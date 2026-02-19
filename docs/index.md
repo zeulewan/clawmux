@@ -6,45 +6,43 @@ hide:
   - toc
 ---
 
-<h1 style="text-align: center;">Voice Chat</h1>
-<p style="text-align: center;">Self-hosted voice interface for <strong>Claude Code</strong> — local <strong>Whisper STT</strong> and <strong>Kokoro TTS</strong> over <strong>Tailscale</strong></p>
+<h1 style="text-align: center;">Voice Hub</h1>
+<p style="text-align: center; color: #888; max-width: 600px; margin: 0 auto;">A voice interface for AI agents that actually do things.</p>
+
+---
+
+There isn't a good way to talk to AI agents right now. You can type to them, but verbal interaction with agents that run commands, edit files, and browse the web barely exists.
+
+Voice Hub gives each agent a voice and a name. You spin up sessions, talk naturally, and switch between them like phone calls. One agent debugs your server while another writes tests. You hear who's talking and know who to ask.
+
+All audio processing runs locally on your GPU. No audio leaves your network.
 
 ---
 
 <div class="grid cards" markdown>
 
--   :material-microphone:{ .lg .middle } **Getting Started**
+-   :material-account:{ .lg .middle } **For Humans**
 
     ---
 
-    Install, configure, and run the voice chat server in minutes
+    What it is, how to install, how to use
 
-    [:octicons-arrow-right-24: Quick Start](guide/getting-started.md)
+    [:octicons-arrow-right-24: Guide](humans/index.md)
 
--   :material-sitemap:{ .lg .middle } **Architecture**
-
-    ---
-
-    How the browser, MCP server, Whisper, Kokoro, and Claude fit together
-
-    [:octicons-arrow-right-24: Architecture](guide/architecture.md)
-
--   :material-cog:{ .lg .middle } **Configuration**
+-   :material-robot:{ .lg .middle } **For Agents**
 
     ---
 
-    Endpoints, environment variables, voice options, and Tailscale setup
+    System checks, install steps, file map, endpoints
 
-    [:octicons-arrow-right-24: Configuration](guide/configuration.md)
+    [:octicons-arrow-right-24: Reference](agents/index.md)
 
 -   :material-road-variant:{ .lg .middle } **Roadmap**
 
     ---
 
-    Release history, planned features, and development updates
+    Release history and planned features
 
     [:octicons-arrow-right-24: Roadmap](roadmap/planned-features.md)
 
 </div>
-
----

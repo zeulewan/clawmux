@@ -158,6 +158,7 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("Hub starting on port %d", HUB_PORT)
+    await session_mgr.cleanup_stale_sessions()
     timeout_task = asyncio.create_task(session_mgr.run_timeout_loop())
     try:
         yield

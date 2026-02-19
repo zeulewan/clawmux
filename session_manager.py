@@ -71,6 +71,34 @@ class SessionManager:
         self._counter = 0
         SESSION_DIR_BASE.mkdir(parents=True, exist_ok=True)
 
+    async def cleanup_stale_sessions(self) -> None:
+        """Kill orphaned voice-* tmux sessions from previous hub runs."""
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "tmux", "list-sessions", "-F", "#{session_name}",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            stdout, _ = await proc.communicate()
+            if proc.returncode != 0:
+                return
+            for name in stdout.decode().strip().splitlines():
+                if name.startswith(TMUX_SESSION_PREFIX + "-"):
+                    if name not in {s.tmux_session for s in self.sessions.values()}:
+                        log.warning("Killing orphaned tmux session: %s", name)
+                        await self._cleanup_tmux(name)
+        except Exception as e:
+            log.error("Error cleaning stale sessions: %s", e)
+
+        # Clean orphaned session work dirs
+        try:
+            for d in SESSION_DIR_BASE.iterdir():
+                if d.is_dir() and d.name not in self.sessions:
+                    log.warning("Removing orphaned work dir: %s", d)
+                    shutil.rmtree(d, ignore_errors=True)
+        except Exception as e:
+            log.error("Error cleaning stale work dirs: %s", e)
+
     def list_sessions(self) -> list[dict]:
         return [s.to_dict() for s in self.sessions.values()]
 

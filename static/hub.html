@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Voice Chat Hub</title>
+<title>Voice Hub</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%233a86ff'/><path d='M32 12a6 6 0 0 1 6 6v14a6 6 0 0 1-12 0V18a6 6 0 0 1 6-6z' fill='white'/><path d='M20 30a12 12 0 0 0 24 0' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/><line x1='32' y1='42' x2='32' y2='50' stroke='white' stroke-width='3' stroke-linecap='round'/><line x1='25' y1='50' x2='39' y2='50' stroke='white' stroke-width='3' stroke-linecap='round'/></svg>">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -304,12 +305,62 @@ body {
   0%, 100% { box-shadow: 0 0 0 0 rgba(230,57,70,0.5); }
   50% { box-shadow: 0 0 0 12px rgba(230,57,70,0); }
 }
+.msg.thinking {
+  align-self: flex-start;
+  background: #2a2a4a;
+  border-bottom-left-radius: 0.25rem;
+  padding: 0.75rem 1.2rem;
+  display: flex;
+  gap: 0.3rem;
+}
+.thinking-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #888;
+  animation: thinkingPulse 1.4s infinite ease-in-out;
+}
+.thinking-dot:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes thinkingPulse {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1); }
+}
+#auto-interrupt-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: #888;
+  cursor: pointer;
+  user-select: none;
+}
+#auto-interrupt-toggle .toggle-track {
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: #333;
+  position: relative;
+  transition: background 0.2s;
+}
+#auto-interrupt-toggle .toggle-track.on { background: #3a86ff; }
+#auto-interrupt-toggle .toggle-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ccc;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: left 0.2s;
+}
+#auto-interrupt-toggle .toggle-track.on .toggle-thumb { left: 18px; }
 </style>
 </head>
 <body>
 
 <div id="header">
-  <h1 onclick="showVoiceGrid()">Voice Chat Hub</h1>
+  <h1 onclick="showVoiceGrid()">Voice Hub</h1>
   <div id="dot"></div>
   <span id="conn-label">Disconnected</span>
 </div>
@@ -336,6 +387,10 @@ body {
     <div id="vad-toggle" onclick="toggleVAD()" title="Auto-detect when you stop talking">
       <div class="toggle-track on"><div class="toggle-thumb"></div></div>
       <span>Auto End</span>
+    </div>
+    <div id="auto-interrupt-toggle" onclick="toggleAutoInterrupt()" title="Interrupt Claude by speaking">
+      <div class="toggle-track"><div class="toggle-thumb"></div></div>
+      <span>Auto Interrupt</span>
     </div>
     <select id="voice-select" onchange="changeVoice(this.value)" title="Session voice">
       <option value="af_sky">Sky (F)</option>
@@ -374,6 +429,12 @@ let vadDetectedSpeech = false; // did we hear any speech this recording?
 let currentAudio = null; // { audio, sessionId, url } — currently playing audio element
 let currentBufferedPlayer = null; // { sessionId, stop() } — active buffered playback
 let persistentStream = null; // persistent mic MediaStream, acquired once
+let autoInterruptEnabled = false; // voice-based interrupt during playback
+let playbackVadInterval = null; // VAD interval during playback for auto-interrupt
+let playbackVadCtx = null; // AudioContext for playback VAD
+let thinkingSoundCtx = null; // AudioContext for thinking sound
+let thinkingSoundOsc = null; // oscillator for thinking sound
+let thinkingSoundLfo = null; // LFO for thinking sound pulsing
 
 // --- DOM refs ---
 const tabBar = document.getElementById('tab-bar');
@@ -600,7 +661,7 @@ function switchTab(sessionId) {
     setStatus(s.statusText || 'Ready');
     micBtn.disabled = s.status !== 'ready' && s.status !== 'active';
     voiceSelect.value = s.voice || 'af_sky';
-    speedSelect.value = String(s.speed || 1.0);
+    speedSelect.value = String(parseFloat(s.speed || 1.0).toFixed(1));
     document.getElementById('tmux-label').textContent = s.tmux_session || s.session_id;
 
     // Resume paused audio or play buffered audio
@@ -652,6 +713,18 @@ function renderChat() {
     const div = document.createElement('div');
     div.className = `msg ${msg.role}`;
     div.textContent = msg.text;
+    chatArea.appendChild(div);
+  }
+  // Re-show thinking indicator if session is thinking
+  if (s.isThinking) {
+    const div = document.createElement('div');
+    div.className = 'msg thinking';
+    div.id = `thinking-${activeSessionId}`;
+    for (let i = 0; i < 3; i++) {
+      const dot = document.createElement('span');
+      dot.className = 'thinking-dot';
+      div.appendChild(dot);
+    }
     chatArea.appendChild(div);
   }
   chatArea.scrollTop = chatArea.scrollHeight;
@@ -712,6 +785,7 @@ function addSession(data) {
     ...data,
     tmux_session: data.tmux_session || data.session_id,
     voice: data.voice || (saved && saved.voice) || 'af_sky',
+    speed: data.speed || (saved && saved.speed) || 1.0,
     messages: (saved && saved.messages) || [],
     statusText: isReady ? 'Ready' : 'Waiting for Claude...',
     el,
@@ -834,8 +908,8 @@ function startVAD(stream) {
   source.connect(analyser);
 
   const data = new Uint8Array(analyser.frequencyBinCount);
-  const SILENCE_THRESHOLD = 15; // RMS level below which = silence
-  const SILENCE_DURATION = 1500; // ms of silence before auto-stop
+  const SILENCE_THRESHOLD = 10; // RMS level below which = silence
+  const SILENCE_DURATION = 3000; // ms of silence before auto-stop
   let silenceStart = null;
 
   vadInterval = setInterval(() => {
@@ -869,6 +943,150 @@ function startVAD(stream) {
       vadDetectedSpeech = true;
     }
   }, 100);
+}
+
+// --- Auto Interrupt (voice-based interrupt during playback) ---
+function toggleAutoInterrupt() {
+  autoInterruptEnabled = !autoInterruptEnabled;
+  const track = document.querySelector('#auto-interrupt-toggle .toggle-track');
+  track.classList.toggle('on', autoInterruptEnabled);
+}
+
+function startPlaybackVAD(sessionId) {
+  stopPlaybackVAD();
+  getMicStream().then(stream => {
+    playbackVadCtx = new AudioContext();
+    const source = playbackVadCtx.createMediaStreamSource(stream);
+    const analyser = playbackVadCtx.createAnalyser();
+    analyser.fftSize = 512;
+    source.connect(analyser);
+
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    const SPEECH_THRESHOLD = 25; // higher than auto-end to avoid speaker bleed
+    const SPEECH_DURATION = 300; // ms of sustained speech before triggering
+    let speechStart = null;
+
+    playbackVadInterval = setInterval(() => {
+      // Stop if no longer playing
+      if (!currentAudio && !currentBufferedPlayer) {
+        stopPlaybackVAD();
+        return;
+      }
+
+      analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) {
+        const v = (data[i] - 128) / 128;
+        sum += v * v;
+      }
+      const rms = Math.sqrt(sum / data.length) * 200;
+
+      if (rms >= SPEECH_THRESHOLD) {
+        if (!speechStart) speechStart = Date.now();
+        else if (Date.now() - speechStart >= SPEECH_DURATION) {
+          // Sustained speech detected — interrupt and record
+          const sid = sessionId;
+          stopPlaybackVAD();
+          interruptPlayback(sid);
+          startRecording(sid);
+        }
+      } else {
+        speechStart = null;
+      }
+    }, 50); // check every 50ms for responsiveness
+  }).catch(err => {
+    console.warn('Playback VAD mic error:', err);
+  });
+}
+
+function stopPlaybackVAD() {
+  if (playbackVadInterval) {
+    clearInterval(playbackVadInterval);
+    playbackVadInterval = null;
+  }
+  if (playbackVadCtx) {
+    playbackVadCtx.close().catch(() => {});
+    playbackVadCtx = null;
+  }
+}
+
+// --- Thinking indicator ---
+function showThinking(sessionId) {
+  const s = sessions.get(sessionId);
+  if (!s) return;
+  hideThinking(sessionId); // remove existing if any
+
+  if (sessionId === activeSessionId) {
+    const div = document.createElement('div');
+    div.className = 'msg thinking';
+    div.id = `thinking-${sessionId}`;
+    for (let i = 0; i < 3; i++) {
+      const dot = document.createElement('span');
+      dot.className = 'thinking-dot';
+      div.appendChild(dot);
+    }
+    chatArea.appendChild(div);
+    chatArea.scrollTop = chatArea.scrollHeight;
+  }
+  s.isThinking = true;
+}
+
+function hideThinking(sessionId) {
+  const s = sessions.get(sessionId);
+  if (s) s.isThinking = false;
+  const el = document.getElementById(`thinking-${sessionId}`);
+  if (el) el.remove();
+}
+
+// --- Thinking sound ---
+function startThinkingSound() {
+  stopThinkingSound();
+  try {
+    thinkingSoundCtx = new AudioContext();
+    // Soft sine tone
+    thinkingSoundOsc = thinkingSoundCtx.createOscillator();
+    thinkingSoundOsc.type = 'sine';
+    thinkingSoundOsc.frequency.value = 440;
+
+    // Main gain — very quiet
+    const mainGain = thinkingSoundCtx.createGain();
+    mainGain.gain.value = 0.03;
+
+    // LFO to pulse the volume
+    thinkingSoundLfo = thinkingSoundCtx.createOscillator();
+    thinkingSoundLfo.type = 'sine';
+    thinkingSoundLfo.frequency.value = 0.8; // pulse ~1Hz
+
+    const lfoGain = thinkingSoundCtx.createGain();
+    lfoGain.gain.value = 0.03; // modulation depth
+
+    // LFO modulates main gain
+    thinkingSoundLfo.connect(lfoGain);
+    lfoGain.connect(mainGain.gain);
+
+    thinkingSoundOsc.connect(mainGain);
+    mainGain.connect(thinkingSoundCtx.destination);
+
+    thinkingSoundOsc.start();
+    thinkingSoundLfo.start();
+  } catch (e) {
+    console.warn('Thinking sound error:', e);
+  }
+}
+
+function stopThinkingSound() {
+  if (thinkingSoundOsc) {
+    try { thinkingSoundOsc.stop(); } catch {}
+    thinkingSoundOsc = null;
+  }
+  if (thinkingSoundLfo) {
+    try { thinkingSoundLfo.stop(); } catch {}
+    thinkingSoundLfo = null;
+  }
+  if (thinkingSoundCtx) {
+    thinkingSoundCtx.close().catch(() => {});
+    thinkingSoundCtx = null;
+  }
 }
 
 // --- WebSocket ---
@@ -937,6 +1155,8 @@ function handleMessage(data) {
   if (!s) return;
 
   if (type === 'assistant_text') {
+    hideThinking(session_id);
+    stopThinkingSound();
     addMessage(session_id, 'assistant', data.text);
   } else if (type === 'user_text') {
     addMessage(session_id, 'user', data.text);
@@ -974,6 +1194,8 @@ function handleMessage(data) {
     s.statusText = data.text;
     if (session_id === activeSessionId) setStatus(data.text);
   } else if (type === 'done') {
+    hideThinking(session_id);
+    stopThinkingSound();
     s.statusText = 'Ready';
     s.status = 'ready';
     if (s.el) s.el.statusDot.className = 'status-dot ready';
@@ -1012,9 +1234,11 @@ function playAudio(sessionId, b64data) {
     }
   };
 
-  audio.onended = sendDone;
-  audio.onerror = () => { sendDone(); setStatus('Audio error'); };
-  audio.play().catch(() => { sendDone(); setStatus('Audio blocked — tap page first'); });
+  audio.onended = () => { stopPlaybackVAD(); sendDone(); };
+  audio.onerror = () => { stopPlaybackVAD(); sendDone(); setStatus('Audio error'); };
+  audio.play().then(() => {
+    if (autoInterruptEnabled && !micMuted) startPlaybackVAD(sessionId);
+  }).catch(() => { stopPlaybackVAD(); sendDone(); setStatus('Audio blocked — tap page first'); });
 }
 
 // --- Buffered playback ---
@@ -1025,9 +1249,10 @@ function playBufferedAudio(sessionId, chunks) {
 
   currentBufferedPlayer = {
     sessionId,
-    stop() { stopped = true; if (currentAudio) { currentAudio.audio.pause(); } },
+    stop() { stopped = true; stopPlaybackVAD(); if (currentAudio) { currentAudio.audio.pause(); } },
   };
   updateMicUI();
+  if (autoInterruptEnabled && !micMuted) startPlaybackVAD(sessionId);
 
   function playNext() {
     if (stopped || i >= chunks.length) {
@@ -1156,6 +1381,8 @@ function sendAudio(sessionId) {
   micBtn.classList.add('processing');
   micBtn.textContent = 'Processing...';
   micBtn.disabled = true;
+  showThinking(sessionId);
+  startThinkingSound();
 
   const reader = new FileReader();
   reader.onload = () => {
@@ -1181,6 +1408,7 @@ function sendSilentAudio(sessionId) {
 
 // --- Interrupt playback ---
 function interruptPlayback(sessionId) {
+  stopPlaybackVAD();
   // Stop current audio immediately
   if (currentAudio) {
     currentAudio.audio.pause();

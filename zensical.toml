@@ -1,6 +1,6 @@
 [project]
-site_name = "Voice Chat"
-site_description = "Self-hosted voice chat interface for Claude — local Whisper STT and Kokoro TTS over Tailscale."
+site_name = "Voice Hub"
+site_description = "Multi-session voice interface for Claude Code with local Whisper STT and Kokoro TTS."
 site_author = "Zeul"
 site_url = "https://zeulewan.github.io/voice-chat/"
 repo_url = "https://github.com/zeulewan/voice-chat"
@@ -11,28 +11,21 @@ copyright = "&copy; 2026 Zeul Mordasiewicz"
 [project.theme]
 language = "en"
 features = [
-    # Content
     "content.code.copy",
     "content.code.annotate",
     "content.code.select",
     "content.tabs.link",
-    # Navigation
     "navigation.footer",
     "navigation.instant",
     "navigation.instant.prefetch",
     "navigation.instant.progress",
     "navigation.path",
-    # "navigation.indexes", # Do not add this back
     "navigation.prune",
-    "navigation.sections",
     "navigation.tabs",
     "navigation.top",
     "navigation.tracking",
-    # Table of contents
     "toc.follow",
-    # Header
     "header.autohide",
-    # Search
     "search.highlight",
     "search.suggest",
     "search.share",
@@ -41,7 +34,6 @@ features = [
 [project.theme.icon]
 repo = "fontawesome/brands/github"
 
-# Palette toggle for automatic mode
 [[project.theme.palette]]
 media = "(prefers-color-scheme)"
 primary = "blue"
@@ -49,7 +41,6 @@ accent = "blue"
 toggle.icon = "lucide/sun-moon"
 toggle.name = "Switch to light mode"
 
-# Palette toggle for light mode
 [[project.theme.palette]]
 media = "(prefers-color-scheme: light)"
 scheme = "default"
@@ -58,7 +49,6 @@ accent = "blue"
 toggle.icon = "lucide/sun"
 toggle.name = "Switch to dark mode"
 
-# Palette toggle for dark mode
 [[project.theme.palette]]
 media = "(prefers-color-scheme: dark)"
 scheme = "slate"
@@ -104,3 +94,22 @@ alternate_style = true
 
 [project.markdown_extensions.pymdownx.tasklist]
 custom_checkbox = true
+
+[[project.nav]]
+Home = "index.md"
+
+[[project.nav]]
+"For Humans" = "humans/index.md"
+
+[[project.nav]]
+"For Agents" = "agents/index.md"
+
+[[project.nav]]
+Roadmap = [
+  { "Planned Features" = "roadmap/planned-features.md" },
+  { "v0.3.0" = "roadmap/v0.3.0.md" },
+  { "v0.4.0" = "roadmap/v0.4.0.md" },
+  { "v0.2.0" = "roadmap/v0.2.0.md" },
+  { "v0.1.0" = "roadmap/v0.1.0.md" },
+  { "v0.0.1" = "roadmap/v0.0.1.md" },
+]
