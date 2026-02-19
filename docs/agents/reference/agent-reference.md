@@ -125,25 +125,33 @@ voice-chat/
 ├── hub_config.py           # Constants — ports, timeouts, voice list, service URLs
 ├── hub_mcp_server.py       # Thin MCP server — runs inside each Claude session, proxies converse() to hub
 ├── session_manager.py      # Session lifecycle — tmux spawn/kill, temp dirs, health checks, timeout loop
+├── history_store.py        # Per-voice persistent message history (JSON files in data/history/)
 ├── mcp_server.py           # Legacy single-session MCP server (not used by hub)
 ├── static/
 │   ├── hub.html            # Hub browser UI — single file (HTML + CSS + JS)
 │   └── index.html          # Legacy single-session browser UI
+├── data/
+│   └── history/            # Per-voice JSON history files (gitignored)
+│       ├── af_sky.json
+│       └── ...
 ├── docs/
-│   ├── guide/
-│   │   ├── overview.md     # Human-friendly guide
-│   │   ├── agent-reference.md  # This file
-│   │   ├── hub.md          # Detailed hub architecture and protocol
-│   │   ├── architecture.md # Legacy single-session architecture
-│   │   ├── getting-started.md
-│   │   └── configuration.md
+│   ├── agents/
+│   │   ├── index.md        # Agent docs landing page
+│   │   ├── web-dev.md      # Web development entry point
+│   │   ├── ios-dev.md      # iOS development entry point
+│   │   └── reference/
+│   │       ├── agent-reference.md  # This file
+│   │       ├── protocol.md        # WebSocket protocol reference
+│   │       ├── ui-behavior.md     # UI behavior reference
+│   │       └── hub.md             # Hub architecture
+│   ├── humans/
+│   │   └── index.md        # Human-friendly guide
 │   └── roadmap/
 │       ├── v0.3.0.md       # Current release
 │       └── v0.4.0.md       # Next release
 └── .claude/
     ├── commands/
-    │   ├── voice-chat.md   # Slash command for direct voice mode
-    │   └── voice-hub.md    # Slash command for hub voice mode
+    │   └── voice-chat.md   # Slash command for direct voice mode
     └── skills/voice-chat/skill.md
 ```
 
@@ -155,7 +163,7 @@ voice-chat/
 2. Pick next unused voice from `hub_config.VOICES`
 3. Create temp dir at `/tmp/voice-hub-sessions/{session_id}/`
 4. Write `.mcp.json` with `VOICE_HUB_SESSION_ID` and `VOICE_CHAT_HUB_PORT` env vars
-5. Write `CLAUDE.md` with agent name and greeting
+5. Write `CLAUDE.md` with agent name, greeting, and conversation history from `history_store`
 6. `tmux new-session` starting in the temp dir
 7. `tmux send-keys` to launch `claude --dangerously-skip-permissions`
 8. Wait 10s, then send `/voice-hub` slash command
@@ -165,7 +173,7 @@ voice-chat/
 ### Converse Flow (`hub.py:handle_converse`)
 
 1. Receive `{"type": "converse", "message": "...", "wait_for_response": true}` from MCP WS
-2. Send `assistant_text` to browser (for chat transcript)
+2. Send `assistant_text` to browser (for chat transcript) and persist to `history_store`
 3. TTS via Kokoro (`hub.py:tts`) using session's voice and speed
 4. Send base64 MP3 to browser tagged with `session_id`
 5. Wait for `playback_done` from browser (via `session.playback_done` asyncio.Event)
@@ -180,8 +188,8 @@ voice-chat/
 
 Key JS state variables:
 
-- `sessions` (Map) — session_id → `{label, status, voice, speed, messages[], audioBuffer[], pausedAudio, pendingListen, el}`
-- `activeSessionId` — currently visible tab
+- `sessions` (Map) — session_id → `{label, status, voice, speed, messages[], audioBuffer[], pausedAudio, pendingListen, hasUnread}`
+- `activeSessionId` — currently visible session (null = voice grid)
 - `recording` / `recordingSessionId` — mic state
 - `currentAudio` — `{audio, sessionId, url}` for playing audio
 - `currentBufferedPlayer` — active buffered playback chain
@@ -210,6 +218,8 @@ Main button states managed by `updateMicUI()`:
 | `DELETE` | `/api/sessions/{id}` | — | Terminate session |
 | `PUT` | `/api/sessions/{id}/voice` | `{"voice": "am_adam"}` | Change voice |
 | `PUT` | `/api/sessions/{id}/speed` | `{"speed": 1.5}` | Change TTS speed |
+| `GET` | `/api/history/{voice_id}` | — | Get per-voice message history |
+| `DELETE` | `/api/history/{voice_id}` | — | Clear per-voice message history |
 
 ## Per-Session Bridge State (`session_manager.py:Session`)
 

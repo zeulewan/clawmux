@@ -6,3 +6,4 @@ python-multipart
 zensical
 fastmcp>=2.14
 websockets
+psutil

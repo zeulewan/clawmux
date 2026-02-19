@@ -40,71 +40,20 @@ body {
   transition: background 0.3s;
 }
 #dot.connected { background: #2ecc71; }
+#dot.connecting { background: #f1c40f; animation: thinkingPulse 1.4s infinite ease-in-out; }
 #conn-label {
   font-size: 0.75rem;
   color: #888;
 }
 
-/* Tab bar */
-#tab-bar {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  background: #12122a;
-  border-bottom: 1px solid #2a2a4a;
-  overflow-x: auto;
-  min-height: 36px;
-}
-.tab {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.4rem 0.75rem;
-  font-size: 0.8rem;
-  color: #888;
-  cursor: pointer;
-  border-right: 1px solid #2a2a4a;
-  white-space: nowrap;
-  position: relative;
-  user-select: none;
-}
-.tab:hover { background: #1e1e3a; }
-.tab.active { color: #e0e0e0; background: #1a1a2e; border-bottom: 2px solid #3a86ff; }
-.tab .status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #888;
-}
-.tab .status-dot.ready { background: #2ecc71; }
-.tab .status-dot.starting { background: #f1c40f; }
-.tab .status-dot.active { background: #3a86ff; }
-.tab .badge {
-  background: #e63946;
-  color: #fff;
-  font-size: 0.6rem;
-  padding: 1px 4px;
-  border-radius: 6px;
-  display: none;
-}
-.tab .badge.visible { display: inline; }
-.tab .close-btn {
+/* Debug link in header */
+#debug-link {
   font-size: 0.7rem;
-  color: #666;
+  color: #555;
   cursor: pointer;
-  padding: 0 2px;
-}
-.tab .close-btn:hover { color: #e63946; }
-#spawn-btn {
-  padding: 0.4rem 0.75rem;
-  font-size: 0.8rem;
-  color: #3a86ff;
-  cursor: pointer;
-  white-space: nowrap;
   user-select: none;
 }
-#spawn-btn:hover { color: #5a9aff; }
-#spawn-btn.disabled { color: #555; cursor: wait; }
+#debug-link:hover { color: #888; }
 
 /* Chat area */
 #chat-area {
@@ -161,6 +110,7 @@ body {
   cursor: pointer;
   transition: all 0.15s;
   user-select: none;
+  position: relative;
 }
 .voice-card:hover { background: #333360; border-color: #3a86ff; }
 .voice-card.active { border-color: #2ecc71; }
@@ -188,65 +138,96 @@ body {
 .voice-card.thinking .voice-dot { background: #e67e22; animation: thinkingPulse 1.4s infinite ease-in-out; }
 .voice-card.speaking .voice-dot { background: #3a86ff; }
 .voice-card.listening .voice-dot { background: #e63946; }
+.voice-card .unread-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e63946;
+}
+
+/* Waveform */
+#waveform {
+  width: 100%;
+  max-width: 400px;
+  height: 40px;
+  align-self: center;
+}
 
 /* Controls */
 #controls {
-  padding: 0.75rem;
+  padding: 1rem;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.5rem;
   background: #16162a;
+  border-top: 1px solid #2a2a4a;
 }
 #status {
-  font-size: 0.8rem;
-  color: #888;
+  font-size: 0.7rem;
+  color: #666;
   min-height: 1.2em;
 }
 #mic {
-  height: 48px;
-  padding: 0 1.2rem;
-  border-radius: 24px;
+  height: 64px;
+  width: 64px;
+  padding: 0;
+  border-radius: 50%;
   border: none;
   background: #3a86ff;
   color: #fff;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
   white-space: nowrap;
+  box-shadow: 0 0 20px rgba(58,134,255,0.3);
 }
-#mic:hover { background: #2a76ef; }
+#mic:hover { background: #2a76ef; box-shadow: 0 0 28px rgba(58,134,255,0.5); }
 #mic.recording {
   background: #2ecc71;
+  box-shadow: 0 0 20px rgba(46,204,113,0.4);
+  width: auto;
+  padding: 0 1.5rem;
+  border-radius: 32px;
 }
-#mic.recording:hover { background: #27ae60; }
+#mic.recording:hover { background: #27ae60; box-shadow: 0 0 28px rgba(46,204,113,0.6); }
 #mic.interruptable {
   background: #e67e22;
+  box-shadow: 0 0 20px rgba(230,126,34,0.4);
+  width: auto;
+  padding: 0 1.5rem;
+  border-radius: 32px;
 }
-#mic.interruptable:hover { background: #d35400; }
+#mic.interruptable:hover { background: #d35400; box-shadow: 0 0 28px rgba(230,126,34,0.6); }
 #mic.processing {
   background: #555;
+  box-shadow: none;
   cursor: wait;
+  width: auto;
+  padding: 0 1.5rem;
+  border-radius: 32px;
 }
-#mic:disabled { opacity: 0.4; cursor: not-allowed; }
+#mic:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
 #mic-row {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 1rem;
 }
 .btn-icon {
   height: 40px;
   width: 40px;
   border-radius: 50%;
-  border: 2px solid #555;
+  border: 1px solid #444;
   background: transparent;
   color: #888;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
   display: flex;
@@ -254,59 +235,72 @@ body {
   justify-content: center;
   transition: all 0.15s;
 }
-.btn-icon:hover { border-color: #888; color: #ccc; }
-#mic-mute.muted { border-color: #e63946; color: #e63946; background: rgba(230,57,70,0.15); }
+.btn-icon:hover { border-color: #666; color: #ccc; }
 #mic-cancel { border-color: #e63946; color: #e63946; }
 #mic-cancel:hover { background: rgba(230,57,70,0.2); color: #ff5a5a; }
-#auto-toggle, #vad-toggle {
+/* Options menu */
+#options-menu {
+  display: none;
+  position: absolute;
+  bottom: 80px;
+  right: 1rem;
+  background: #1e1e3a;
+  border: 1px solid #2a2a4a;
+  border-radius: 12px;
+  padding: 0.5rem 0;
+  min-width: 200px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+  z-index: 100;
+}
+#options-menu.visible { display: block; }
+.opt-item {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.75rem;
-  color: #888;
+  justify-content: space-between;
+  padding: 0.5rem 1rem;
+  font-size: 0.8rem;
+  color: #ccc;
   cursor: pointer;
   user-select: none;
 }
-#auto-toggle .toggle-track, #vad-toggle .toggle-track {
-  width: 36px;
-  height: 20px;
-  border-radius: 10px;
-  background: #333;
-  position: relative;
-  transition: background 0.2s;
-}
-#auto-toggle .toggle-track.on, #vad-toggle .toggle-track.on { background: #3a86ff; }
-#auto-toggle .toggle-thumb, #vad-toggle .toggle-thumb {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #ccc;
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  transition: left 0.2s;
-}
-#auto-toggle .toggle-track.on .toggle-thumb, #vad-toggle .toggle-track.on .toggle-thumb { left: 18px; }
-#voice-select, #speed-select {
+.opt-item:hover { background: #2a2a4a; }
+.opt-item .opt-check { color: #3a86ff; font-size: 0.9rem; width: 1.2rem; text-align: center; }
+.opt-divider { height: 1px; background: #2a2a4a; margin: 0.25rem 0; }
+.opt-label { font-size: 0.65rem; color: #666; padding: 0.4rem 1rem 0.2rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.opt-item select {
   background: #2a2a4a;
   color: #e0e0e0;
   border: 1px solid #444;
   border-radius: 6px;
-  padding: 4px 8px;
+  padding: 2px 6px;
   font-size: 0.75rem;
   cursor: pointer;
   outline: none;
 }
-#voice-select:hover, #speed-select:hover { border-color: #666; }
-#session-info {
-  font-size: 0.7rem;
-  color: #555;
-  font-family: monospace;
-  user-select: all;
+/* Context menu */
+#context-menu {
+  display: none;
+  position: fixed;
+  background: #1e1e3a;
+  border: 1px solid #2a2a4a;
+  border-radius: 8px;
+  padding: 0.25rem 0;
+  min-width: 160px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  z-index: 200;
 }
+#context-menu.visible { display: block; }
+#context-menu .ctx-item {
+  padding: 0.5rem 1rem;
+  font-size: 0.8rem;
+  color: #ccc;
+  cursor: pointer;
+  user-select: none;
+}
+#context-menu .ctx-item:hover { background: #2a2a4a; }
 @keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(230,57,70,0.5); }
-  50% { box-shadow: 0 0 0 12px rgba(230,57,70,0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(58,134,255,0.4); }
+  50% { box-shadow: 0 0 0 16px rgba(58,134,255,0); }
 }
 .msg.thinking {
   align-self: flex-start;
@@ -330,35 +324,6 @@ body {
   0%, 80%, 100% { opacity: 0.2; transform: scale(0.7); }
   40% { opacity: 1; transform: scale(1.1); }
 }
-#auto-interrupt-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.75rem;
-  color: #888;
-  cursor: pointer;
-  user-select: none;
-}
-#auto-interrupt-toggle .toggle-track {
-  width: 36px;
-  height: 20px;
-  border-radius: 10px;
-  background: #333;
-  position: relative;
-  transition: background 0.2s;
-}
-#auto-interrupt-toggle .toggle-track.on { background: #3a86ff; }
-#auto-interrupt-toggle .toggle-thumb {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #ccc;
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  transition: left 0.2s;
-}
-#auto-interrupt-toggle .toggle-track.on .toggle-thumb { left: 18px; }
 /* Debug panel */
 .debug-section {
   background: #16162a;
@@ -400,72 +365,75 @@ body {
 .debug-kv { display: flex; gap: 0.5rem; margin: 0.15rem 0; }
 .debug-kv .k { color: #666; min-width: 130px; }
 .debug-kv .v { color: #e0e0e0; }
-#home-tab.active { color: #e0e0e0 !important; border-bottom: 2px solid #3a86ff; }
-#debug-tab.active { color: #e0e0e0 !important; border-bottom: 2px solid #3a86ff; }
 </style>
 </head>
 <body>
 
 <div id="header">
   <h1 onclick="showVoiceGrid()">Voice Hub</h1>
-  <div id="dot"></div>
-  <span id="conn-label">Disconnected</span>
-</div>
-
-<div id="tab-bar">
-  <div id="home-tab" class="tab active" onclick="showVoiceGrid()" style="color:#e0e0e0; font-size:0.8rem;">Home</div>
-  <div id="spawn-btn" onclick="spawnSession()">+ New Session</div>
+  <span id="active-voice" style="display:none; font-size:0.85rem; color:#3a86ff; font-weight:600;"></span>
   <div style="flex:1;"></div>
-  <div id="debug-tab" class="tab" onclick="showDebugPanel()" style="border-right:none; color:#666; font-size:0.7rem;">Debug</div>
+  <div id="dot" class="connecting"></div>
+  <span id="conn-label">Connecting...</span>
+  <span id="debug-link" onclick="showDebugPanel()">Debug</span>
 </div>
 
 <div id="voice-grid"></div>
 
 <div id="chat-area" style="display:none;"></div>
 
+<canvas id="waveform" width="300" height="40" style="display:none;"></canvas>
 <div id="controls" style="display:none;">
-  <div id="session-info"><span id="tmux-label"></span></div>
   <div id="status"></div>
-  <button id="home-btn" onclick="showVoiceGrid()" style="background:none; border:1px solid #444; color:#888; font-size:0.75rem; padding:0.3rem 0.8rem; border-radius:6px; cursor:pointer; margin-bottom:0.25rem;">Home</button>
   <div id="mic-row">
-    <button id="mic-mute" class="btn-icon" title="Mute microphone" onclick="toggleMicMute()">Mic</button>
-    <button id="mic" disabled>Record</button>
+    <button id="home-btn" class="btn-icon" onclick="showVoiceGrid()" title="Home">&#8962;</button>
     <button id="mic-cancel" class="btn-icon" style="display:none;" title="Cancel recording" onclick="cancelRecording()">&#10005;</button>
-    <div id="auto-toggle" onclick="toggleAutoMode()" title="Auto-record after Claude speaks">
-      <div class="toggle-track"><div class="toggle-thumb"></div></div>
-      <span>Auto Record</span>
-    </div>
-    <div id="vad-toggle" onclick="toggleVAD()" title="Auto-detect when you stop talking">
-      <div class="toggle-track on"><div class="toggle-thumb"></div></div>
-      <span>Auto End</span>
-    </div>
-    <div id="auto-interrupt-toggle" onclick="toggleAutoInterrupt()" title="Interrupt Claude by speaking">
-      <div class="toggle-track"><div class="toggle-thumb"></div></div>
-      <span>Auto Interrupt</span>
-    </div>
-    <select id="voice-select" onchange="changeVoice(this.value)" title="Session voice">
-      <option value="af_sky">Sky (F)</option>
-      <option value="af_alloy">Alloy (F)</option>
-      <option value="af_sarah">Sarah (F)</option>
-      <option value="am_adam">Adam (M)</option>
-      <option value="am_echo">Echo (M)</option>
-      <option value="am_onyx">Onyx (M)</option>
-      <option value="bm_fable">Fable</option>
-    </select>
-    <select id="speed-select" onchange="changeSpeed(this.value)" title="Speech speed">
-      <option value="0.75">0.75x</option>
-      <option value="1.0" selected>1x</option>
-      <option value="1.25">1.25x</option>
-      <option value="1.5">1.5x</option>
-      <option value="2.0">2x</option>
-    </select>
+    <button id="mic" disabled>Record</button>
+    <button id="options-btn" class="btn-icon" onclick="toggleOptions(event)" title="Options">&#8943;</button>
   </div>
+</div>
+
+<div id="options-menu">
+  <div class="opt-item" onclick="toggleMicMute()"><span>Mic Mute</span><span class="opt-check" id="opt-mute"></span></div>
+  <div class="opt-divider"></div>
+  <div class="opt-item" onclick="toggleAutoMode()"><span>Auto Record</span><span class="opt-check" id="opt-auto"></span></div>
+  <div class="opt-item" onclick="toggleVAD()"><span>Auto End</span><span class="opt-check" id="opt-vad">&#10003;</span></div>
+  <div class="opt-item" onclick="toggleAutoInterrupt()"><span>Auto Interrupt</span><span class="opt-check" id="opt-interrupt"></span></div>
+  <div class="opt-divider"></div>
+  <div class="opt-label">Voice</div>
+  <div class="opt-item"><select id="voice-select" onchange="changeVoice(this.value)" style="width:100%;">
+    <option value="af_sky">Sky (F)</option>
+    <option value="af_alloy">Alloy (F)</option>
+    <option value="af_sarah">Sarah (F)</option>
+    <option value="am_adam">Adam (M)</option>
+    <option value="am_echo">Echo (M)</option>
+    <option value="am_onyx">Onyx (M)</option>
+    <option value="bm_fable">Fable</option>
+  </select></div>
+  <div class="opt-label">Speed</div>
+  <div class="opt-item"><select id="speed-select" onchange="changeSpeed(this.value)" style="width:100%;">
+    <option value="0.75">0.75x</option>
+    <option value="1.0" selected>1x</option>
+    <option value="1.25">1.25x</option>
+    <option value="1.5">1.5x</option>
+    <option value="2.0">2x</option>
+  </select></div>
+</div>
+
+<div id="context-menu">
+  <div class="ctx-item" id="ctx-reset">Reset History</div>
+  <div class="ctx-item" id="ctx-terminate" style="color:#e63946;">Terminate Session</div>
 </div>
 
 <div id="debug-panel" style="display:none; flex:1; overflow-y:auto; padding:1rem; font-family:'SF Mono','Menlo','Monaco','Consolas',monospace; font-size:0.8rem;">
   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
     <span style="font-size:0.95rem; font-weight:600;">Debug</span>
     <span id="debug-refresh-info" style="color:#555; font-size:0.65rem;"></span>
+  </div>
+
+  <div class="debug-section">
+    <div class="debug-title">System</div>
+    <div id="debug-system"></div>
   </div>
 
   <div class="debug-section">
@@ -529,8 +497,6 @@ let playbackVadCtx = null; // AudioContext for playback VAD
 const spawningVoices = new Set(); // voice IDs currently being spawned
 
 // --- DOM refs ---
-const tabBar = document.getElementById('tab-bar');
-const spawnBtn = document.getElementById('spawn-btn');
 const chatArea = document.getElementById('chat-area');
 const controls = document.getElementById('controls');
 const statusEl = document.getElementById('status');
@@ -538,6 +504,67 @@ const micBtn = document.getElementById('mic');
 const micCancelBtn = document.getElementById('mic-cancel');
 const dot = document.getElementById('dot');
 const connLabel = document.getElementById('conn-label');
+
+// --- Waveform visualizer ---
+const waveCanvas = document.getElementById('waveform');
+const waveCtx = waveCanvas.getContext('2d');
+let waveAnalyser = null;
+let waveAnimFrame = null;
+let waveAudioCtxVis = null;
+
+function startWaveform(stream) {
+  waveCanvas.style.display = 'block';
+  const dpr = window.devicePixelRatio || 1;
+  const rect = waveCanvas.getBoundingClientRect();
+  waveCanvas.width = rect.width * dpr;
+  waveCanvas.height = rect.height * dpr;
+  waveCtx.scale(dpr, dpr);
+  // Use a separate AudioContext for visualization (don't interfere with cues)
+  if (!waveAudioCtxVis) waveAudioCtxVis = new (window.AudioContext || window.webkitAudioContext)();
+  const source = waveAudioCtxVis.createMediaStreamSource(stream);
+  waveAnalyser = waveAudioCtxVis.createAnalyser();
+  waveAnalyser.fftSize = 256;
+  source.connect(waveAnalyser);
+  drawWaveform();
+}
+
+function drawWaveform() {
+  if (!waveAnalyser) return;
+  waveAnimFrame = requestAnimationFrame(drawWaveform);
+  const bufLen = waveAnalyser.frequencyBinCount;
+  const data = new Uint8Array(bufLen);
+  waveAnalyser.getByteTimeDomainData(data);
+
+  const rect = waveCanvas.getBoundingClientRect();
+  const w = rect.width;
+  const h = rect.height;
+  waveCtx.clearRect(0, 0, waveCanvas.width, waveCanvas.height);
+
+  // Get active voice color
+  const s = sessions.get(activeSessionId);
+  const color = s ? voiceColor(s.voice) : '#2ecc71';
+
+  waveCtx.lineWidth = 2;
+  waveCtx.strokeStyle = color;
+  waveCtx.beginPath();
+  const sliceWidth = w / bufLen;
+  let x = 0;
+  for (let i = 0; i < bufLen; i++) {
+    const v = data[i] / 128.0;
+    const y = (v * h) / 2;
+    if (i === 0) waveCtx.moveTo(x, y);
+    else waveCtx.lineTo(x, y);
+    x += sliceWidth;
+  }
+  waveCtx.lineTo(w, h / 2);
+  waveCtx.stroke();
+}
+
+function stopWaveform() {
+  if (waveAnimFrame) { cancelAnimationFrame(waveAnimFrame); waveAnimFrame = null; }
+  waveAnalyser = null;
+  waveCanvas.style.display = 'none';
+}
 
 // --- Audio cues ---
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -581,33 +608,31 @@ const VOICE_NAMES = {
   am_adam: 'Adam', am_echo: 'Echo', am_onyx: 'Onyx',
   bm_fable: 'Fable',
 };
+const VOICE_COLORS = {
+  af_sky: '#3a86ff',
+  af_alloy: '#e67e22',
+  af_sarah: '#e63946',
+  am_adam: '#2ecc71',
+  am_echo: '#9b59b6',
+  am_onyx: '#1abc9c',
+  bm_fable: '#f1c40f',
+};
 function voiceDisplayName(v) { return VOICE_NAMES[v] || v; }
+function voiceColor(v) { return VOICE_COLORS[v] || '#3a86ff'; }
 
-// --- localStorage persistence ---
-const STORAGE_KEY = 'voice-hub-chats';
-function saveChats() {
-  const data = {};
-  for (const [id, s] of sessions) {
-    data[id] = { messages: s.messages, voice: s.voice, label: s.label, tmux_session: s.tmux_session };
-  }
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
-}
-function loadChats() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch { return {}; }
-}
-function clearChat(sessionId) {
-  const saved = loadChats();
-  delete saved[sessionId];
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(saved)); } catch {}
-}
 
 // --- Helpers ---
-function setConnected(connected) {
-  dot.classList.toggle('connected', connected);
-  connLabel.textContent = connected ? 'Connected' : 'Disconnected';
+function setConnected(state) {
+  dot.classList.remove('connected', 'connecting');
+  if (state === 'connected') {
+    dot.classList.add('connected');
+    connLabel.textContent = 'Connected';
+  } else if (state === 'connecting') {
+    dot.classList.add('connecting');
+    connLabel.textContent = 'Connecting...';
+  } else {
+    connLabel.textContent = 'Disconnected';
+  }
 }
 
 function setStatus(text, sessionId) {
@@ -639,8 +664,7 @@ function showVoiceGrid() {
   pendingListenSessionId = null;
   activeSessionId = null;
   hideDebugPanel();
-  tabBar.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.getElementById('home-tab').classList.add('active');
+  document.getElementById('active-voice').style.display = 'none';
   updateLayout();
 }
 
@@ -704,6 +728,16 @@ function renderVoiceGrid() {
     vstatus.appendChild(vdot);
     vstatus.appendChild(vlabel);
 
+    // Voice name color
+    vname.style.color = voiceColor(voiceId);
+
+    // Unread badge
+    if (sessionForVoice && sessionForVoice.hasUnread) {
+      const badge = document.createElement('span');
+      badge.className = 'unread-badge';
+      card.appendChild(badge);
+    }
+
     card.appendChild(vname);
     card.appendChild(vstatus);
 
@@ -716,6 +750,16 @@ function renderVoiceGrid() {
       }
     };
 
+    // Context menu: connected cards get terminate + reset, others get reset only
+    card.oncontextmenu = (e) => {
+      e.preventDefault();
+      if (sessionForVoice) {
+        showContextMenu(e, sessionForVoice.session_id, voiceId);
+      } else {
+        showContextMenu(e, null, voiceId);
+      }
+    };
+
     grid.appendChild(card);
   }
 }
@@ -724,37 +768,7 @@ function renderVoiceGridIfActive() {
   if (!activeSessionId && !debugActive) renderVoiceGrid();
 }
 
-// --- Tab management ---
-function createTab(session) {
-  const tab = document.createElement('div');
-  tab.className = 'tab';
-  tab.dataset.sessionId = session.session_id;
-
-  const statusDot = document.createElement('span');
-  statusDot.className = `status-dot ${session.status}`;
-
-  const label = document.createElement('span');
-  label.className = 'tab-label';
-  label.textContent = voiceDisplayName(session.voice || 'af_sky');
-
-  const badge = document.createElement('span');
-  badge.className = 'badge';
-  badge.textContent = '!';
-
-  const closeBtn = document.createElement('span');
-  closeBtn.className = 'close-btn';
-  closeBtn.textContent = '\u00d7';
-  closeBtn.onclick = (e) => { e.stopPropagation(); terminateSession(session.session_id); };
-
-  tab.appendChild(statusDot);
-  tab.appendChild(label);
-  tab.appendChild(badge);
-  tab.appendChild(closeBtn);
-  tab.onclick = () => switchTab(session.session_id);
-
-  tabBar.insertBefore(tab, spawnBtn);
-  return { tab, statusDot, badge };
-}
+// --- Tab management (via voice grid) ---
 
 function stopActiveAudio() {
   // Pause currently playing audio and save it on the session for resume
@@ -785,15 +799,15 @@ function switchTab(sessionId) {
   }
   activeSessionId = sessionId;
 
-  // Update tab active state
-  tabBar.querySelectorAll('.tab').forEach(t => {
-    t.classList.toggle('active', t.dataset.sessionId === sessionId);
-  });
-
-  // Clear badge on the active tab
   const s = sessions.get(sessionId);
-  if (s && s.el) {
-    s.el.badge.classList.remove('visible');
+  if (s) s.hasUnread = false;
+
+  // Show voice name in header
+  const activeVoiceEl = document.getElementById('active-voice');
+  if (s) {
+    activeVoiceEl.textContent = voiceDisplayName(s.voice);
+    activeVoiceEl.style.color = voiceColor(s.voice);
+    activeVoiceEl.style.display = 'inline';
   }
 
   // Render chat messages
@@ -805,7 +819,6 @@ function switchTab(sessionId) {
     micBtn.disabled = s.status !== 'ready' && s.status !== 'active';
     voiceSelect.value = s.voice || 'af_sky';
     speedSelect.value = String(parseFloat(s.speed || 1.0).toFixed(1));
-    document.getElementById('tmux-label').textContent = s.tmux_session || s.session_id;
 
     // Resume thinking sound if this session is thinking
     if (s.isThinking) startThinkingSound(sessionId);
@@ -855,10 +868,13 @@ function renderChat() {
   chatArea.innerHTML = '';
   const s = sessions.get(activeSessionId);
   if (!s) return;
-  for (const msg of s.messages) {
+  const vc = voiceColor(s.voice);
+  const displayMessages = s.messages.slice(-50);
+  for (const msg of displayMessages) {
     const div = document.createElement('div');
     div.className = `msg ${msg.role}`;
     div.textContent = msg.text;
+    if (msg.role === 'assistant') div.style.borderLeft = `3px solid ${vc}`;
     chatArea.appendChild(div);
   }
   // Re-show thinking indicator if session is thinking
@@ -880,11 +896,11 @@ function addMessage(sessionId, role, text) {
   const s = sessions.get(sessionId);
   if (!s) return;
   s.messages.push({ role, text });
-  saveChats();
   if (sessionId === activeSessionId) {
     const div = document.createElement('div');
     div.className = `msg ${role}`;
     div.textContent = text;
+    if (role === 'assistant') div.style.borderLeft = `3px solid ${voiceColor(s.voice)}`;
     chatArea.appendChild(div);
     chatArea.scrollTop = chatArea.scrollHeight;
   }
@@ -892,10 +908,7 @@ function addMessage(sessionId, role, text) {
 
 // --- Session management ---
 async function spawnSession(voiceId = '') {
-  if (spawnBtn.classList.contains('disabled')) return;
   if (voiceId && spawningVoices.has(voiceId)) return; // already spawning this voice
-  spawnBtn.classList.add('disabled');
-  spawnBtn.textContent = 'Spawning...';
 
   // Mark voice as spawning immediately and update grid
   if (voiceId) {
@@ -920,39 +933,49 @@ async function spawnSession(voiceId = '') {
     // Session will appear via WS session_spawned or session_status message
     // But also add it immediately from the REST response
     if (!sessions.has(data.session_id)) {
-      addSession(data);
+      addSession(data, false);
     }
   } catch (e) {
     alert('Spawn error: ' + e.message);
   } finally {
     if (voiceId) spawningVoices.delete(voiceId);
-    spawnBtn.classList.remove('disabled');
-    spawnBtn.textContent = '+ New Session';
     renderVoiceGridIfActive();
   }
 }
 
-function addSession(data) {
-  const el = createTab(data);
+async function addSession(data, autoSwitch = true) {
   const isReady = data.status === 'ready' || data.mcp_connected;
-  const saved = loadChats()[data.session_id];
+
+  // Fetch persistent history from server
+  let serverMessages = [];
+  try {
+    const resp = await fetch(`/api/history/${data.voice}`);
+    if (resp.ok) {
+      const hist = await resp.json();
+      serverMessages = (hist.messages || []).map(m => ({ role: m.role, text: m.text }));
+    }
+  } catch (e) {
+    console.warn('Failed to fetch history:', e);
+  }
+
   sessions.set(data.session_id, {
     ...data,
     tmux_session: data.tmux_session || data.session_id,
-    voice: data.voice || (saved && saved.voice) || 'af_sky',
-    speed: data.speed || (saved && saved.speed) || 1.0,
-    messages: (saved && saved.messages) || [],
-    statusText: isReady ? 'Ready' : 'Waiting for Claude...',
-    el,
+    voice: data.voice || 'af_sky',
+    speed: data.speed || 1.0,
+    messages: serverMessages,
+    statusText: data.status_text || (isReady ? 'Ready' : 'Waiting for Claude...'),
+    hasUnread: false,
   });
-  switchTab(data.session_id);
-  // Only add system message if no saved history
-  if (!saved || saved.messages.length === 0) {
+  if (autoSwitch) switchTab(data.session_id);
+  if (serverMessages.length === 0) {
     if (isReady) {
       addMessage(data.session_id, 'system', 'Claude connected.');
     } else {
       addMessage(data.session_id, 'system', 'Session started. Waiting for Claude to connect...');
     }
+  } else if (!isReady) {
+    addMessage(data.session_id, 'system', 'Waiting for Claude to connect...');
   }
 }
 
@@ -966,33 +989,18 @@ async function terminateSession(sessionId) {
 }
 
 function removeSession(sessionId) {
-  const s = sessions.get(sessionId);
-  if (s && s.el) {
-    s.el.tab.remove();
-  }
   sessions.delete(sessionId);
-  clearChat(sessionId);
 
   if (activeSessionId === sessionId) {
-    // Switch to another tab or show empty state
-    const remaining = Array.from(sessions.keys());
-    if (remaining.length > 0) {
-      switchTab(remaining[0]);
-    } else {
-      activeSessionId = null;
-    }
+    activeSessionId = null;
   }
   updateLayout();
 }
 
 // --- Mic mute ---
-const micMuteBtn = document.getElementById('mic-mute');
 function toggleMicMute() {
   micMuted = !micMuted;
-  micMuteBtn.classList.toggle('muted', micMuted);
-  micMuteBtn.textContent = micMuted ? 'Muted' : 'Mic';
-  micMuteBtn.title = micMuted ? 'Unmute microphone' : 'Mute microphone';
-  // Mute/unmute persistent stream tracks
+  document.getElementById('opt-mute').textContent = micMuted ? '\u2713' : '';
   if (persistentStream) {
     persistentStream.getAudioTracks().forEach(t => { t.enabled = !micMuted; });
   }
@@ -1005,9 +1013,6 @@ async function changeVoice(voice) {
   const s = sessions.get(activeSessionId);
   if (s) {
     s.voice = voice;
-    const tabLabel = s.el.tab.querySelector('.tab-label');
-    if (tabLabel) tabLabel.textContent = voiceDisplayName(voice);
-    saveChats();
   }
   try {
     await fetch(`/api/sessions/${activeSessionId}/voice`, {
@@ -1041,16 +1046,14 @@ async function changeSpeed(speed) {
 // --- Auto mode ---
 function toggleAutoMode() {
   autoMode = !autoMode;
-  const track = document.querySelector('#auto-toggle .toggle-track');
-  track.classList.toggle('on', autoMode);
+  document.getElementById('opt-auto').textContent = autoMode ? '\u2713' : '';
   updateMicUI();
 }
 
 // --- VAD (voice activity detection) ---
 function toggleVAD() {
   vadEnabled = !vadEnabled;
-  const track = document.querySelector('#vad-toggle .toggle-track');
-  track.classList.toggle('on', vadEnabled);
+  document.getElementById('opt-vad').textContent = vadEnabled ? '\u2713' : '';
 }
 
 function startVAD(stream) {
@@ -1104,8 +1107,7 @@ function startVAD(stream) {
 // --- Auto Interrupt (voice-based interrupt during playback) ---
 function toggleAutoInterrupt() {
   autoInterruptEnabled = !autoInterruptEnabled;
-  const track = document.querySelector('#auto-interrupt-toggle .toggle-track');
-  track.classList.toggle('on', autoInterruptEnabled);
+  document.getElementById('opt-interrupt').textContent = autoInterruptEnabled ? '\u2713' : '';
 }
 
 function startPlaybackVAD(sessionId) {
@@ -1221,17 +1223,18 @@ function stopThinkingSound() {
 
 // --- WebSocket ---
 function connect() {
+  setConnected('connecting');
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const url = `${proto}//${location.host}/ws`;
   ws = new WebSocket(url);
 
   ws.onopen = () => {
-    setConnected(true);
+    setConnected('connected');
     if (!activeSessionId) setStatus('Connected');
   };
 
   ws.onclose = () => {
-    setConnected(false);
+    setConnected('disconnected');
     ws = null;
     setTimeout(connect, 2000);
   };
@@ -1247,15 +1250,22 @@ function connect() {
 function handleMessage(data) {
   const { type, session_id } = data;
 
+  // Heartbeat — ignore pings
+  if (type === 'ping') return;
+
   // Hub-level messages (no session_id)
   if (type === 'session_list') {
+    const promises = [];
     for (const s of data.sessions) {
-      if (!sessions.has(s.session_id)) addSession(s);
+      if (!sessions.has(s.session_id)) promises.push(addSession(s, false));
     }
+    Promise.all(promises).then(() => renderVoiceGridIfActive());
     return;
   }
   if (type === 'session_spawned') {
-    if (!sessions.has(data.session.session_id)) addSession(data.session);
+    if (!sessions.has(data.session.session_id)) {
+      addSession(data.session, false).then(() => renderVoiceGridIfActive());
+    }
     return;
   }
   if (type === 'session_terminated') {
@@ -1266,12 +1276,13 @@ function handleMessage(data) {
     const s = sessions.get(data.session_id);
     if (s) {
       s.status = data.status;
-      if (s.el) s.el.statusDot.className = `status-dot ${data.status}`;
       if (data.status === 'ready') {
         cueSessionReady();
         addMessage(data.session_id, 'system', 'Claude connected.');
+        switchTab(data.session_id);
       }
     }
+    renderVoiceGridIfActive();
     return;
   }
   if (type === 'error') {
@@ -1296,7 +1307,6 @@ function handleMessage(data) {
     renderVoiceGridIfActive();
   } else if (type === 'audio') {
     s.status = 'active';
-    if (s.el) s.el.statusDot.className = 'status-dot active';
     if (session_id === activeSessionId) {
       playAudio(session_id, data.data);
       setStatus('Speaking...', session_id);
@@ -1305,7 +1315,7 @@ function handleMessage(data) {
       s.statusText = 'Speaking...';
       if (!s.audioBuffer) s.audioBuffer = [];
       s.audioBuffer.push(data.data);
-      if (s.el) s.el.badge.classList.add('visible');
+      s.hasUnread = true;
       renderVoiceGridIfActive();
     }
   } else if (type === 'listening') {
@@ -1325,10 +1335,10 @@ function handleMessage(data) {
       updateMicUI();
       setStatus('Tap Record');
     } else {
-      // Background tab — mark pending, show badge
+      // Background tab — mark pending
       s.pendingListen = true;
       s.statusText = 'Waiting...';
-      if (s.el) s.el.badge.classList.add('visible');
+      s.hasUnread = true;
     }
     renderVoiceGridIfActive();
   } else if (type === 'status') {
@@ -1338,7 +1348,6 @@ function handleMessage(data) {
   } else if (type === 'done') {
     s.statusText = 'Ready';
     s.status = 'ready';
-    if (s.el) s.el.statusDot.className = 'status-dot ready';
     if (session_id === activeSessionId) {
       setStatus('Ready', session_id);
       micBtn.disabled = false;
@@ -1482,11 +1491,8 @@ async function startRecording(sessionId) {
     mediaRecorder.start();
     recording = true;
     updateMicUI();
-    if (vadEnabled) {
-      setStatus('Recording...');
-    } else {
-      setStatus('Recording...');
-    }
+    startWaveform(stream);
+    setStatus('Recording...');
     if (vadEnabled) startVAD(stream);
   } catch (err) {
     setStatus('Microphone access denied');
@@ -1501,6 +1507,7 @@ function stopRecording(discard = false) {
     mediaRecorder.stop();
   }
   recording = false;
+  stopWaveform();
   updateMicUI();
 }
 
@@ -1613,10 +1620,7 @@ function showDebugPanel() {
   }
   activeSessionId = null;
   debugActive = true;
-
-  // Update tab styling
-  tabBar.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.getElementById('debug-tab').classList.add('active');
+  document.getElementById('active-voice').style.display = 'none';
 
   // Show debug, hide everything else
   document.getElementById('voice-grid').style.display = 'none';
@@ -1633,7 +1637,6 @@ function showDebugPanel() {
 function hideDebugPanel() {
   debugActive = false;
   document.getElementById('debug-panel').style.display = 'none';
-  document.getElementById('debug-tab').classList.remove('active');
   if (debugTimer) { clearInterval(debugTimer); debugTimer = null; }
 }
 
@@ -1652,12 +1655,25 @@ async function refreshDebug() {
     if (!resp.ok) return;
     const data = await resp.json();
 
+    // System stats
+    const sys = data.system || {};
+    const cpuColor = (sys.cpu_percent || 0) > 80 ? '#e63946' : (sys.cpu_percent || 0) > 50 ? '#e67e22' : '#2ecc71';
+    const gpuColor = (sys.gpu_percent || 0) > 80 ? '#e63946' : (sys.gpu_percent || 0) > 50 ? '#e67e22' : '#2ecc71';
+    const tempColor = (sys.gpu_temp_c || 0) > 80 ? '#e63946' : (sys.gpu_temp_c || 0) > 60 ? '#e67e22' : '#2ecc71';
+    let sysHtml = '';
+    if (sys.cpu_percent != null) sysHtml += `<div class="debug-kv"><span class="k">CPU</span><span class="v" style="color:${cpuColor}">${sys.cpu_percent}%</span></div>`;
+    if (sys.ram_percent != null) sysHtml += `<div class="debug-kv"><span class="k">RAM</span><span class="v">${sys.ram_used_gb} / ${sys.ram_total_gb} GB (${sys.ram_percent}%)</span></div>`;
+    if (sys.gpu_percent != null) sysHtml += `<div class="debug-kv"><span class="k">GPU</span><span class="v" style="color:${gpuColor}">${sys.gpu_percent}%</span></div>`;
+    if (sys.vram_used_mb != null) sysHtml += `<div class="debug-kv"><span class="k">VRAM</span><span class="v">${(sys.vram_used_mb / 1024).toFixed(1)} / ${(sys.vram_total_mb / 1024).toFixed(1)} GB</span></div>`;
+    if (sys.gpu_temp_c != null) sysHtml += `<div class="debug-kv"><span class="k">GPU Temp</span><span class="v" style="color:${tempColor}">${sys.gpu_temp_c}°C</span></div>`;
+    document.getElementById('debug-system').innerHTML = sysHtml || '<span style="color:#555">No system stats available</span>';
+
     // Hub info
     const hub = data.hub;
     document.getElementById('debug-hub').innerHTML = `
       <div class="debug-kv"><span class="k">Port</span><span class="v">${hub.port}</span></div>
       <div class="debug-kv"><span class="k">Uptime</span><span class="v">${debugDuration(hub.uptime_seconds)}</span></div>
-      <div class="debug-kv"><span class="k">Browser</span><span class="v"><span class="debug-badge ${hub.browser_connected ? 'yes' : 'no'}">${hub.browser_connected ? 'connected' : 'disconnected'}</span></span></div>
+      <div class="debug-kv"><span class="k">Clients</span><span class="v"><span class="debug-badge ${hub.browser_connected ? 'yes' : 'no'}">${hub.client_count} connected</span></span></div>
       <div class="debug-kv"><span class="k">Sessions</span><span class="v">${hub.session_count}</span></div>
     `;
 
@@ -1702,6 +1718,82 @@ async function refreshDebug() {
     }
   } catch {}
 }
+
+// --- Options menu ---
+function toggleOptions(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('options-menu');
+  menu.classList.toggle('visible');
+}
+
+// --- Context menu ---
+let contextMenuSessionId = null;
+let contextMenuVoiceId = null;
+
+function showContextMenu(e, sessionId, voiceId) {
+  e.preventDefault();
+  e.stopPropagation();
+  contextMenuSessionId = sessionId;
+  contextMenuVoiceId = voiceId;
+  const menu = document.getElementById('context-menu');
+  // Show/hide terminate based on whether there's an active session
+  document.getElementById('ctx-terminate').style.display = sessionId ? 'block' : 'none';
+  menu.style.left = e.clientX + 'px';
+  menu.style.top = e.clientY + 'px';
+  menu.classList.add('visible');
+}
+
+function hideContextMenu() {
+  document.getElementById('context-menu').classList.remove('visible');
+  contextMenuSessionId = null;
+  contextMenuVoiceId = null;
+}
+
+document.getElementById('ctx-terminate').addEventListener('click', () => {
+  if (contextMenuSessionId) terminateSession(contextMenuSessionId);
+  hideContextMenu();
+});
+
+document.getElementById('ctx-reset').addEventListener('click', async () => {
+  const vid = contextMenuVoiceId;
+  const sid = contextMenuSessionId;
+  if (!vid) { hideContextMenu(); return; }
+  if (!confirm(`Clear all history for ${voiceDisplayName(vid)}?`)) {
+    hideContextMenu();
+    return;
+  }
+  try {
+    await fetch(`/api/history/${vid}`, { method: 'DELETE' });
+  } catch (e) {
+    console.error('Reset error:', e);
+  }
+  // Clear local messages if session is active
+  if (sid) {
+    const s = sessions.get(sid);
+    if (s) {
+      s.messages = [];
+      if (sid === activeSessionId) renderChat();
+    }
+  }
+  hideContextMenu();
+});
+
+// --- Close menus on outside click / Escape ---
+document.addEventListener('click', (e) => {
+  const optMenu = document.getElementById('options-menu');
+  const optBtn = document.getElementById('options-btn');
+  if (optMenu.classList.contains('visible') && !optMenu.contains(e.target) && e.target !== optBtn) {
+    optMenu.classList.remove('visible');
+  }
+  hideContextMenu();
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    document.getElementById('options-menu').classList.remove('visible');
+    hideContextMenu();
+  }
+});
 
 // --- Init ---
 connect();

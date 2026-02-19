@@ -38,6 +38,7 @@ class Session:
     label: str = ""
     voice: str = "af_sky"
     speed: float = 1.0
+    status_text: str = ""  # last status sent to browser (e.g. "Speaking...", "Transcribing...")
     # Per-session bridge state (set by hub after creation)
     audio_queue: asyncio.Queue | None = field(default=None, repr=False)
     playback_done: asyncio.Event | None = field(default=None, repr=False)
@@ -54,6 +55,7 @@ class Session:
             "voice": self.voice,
             "speed": self.speed,
             "mcp_connected": self.mcp_ws is not None,
+            "status_text": self.status_text,
         }
 
     def touch(self) -> None:
@@ -65,9 +67,10 @@ class Session:
 
 
 class SessionManager:
-    def __init__(self) -> None:
+    def __init__(self, history_store=None) -> None:
         self.sessions: dict[str, Session] = {}
         self._counter = 0
+        self.history_store = history_store
         SESSION_DIR_BASE.mkdir(parents=True, exist_ok=True)
 
     async def cleanup_stale_sessions(self) -> None:
@@ -89,10 +92,11 @@ class SessionManager:
         except Exception as e:
             log.error("Error cleaning stale sessions: %s", e)
 
-        # Clean orphaned session work dirs
+        # Clean orphaned session work dirs (but keep voice dirs for --resume)
+        voice_ids = {v[0] for v in VOICES}
         try:
             for d in SESSION_DIR_BASE.iterdir():
-                if d.is_dir() and d.name not in self.sessions:
+                if d.is_dir() and d.name not in self.sessions and d.name not in voice_ids:
                     log.warning("Removing orphaned work dir: %s", d)
                     shutil.rmtree(d, ignore_errors=True)
         except Exception as e:
@@ -113,6 +117,12 @@ class SessionManager:
 
     async def spawn_session(self, label: str = "", voice: str = "") -> Session:
         """Create a temp dir with .mcp.json, tmux session, and start Claude."""
+        # Reject duplicate voice
+        if voice:
+            for s in self.sessions.values():
+                if s.voice == voice:
+                    raise RuntimeError(f"Voice {voice} already has an active session")
+
         self._counter += 1
         short_id = uuid.uuid4().hex[:6]
         session_id = f"{TMUX_SESSION_PREFIX}-{self._counter}-{short_id}"
@@ -140,8 +150,8 @@ class SessionManager:
         log.info("Spawning session %s (tmux: %s)", session_id, tmux_name)
 
         try:
-            # Create session work directory with .mcp.json
-            work_dir = SESSION_DIR_BASE / session_id
+            # Use a stable work directory per voice (so --resume finds the session)
+            work_dir = SESSION_DIR_BASE / voice_id
             work_dir.mkdir(parents=True, exist_ok=True)
             session.work_dir = str(work_dir)
 
@@ -162,21 +172,62 @@ class SessionManager:
             mcp_json_path.write_text(json.dumps(mcp_config, indent=2))
             log.info("Wrote %s", mcp_json_path)
 
+            # Check if we can resume a previous Claude session for this voice
+            claude_session_id = None
+            resuming = False
+            if self.history_store:
+                stored_id = self.history_store.get_claude_session_id(voice_id)
+                if stored_id:
+                    # Verify the session file exists somewhere in ~/.claude/projects/
+                    claude_projects = Path.home() / ".claude" / "projects"
+                    found = False
+                    if claude_projects.exists():
+                        for p in claude_projects.iterdir():
+                            if (p / f"{stored_id}.jsonl").exists():
+                                found = True
+                                break
+                    if found:
+                        claude_session_id = stored_id
+                        resuming = True
+                        log.info("[%s] Resuming Claude session %s", session_id, claude_session_id)
+                    else:
+                        log.info("[%s] Stored session %s not found, starting fresh", session_id, stored_id)
+
+            if not claude_session_id:
+                # Generate a new Claude session UUID for fresh starts
+                claude_session_id = str(uuid.uuid4())
+                log.info("[%s] New Claude session %s", session_id, claude_session_id)
+                if self.history_store:
+                    self.history_store.set_claude_session_id(voice_id, claude_session_id)
+
             # Write CLAUDE.md with agent identity
             claude_md = work_dir / "CLAUDE.md"
-            claude_md.write_text(
-                f"Your name is {voice_name}. "
-                f"When greeting the user, say: \"Hi, I'm {voice_name}! How can I help?\"\n"
-            )
+            if resuming:
+                identity = (
+                    f"Your name is {voice_name}. "
+                    f"You have an ongoing conversation with this user. "
+                    f"Greet them naturally as a returning friend, "
+                    f"referencing something from your recent conversation.\n"
+                )
+            else:
+                identity = (
+                    f"Your name is {voice_name}. "
+                    f"When greeting the user, say: \"Hi, I'm {voice_name}! How can I help?\"\n"
+                )
+            claude_md.write_text(identity)
 
             # Create tmux session starting in the work dir
             await self._run(
                 f"tmux new-session -d -s {tmux_name} -x 200 -y 50 -c {work_dir}"
             )
 
-            # Start Claude (it picks up .mcp.json from the work dir)
+            # Start Claude with session ID (resume or fresh)
+            if resuming:
+                claude_cmd = f"{CLAUDE_COMMAND} --resume {claude_session_id}"
+            else:
+                claude_cmd = f"{CLAUDE_COMMAND} --session-id {claude_session_id}"
             await self._run(
-                f'tmux send-keys -t {tmux_name} "{CLAUDE_COMMAND}" Enter'
+                f'tmux send-keys -t {tmux_name} "{claude_cmd}" Enter'
             )
 
             # Wait for Claude to initialize and MCP servers to start
@@ -261,11 +312,15 @@ class SessionManager:
                     await self.terminate_session(session_id)
 
     def _cleanup_workdir(self, session: Session) -> None:
-        if session.work_dir and os.path.exists(session.work_dir):
-            try:
-                shutil.rmtree(session.work_dir)
-            except Exception:
-                pass
+        # Don't delete voice work dirs — they persist for --resume
+        # Only clean up .mcp.json so stale config doesn't interfere
+        if session.work_dir:
+            mcp_json = Path(session.work_dir) / ".mcp.json"
+            if mcp_json.exists():
+                try:
+                    mcp_json.unlink()
+                except Exception:
+                    pass
 
     async def _cleanup_tmux(self, tmux_name: str) -> None:
         try:

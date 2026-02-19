@@ -9,9 +9,9 @@ Complete message reference for browser and MCP clients connecting to the hub.
 | `ws(s)://{host}:{port}/ws` | Browser (single connection, last-wins) | All browser-hub communication |
 | `ws://{host}:{port}/mcp/{session_id}` | `hub_mcp_server.py` (one per session) | Per-session MCP-hub communication |
 
-## Browser WebSocket (`/ws`)
+## Client WebSocket (`/ws`)
 
-Single connection. If a new browser connects, the previous one is replaced. On disconnect, all sessions with pending `playback_done` waits are unblocked.
+Multiple clients can connect simultaneously (browser, iOS app, etc.). All receive the same messages. When the last client disconnects, all sessions with pending `playback_done` waits are unblocked.
 
 ### On Connect
 
@@ -68,11 +68,13 @@ No `session_id`:
 | `session_list` | `sessions` (array of session objects) | Full session list, sent on connect |
 | `session_status` | `session_id`, `status` | Session state changed (e.g. "ready") |
 | `session_terminated` | `session_id` | Session was terminated |
+| `ping` | — | Heartbeat every 30s. Clients should ignore (no response needed). |
 
 ```json
 {"type": "session_list", "sessions": [{...}, {...}]}
 {"type": "session_status", "session_id": "voice-1-abc123", "status": "ready"}
 {"type": "session_terminated", "session_id": "voice-1-abc123"}
+{"type": "ping"}
 ```
 
 ## MCP WebSocket (`/mcp/{session_id}`)
@@ -154,6 +156,8 @@ Returned by REST API and included in `session_list`:
 | `DELETE` | `/api/sessions/{id}` | — | `{"status": "terminated"}` |
 | `PUT` | `/api/sessions/{id}/voice` | `{"voice": "am_adam"}` | `{"voice": "am_adam"}` |
 | `PUT` | `/api/sessions/{id}/speed` | `{"speed": 1.5}` | `{"speed": 1.5}` |
+| `GET` | `/api/history/{voice_id}` | — | `{"voice_id": "...", "messages": [{role, text, ts}, ...]}` |
+| `DELETE` | `/api/history/{voice_id}` | — | `{"status": "cleared", "voice_id": "..."}` |
 | `GET` | `/api/debug` | — | Hub info, sessions, tmux, services |
 | `GET` | `/api/debug/log` | — | `{"lines": [...]}` (last 50 hub log lines) |
 

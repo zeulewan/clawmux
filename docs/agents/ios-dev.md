@@ -42,8 +42,21 @@ The app needs to handle all the same WebSocket messages and user interactions as
 6. **Background session handling** — buffer audio for non-focused sessions, show badges, resume on switch
 7. **Toggles** — Auto Record, Auto End (VAD), Auto Interrupt, Mic Mute
 8. **Voice/speed selection** — per-session, via REST API
+9. **Message history** — fetch from `GET /api/history/{voice_id}` when opening a voice's chat, display previous messages. Reset via `DELETE /api/history/{voice_id}`
 
 See `docs/agents/reference/ui-behavior.md` for the exact behavior of every feature.
+
+## Message History
+
+Messages are persisted **server-side per voice** (not per session). When a session is terminated and respawned for the same voice, the conversation history carries over.
+
+- **Fetch history**: `GET /api/history/{voice_id}` → `{"voice_id": "af_sky", "messages": [{"role": "user"|"assistant", "text": "...", "ts": 1708300000.0}, ...]}`
+- **Clear history**: `DELETE /api/history/{voice_id}` → `{"status": "cleared", "voice_id": "af_sky"}`
+- The hub records messages automatically during `converse()` — clients do NOT need to send messages to be stored
+- On session open, fetch history and display it as the chat transcript
+- Only display the **last 50 messages** — server stores up to 200 but rendering all is unnecessary
+- Provide a "Reset History" action (e.g. in a context menu or swipe action) that calls the DELETE endpoint
+- **Reset clears everything** — message history AND the Claude session. The next spawn for that voice starts completely fresh (new Claude context, default greeting)
 
 ## Connection Details
 
@@ -51,7 +64,27 @@ The hub runs on the user's workstation, accessed via Tailscale:
 
 - **WebSocket**: `wss://{hostname}.ts.net:3460/ws`
 - **REST API**: `https://{hostname}.ts.net:3460/api/...`
-- Single client connection (last-wins) — if browser is open, app replaces it
+- **Multi-client** — multiple clients (browser + iOS app) can connect simultaneously. All receive the same messages.
+
+## Heartbeat & Sync
+
+The hub sends `{"type": "ping"}` to all clients every 30 seconds. Clients that fail to receive it are disconnected. The iOS app should:
+
+- **Ignore `ping` messages** — no response needed, just don't crash on them
+- **Detect stale connections** — if no `ping` received for ~60s, reconnect
+- **Stay in sync** — all session state changes (status, new messages, audio) are broadcast to every connected client simultaneously. The app doesn't need to poll — just listen to the WebSocket.
+- **On reconnect** — hub sends `session_list` on connect, which gives the full current state. Fetch history for each session via `GET /api/history/{voice_id}` to restore chat transcripts.
+
+## Navigation
+
+The app should use a **voice grid** as the landing page (not tabs). Each voice gets a card.
+
+- **Tapping a card with an active session** → switch to its chat view immediately
+- **Tapping an inactive card** → spawn via `POST /api/sessions`, stay on the grid showing "Spawning..." state on the card. When a `session_status` message arrives with `status: "ready"` for that session, auto-switch to the chat view.
+- **Duplicate voice guard** — the server returns 503 if that voice already has a session. Don't show an error, just ignore it.
+- **On app launch or reconnect** — always show the voice grid first, never auto-switch to a session
+
+Show a connection status indicator (pulsing yellow = connecting, green = connected, red = disconnected).
 
 ## Audio Format
 

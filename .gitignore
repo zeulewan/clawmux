@@ -5,6 +5,7 @@ __pycache__/
 site/
 *.egg-info/
 .cache/
+data/
 
 # iOS
 ios/build/

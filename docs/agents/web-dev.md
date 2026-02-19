@@ -25,6 +25,12 @@ session_manager.py            # Session lifecycle — tmux spawn/kill, temp dirs
 hub_mcp_server.py             # Thin MCP server running inside each Claude session
 ```
 
+## Key Files (continued)
+
+```
+history_store.py              # Per-voice persistent message history (JSON files in data/history/)
+```
+
 ## Conventions
 
 - The browser UI is a **single HTML file** with embedded CSS and JS. No build step, no bundling.
@@ -33,7 +39,10 @@ hub_mcp_server.py             # Thin MCP server running inside each Claude sessi
 - `renderVoiceGridIfActive()` re-renders the home page grid only if the home tab is showing. Call it after any state change that affects voice card display.
 - `updateMicUI()` derives the main button state from `currentAudio`, `recording`, etc. Call it after changing any of those.
 - Toggles default to: Auto Record off, Auto End on, Auto Interrupt off. Toggle states are not persisted across page loads.
-- Chat messages are persisted to `localStorage`. Session list comes from the hub on WebSocket connect.
+- **No tab bar** — navigation is via the voice grid (home page). Clicking a voice card switches to that session or spawns a new one.
+- **No localStorage for messages** — chat history is persisted server-side per voice via `history_store.py`. Fetched from `GET /api/history/{voice_id}` on session open.
+- Controls (toggles, voice/speed) are in an options menu (⋯ button) to keep the UI minimal.
+- Right-click context menu on voice cards for "Reset History" and "Terminate Session".
 
 ## Testing
 
@@ -41,7 +50,8 @@ After making changes:
 
 1. Reload the hub (`python hub.py`) if you changed server-side code
 2. Hard-refresh the browser (`Ctrl+Shift+R`) for client-side changes
-3. Verify on the home page (voice cards update correctly)
-4. Verify in a session (buttons, audio, recording, thinking indicators)
-5. Verify tab switching (audio pause/resume, background buffering)
-6. Verify the debug panel still loads
+3. Verify on the home page (voice cards update correctly, unread badges, context menus)
+4. Verify in a session (buttons, audio, recording, thinking indicators, options menu)
+5. Verify session switching via voice cards (audio pause/resume, background buffering)
+6. Verify the debug panel still loads (via header link)
+7. Verify message history persists across session terminate/respawn

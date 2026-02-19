@@ -23,6 +23,7 @@ import uvicorn
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 
+from history_store import HistoryStore
 from hub_config import HUB_PORT, HUB_START_TIME, KOKORO_URL, WHISPER_URL
 from session_manager import SessionManager
 
@@ -38,20 +39,38 @@ logging.basicConfig(
 )
 log = logging.getLogger("hub")
 
-session_mgr = SessionManager()
+history = HistoryStore()
+session_mgr = SessionManager(history_store=history)
 
-# Browser WebSocket (single connection, last-wins)
-browser_ws: WebSocket | None = None
+# Browser WebSocket clients (multiple connections supported)
+browser_clients: set[WebSocket] = set()
 
 
 async def send_to_browser(data: dict) -> None:
-    global browser_ws
-    if browser_ws is None:
-        return
-    try:
-        await browser_ws.send_json(data)
-    except Exception as e:
-        log.error("Error sending to browser: %s", e)
+    """Broadcast a message to all connected browser/app clients."""
+    dead = []
+    for ws in browser_clients:
+        try:
+            await ws.send_json(data)
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        browser_clients.discard(ws)
+
+
+async def heartbeat_loop() -> None:
+    """Ping all browser clients every 30s, remove dead connections."""
+    while True:
+        await asyncio.sleep(30)
+        dead = []
+        for ws in list(browser_clients):
+            try:
+                await ws.send_json({"type": "ping"})
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            log.info("Heartbeat: removing dead client (%d remain)", len(browser_clients) - 1)
+            browser_clients.discard(ws)
 
 
 # --- TTS / STT ---
@@ -95,6 +114,8 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
 
     # Send assistant text + status to browser
     await send_to_browser({"session_id": session_id, "type": "assistant_text", "text": message})
+    history.append(session.voice, session.label, "assistant", message)
+    session.status_text = "Speaking..."
     await send_to_browser({"session_id": session_id, "type": "status", "text": "Speaking..."})
 
     # TTS
@@ -107,6 +128,7 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
     await send_to_browser({"session_id": session_id, "type": "audio", "data": audio_b64})
 
     if not wait_for_response:
+        session.status_text = ""
         await send_to_browser({"session_id": session_id, "type": "done"})
         # Session ending — notify browser to close tab after playback
         await send_to_browser({"session_id": session_id, "type": "session_ended"})
@@ -124,6 +146,7 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
             break
 
     # Tell browser to start recording
+    session.status_text = "Listening..."
     await send_to_browser({"session_id": session_id, "type": "listening"})
     log.info("[%s] Listening...", session_id)
 
@@ -134,11 +157,13 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
     # Empty audio = session muted in browser
     if len(audio_bytes) == 0:
         log.info("[%s] Empty audio (muted)", session_id)
+        session.status_text = ""
         await send_to_browser({"session_id": session_id, "type": "done"})
         session.touch()
         return "(session muted)"
 
     # STT
+    session.status_text = "Transcribing..."
     await send_to_browser({"session_id": session_id, "type": "status", "text": "Transcribing..."})
     text = await stt(audio_bytes)
     log.info("[%s] STT: %s", session_id, text[:100])
@@ -146,7 +171,9 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
     # Send user's transcribed text to browser for chat display
     if text:
         await send_to_browser({"session_id": session_id, "type": "user_text", "text": text})
+        history.append(session.voice, session.label, "user", text)
 
+    session.status_text = ""
     await send_to_browser({"session_id": session_id, "type": "done"})
 
     session.touch()
@@ -160,11 +187,13 @@ async def lifespan(app: FastAPI):
     log.info("Hub starting on port %d", HUB_PORT)
     await session_mgr.cleanup_stale_sessions()
     timeout_task = asyncio.create_task(session_mgr.run_timeout_loop())
+    hb_task = asyncio.create_task(heartbeat_loop())
     try:
         yield
     finally:
         log.info("Hub shutting down, terminating all sessions")
         timeout_task.cancel()
+        hb_task.cancel()
         for sid in list(session_mgr.sessions):
             try:
                 await session_mgr.terminate_session(sid)
@@ -193,15 +222,9 @@ async def static_file(filename: str):
 
 @app.websocket("/ws")
 async def browser_websocket(ws: WebSocket):
-    global browser_ws
     await ws.accept()
-    log.info("Browser connected")
-
-    old = browser_ws
-    browser_ws = ws
-
-    if old is not None:
-        log.info("Replacing previous browser connection")
+    browser_clients.add(ws)
+    log.info("Client connected (%d total)", len(browser_clients))
 
     try:
         # Send current session list
@@ -214,13 +237,14 @@ async def browser_websocket(ws: WebSocket):
             data = await ws.receive_json()
             await handle_browser_message(data)
     except WebSocketDisconnect:
-        log.info("Browser disconnected")
+        log.info("Client disconnected")
     except Exception as e:
-        log.error("Browser WS error: %s: %s", type(e).__name__, e)
+        log.error("Client WS error: %s: %s", type(e).__name__, e)
     finally:
-        if browser_ws is ws:
-            browser_ws = None
-            # Unblock any waiting converse() calls
+        browser_clients.discard(ws)
+        log.info("Clients remaining: %d", len(browser_clients))
+        if not browser_clients:
+            # No clients left — unblock any waiting converse() calls
             for session in session_mgr.sessions.values():
                 if session.playback_done:
                     session.playback_done.set()
@@ -298,7 +322,7 @@ async def mcp_websocket(ws: WebSocket, session_id: str):
             elif msg_type == "status_check":
                 await ws.send_json({
                     "type": "status_result",
-                    "connected": browser_ws is not None,
+                    "connected": len(browser_clients) > 0,
                 })
 
     except WebSocketDisconnect:
@@ -365,9 +389,51 @@ async def set_session_speed(session_id: str, request: Request):
     return JSONResponse({"speed": speed})
 
 
+@app.get("/api/history/{voice_id}")
+async def get_history(voice_id: str):
+    messages = history.load(voice_id)
+    return JSONResponse({"voice_id": voice_id, "messages": messages})
+
+
+@app.delete("/api/history/{voice_id}")
+async def clear_history(voice_id: str):
+    history.clear(voice_id)
+    return JSONResponse({"status": "cleared", "voice_id": voice_id})
+
+
 @app.get("/api/debug")
 async def debug_info():
     import time as _time
+
+    # System stats
+    system = {}
+    try:
+        import psutil
+        system["cpu_percent"] = psutil.cpu_percent(interval=0.1)
+        mem = psutil.virtual_memory()
+        system["ram_used_gb"] = round(mem.used / 1073741824, 1)
+        system["ram_total_gb"] = round(mem.total / 1073741824, 1)
+        system["ram_percent"] = mem.percent
+    except ImportError:
+        system["cpu_percent"] = None
+        system["ram_percent"] = None
+
+    # GPU stats via nvidia-smi
+    try:
+        gpu_proc = await asyncio.create_subprocess_exec(
+            "nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu",
+            "--format=csv,noheader,nounits",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+        )
+        gpu_out, _ = await gpu_proc.communicate()
+        if gpu_proc.returncode == 0:
+            parts = gpu_out.decode().strip().split(", ")
+            system["gpu_percent"] = int(parts[0])
+            system["vram_used_mb"] = int(parts[1])
+            system["vram_total_mb"] = int(parts[2])
+            system["gpu_temp_c"] = int(parts[3])
+    except Exception:
+        pass
 
     # Gather tmux sessions
     tmux_sessions = []
@@ -417,9 +483,11 @@ async def debug_info():
         "hub": {
             "port": HUB_PORT,
             "uptime_seconds": round(_time.time() - HUB_START_TIME),
-            "browser_connected": browser_ws is not None,
+            "browser_connected": len(browser_clients) > 0,
+            "client_count": len(browser_clients),
             "session_count": len(session_mgr.sessions),
         },
+        "system": system,
         "sessions": hub_sessions,
         "tmux_sessions": tmux_sessions,
         "services": services,
