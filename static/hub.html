@@ -1196,7 +1196,6 @@ function handleMessage(data) {
 
   if (type === 'assistant_text') {
     hideThinking(session_id);
-    stopThinkingSound();
     addMessage(session_id, 'assistant', data.text);
   } else if (type === 'user_text') {
     addMessage(session_id, 'user', data.text);
@@ -1423,7 +1422,6 @@ function sendAudio(sessionId) {
   micBtn.classList.add('processing');
   micBtn.textContent = 'Processing...';
   micBtn.disabled = true;
-  startThinkingSound();
 
   const reader = new FileReader();
   reader.onload = () => {
