@@ -99,3 +99,5 @@ If anything is missing, Claude will walk you through it.
 - **Switch tabs** to jump between agents. Audio pauses when you leave and resumes when you come back.
 - **Background work** — If an agent is talking while you're on another tab, the audio is saved and plays when you switch back.
 - You can **attach to the tmux session** shown in the bottom bar to see what Claude is doing behind the scenes.
+
+For the full details on every state, button, toggle, and audio behavior, see the [UI Behavior Reference](ui-behavior.md).
