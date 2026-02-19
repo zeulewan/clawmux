@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voice Chat Hub</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+#header {
+  padding: 0.5rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: #16162a;
+  border-bottom: 1px solid #2a2a4a;
+}
+#header h1 {
+  font-size: 1rem;
+  font-weight: 600;
+  flex: 1;
+}
+#dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #e63946;
+  transition: background 0.3s;
+}
+#dot.connected { background: #2ecc71; }
+#conn-label {
+  font-size: 0.75rem;
+  color: #888;
+}
+
+/* Tab bar */
+#tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: #12122a;
+  border-bottom: 1px solid #2a2a4a;
+  overflow-x: auto;
+  min-height: 36px;
+}
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  color: #888;
+  cursor: pointer;
+  border-right: 1px solid #2a2a4a;
+  white-space: nowrap;
+  position: relative;
+  user-select: none;
+}
+.tab:hover { background: #1e1e3a; }
+.tab.active { color: #e0e0e0; background: #1a1a2e; border-bottom: 2px solid #3a86ff; }
+.tab .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #888;
+}
+.tab .status-dot.ready { background: #2ecc71; }
+.tab .status-dot.starting { background: #f1c40f; }
+.tab .status-dot.active { background: #3a86ff; }
+.tab .badge {
+  background: #e63946;
+  color: #fff;
+  font-size: 0.6rem;
+  padding: 1px 4px;
+  border-radius: 6px;
+  display: none;
+}
+.tab .badge.visible { display: inline; }
+.tab .close-btn {
+  font-size: 0.7rem;
+  color: #666;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.tab .close-btn:hover { color: #e63946; }
+#spawn-btn {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  color: #3a86ff;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+#spawn-btn:hover { color: #5a9aff; }
+#spawn-btn.disabled { color: #555; cursor: wait; }
+
+/* Chat area */
+#chat-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.msg {
+  max-width: 80%;
+  padding: 0.75rem 1rem;
+  border-radius: 1rem;
+  line-height: 1.5;
+  font-size: 0.95rem;
+}
+.msg.user {
+  align-self: flex-end;
+  background: #3a86ff;
+  color: #fff;
+  border-bottom-right-radius: 0.25rem;
+}
+.msg.assistant {
+  align-self: flex-start;
+  background: #2a2a4a;
+  border-bottom-left-radius: 0.25rem;
+}
+.msg.system {
+  align-self: center;
+  background: none;
+  color: #666;
+  font-size: 0.8rem;
+  padding: 0.25rem;
+}
+
+/* Empty state */
+#empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  color: #666;
+}
+#empty-state h2 { font-size: 1.2rem; font-weight: 500; }
+#empty-state p { font-size: 0.9rem; }
+#empty-state button {
+  padding: 0.6rem 1.5rem;
+  background: #3a86ff;
+  color: #fff;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+#empty-state button:hover { background: #2a76ef; }
+
+/* Controls */
+#controls {
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  background: #16162a;
+}
+#status {
+  font-size: 0.8rem;
+  color: #888;
+  min-height: 1.2em;
+}
+#mic {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: none;
+  background: #3a86ff;
+  color: #fff;
+  font-size: 1.6rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#mic:hover { background: #2a76ef; }
+#mic.recording {
+  background: #e63946;
+  animation: pulse 1s infinite;
+}
+#mic:disabled { opacity: 0.4; cursor: not-allowed; }
+#mic-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+#mic-mute {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid #555;
+  background: transparent;
+  color: #888;
+  font-size: 1.2rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+#mic-mute:hover { border-color: #888; color: #ccc; }
+#mic-mute.muted { border-color: #e63946; color: #e63946; background: rgba(230,57,70,0.15); }
+#auto-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: #888;
+  cursor: pointer;
+  user-select: none;
+}
+#auto-toggle .toggle-track {
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: #333;
+  position: relative;
+  transition: background 0.2s;
+}
+#auto-toggle .toggle-track.on { background: #3a86ff; }
+#auto-toggle .toggle-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ccc;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: left 0.2s;
+}
+#auto-toggle .toggle-track.on .toggle-thumb { left: 18px; }
+#voice-select {
+  background: #2a2a4a;
+  color: #e0e0e0;
+  border: 1px solid #444;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  outline: none;
+}
+#voice-select:hover { border-color: #666; }
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(230,57,70,0.5); }
+  50% { box-shadow: 0 0 0 12px rgba(230,57,70,0); }
+}
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>Voice Chat Hub</h1>
+  <div id="dot"></div>
+  <span id="conn-label">Disconnected</span>
+</div>
+
+<div id="tab-bar">
+  <div id="spawn-btn" onclick="spawnSession()">+ New Session</div>
+</div>
+
+<div id="empty-state">
+  <h2>No sessions</h2>
+  <p>Spawn a Claude session to start talking.</p>
+  <button onclick="spawnSession()">New Session</button>
+</div>
+
+<div id="chat-area" style="display:none;"></div>
+
+<div id="controls" style="display:none;">
+  <div id="status"></div>
+  <div id="mic-row">
+    <button id="mic-mute" title="Mute microphone" onclick="toggleMicMute()">&#127908;</button>
+    <button id="mic" disabled>&#127908;</button>
+    <div id="auto-toggle" onclick="toggleAutoMode()" title="Auto-record after Claude speaks">
+      <div class="toggle-track on"><div class="toggle-thumb"></div></div>
+      <span>Auto</span>
+    </div>
+    <select id="voice-select" onchange="changeVoice(this.value)" title="Session voice">
+      <option value="af_sky">Sky (F)</option>
+      <option value="af_alloy">Alloy (F)</option>
+      <option value="af_sarah">Sarah (F)</option>
+      <option value="am_adam">Adam (M)</option>
+      <option value="am_echo">Echo (M)</option>
+      <option value="am_onyx">Onyx (M)</option>
+      <option value="bm_fable">Fable</option>
+    </select>
+  </div>
+</div>
+
+<script>
+// --- State ---
+const sessions = new Map(); // session_id -> { label, status, messages[], el }
+let activeSessionId = null;
+let recordingSessionId = null;
+let ws = null;
+let mediaRecorder = null;
+let audioChunks = [];
+let recording = false;
+let micMuted = false;
+let autoMode = true;
+let pendingListenSessionId = null; // session waiting for manual mic click
+
+// --- DOM refs ---
+const tabBar = document.getElementById('tab-bar');
+const spawnBtn = document.getElementById('spawn-btn');
+const emptyState = document.getElementById('empty-state');
+const chatArea = document.getElementById('chat-area');
+const controls = document.getElementById('controls');
+const statusEl = document.getElementById('status');
+const micBtn = document.getElementById('mic');
+const dot = document.getElementById('dot');
+const connLabel = document.getElementById('conn-label');
+
+// --- Helpers ---
+function setConnected(connected) {
+  dot.classList.toggle('connected', connected);
+  connLabel.textContent = connected ? 'Connected' : 'Disconnected';
+}
+
+function setStatus(text) {
+  statusEl.textContent = text;
+}
+
+function updateLayout() {
+  const hasSessions = sessions.size > 0;
+  emptyState.style.display = hasSessions ? 'none' : 'flex';
+  chatArea.style.display = (hasSessions && activeSessionId) ? 'flex' : 'none';
+  controls.style.display = (hasSessions && activeSessionId) ? 'flex' : 'none';
+}
+
+// --- Tab management ---
+function createTab(session) {
+  const tab = document.createElement('div');
+  tab.className = 'tab';
+  tab.dataset.sessionId = session.session_id;
+
+  const statusDot = document.createElement('span');
+  statusDot.className = `status-dot ${session.status}`;
+
+  const label = document.createElement('span');
+  label.textContent = session.label || session.session_id;
+
+  const badge = document.createElement('span');
+  badge.className = 'badge';
+  badge.textContent = '!';
+
+  const closeBtn = document.createElement('span');
+  closeBtn.className = 'close-btn';
+  closeBtn.textContent = '\u00d7';
+  closeBtn.onclick = (e) => { e.stopPropagation(); terminateSession(session.session_id); };
+
+  tab.appendChild(statusDot);
+  tab.appendChild(label);
+  tab.appendChild(badge);
+  tab.appendChild(closeBtn);
+  tab.onclick = () => switchTab(session.session_id);
+
+  tabBar.insertBefore(tab, spawnBtn);
+  return { tab, statusDot, badge };
+}
+
+function switchTab(sessionId) {
+  activeSessionId = sessionId;
+
+  // Update tab active state
+  tabBar.querySelectorAll('.tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.sessionId === sessionId);
+  });
+
+  // Clear badge on the active tab
+  const s = sessions.get(sessionId);
+  if (s && s.el) {
+    s.el.badge.classList.remove('visible');
+  }
+
+  // Render chat messages
+  renderChat();
+  updateLayout();
+
+  if (s) {
+    setStatus(s.statusText || 'Ready');
+    micBtn.disabled = s.status !== 'ready' && s.status !== 'active';
+    voiceSelect.value = s.voice || 'af_sky';
+  }
+}
+
+function renderChat() {
+  chatArea.innerHTML = '';
+  const s = sessions.get(activeSessionId);
+  if (!s) return;
+  for (const msg of s.messages) {
+    const div = document.createElement('div');
+    div.className = `msg ${msg.role}`;
+    div.textContent = msg.text;
+    chatArea.appendChild(div);
+  }
+  chatArea.scrollTop = chatArea.scrollHeight;
+}
+
+function addMessage(sessionId, role, text) {
+  const s = sessions.get(sessionId);
+  if (!s) return;
+  s.messages.push({ role, text });
+  if (sessionId === activeSessionId) {
+    const div = document.createElement('div');
+    div.className = `msg ${role}`;
+    div.textContent = text;
+    chatArea.appendChild(div);
+    chatArea.scrollTop = chatArea.scrollHeight;
+  }
+}
+
+// --- Session management ---
+async function spawnSession() {
+  if (spawnBtn.classList.contains('disabled')) return;
+  spawnBtn.classList.add('disabled');
+  spawnBtn.textContent = 'Spawning...';
+
+  try {
+    const resp = await fetch('/api/sessions', { method: 'POST' });
+    const data = await resp.json();
+    if (data.error) {
+      alert('Failed to spawn: ' + data.error);
+      return;
+    }
+    // Session will appear via WS session_spawned or session_status message
+    // But also add it immediately from the REST response
+    if (!sessions.has(data.session_id)) {
+      addSession(data);
+    }
+  } catch (e) {
+    alert('Spawn error: ' + e.message);
+  } finally {
+    spawnBtn.classList.remove('disabled');
+    spawnBtn.textContent = '+ New Session';
+  }
+}
+
+function addSession(data) {
+  const el = createTab(data);
+  const isReady = data.status === 'ready' || data.mcp_connected;
+  sessions.set(data.session_id, {
+    ...data,
+    voice: data.voice || 'af_sky',
+    messages: [],
+    statusText: isReady ? 'Ready' : 'Waiting for Claude...',
+    el,
+  });
+  switchTab(data.session_id);
+  if (isReady) {
+    addMessage(data.session_id, 'system', 'Claude connected.');
+  } else {
+    addMessage(data.session_id, 'system', 'Session started. Waiting for Claude to connect...');
+  }
+}
+
+async function terminateSession(sessionId) {
+  try {
+    await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
+  } catch (e) {
+    console.error('Terminate error:', e);
+  }
+  removeSession(sessionId);
+}
+
+function removeSession(sessionId) {
+  const s = sessions.get(sessionId);
+  if (s && s.el) {
+    s.el.tab.remove();
+  }
+  sessions.delete(sessionId);
+
+  if (activeSessionId === sessionId) {
+    // Switch to another tab or show empty state
+    const remaining = Array.from(sessions.keys());
+    if (remaining.length > 0) {
+      switchTab(remaining[0]);
+    } else {
+      activeSessionId = null;
+    }
+  }
+  updateLayout();
+}
+
+// --- Mic mute ---
+const micMuteBtn = document.getElementById('mic-mute');
+function toggleMicMute() {
+  micMuted = !micMuted;
+  micMuteBtn.classList.toggle('muted', micMuted);
+  micMuteBtn.innerHTML = micMuted ? '&#128263;' : '&#127908;';
+  micMuteBtn.title = micMuted ? 'Unmute microphone' : 'Mute microphone';
+}
+
+// --- Voice selector ---
+const voiceSelect = document.getElementById('voice-select');
+async function changeVoice(voice) {
+  if (!activeSessionId) return;
+  const s = sessions.get(activeSessionId);
+  if (s) s.voice = voice;
+  try {
+    await fetch(`/api/sessions/${activeSessionId}/voice`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ voice }),
+    });
+  } catch (e) {
+    console.error('Failed to set voice:', e);
+  }
+}
+
+// --- Auto mode ---
+function toggleAutoMode() {
+  autoMode = !autoMode;
+  const track = document.querySelector('#auto-toggle .toggle-track');
+  const label = document.querySelector('#auto-toggle span');
+  track.classList.toggle('on', autoMode);
+  label.textContent = autoMode ? 'Auto' : 'Manual';
+}
+
+// --- WebSocket ---
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url = `${proto}//${location.host}/ws`;
+  ws = new WebSocket(url);
+
+  ws.onopen = () => {
+    setConnected(true);
+    if (!activeSessionId) setStatus('Connected');
+  };
+
+  ws.onclose = () => {
+    setConnected(false);
+    ws = null;
+    setTimeout(connect, 2000);
+  };
+
+  ws.onerror = () => { ws?.close(); };
+
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    handleMessage(data);
+  };
+}
+
+function handleMessage(data) {
+  const { type, session_id } = data;
+
+  // Hub-level messages (no session_id)
+  if (type === 'session_list') {
+    for (const s of data.sessions) {
+      if (!sessions.has(s.session_id)) addSession(s);
+    }
+    return;
+  }
+  if (type === 'session_spawned') {
+    if (!sessions.has(data.session.session_id)) addSession(data.session);
+    return;
+  }
+  if (type === 'session_terminated') {
+    removeSession(data.session_id);
+    return;
+  }
+  if (type === 'session_status') {
+    const s = sessions.get(data.session_id);
+    if (s) {
+      s.status = data.status;
+      if (s.el) s.el.statusDot.className = `status-dot ${data.status}`;
+      if (data.status === 'ready') {
+        addMessage(data.session_id, 'system', 'Claude connected.');
+      }
+    }
+    return;
+  }
+  if (type === 'error') {
+    alert('Hub error: ' + data.message);
+    return;
+  }
+
+  // Session-scoped messages
+  if (!session_id) return;
+  const s = sessions.get(session_id);
+  if (!s) return;
+
+  if (type === 'assistant_text') {
+    addMessage(session_id, 'assistant', data.text);
+  } else if (type === 'user_text') {
+    addMessage(session_id, 'user', data.text);
+  } else if (type === 'audio') {
+    playAudio(session_id, data.data);
+    s.status = 'active';
+    if (s.el) s.el.statusDot.className = 'status-dot active';
+    if (session_id === activeSessionId) setStatus('Playing...');
+  } else if (type === 'listening') {
+    if (micMuted) {
+      // Mic muted: send empty audio so hub doesn't hang
+      sendSilentAudio(session_id);
+    } else if (session_id === activeSessionId && autoMode) {
+      startRecording(session_id);
+    } else if (session_id === activeSessionId && !autoMode) {
+      // Manual mode: enable mic and wait for user to click
+      pendingListenSessionId = session_id;
+      micBtn.disabled = false;
+      setStatus('Tap mic to respond');
+    } else {
+      // Show badge on inactive tab
+      if (s.el) s.el.badge.classList.add('visible');
+    }
+  } else if (type === 'status') {
+    s.statusText = data.text;
+    if (session_id === activeSessionId) setStatus(data.text);
+  } else if (type === 'done') {
+    s.statusText = 'Ready';
+    s.status = 'ready';
+    if (s.el) s.el.statusDot.className = 'status-dot ready';
+    if (session_id === activeSessionId) {
+      setStatus('Ready');
+      micBtn.disabled = false;
+    }
+  }
+}
+
+// --- Audio playback ---
+function playAudio(sessionId, b64data) {
+  if (sessionId === activeSessionId) micBtn.disabled = true;
+
+  const bytes = Uint8Array.from(atob(b64data), c => c.charCodeAt(0));
+  const blob = new Blob([bytes], { type: 'audio/mpeg' });
+  const url = URL.createObjectURL(blob);
+  const audio = new Audio(url);
+
+  const sendDone = () => {
+    URL.revokeObjectURL(url);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ session_id: sessionId, type: 'playback_done' }));
+    }
+  };
+
+  audio.onended = sendDone;
+  audio.onerror = () => { sendDone(); setStatus('Audio error'); };
+  audio.play().catch(() => { sendDone(); setStatus('Audio blocked — tap page first'); });
+}
+
+// --- Recording ---
+async function startRecording(sessionId) {
+  recordingSessionId = sessionId;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+    audioChunks = [];
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      sendAudio(sessionId);
+    };
+    mediaRecorder.start();
+    recording = true;
+    micBtn.classList.add('recording');
+    micBtn.disabled = false;
+    setStatus('Recording... tap to stop');
+  } catch (err) {
+    setStatus('Microphone access denied');
+  }
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+  }
+  recording = false;
+  micBtn.classList.remove('recording');
+}
+
+function sendAudio(sessionId) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    setStatus('Not connected');
+    return;
+  }
+  const blob = new Blob(audioChunks, { type: 'audio/webm' });
+  setStatus('Processing...');
+  micBtn.disabled = true;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const b64 = reader.result.split(',')[1];
+    ws.send(JSON.stringify({ session_id: sessionId, type: 'audio', data: b64 }));
+  };
+  reader.onerror = () => {
+    setStatus('Error reading audio');
+    micBtn.disabled = false;
+  };
+  reader.readAsDataURL(blob);
+}
+
+// --- Silent audio for muted sessions ---
+function sendSilentAudio(sessionId) {
+  // Send a minimal valid webm audio blob (silence)
+  // The hub will STT it and get [BLANK_AUDIO], triggering the retry prompt
+  // To avoid that, we send an empty data payload — hub should treat empty audio as "skip"
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ session_id: sessionId, type: 'audio', data: '' }));
+  }
+}
+
+// --- Mic button ---
+micBtn.addEventListener('click', () => {
+  if (micBtn.disabled) return;
+  if (recording) {
+    stopRecording();
+  } else if (pendingListenSessionId) {
+    // Manual mode: hub is waiting for audio from this session
+    const sid = pendingListenSessionId;
+    pendingListenSessionId = null;
+    startRecording(sid);
+  } else if (activeSessionId) {
+    startRecording(activeSessionId);
+  }
+});
+
+// --- Init ---
+connect();
+</script>
+</body>
+</html>
