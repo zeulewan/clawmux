@@ -12,9 +12,9 @@ Read these before writing any code:
 
 | Document | What you'll learn |
 |----------|-------------------|
-| [WebSocket Protocol](../guide/protocol.md) | Every message type, the converse flow sequence, session object schema, REST API |
-| [UI Behavior](../guide/ui-behavior.md) | All states, button behaviors, toggles, audio handling for focused vs background sessions, tab switching |
-| [Hub Architecture](../guide/hub.md) | How the hub works, what it expects from clients |
+| [WebSocket Protocol](protocol.md) | Every message type, the converse flow sequence, session object schema, REST API |
+| [UI Behavior](ui-behavior.md) | All states, button behaviors, toggles, audio handling for focused vs background sessions, tab switching |
+| [Hub Architecture](hub.md) | How the hub works, what it expects from clients |
 
 The protocol doc is your contract. The UI behavior doc is your spec. The hub.html source is your reference implementation.
 
@@ -23,8 +23,8 @@ The protocol doc is your contract. The UI behavior doc is your spec. The hub.htm
 These files define what the app needs to implement. When they change, your implementation may need updating:
 
 ```
-docs/guide/protocol.md       # WebSocket messages and REST API — your integration contract
-docs/guide/ui-behavior.md    # States, controls, audio behavior — your feature spec
+docs/agents/protocol.md       # WebSocket messages and REST API — your integration contract
+docs/agents/ui-behavior.md    # States, controls, audio behavior — your feature spec
 static/hub.html              # Reference implementation — how the browser does it
 docs/roadmap/v0.3.0.md       # Current release features (what's implemented)
 docs/roadmap/v0.4.0.md       # Next release features (what's coming)
@@ -43,7 +43,7 @@ The app needs to handle all the same WebSocket messages and user interactions as
 7. **Toggles** — Auto Record, Auto End (VAD), Auto Interrupt, Mic Mute
 8. **Voice/speed selection** — per-session, via REST API
 
-See `docs/guide/ui-behavior.md` for the exact behavior of every feature.
+See `docs/agents/ui-behavior.md` for the exact behavior of every feature.
 
 ## Connection Details
 
