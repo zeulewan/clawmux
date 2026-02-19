@@ -609,8 +609,15 @@ function setConnected(connected) {
   connLabel.textContent = connected ? 'Connected' : 'Disconnected';
 }
 
-function setStatus(text) {
+function setStatus(text, sessionId) {
   statusEl.textContent = text;
+  // Update session statusText so voice grid stays in sync
+  const sid = sessionId || activeSessionId;
+  if (sid) {
+    const s = sessions.get(sid);
+    if (s) s.statusText = text;
+  }
+  renderVoiceGridIfActive();
 }
 
 function updateLayout() {
@@ -800,7 +807,7 @@ function switchTab(sessionId) {
 
     // Resume paused audio or play buffered audio
     if (s.pausedAudio) {
-      setStatus('Playing...');
+      setStatus('Speaking...');
       const pa = s.pausedAudio;
       s.pausedAudio = null;
       currentAudio = pa;
@@ -1287,12 +1294,14 @@ function handleMessage(data) {
     if (s.el) s.el.statusDot.className = 'status-dot active';
     if (session_id === activeSessionId) {
       playAudio(session_id, data.data);
-      setStatus('Playing...');
+      setStatus('Speaking...', session_id);
     } else {
       // Buffer audio for background session — don't play or ack
+      s.statusText = 'Speaking...';
       if (!s.audioBuffer) s.audioBuffer = [];
       s.audioBuffer.push(data.data);
       if (s.el) s.el.badge.classList.add('visible');
+      renderVoiceGridIfActive();
     }
   } else if (type === 'listening') {
     if (recording && recordingSessionId === session_id) {
@@ -1313,23 +1322,25 @@ function handleMessage(data) {
     } else {
       // Background tab — mark pending, show badge
       s.pendingListen = true;
+      s.statusText = 'Waiting...';
       if (s.el) s.el.badge.classList.add('visible');
     }
     renderVoiceGridIfActive();
   } else if (type === 'status') {
     s.statusText = data.text;
-    if (session_id === activeSessionId) setStatus(data.text);
-    renderVoiceGridIfActive();
+    if (session_id === activeSessionId) setStatus(data.text, session_id);
+    else renderVoiceGridIfActive();
   } else if (type === 'done') {
     s.statusText = 'Ready';
     s.status = 'ready';
     if (s.el) s.el.statusDot.className = 'status-dot ready';
     if (session_id === activeSessionId) {
-      setStatus('Ready');
+      setStatus('Ready', session_id);
       micBtn.disabled = false;
       updateMicUI();
+    } else {
+      renderVoiceGridIfActive();
     }
-    renderVoiceGridIfActive();
   } else if (type === 'session_ended') {
     // Agent said goodbye — auto-close after a short delay
     addMessage(session_id, 'system', 'Session ended.');
@@ -1546,6 +1557,7 @@ function interruptPlayback(sessionId) {
     currentBufferedPlayer = null;
   }
   updateMicUI();
+  setStatus('Ready', sessionId);
 
   // Send playback_done to unblock hub's converse() call
   if (ws && ws.readyState === WebSocket.OPEN) {
