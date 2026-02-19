@@ -105,6 +105,9 @@ Home = "index.md"
 "For Agents" = "agents/index.md"
 
 [[project.nav]]
+"iOS App" = "guide/ios.md"
+
+[[project.nav]]
 Roadmap = [
   { "Planned Features" = "roadmap/planned-features.md" },
   { "v0.3.0" = "roadmap/v0.3.0.md" },

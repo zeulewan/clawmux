@@ -5,3 +5,8 @@ __pycache__/
 site/
 *.egg-info/
 .cache/
+
+# iOS
+ios/build/
+ios/VoiceChat.xcodeproj/
+ios/*.xcworkspace/
