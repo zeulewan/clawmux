@@ -1,11 +1,18 @@
----
-hide:
-  - navigation
----
-
 # For Agents
 
 Reference for AI agents installing, maintaining, or extending Voice Hub. If you're a human, see the [human guide](../humans/index.md).
+
+## Docs
+
+| Document | Description |
+|----------|-------------|
+| [Agent Reference](../guide/agent-reference.md) | System requirements, installation, file map, core flows, config, debugging |
+| [Hub Architecture](../guide/hub.md) | How the hub works, components, session lifecycle, slash commands |
+| [WebSocket Protocol](../guide/protocol.md) | Complete message reference for browser and MCP clients |
+| [UI Behavior](../guide/ui-behavior.md) | Every state, button, toggle, and audio behavior in the browser UI |
+| [Architecture (Legacy)](../guide/architecture.md) | Single-session mode architecture (pre-hub) |
+| [Configuration](../guide/configuration.md) | Environment variables and config options |
+| [Getting Started](../guide/getting-started.md) | Quick start guide |
 
 ## System Requirements
 
