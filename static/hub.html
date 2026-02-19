@@ -185,6 +185,9 @@ body {
 }
 .voice-card.active .voice-dot { background: #2ecc71; }
 .voice-card.starting .voice-dot { background: #f1c40f; }
+.voice-card.thinking .voice-dot { background: #e67e22; animation: thinkingPulse 1.4s infinite ease-in-out; }
+.voice-card.speaking .voice-dot { background: #3a86ff; }
+.voice-card.listening .voice-dot { background: #e63946; }
 
 /* Controls */
 #controls {
@@ -397,6 +400,7 @@ body {
 .debug-kv { display: flex; gap: 0.5rem; margin: 0.15rem 0; }
 .debug-kv .k { color: #666; min-width: 130px; }
 .debug-kv .v { color: #e0e0e0; }
+#home-tab.active { color: #e0e0e0 !important; border-bottom: 2px solid #3a86ff; }
 #debug-tab.active { color: #e0e0e0 !important; border-bottom: 2px solid #3a86ff; }
 </style>
 </head>
@@ -409,6 +413,7 @@ body {
 </div>
 
 <div id="tab-bar">
+  <div id="home-tab" class="tab active" onclick="showVoiceGrid()" style="color:#e0e0e0; font-size:0.8rem;">Home</div>
   <div id="spawn-btn" onclick="spawnSession()">+ New Session</div>
   <div style="flex:1;"></div>
   <div id="debug-tab" class="tab" onclick="showDebugPanel()" style="border-right:none; color:#666; font-size:0.7rem;">Debug</div>
@@ -622,6 +627,7 @@ function showVoiceGrid() {
   activeSessionId = null;
   hideDebugPanel();
   tabBar.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('home-tab').classList.add('active');
   updateLayout();
 }
 
@@ -640,7 +646,17 @@ function renderVoiceGrid() {
     const card = document.createElement('div');
     card.className = 'voice-card';
     if (sessionForVoice) {
-      card.classList.add(sessionForVoice.status === 'starting' ? 'starting' : 'active');
+      if (sessionForVoice.status === 'starting') {
+        card.classList.add('starting');
+      } else if (sessionForVoice.isThinking) {
+        card.classList.add('thinking');
+      } else if (sessionForVoice.statusText === 'Playing...' || sessionForVoice.statusText === 'Speaking...') {
+        card.classList.add('speaking');
+      } else if (sessionForVoice.statusText === 'Recording...' || sessionForVoice.statusText === 'Tap Record' || sessionForVoice.pendingListen) {
+        card.classList.add('listening');
+      } else {
+        card.classList.add('active');
+      }
     }
 
     const vname = document.createElement('div');
@@ -652,7 +668,21 @@ function renderVoiceGrid() {
     const vdot = document.createElement('span');
     vdot.className = 'voice-dot';
     const vlabel = document.createElement('span');
-    vlabel.textContent = sessionForVoice ? (sessionForVoice.status === 'starting' ? 'Starting...' : 'Connected') : 'Available';
+    if (!sessionForVoice) {
+      vlabel.textContent = 'Available';
+    } else if (sessionForVoice.status === 'starting') {
+      vlabel.textContent = 'Starting...';
+    } else if (sessionForVoice.isThinking) {
+      vlabel.textContent = 'Thinking...';
+    } else if (sessionForVoice.statusText === 'Playing...' || sessionForVoice.statusText === 'Speaking...') {
+      vlabel.textContent = 'Speaking...';
+    } else if (sessionForVoice.statusText === 'Recording...' || sessionForVoice.statusText === 'Tap Record') {
+      vlabel.textContent = 'Listening...';
+    } else if (sessionForVoice.pendingListen) {
+      vlabel.textContent = 'Waiting...';
+    } else {
+      vlabel.textContent = 'Ready';
+    }
     vstatus.appendChild(vdot);
     vstatus.appendChild(vlabel);
 
@@ -669,6 +699,10 @@ function renderVoiceGrid() {
 
     grid.appendChild(card);
   }
+}
+
+function renderVoiceGridIfActive() {
+  if (!activeSessionId && !debugActive) renderVoiceGrid();
 }
 
 // --- Tab management ---
@@ -1226,10 +1260,12 @@ function handleMessage(data) {
     hideThinking(session_id);
     stopThinkingSound();
     addMessage(session_id, 'assistant', data.text);
+    renderVoiceGridIfActive();
   } else if (type === 'user_text') {
     addMessage(session_id, 'user', data.text);
     showThinking(session_id);
     startThinkingSound(session_id);
+    renderVoiceGridIfActive();
   } else if (type === 'audio') {
     s.status = 'active';
     if (s.el) s.el.statusDot.className = 'status-dot active';
@@ -1263,9 +1299,11 @@ function handleMessage(data) {
       s.pendingListen = true;
       if (s.el) s.el.badge.classList.add('visible');
     }
+    renderVoiceGridIfActive();
   } else if (type === 'status') {
     s.statusText = data.text;
     if (session_id === activeSessionId) setStatus(data.text);
+    renderVoiceGridIfActive();
   } else if (type === 'done') {
     s.statusText = 'Ready';
     s.status = 'ready';
@@ -1275,6 +1313,7 @@ function handleMessage(data) {
       micBtn.disabled = false;
       updateMicUI();
     }
+    renderVoiceGridIfActive();
   } else if (type === 'session_ended') {
     // Agent said goodbye — auto-close after a short delay
     addMessage(session_id, 'system', 'Session ended.');
