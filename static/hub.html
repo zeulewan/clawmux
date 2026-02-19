@@ -295,8 +295,8 @@ body {
     <button id="mic-mute" title="Mute microphone" onclick="toggleMicMute()">&#127908;</button>
     <button id="mic" disabled>&#127908;</button>
     <div id="auto-toggle" onclick="toggleAutoMode()" title="Auto-record after Claude speaks">
-      <div class="toggle-track on"><div class="toggle-thumb"></div></div>
-      <span>Auto</span>
+      <div class="toggle-track"><div class="toggle-thumb"></div></div>
+      <span>Manual</span>
     </div>
     <select id="voice-select" onchange="changeVoice(this.value)" title="Session voice">
       <option value="af_sky">Sky (F)</option>
@@ -320,7 +320,7 @@ let mediaRecorder = null;
 let audioChunks = [];
 let recording = false;
 let micMuted = false;
-let autoMode = true;
+let autoMode = false;
 let pendingListenSessionId = null; // session waiting for manual mic click
 
 // --- DOM refs ---
