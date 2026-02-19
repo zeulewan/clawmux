@@ -471,6 +471,13 @@ function switchTab(sessionId) {
     micBtn.disabled = s.status !== 'ready' && s.status !== 'active';
     voiceSelect.value = s.voice || 'af_sky';
     document.getElementById('tmux-label').textContent = s.tmux_session || s.session_id;
+
+    // Play buffered audio from background
+    if (s.audioBuffer && s.audioBuffer.length > 0) {
+      setStatus('Playing buffered audio...');
+      playBufferedAudio(sessionId, s.audioBuffer);
+      s.audioBuffer = [];
+    }
   }
 }
 
@@ -690,10 +697,17 @@ function handleMessage(data) {
   } else if (type === 'user_text') {
     addMessage(session_id, 'user', data.text);
   } else if (type === 'audio') {
-    playAudio(session_id, data.data);
     s.status = 'active';
     if (s.el) s.el.statusDot.className = 'status-dot active';
-    if (session_id === activeSessionId) setStatus('Playing...');
+    if (session_id === activeSessionId) {
+      playAudio(session_id, data.data);
+      setStatus('Playing...');
+    } else {
+      // Buffer audio for background session — don't play or ack
+      if (!s.audioBuffer) s.audioBuffer = [];
+      s.audioBuffer.push(data.data);
+      if (s.el) s.el.badge.classList.add('visible');
+    }
   } else if (type === 'listening') {
     if (micMuted) {
       // Mic muted: send empty audio so hub doesn't hang
@@ -744,6 +758,33 @@ function playAudio(sessionId, b64data) {
   audio.onended = sendDone;
   audio.onerror = () => { sendDone(); setStatus('Audio error'); };
   audio.play().catch(() => { sendDone(); setStatus('Audio blocked — tap page first'); });
+}
+
+// --- Buffered playback ---
+function playBufferedAudio(sessionId, chunks) {
+  if (chunks.length === 0) return;
+  micBtn.disabled = true;
+  let i = 0;
+
+  function playNext() {
+    if (i >= chunks.length) {
+      // All chunks played — send single playback_done
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ session_id: sessionId, type: 'playback_done' }));
+      }
+      return;
+    }
+    const b64data = chunks[i++];
+    const bytes = Uint8Array.from(atob(b64data), c => c.charCodeAt(0));
+    const blob = new Blob([bytes], { type: 'audio/mpeg' });
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.onended = () => { URL.revokeObjectURL(url); playNext(); };
+    audio.onerror = () => { URL.revokeObjectURL(url); playNext(); };
+    audio.play().catch(() => playNext());
+  }
+
+  playNext();
 }
 
 // --- Recording ---
