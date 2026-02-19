@@ -1189,7 +1189,7 @@ let thinkingSoundSessionId = null;
 function startThinkingSound(sessionId) {
   stopThinkingSound();
   thinkingSoundSessionId = sessionId;
-  if (sessionId !== activeSessionId) return; // only play for focused tab
+  if (!activeSessionId || sessionId !== activeSessionId) return; // only play for focused session tab
   const tick = () => {
     // Double-tick pattern: two quick soft clicks
     playTone(1200, 0.03, 0, 0.06);
