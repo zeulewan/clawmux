@@ -2,7 +2,16 @@
 
 Reference for AI agents installing, maintaining, or extending Voice Hub. If you're a human, see the [human guide](../humans/index.md).
 
-## Docs
+## Entry Points
+
+Start here depending on what you're working on:
+
+| Role | Document | Description |
+|------|----------|-------------|
+| **iOS Dev** | [iOS Development](ios-dev.md) | Building the native iOS app. What to read, what to implement, what files to watch |
+| **Web Dev** | [Web Development](web-dev.md) | Building browser features. What docs to keep updated, conventions, testing |
+
+## Reference Docs
 
 | Document | Description |
 |----------|-------------|
