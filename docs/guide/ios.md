@@ -15,6 +15,10 @@ Native iPhone companion app for Voice Hub. Connects to the hub over WebSocket an
 - **Auto-record** - Automatically start recording after assistant finishes speaking
 - **Interrupt** - Stop assistant audio playback mid-sentence
 - **Thinking indicator** - Pulsing dots while Claude is processing
+- **Thinking sound** - Double-tick audio cue while Claude is thinking (matches web client)
+- **Audio cues** - Listening tone (ascending), processing tone (soft), session ready chime (three-note)
+- **Debug panel** - Inline debug tab showing hub info, services, sessions, tmux, and log tail
+- **Spawning feedback** - Voice card shows "Starting..." with yellow border while session spawns
 - **Haptic feedback** - Tactile feedback on record/send/interrupt actions
 
 ## Requirements
@@ -77,9 +81,7 @@ ios/
 
 ## Known Issues
 
-- **Text wrapping in controls** - Some UI elements (buttons, labels) don't fit properly and wrap or clip on smaller screen widths
-- **No debug panel** - Web client's debug tab not yet implemented
-- **No audio cues** - Missing the ascending/descending tone feedback the web client has
+- **Text wrapping in controls** - Some UI elements (buttons, labels) may clip on smaller screen widths
 - **No auto-interrupt** - Voice-based interrupt during playback not implemented
 - **No mic mute** - Global mic mute toggle not yet added
 - **No chat persistence** - Chat history lost on app restart (web client saves to localStorage)

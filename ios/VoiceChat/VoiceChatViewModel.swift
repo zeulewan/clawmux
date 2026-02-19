@@ -43,7 +43,9 @@ let SPEED_OPTIONS: [(label: String, value: Double)] = [
 
 // MARK: - VAD Tap Helper (must be outside @MainActor to avoid isolation inheritance)
 
-private func installVADTap(on input: AVAudioInputNode, format: AVAudioFormat, processor: VADProcessor) {
+private func installVADTap(
+    on input: AVAudioInputNode, format: AVAudioFormat, processor: VADProcessor
+) {
     input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
         processor.processBuffer(buffer)
     }
@@ -86,6 +88,109 @@ final class VADProcessor: @unchecked Sendable {
     }
 }
 
+// MARK: - Tone Player (audio cues matching web client)
+
+final class TonePlayer {
+    private let engine = AVAudioEngine()
+    private let player = AVAudioPlayerNode()
+    private let format: AVAudioFormat
+
+    init() {
+        format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1)!
+        engine.attach(player)
+        engine.connect(player, to: engine.mainMixerNode, format: format)
+    }
+
+    private func ensureRunning() {
+        guard !engine.isRunning else { return }
+        do {
+            try engine.start()
+            player.play()
+        } catch {
+            print("[tone] Engine start failed: \(error)")
+        }
+    }
+
+    func play(_ tones: [(freq: Double, dur: Double, delay: Double, gain: Float)]) {
+        let sr = format.sampleRate
+        guard let end = tones.map({ $0.delay + $0.dur }).max(), end > 0 else { return }
+        let count = AVAudioFrameCount(end * sr) + 1
+        guard let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: count) else { return }
+        buf.frameLength = count
+        let s = buf.floatChannelData![0]
+        for i in 0..<Int(count) { s[i] = 0 }
+
+        for t in tones {
+            let start = Int(t.delay * sr)
+            let len = Int(t.dur * sr)
+            for i in 0..<len where start + i < Int(count) {
+                let time = Double(i) / sr
+                let env = t.gain * Float(max(0.001, exp(-time * 5.0 / t.dur)))
+                s[start + i] += env * sinf(Float(2.0 * .pi * t.freq * time))
+            }
+        }
+
+        ensureRunning()
+        player.scheduleBuffer(buf, completionHandler: nil)
+    }
+
+    // Ascending two-tone: your turn to speak
+    func cueListening() {
+        play([(660, 0.12, 0, 0.15), (880, 0.15, 0.1, 0.15)])
+    }
+
+    // Single soft low tone: processing
+    func cueProcessing() {
+        play([(440, 0.2, 0, 0.08)])
+    }
+
+    // Three-note chime: session connected
+    func cueSessionReady() {
+        play([(523, 0.1, 0, 0.15), (659, 0.1, 0.1, 0.15), (784, 0.15, 0.2, 0.15)])
+    }
+
+    // Double-tick: thinking
+    func thinkingTick() {
+        play([(1200, 0.03, 0, 0.06), (900, 0.03, 0.08, 0.04)])
+    }
+}
+
+// MARK: - Debug Data Models
+
+struct DebugHubInfo {
+    var port = 0
+    var uptimeSeconds = 0
+    var browserConnected = false
+    var sessionCount = 0
+}
+
+struct DebugService: Identifiable {
+    let id = UUID()
+    let name: String
+    let url: String
+    let status: String
+    let detail: String
+}
+
+struct DebugHubSession: Identifiable {
+    var id: String { sessionId }
+    let sessionId: String
+    let voice: String
+    let status: String
+    let mcpConnected: Bool
+    let idleSeconds: Int
+    let ageSeconds: Int
+}
+
+struct DebugTmuxSession: Identifiable {
+    let id = UUID()
+    let name: String
+    let isVoice: Bool
+    let windows: Int
+    let attached: Bool
+    let created: String
+}
+
 // MARK: - ViewModel
 
 @MainActor
@@ -101,6 +206,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     // Sessions
     @Published var sessions: [VoiceSession] = []
     @Published var activeSessionId: String?
+    @Published var spawningVoiceId: String?
 
     // Active session UI state
     @Published var statusText = ""
@@ -111,6 +217,15 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     // Controls
     @Published var autoRecord = false
     @Published var vadEnabled = true
+
+    // Debug
+    @Published var showDebug = false
+    @Published var debugHub = DebugHubInfo()
+    @Published var debugServices: [DebugService] = []
+    @Published var debugSessions: [DebugHubSession] = []
+    @Published var debugTmux: [DebugTmuxSession] = []
+    @Published var debugLog: [String] = []
+    @Published var debugLastUpdated = ""
 
     // Computed
     var activeSession: VoiceSession? {
@@ -141,6 +256,9 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     private let recordingURL: URL
     private var playingSessionId: String?
     private var recordingSessionId: String?
+    private lazy var tonePlayer = TonePlayer()
+    private var thinkingSoundTimer: Timer?
+    private var debugRefreshTimer: Timer?
 
     // MARK: - Init
 
@@ -149,6 +267,8 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         self.recordingURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("recording.wav")
         super.init()
+
+        setupAudioSession()
 
         if serverURL.isEmpty {
             showSettings = true
@@ -180,11 +300,29 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(
                 .playAndRecord, mode: .default,
-                options: [.defaultToSpeaker, .allowBluetoothHFP])
+                options: [.defaultToSpeaker, .allowBluetoothHFP, .mixWithOthers])
             try session.setActive(true)
         } catch {
             print("[audio] Session setup failed: \(error)")
         }
+    }
+
+    // MARK: - Thinking Sound
+
+    func startThinkingSound() {
+        stopThinkingSound()
+        tonePlayer.thinkingTick()
+        thinkingSoundTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: true) {
+            [weak self] _ in
+            Task { @MainActor in
+                self?.tonePlayer.thinkingTick()
+            }
+        }
+    }
+
+    func stopThinkingSound() {
+        thinkingSoundTimer?.invalidate()
+        thinkingSoundTimer = nil
     }
 
     // MARK: - WebSocket
@@ -225,6 +363,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         urlSession?.invalidateAndCancel()
         urlSession = nil
         isConnected = false
+        stopThinkingSound()
     }
 
     private func scheduleReconnect() {
@@ -257,6 +396,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         isPlaying = false
         isProcessing = false
         statusText = "Disconnected"
+        stopThinkingSound()
         scheduleReconnect()
     }
 
@@ -297,6 +437,10 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                 let sid = s["session_id"] as? String,
                 sessionIndex(sid) == nil
             {
+                // Clear spawning state for the voice
+                if let voice = s["voice"] as? String, spawningVoiceId == voice {
+                    spawningVoiceId = nil
+                }
                 addSessionFromDict(s)
                 switchToSession(sid)
             }
@@ -313,6 +457,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                 sessions[idx].status = status
                 if status == "ready" {
                     addMessage(sid, role: "system", text: "Claude connected.")
+                    tonePlayer.cueSessionReady()
                     haptic(.success)
                 }
             }
@@ -327,6 +472,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                 if let idx = sessionIndex(sid) {
                     sessions[idx].isThinking = false
                 }
+                stopThinkingSound()
                 addMessage(sid, role: "assistant", text: t)
             }
 
@@ -335,6 +481,9 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                 addMessage(sid, role: "user", text: t)
                 if let idx = sessionIndex(sid) {
                     sessions[idx].isThinking = true
+                }
+                if sid == activeSessionId {
+                    startThinkingSound()
                 }
             }
 
@@ -353,6 +502,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         case "listening":
             if let sid = sessionId {
                 if sid == activeSessionId {
+                    tonePlayer.cueListening()
                     haptic(.light)
                     if autoRecord {
                         startRecording(sessionId: sid)
@@ -428,11 +578,18 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             // Stop audio/recording from previous session
             if isPlaying { interruptPlayback() }
             if isRecording { stopRecording(discard: true) }
+            stopThinkingSound()
         }
         activeSessionId = id
+        showDebug = false
 
         if let session = activeSession {
             statusText = session.status == "ready" ? "Ready" : "Waiting for Claude..."
+
+            // Resume thinking sound if session is thinking
+            if session.isThinking {
+                startThinkingSound()
+            }
 
             // Handle pending listen
             if session.pendingListen {
@@ -440,8 +597,10 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                     sessions[idx].pendingListen = false
                 }
                 if autoRecord {
+                    tonePlayer.cueListening()
                     startRecording(sessionId: id)
                 } else {
+                    tonePlayer.cueListening()
                     haptic(.light)
                     statusText = "Tap Record"
                 }
@@ -452,6 +611,8 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     func spawnSession(voiceId: String = "") {
         guard let baseURL = httpBaseURL() else { return }
         let url = baseURL.appendingPathComponent("api/sessions")
+
+        spawningVoiceId = voiceId.isEmpty ? nil : voiceId
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -464,7 +625,11 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                 guard let self, let data,
                     let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                     let sid = json["session_id"] as? String
-                else { return }
+                else {
+                    self?.spawningVoiceId = nil
+                    return
+                }
+                self.spawningVoiceId = nil
                 if self.sessionIndex(sid) == nil {
                     self.addSessionFromDict(json)
                 }
@@ -516,7 +681,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         URLSession.shared.dataTask(with: request) { _, _, _ in }.resume()
     }
 
-    private func httpBaseURL() -> URL? {
+    func httpBaseURL() -> URL? {
         var base = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
         if !base.hasPrefix("http://") && !base.hasPrefix("https://") {
             base = "https://" + base
@@ -530,7 +695,6 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         statusText = "Playing..."
         isPlaying = true
         playingSessionId = sessionId
-        setupAudioSession()
 
         do {
             audioPlayer = try AVAudioPlayer(data: data)
@@ -563,8 +727,6 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         let sid = sessionId ?? activeSessionId
         guard let sid else { return }
         recordingSessionId = sid
-
-        setupAudioSession()
 
         AVAudioApplication.requestRecordPermission { [weak self] granted in
             Task { @MainActor in
@@ -617,6 +779,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
 
         statusText = "Processing..."
         isProcessing = true
+        tonePlayer.cueProcessing()
         haptic(.light)
 
         if let audioData = try? Data(contentsOf: recordingURL) {
@@ -683,6 +846,108 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         vadAudioEngine?.stop()
         vadAudioEngine = nil
         vadProcessor = nil
+    }
+
+    // MARK: - Debug
+
+    func startDebugRefresh() {
+        stopDebugRefresh()
+        fetchDebugInfo()
+        debugRefreshTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) {
+            [weak self] _ in
+            Task { @MainActor in self?.fetchDebugInfo() }
+        }
+    }
+
+    func stopDebugRefresh() {
+        debugRefreshTimer?.invalidate()
+        debugRefreshTimer = nil
+    }
+
+    func fetchDebugInfo() {
+        guard let baseURL = httpBaseURL() else { return }
+
+        // Fetch /api/debug
+        let debugURL = baseURL.appendingPathComponent("api/debug")
+        URLSession.shared.dataTask(with: debugURL) { [weak self] data, _, _ in
+            guard let data,
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { return }
+            Task { @MainActor in
+                guard let self else { return }
+
+                // Hub
+                if let hub = json["hub"] as? [String: Any] {
+                    self.debugHub = DebugHubInfo(
+                        port: hub["port"] as? Int ?? 0,
+                        uptimeSeconds: hub["uptime_seconds"] as? Int ?? 0,
+                        browserConnected: hub["browser_connected"] as? Bool ?? false,
+                        sessionCount: hub["session_count"] as? Int ?? 0
+                    )
+                }
+
+                // Services
+                if let svcs = json["services"] as? [String: [String: Any]] {
+                    self.debugServices = svcs.map { name, info in
+                        DebugService(
+                            name: name,
+                            url: info["url"] as? String ?? "",
+                            status: info["status"] as? String ?? "unknown",
+                            detail: info["status"] as? String == "up"
+                                ? "HTTP \(info["code"] as? Int ?? 0)"
+                                : (info["error"] as? String ?? "")
+                        )
+                    }.sorted { $0.name < $1.name }
+                }
+
+                // Sessions
+                if let sess = json["sessions"] as? [[String: Any]] {
+                    self.debugSessions = sess.map { s in
+                        DebugHubSession(
+                            sessionId: s["session_id"] as? String ?? "?",
+                            voice: s["voice"] as? String ?? "?",
+                            status: s["status"] as? String ?? "?",
+                            mcpConnected: s["mcp_connected"] as? Bool ?? false,
+                            idleSeconds: s["idle_seconds"] as? Int ?? 0,
+                            ageSeconds: s["age_seconds"] as? Int ?? 0
+                        )
+                    }
+                }
+
+                // tmux
+                if let tmux = json["tmux_sessions"] as? [[String: Any]] {
+                    self.debugTmux = tmux.map { t in
+                        let created = t["created"] as? Int ?? 0
+                        let date = Date(timeIntervalSince1970: TimeInterval(created))
+                        let fmt = DateFormatter()
+                        fmt.timeStyle = .medium
+                        return DebugTmuxSession(
+                            name: t["name"] as? String ?? "?",
+                            isVoice: t["is_voice"] as? Bool ?? false,
+                            windows: t["windows"] as? Int ?? 0,
+                            attached: t["attached"] as? Bool ?? false,
+                            created: fmt.string(from: date)
+                        )
+                    }
+                }
+
+                let fmt = DateFormatter()
+                fmt.timeStyle = .medium
+                self.debugLastUpdated = "Updated " + fmt.string(from: Date())
+            }
+        }.resume()
+
+        // Fetch /api/debug/log
+        let logURL = baseURL.appendingPathComponent("api/debug/log")
+        URLSession.shared.dataTask(with: logURL) { [weak self] data, _, _ in
+            guard let data,
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                let lines = json["lines"] as? [String]
+            else { return }
+            Task { @MainActor in
+                self?.debugLog = lines
+            }
+        }.resume()
     }
 
     // MARK: - Haptics
@@ -759,4 +1024,14 @@ extension VoiceChatViewModel: AVAudioPlayerDelegate {
             }
         }
     }
+}
+
+// MARK: - Helpers
+
+func formatDuration(_ seconds: Int) -> String {
+    if seconds < 60 { return "\(seconds)s" }
+    if seconds < 3600 { return "\(seconds / 60)m \(seconds % 60)s" }
+    let h = seconds / 3600
+    let m = (seconds % 3600) / 60
+    return "\(h)h \(m)m"
 }
