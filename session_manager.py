@@ -37,6 +37,7 @@ class Session:
     last_activity: float = field(default_factory=time.time)
     label: str = ""
     voice: str = "af_sky"
+    speed: float = 1.0
 
     # Per-session bridge state (set by hub after creation)
     audio_queue: asyncio.Queue | None = field(default=None, repr=False)
@@ -52,6 +53,7 @@ class Session:
             "last_activity": self.last_activity,
             "label": self.label,
             "voice": self.voice,
+            "speed": self.speed,
             "mcp_connected": self.mcp_ws is not None,
         }
 
@@ -82,7 +84,7 @@ class SessionManager:
         idx = self._counter % len(VOICES)
         return VOICES[idx]
 
-    async def spawn_session(self, label: str = "") -> Session:
+    async def spawn_session(self, label: str = "", voice: str = "") -> Session:
         """Create a temp dir with .mcp.json, tmux session, and start Claude."""
         self._counter += 1
         short_id = uuid.uuid4().hex[:6]
@@ -92,7 +94,12 @@ class SessionManager:
         # Kill stale tmux session with same name if it exists
         await self._run(f"tmux kill-session -t {tmux_name} 2>/dev/null || true")
 
-        voice_id, voice_name = self._next_voice()
+        if voice:
+            # Use specified voice
+            voice_id = voice
+            voice_name = dict(VOICES).get(voice, voice)
+        else:
+            voice_id, voice_name = self._next_voice()
 
         session = Session(
             session_id=session_id,

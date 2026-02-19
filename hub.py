@@ -56,12 +56,12 @@ async def send_to_browser(data: dict) -> None:
 
 # --- TTS / STT ---
 
-async def tts(text: str, voice: str = "af_sky") -> bytes:
+async def tts(text: str, voice: str = "af_sky", speed: float = 1.0) -> bytes:
     """Text → MP3 bytes via Kokoro."""
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
             f"{KOKORO_URL}/v1/audio/speech",
-            json={"model": "tts-1", "input": text, "voice": voice, "response_format": "mp3"},
+            json={"model": "tts-1", "input": text, "voice": voice, "response_format": "mp3", "speed": speed},
         )
         resp.raise_for_status()
     return resp.content
@@ -89,8 +89,9 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
 
     session.touch()
 
-    # Use session's voice override
+    # Use session's voice/speed overrides
     voice = session.voice
+    speed = session.speed
 
     # Send assistant text + status to browser
     await send_to_browser({"session_id": session_id, "type": "assistant_text", "text": message})
@@ -98,7 +99,7 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
 
     # TTS
     log.info("[%s] TTS: %s", session_id, message[:80])
-    mp3 = await tts(message, voice)
+    mp3 = await tts(message, voice, speed)
     audio_b64 = base64.b64encode(mp3).decode()
 
     # Send audio to browser
@@ -107,6 +108,8 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
 
     if not wait_for_response:
         await send_to_browser({"session_id": session_id, "type": "done"})
+        # Session ending — notify browser to close tab after playback
+        await send_to_browser({"session_id": session_id, "type": "session_ended"})
         return "Message delivered."
 
     # Wait for playback_done from browser
@@ -314,9 +317,12 @@ async def list_sessions():
 
 
 @app.post("/api/sessions")
-async def spawn_session(label: str = ""):
+async def spawn_session(request: Request):
     try:
-        session = await session_mgr.spawn_session(label)
+        body = await request.json() if request.headers.get("content-type") == "application/json" else {}
+        label = body.get("label", "")
+        voice = body.get("voice", "")
+        session = await session_mgr.spawn_session(label, voice)
         return JSONResponse(session.to_dict())
     except RuntimeError as e:
         return JSONResponse({"error": str(e)}, status_code=503)
@@ -344,6 +350,18 @@ async def set_session_voice(session_id: str, request: Request):
     session.voice = voice
     log.info("[%s] Voice changed to %s", session_id, voice)
     return JSONResponse({"voice": voice})
+
+
+@app.put("/api/sessions/{session_id}/speed")
+async def set_session_speed(session_id: str, request: Request):
+    data = await request.json()
+    speed = float(data.get("speed", 1.0))
+    session = session_mgr.sessions.get(session_id)
+    if not session:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    session.speed = speed
+    log.info("[%s] Speed changed to %s", session_id, speed)
+    return JSONResponse({"speed": speed})
 
 
 if __name__ == "__main__":

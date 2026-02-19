@@ -28,7 +28,9 @@ body {
   font-size: 1rem;
   font-weight: 600;
   flex: 1;
+  cursor: pointer;
 }
+#header h1:hover { color: #3a86ff; }
 #dot {
   width: 10px;
   height: 10px;
@@ -138,28 +140,50 @@ body {
   padding: 0.25rem;
 }
 
-/* Empty state */
-#empty-state {
+/* Voice grid (landing page) */
+#voice-grid {
   flex: 1;
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 1rem;
-  color: #666;
+  padding: 2rem;
 }
-#empty-state h2 { font-size: 1.2rem; font-weight: 500; }
-#empty-state p { font-size: 0.9rem; }
-#empty-state button {
-  padding: 0.6rem 1.5rem;
-  background: #3a86ff;
-  color: #fff;
-  border: none;
-  border-radius: 0.5rem;
-  font-size: 0.95rem;
+.voice-card {
+  width: 120px;
+  padding: 1.25rem 1rem;
+  background: #2a2a4a;
+  border: 2px solid transparent;
+  border-radius: 1rem;
+  text-align: center;
   cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
 }
-#empty-state button:hover { background: #2a76ef; }
+.voice-card:hover { background: #333360; border-color: #3a86ff; }
+.voice-card.active { border-color: #2ecc71; }
+.voice-card .voice-name {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+.voice-card .voice-status {
+  font-size: 0.7rem;
+  color: #888;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+.voice-card .voice-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #555;
+}
+.voice-card.active .voice-dot { background: #2ecc71; }
+.voice-card.starting .voice-dot { background: #f1c40f; }
 
 /* Controls */
 #controls {
@@ -176,46 +200,60 @@ body {
   min-height: 1.2em;
 }
 #mic {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
+  height: 48px;
+  padding: 0 1.2rem;
+  border-radius: 24px;
   border: none;
   background: #3a86ff;
   color: #fff;
-  font-size: 1.6rem;
+  font-size: 0.85rem;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.15s;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 0.4rem;
+  white-space: nowrap;
 }
 #mic:hover { background: #2a76ef; }
 #mic.recording {
-  background: #e63946;
-  animation: pulse 1s infinite;
+  background: #2ecc71;
+}
+#mic.recording:hover { background: #27ae60; }
+#mic.interruptable {
+  background: #e67e22;
+}
+#mic.interruptable:hover { background: #d35400; }
+#mic.processing {
+  background: #555;
+  cursor: wait;
 }
 #mic:disabled { opacity: 0.4; cursor: not-allowed; }
 #mic-row {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.75rem;
 }
-#mic-mute {
-  width: 44px;
-  height: 44px;
+.btn-icon {
+  height: 40px;
+  width: 40px;
   border-radius: 50%;
   border: 2px solid #555;
   background: transparent;
   color: #888;
-  font-size: 1.2rem;
+  font-size: 0.75rem;
+  font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.15s;
 }
-#mic-mute:hover { border-color: #888; color: #ccc; }
+.btn-icon:hover { border-color: #888; color: #ccc; }
 #mic-mute.muted { border-color: #e63946; color: #e63946; background: rgba(230,57,70,0.15); }
+#mic-cancel { border-color: #e63946; color: #e63946; }
+#mic-cancel:hover { background: rgba(230,57,70,0.2); color: #ff5a5a; }
 #auto-toggle, #vad-toggle {
   display: flex;
   align-items: center;
@@ -245,7 +283,7 @@ body {
   transition: left 0.2s;
 }
 #auto-toggle .toggle-track.on .toggle-thumb, #vad-toggle .toggle-track.on .toggle-thumb { left: 18px; }
-#voice-select {
+#voice-select, #speed-select {
   background: #2a2a4a;
   color: #e0e0e0;
   border: 1px solid #444;
@@ -255,7 +293,7 @@ body {
   cursor: pointer;
   outline: none;
 }
-#voice-select:hover { border-color: #666; }
+#voice-select:hover, #speed-select:hover { border-color: #666; }
 #session-info {
   font-size: 0.7rem;
   color: #555;
@@ -271,7 +309,7 @@ body {
 <body>
 
 <div id="header">
-  <h1>Voice Chat Hub</h1>
+  <h1 onclick="showVoiceGrid()">Voice Chat Hub</h1>
   <div id="dot"></div>
   <span id="conn-label">Disconnected</span>
 </div>
@@ -280,11 +318,7 @@ body {
   <div id="spawn-btn" onclick="spawnSession()">+ New Session</div>
 </div>
 
-<div id="empty-state">
-  <h2>No sessions</h2>
-  <p>Spawn a Claude session to start talking.</p>
-  <button onclick="spawnSession()">New Session</button>
-</div>
+<div id="voice-grid"></div>
 
 <div id="chat-area" style="display:none;"></div>
 
@@ -292,15 +326,16 @@ body {
   <div id="session-info"><span id="tmux-label"></span></div>
   <div id="status"></div>
   <div id="mic-row">
-    <button id="mic-mute" title="Mute microphone" onclick="toggleMicMute()">&#127908;</button>
-    <button id="mic" disabled>&#127908;</button>
+    <button id="mic-mute" class="btn-icon" title="Mute microphone" onclick="toggleMicMute()">Mic</button>
+    <button id="mic" disabled>Record</button>
+    <button id="mic-cancel" class="btn-icon" style="display:none;" title="Cancel recording" onclick="cancelRecording()">&#10005;</button>
     <div id="auto-toggle" onclick="toggleAutoMode()" title="Auto-record after Claude speaks">
       <div class="toggle-track"><div class="toggle-thumb"></div></div>
-      <span>Manual</span>
+      <span>Auto Record</span>
     </div>
     <div id="vad-toggle" onclick="toggleVAD()" title="Auto-detect when you stop talking">
       <div class="toggle-track on"><div class="toggle-thumb"></div></div>
-      <span>VAD</span>
+      <span>Auto End</span>
     </div>
     <select id="voice-select" onchange="changeVoice(this.value)" title="Session voice">
       <option value="af_sky">Sky (F)</option>
@@ -310,6 +345,13 @@ body {
       <option value="am_echo">Echo (M)</option>
       <option value="am_onyx">Onyx (M)</option>
       <option value="bm_fable">Fable</option>
+    </select>
+    <select id="speed-select" onchange="changeSpeed(this.value)" title="Speech speed">
+      <option value="0.75">0.75x</option>
+      <option value="1.0" selected>1x</option>
+      <option value="1.25">1.25x</option>
+      <option value="1.5">1.5x</option>
+      <option value="2.0">2x</option>
     </select>
   </div>
 </div>
@@ -331,15 +373,16 @@ let vadInterval = null; // silence detection interval
 let vadDetectedSpeech = false; // did we hear any speech this recording?
 let currentAudio = null; // { audio, sessionId, url } — currently playing audio element
 let currentBufferedPlayer = null; // { sessionId, stop() } — active buffered playback
+let persistentStream = null; // persistent mic MediaStream, acquired once
 
 // --- DOM refs ---
 const tabBar = document.getElementById('tab-bar');
 const spawnBtn = document.getElementById('spawn-btn');
-const emptyState = document.getElementById('empty-state');
 const chatArea = document.getElementById('chat-area');
 const controls = document.getElementById('controls');
 const statusEl = document.getElementById('status');
 const micBtn = document.getElementById('mic');
+const micCancelBtn = document.getElementById('mic-cancel');
 const dot = document.getElementById('dot');
 const connLabel = document.getElementById('conn-label');
 
@@ -419,10 +462,64 @@ function setStatus(text) {
 }
 
 function updateLayout() {
-  const hasSessions = sessions.size > 0;
-  emptyState.style.display = hasSessions ? 'none' : 'flex';
-  chatArea.style.display = (hasSessions && activeSessionId) ? 'flex' : 'none';
-  controls.style.display = (hasSessions && activeSessionId) ? 'flex' : 'none';
+  const inChat = activeSessionId && sessions.has(activeSessionId);
+  document.getElementById('voice-grid').style.display = inChat ? 'none' : 'flex';
+  chatArea.style.display = inChat ? 'flex' : 'none';
+  controls.style.display = inChat ? 'flex' : 'none';
+  if (!inChat) renderVoiceGrid();
+}
+
+// --- Voice grid (landing page) ---
+function showVoiceGrid() {
+  activeSessionId = null;
+  tabBar.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  updateLayout();
+}
+
+function renderVoiceGrid() {
+  const grid = document.getElementById('voice-grid');
+  grid.innerHTML = '';
+  const allVoices = Object.entries(VOICE_NAMES); // [[id, name], ...]
+
+  for (const [voiceId, name] of allVoices) {
+    // Check if this voice has an active session
+    let sessionForVoice = null;
+    for (const [sid, s] of sessions) {
+      if (s.voice === voiceId) { sessionForVoice = s; break; }
+    }
+
+    const card = document.createElement('div');
+    card.className = 'voice-card';
+    if (sessionForVoice) {
+      card.classList.add(sessionForVoice.status === 'starting' ? 'starting' : 'active');
+    }
+
+    const vname = document.createElement('div');
+    vname.className = 'voice-name';
+    vname.textContent = name;
+
+    const vstatus = document.createElement('div');
+    vstatus.className = 'voice-status';
+    const vdot = document.createElement('span');
+    vdot.className = 'voice-dot';
+    const vlabel = document.createElement('span');
+    vlabel.textContent = sessionForVoice ? (sessionForVoice.status === 'starting' ? 'Starting...' : 'Connected') : 'Available';
+    vstatus.appendChild(vdot);
+    vstatus.appendChild(vlabel);
+
+    card.appendChild(vname);
+    card.appendChild(vstatus);
+
+    card.onclick = () => {
+      if (sessionForVoice) {
+        switchTab(sessionForVoice.session_id);
+      } else {
+        spawnSession(voiceId);
+      }
+    };
+
+    grid.appendChild(card);
+  }
 }
 
 // --- Tab management ---
@@ -472,6 +569,7 @@ function stopActiveAudio() {
     currentBufferedPlayer.stop();
     currentBufferedPlayer = null;
   }
+  updateMicUI();
 }
 
 function switchTab(sessionId) {
@@ -502,19 +600,21 @@ function switchTab(sessionId) {
     setStatus(s.statusText || 'Ready');
     micBtn.disabled = s.status !== 'ready' && s.status !== 'active';
     voiceSelect.value = s.voice || 'af_sky';
+    speedSelect.value = String(s.speed || 1.0);
     document.getElementById('tmux-label').textContent = s.tmux_session || s.session_id;
 
     // Resume paused audio or play buffered audio
     if (s.pausedAudio) {
       setStatus('Playing...');
-      micBtn.disabled = true;
       const pa = s.pausedAudio;
       s.pausedAudio = null;
       currentAudio = pa;
+      updateMicUI();
 
       const sendDone = () => {
         URL.revokeObjectURL(pa.url);
         if (currentAudio && currentAudio.audio === pa.audio) currentAudio = null;
+        updateMicUI();
         if (ws && ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ session_id: sessionId, type: 'playback_done' }));
         }
@@ -537,8 +637,8 @@ function switchTab(sessionId) {
       } else {
         cueListening();
         pendingListenSessionId = sessionId;
-        micBtn.disabled = false;
-        setStatus('Tap mic to respond');
+        updateMicUI();
+        setStatus('Tap Record');
       }
     }
   }
@@ -572,13 +672,20 @@ function addMessage(sessionId, role, text) {
 }
 
 // --- Session management ---
-async function spawnSession() {
+async function spawnSession(voiceId = '') {
   if (spawnBtn.classList.contains('disabled')) return;
   spawnBtn.classList.add('disabled');
   spawnBtn.textContent = 'Spawning...';
 
+  // Acquire mic permission now while page is focused (avoids background focus issues)
+  try { await getMicStream(); } catch (e) { console.warn('Mic permission denied:', e); }
+
   try {
-    const resp = await fetch('/api/sessions', { method: 'POST' });
+    const resp = await fetch('/api/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ voice: voiceId }),
+    });
     const data = await resp.json();
     if (data.error) {
       alert('Failed to spawn: ' + data.error);
@@ -654,8 +761,12 @@ const micMuteBtn = document.getElementById('mic-mute');
 function toggleMicMute() {
   micMuted = !micMuted;
   micMuteBtn.classList.toggle('muted', micMuted);
-  micMuteBtn.innerHTML = micMuted ? '&#128263;' : '&#127908;';
+  micMuteBtn.textContent = micMuted ? 'Muted' : 'Mic';
   micMuteBtn.title = micMuted ? 'Unmute microphone' : 'Mute microphone';
+  // Mute/unmute persistent stream tracks
+  if (persistentStream) {
+    persistentStream.getAudioTracks().forEach(t => { t.enabled = !micMuted; });
+  }
 }
 
 // --- Voice selector ---
@@ -665,7 +776,6 @@ async function changeVoice(voice) {
   const s = sessions.get(activeSessionId);
   if (s) {
     s.voice = voice;
-    // Update tab label to new voice name
     const tabLabel = s.el.tab.querySelector('.tab-label');
     if (tabLabel) tabLabel.textContent = voiceDisplayName(voice);
     saveChats();
@@ -681,13 +791,29 @@ async function changeVoice(voice) {
   }
 }
 
+// --- Speed selector ---
+const speedSelect = document.getElementById('speed-select');
+async function changeSpeed(speed) {
+  if (!activeSessionId) return;
+  const s = sessions.get(activeSessionId);
+  if (s) s.speed = parseFloat(speed);
+  try {
+    await fetch(`/api/sessions/${activeSessionId}/speed`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ speed: parseFloat(speed) }),
+    });
+  } catch (e) {
+    console.error('Failed to set speed:', e);
+  }
+}
+
 // --- Auto mode ---
 function toggleAutoMode() {
   autoMode = !autoMode;
   const track = document.querySelector('#auto-toggle .toggle-track');
-  const label = document.querySelector('#auto-toggle span');
   track.classList.toggle('on', autoMode);
-  label.textContent = autoMode ? 'Auto' : 'Manual';
+  updateMicUI();
 }
 
 // --- VAD (voice activity detection) ---
@@ -834,11 +960,11 @@ function handleMessage(data) {
       cueListening();
       startRecording(session_id);
     } else if (session_id === activeSessionId && !autoMode) {
-      // Manual mode: enable mic and wait for user to click
+      // Manual mode: show Record button and wait for user to click
       cueListening();
       pendingListenSessionId = session_id;
-      micBtn.disabled = false;
-      setStatus('Tap mic to respond');
+      updateMicUI();
+      setStatus('Tap Record');
     } else {
       // Background tab — mark pending, show badge
       s.pendingListen = true;
@@ -854,24 +980,29 @@ function handleMessage(data) {
     if (session_id === activeSessionId) {
       setStatus('Ready');
       micBtn.disabled = false;
+      updateMicUI();
     }
+  } else if (type === 'session_ended') {
+    // Agent said goodbye — auto-close after a short delay
+    addMessage(session_id, 'system', 'Session ended.');
+    setTimeout(() => terminateSession(session_id), 3000);
   }
 }
 
 // --- Audio playback ---
 function playAudio(sessionId, b64data) {
-  if (sessionId === activeSessionId) micBtn.disabled = true;
-
   const bytes = Uint8Array.from(atob(b64data), c => c.charCodeAt(0));
   const blob = new Blob([bytes], { type: 'audio/mpeg' });
   const url = URL.createObjectURL(blob);
   const audio = new Audio(url);
 
   currentAudio = { audio, sessionId, url };
+  if (sessionId === activeSessionId) updateMicUI();
 
   const cleanup = () => {
     URL.revokeObjectURL(url);
     if (currentAudio && currentAudio.audio === audio) currentAudio = null;
+    updateMicUI();
   };
 
   const sendDone = () => {
@@ -889,7 +1020,6 @@ function playAudio(sessionId, b64data) {
 // --- Buffered playback ---
 function playBufferedAudio(sessionId, chunks) {
   if (chunks.length === 0) return;
-  micBtn.disabled = true;
   let i = 0;
   let stopped = false;
 
@@ -897,10 +1027,12 @@ function playBufferedAudio(sessionId, chunks) {
     sessionId,
     stop() { stopped = true; if (currentAudio) { currentAudio.audio.pause(); } },
   };
+  updateMicUI();
 
   function playNext() {
     if (stopped || i >= chunks.length) {
       currentBufferedPlayer = null;
+      updateMicUI();
       if (!stopped && ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ session_id: sessionId, type: 'playback_done' }));
       }
@@ -920,16 +1052,60 @@ function playBufferedAudio(sessionId, chunks) {
   playNext();
 }
 
+// --- Mic UI state management ---
+function updateMicUI() {
+  const isPlaying = !!(currentAudio || currentBufferedPlayer);
+
+  micBtn.classList.remove('recording', 'interruptable', 'processing');
+
+  if (isPlaying) {
+    // During playback: show interrupt button
+    micBtn.style.display = 'flex';
+    micBtn.disabled = false;
+    micBtn.classList.add('interruptable');
+    micBtn.textContent = 'Interrupt';
+    micCancelBtn.style.display = 'none';
+  } else if (recording) {
+    // Recording: show Send + Cancel
+    micBtn.style.display = 'flex';
+    micBtn.classList.add('recording');
+    micBtn.textContent = 'Send';
+    micBtn.disabled = false;
+    micCancelBtn.style.display = 'flex';
+  } else {
+    // Idle: always show Record button so user can initiate
+    micCancelBtn.style.display = 'none';
+    micBtn.style.display = 'flex';
+    micBtn.textContent = 'Record';
+    micBtn.disabled = false;
+  }
+}
+
+// --- Persistent mic stream ---
+async function getMicStream() {
+  if (persistentStream) {
+    // Check if tracks are still alive
+    const tracks = persistentStream.getAudioTracks();
+    if (tracks.length > 0 && tracks[0].readyState === 'live') {
+      return persistentStream;
+    }
+  }
+  persistentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  // Apply current mute state
+  persistentStream.getAudioTracks().forEach(t => { t.enabled = !micMuted; });
+  return persistentStream;
+}
+
 // --- Recording ---
 async function startRecording(sessionId) {
   recordingSessionId = sessionId;
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const stream = await getMicStream();
     mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
     audioChunks = [];
     mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
     mediaRecorder.onstop = () => {
-      stream.getTracks().forEach(t => t.stop());
+      // Don't stop persistent stream tracks — keep them alive
       if (discardRecording) {
         discardRecording = false;
       } else {
@@ -938,9 +1114,12 @@ async function startRecording(sessionId) {
     };
     mediaRecorder.start();
     recording = true;
-    micBtn.classList.add('recording');
-    micBtn.disabled = false;
-    setStatus(vadEnabled ? 'Recording... (auto-stop on silence)' : 'Recording... tap to stop');
+    updateMicUI();
+    if (vadEnabled) {
+      setStatus('Recording...');
+    } else {
+      setStatus('Recording...');
+    }
     if (vadEnabled) startVAD(stream);
   } catch (err) {
     setStatus('Microphone access denied');
@@ -955,7 +1134,15 @@ function stopRecording(discard = false) {
     mediaRecorder.stop();
   }
   recording = false;
-  micBtn.classList.remove('recording');
+  updateMicUI();
+}
+
+function cancelRecording() {
+  if (recording) {
+    stopRecording(true); // discard audio
+    if (recordingSessionId) sendSilentAudio(recordingSessionId);
+    setStatus('Recording cancelled');
+  }
 }
 
 function sendAudio(sessionId) {
@@ -966,6 +1153,8 @@ function sendAudio(sessionId) {
   const blob = new Blob(audioChunks, { type: 'audio/webm' });
   cueProcessing();
   setStatus('Processing...');
+  micBtn.classList.add('processing');
+  micBtn.textContent = 'Processing...';
   micBtn.disabled = true;
 
   const reader = new FileReader();
@@ -975,7 +1164,7 @@ function sendAudio(sessionId) {
   };
   reader.onerror = () => {
     setStatus('Error reading audio');
-    micBtn.disabled = false;
+    updateMicUI();
   };
   reader.readAsDataURL(blob);
 }
@@ -990,13 +1179,49 @@ function sendSilentAudio(sessionId) {
   }
 }
 
+// --- Interrupt playback ---
+function interruptPlayback(sessionId) {
+  // Stop current audio immediately
+  if (currentAudio) {
+    currentAudio.audio.pause();
+    currentAudio.audio.onended = null;
+    currentAudio.audio.onerror = null;
+    URL.revokeObjectURL(currentAudio.url);
+    currentAudio = null;
+  }
+  if (currentBufferedPlayer) {
+    currentBufferedPlayer.stop();
+    currentBufferedPlayer = null;
+  }
+  updateMicUI();
+
+  // Send playback_done to unblock hub's converse() call
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ session_id: sessionId, type: 'playback_done' }));
+  }
+}
+
 // --- Mic button ---
 micBtn.addEventListener('click', () => {
   if (micBtn.disabled) return;
+
+  // Interrupt: tap during playback → stop audio, hub sends listening next
+  if (currentAudio || currentBufferedPlayer) {
+    const sid = (currentAudio && currentAudio.sessionId) ||
+                (currentBufferedPlayer && currentBufferedPlayer.sessionId) ||
+                activeSessionId;
+    interruptPlayback(sid);
+    return;
+  }
+
+  // Send: tap during recording → stop and send audio
   if (recording) {
     stopRecording();
-  } else if (pendingListenSessionId) {
-    // Manual mode: hub is waiting for audio from this session
+    return;
+  }
+
+  // Record: tap when idle → start recording
+  if (pendingListenSessionId) {
     const sid = pendingListenSessionId;
     pendingListenSessionId = null;
     startRecording(sid);
