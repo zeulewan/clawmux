@@ -474,9 +474,11 @@ function stopActiveAudio() {
 }
 
 function switchTab(sessionId) {
-  // Stop audio from the tab we're leaving
+  // Stop audio and recording from the tab we're leaving
   if (activeSessionId && activeSessionId !== sessionId) {
     stopActiveAudio();
+    if (recording) stopRecording(true); // discard — don't send to old session
+    pendingListenSessionId = null;
   }
   activeSessionId = sessionId;
 
@@ -910,7 +912,11 @@ async function startRecording(sessionId) {
     mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
     mediaRecorder.onstop = () => {
       stream.getTracks().forEach(t => t.stop());
-      sendAudio(sessionId);
+      if (discardRecording) {
+        discardRecording = false;
+      } else {
+        sendAudio(sessionId);
+      }
     };
     mediaRecorder.start();
     recording = true;
@@ -923,7 +929,10 @@ async function startRecording(sessionId) {
   }
 }
 
-function stopRecording() {
+let discardRecording = false;
+
+function stopRecording(discard = false) {
+  discardRecording = discard;
   if (mediaRecorder && mediaRecorder.state === 'recording') {
     mediaRecorder.stop();
   }
