@@ -328,6 +328,7 @@ let autoMode = false;
 let pendingListenSessionId = null; // session waiting for manual mic click
 let vadEnabled = true;
 let vadInterval = null; // silence detection interval
+let vadDetectedSpeech = false; // did we hear any speech this recording?
 let currentAudio = null; // { audio, sessionId, url } — currently playing audio element
 let currentBufferedPlayer = null; // { sessionId, stop() } — active buffered playback
 
@@ -684,6 +685,7 @@ function toggleVAD() {
 
 function startVAD(stream) {
   if (vadInterval) { clearInterval(vadInterval); vadInterval = null; }
+  vadDetectedSpeech = false;
 
   const vadCtx = new AudioContext();
   const source = vadCtx.createMediaStreamSource(stream);
@@ -715,8 +717,8 @@ function startVAD(stream) {
 
     if (rms < SILENCE_THRESHOLD) {
       if (!silenceStart) silenceStart = Date.now();
-      else if (Date.now() - silenceStart > SILENCE_DURATION) {
-        // Silence detected — auto-stop
+      else if (vadDetectedSpeech && Date.now() - silenceStart > SILENCE_DURATION) {
+        // Speech was heard, now silence — auto-stop
         stopRecording();
         clearInterval(vadInterval);
         vadInterval = null;
@@ -724,6 +726,7 @@ function startVAD(stream) {
       }
     } else {
       silenceStart = null;
+      vadDetectedSpeech = true;
     }
   }, 100);
 }
