@@ -76,6 +76,11 @@ body {
 .tab .status-dot.ready { background: #2ecc71; }
 .tab .status-dot.starting { background: #f1c40f; }
 .tab .status-dot.active { background: #3a86ff; }
+.tab .tmux-id {
+  font-size: 0.65rem;
+  color: #666;
+  font-family: monospace;
+}
 .tab .badge {
   background: #e63946;
   color: #fff;
@@ -327,6 +332,27 @@ const micBtn = document.getElementById('mic');
 const dot = document.getElementById('dot');
 const connLabel = document.getElementById('conn-label');
 
+// --- localStorage persistence ---
+const STORAGE_KEY = 'voice-hub-chats';
+function saveChats() {
+  const data = {};
+  for (const [id, s] of sessions) {
+    data[id] = { messages: s.messages, voice: s.voice, label: s.label, tmux_session: s.tmux_session };
+  }
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
+}
+function loadChats() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+function clearChat(sessionId) {
+  const saved = loadChats();
+  delete saved[sessionId];
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(saved)); } catch {}
+}
+
 // --- Helpers ---
 function setConnected(connected) {
   dot.classList.toggle('connected', connected);
@@ -354,7 +380,13 @@ function createTab(session) {
   statusDot.className = `status-dot ${session.status}`;
 
   const label = document.createElement('span');
+  label.className = 'tab-label';
   label.textContent = session.label || session.session_id;
+
+  const tmuxId = document.createElement('span');
+  tmuxId.className = 'tmux-id';
+  tmuxId.textContent = session.tmux_session || session.session_id;
+  tmuxId.title = `tmux attach -t ${session.tmux_session || session.session_id}`;
 
   const badge = document.createElement('span');
   badge.className = 'badge';
@@ -367,6 +399,7 @@ function createTab(session) {
 
   tab.appendChild(statusDot);
   tab.appendChild(label);
+  tab.appendChild(tmuxId);
   tab.appendChild(badge);
   tab.appendChild(closeBtn);
   tab.onclick = () => switchTab(session.session_id);
@@ -417,6 +450,7 @@ function addMessage(sessionId, role, text) {
   const s = sessions.get(sessionId);
   if (!s) return;
   s.messages.push({ role, text });
+  saveChats();
   if (sessionId === activeSessionId) {
     const div = document.createElement('div');
     div.className = `msg ${role}`;
@@ -455,18 +489,22 @@ async function spawnSession() {
 function addSession(data) {
   const el = createTab(data);
   const isReady = data.status === 'ready' || data.mcp_connected;
+  const saved = loadChats()[data.session_id];
   sessions.set(data.session_id, {
     ...data,
-    voice: data.voice || 'af_sky',
-    messages: [],
+    voice: data.voice || (saved && saved.voice) || 'af_sky',
+    messages: (saved && saved.messages) || [],
     statusText: isReady ? 'Ready' : 'Waiting for Claude...',
     el,
   });
   switchTab(data.session_id);
-  if (isReady) {
-    addMessage(data.session_id, 'system', 'Claude connected.');
-  } else {
-    addMessage(data.session_id, 'system', 'Session started. Waiting for Claude to connect...');
+  // Only add system message if no saved history
+  if (!saved || saved.messages.length === 0) {
+    if (isReady) {
+      addMessage(data.session_id, 'system', 'Claude connected.');
+    } else {
+      addMessage(data.session_id, 'system', 'Session started. Waiting for Claude to connect...');
+    }
   }
 }
 
@@ -485,6 +523,7 @@ function removeSession(sessionId) {
     s.el.tab.remove();
   }
   sessions.delete(sessionId);
+  clearChat(sessionId);
 
   if (activeSessionId === sessionId) {
     // Switch to another tab or show empty state
