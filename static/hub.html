@@ -334,6 +334,42 @@ const micBtn = document.getElementById('mic');
 const dot = document.getElementById('dot');
 const connLabel = document.getElementById('conn-label');
 
+// --- Audio cues ---
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playTone(freq, duration, startDelay = 0, gain = 0.15) {
+  const osc = audioCtx.createOscillator();
+  const vol = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = freq;
+  vol.gain.value = gain;
+  // Fade out
+  vol.gain.setValueAtTime(gain, audioCtx.currentTime + startDelay);
+  vol.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + startDelay + duration);
+  osc.connect(vol);
+  vol.connect(audioCtx.destination);
+  osc.start(audioCtx.currentTime + startDelay);
+  osc.stop(audioCtx.currentTime + startDelay + duration);
+}
+
+function cueListening() {
+  // Ascending two-tone: your turn to speak
+  playTone(660, 0.12, 0);
+  playTone(880, 0.15, 0.1);
+}
+
+function cueProcessing() {
+  // Single soft low tone: thinking
+  playTone(440, 0.2, 0, 0.08);
+}
+
+function cueSessionReady() {
+  // Three-note chime: connected
+  playTone(523, 0.1, 0);
+  playTone(659, 0.1, 0.1);
+  playTone(784, 0.15, 0.2);
+}
+
 // --- Voice display names ---
 const VOICE_NAMES = {
   af_sky: 'Sky', af_alloy: 'Alloy', af_sarah: 'Sarah',
@@ -633,6 +669,7 @@ function handleMessage(data) {
       s.status = data.status;
       if (s.el) s.el.statusDot.className = `status-dot ${data.status}`;
       if (data.status === 'ready') {
+        cueSessionReady();
         addMessage(data.session_id, 'system', 'Claude connected.');
       }
     }
@@ -662,9 +699,11 @@ function handleMessage(data) {
       // Mic muted: send empty audio so hub doesn't hang
       sendSilentAudio(session_id);
     } else if (session_id === activeSessionId && autoMode) {
+      cueListening();
       startRecording(session_id);
     } else if (session_id === activeSessionId && !autoMode) {
       // Manual mode: enable mic and wait for user to click
+      cueListening();
       pendingListenSessionId = session_id;
       micBtn.disabled = false;
       setStatus('Tap mic to respond');
@@ -743,6 +782,7 @@ function sendAudio(sessionId) {
     return;
   }
   const blob = new Blob(audioChunks, { type: 'audio/webm' });
+  cueProcessing();
   setStatus('Processing...');
   micBtn.disabled = true;
 
