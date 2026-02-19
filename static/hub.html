@@ -1200,6 +1200,7 @@ function handleMessage(data) {
     addMessage(session_id, 'assistant', data.text);
   } else if (type === 'user_text') {
     addMessage(session_id, 'user', data.text);
+    showThinking(session_id);
   } else if (type === 'audio') {
     s.status = 'active';
     if (s.el) s.el.statusDot.className = 'status-dot active';
@@ -1422,7 +1423,6 @@ function sendAudio(sessionId) {
   micBtn.classList.add('processing');
   micBtn.textContent = 'Processing...';
   micBtn.disabled = true;
-  showThinking(sessionId);
   startThinkingSound();
 
   const reader = new FileReader();
