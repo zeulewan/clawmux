@@ -374,7 +374,7 @@ body {
 <div id="chat-area" style="display:none;"></div>
 
 <div id="controls" style="display:none;">
-  <div id="session-info"><span id="tmux-label"></span></div>
+  <div id="session-info"><span id="tmux-label"></span> <span id="claude-id" style="cursor:pointer;" title="Click to copy resume command" onclick="copyResumeCmd()"></span></div>
   <div id="status"></div>
   <div id="mic-row">
     <button id="mic-mute" class="btn-icon" title="Mute microphone" onclick="toggleMicMute()">Mic</button>
@@ -496,7 +496,7 @@ const STORAGE_KEY = 'voice-hub-chats';
 function saveChats() {
   const data = {};
   for (const [id, s] of sessions) {
-    data[id] = { messages: s.messages, voice: s.voice, label: s.label, tmux_session: s.tmux_session };
+    data[id] = { messages: s.messages, voice: s.voice, label: s.label, tmux_session: s.tmux_session, claude_session_id: s.claude_session_id };
   }
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
 }
@@ -663,6 +663,14 @@ function switchTab(sessionId) {
     voiceSelect.value = s.voice || 'af_sky';
     speedSelect.value = String(parseFloat(s.speed || 1.0).toFixed(1));
     document.getElementById('tmux-label').textContent = s.tmux_session || s.session_id;
+    const claudeIdEl = document.getElementById('claude-id');
+    if (s.claude_session_id) {
+      claudeIdEl.textContent = '| resume: ' + s.claude_session_id.slice(0, 8) + '...';
+      claudeIdEl.dataset.fullId = s.claude_session_id;
+    } else {
+      claudeIdEl.textContent = '';
+      claudeIdEl.dataset.fullId = '';
+    }
 
     // Resume paused audio or play buffered audio
     if (s.pausedAudio) {
@@ -786,6 +794,7 @@ function addSession(data) {
     tmux_session: data.tmux_session || data.session_id,
     voice: data.voice || (saved && saved.voice) || 'af_sky',
     speed: data.speed || (saved && saved.speed) || 1.0,
+    claude_session_id: data.claude_session_id || (saved && saved.claude_session_id) || '',
     messages: (saved && saved.messages) || [],
     statusText: isReady ? 'Ready' : 'Waiting for Claude...',
     el,
@@ -867,6 +876,22 @@ async function changeVoice(voice) {
 
 // --- Speed selector ---
 const speedSelect = document.getElementById('speed-select');
+function copyResumeCmd() {
+  const el = document.getElementById('claude-id');
+  const id = el.dataset.fullId;
+  if (!id) return;
+  const cmd = `claude --resume ${id}`;
+  navigator.clipboard.writeText(cmd).then(() => {
+    el.textContent = '| copied!';
+    setTimeout(() => {
+      el.textContent = '| resume: ' + id.slice(0, 8) + '...';
+    }, 1500);
+  }).catch(() => {
+    // Fallback: select text
+    prompt('Resume command:', cmd);
+  });
+}
+
 async function changeSpeed(speed) {
   if (!activeSessionId) return;
   const s = sessions.get(activeSessionId);
@@ -1136,6 +1161,7 @@ function handleMessage(data) {
     const s = sessions.get(data.session_id);
     if (s) {
       s.status = data.status;
+      if (data.claude_session_id) s.claude_session_id = data.claude_session_id;
       if (s.el) s.el.statusDot.className = `status-dot ${data.status}`;
       if (data.status === 'ready') {
         cueSessionReady();

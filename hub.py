@@ -273,6 +273,7 @@ async def mcp_websocket(ws: WebSocket, session_id: str):
         "type": "session_status",
         "session_id": session_id,
         "status": "ready",
+        "claude_session_id": session.claude_session_id if session else "",
     })
 
     try:

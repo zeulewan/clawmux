@@ -38,6 +38,7 @@ class Session:
     label: str = ""
     voice: str = "af_sky"
     speed: float = 1.0
+    claude_session_id: str = ""  # Claude Code resume ID
 
     # Per-session bridge state (set by hub after creation)
     audio_queue: asyncio.Queue | None = field(default=None, repr=False)
@@ -54,6 +55,7 @@ class Session:
             "label": self.label,
             "voice": self.voice,
             "speed": self.speed,
+            "claude_session_id": self.claude_session_id,
             "mcp_connected": self.mcp_ws is not None,
         }
 
@@ -201,7 +203,8 @@ class SessionManager:
 
             session.status = "ready"
             session.touch()
-            log.info("Session %s ready", session_id)
+            session.claude_session_id = self._find_claude_session_id(session_id)
+            log.info("Session %s ready (claude_id=%s)", session_id, session.claude_session_id)
             return session
 
         except Exception as e:
@@ -260,6 +263,27 @@ class SessionManager:
                 if idle > timeout:
                     log.info("Session %s timed out (%.0fs idle)", session_id, idle)
                     await self.terminate_session(session_id)
+
+    def _find_claude_session_id(self, session_id: str) -> str:
+        """Find the Claude Code session ID by scanning the projects dir."""
+        # Claude stores sessions at ~/.claude/projects/{path-hash}/{uuid}.jsonl
+        # For work dir /tmp/voice-hub-sessions/voice-1-abc123, the path hash is
+        # -tmp-voice-hub-sessions-voice-1-abc123
+        path_hash = f"-tmp-voice-hub-sessions-{session_id}"
+        projects_dir = Path.home() / ".claude" / "projects" / path_hash
+        try:
+            if not projects_dir.exists():
+                return ""
+            jsonl_files = sorted(
+                projects_dir.glob("*.jsonl"),
+                key=lambda f: f.stat().st_mtime,
+                reverse=True,
+            )
+            if jsonl_files:
+                return jsonl_files[0].stem  # UUID without .jsonl
+        except Exception as e:
+            log.warning("Could not find Claude session ID for %s: %s", session_id, e)
+        return ""
 
     def _cleanup_workdir(self, session: Session) -> None:
         if session.work_dir and os.path.exists(session.work_dir):
