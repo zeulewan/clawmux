@@ -163,6 +163,12 @@ class SessionManager:
 
         log.info("Terminating session %s", session_id)
         session.status = "dead"
+        if session.mcp_ws:
+            try:
+                await session.mcp_ws.close(code=1001, reason="Session terminated")
+            except Exception:
+                pass
+            session.mcp_ws = None
         await self._cleanup_tmux(session.tmux_session)
         self._cleanup_workdir(session)
         del self.sessions[session_id]
