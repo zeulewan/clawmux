@@ -451,15 +451,16 @@ function createTab(session) {
 }
 
 function stopActiveAudio() {
-  // Stop currently playing audio — don't send playback_done (hub stays blocked)
+  // Pause currently playing audio and save it on the session for resume
   if (currentAudio) {
+    const s = sessions.get(currentAudio.sessionId);
     currentAudio.audio.pause();
     currentAudio.audio.onended = null;
     currentAudio.audio.onerror = null;
-    URL.revokeObjectURL(currentAudio.url);
+    if (s) s.pausedAudio = currentAudio; // save for resume
     currentAudio = null;
   }
-  // Stop buffered playback chain
+  // Stop buffered playback chain — remaining chunks stay in buffer
   if (currentBufferedPlayer) {
     currentBufferedPlayer.stop();
     currentBufferedPlayer = null;
@@ -494,8 +495,25 @@ function switchTab(sessionId) {
     voiceSelect.value = s.voice || 'af_sky';
     document.getElementById('tmux-label').textContent = s.tmux_session || s.session_id;
 
-    // Play buffered audio from background
-    if (s.audioBuffer && s.audioBuffer.length > 0) {
+    // Resume paused audio or play buffered audio
+    if (s.pausedAudio) {
+      setStatus('Playing...');
+      micBtn.disabled = true;
+      const pa = s.pausedAudio;
+      s.pausedAudio = null;
+      currentAudio = pa;
+
+      const sendDone = () => {
+        URL.revokeObjectURL(pa.url);
+        if (currentAudio && currentAudio.audio === pa.audio) currentAudio = null;
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ session_id: sessionId, type: 'playback_done' }));
+        }
+      };
+      pa.audio.onended = sendDone;
+      pa.audio.onerror = sendDone;
+      pa.audio.play().catch(sendDone);
+    } else if (s.audioBuffer && s.audioBuffer.length > 0) {
       setStatus('Playing buffered audio...');
       playBufferedAudio(sessionId, s.audioBuffer);
       s.audioBuffer = [];
