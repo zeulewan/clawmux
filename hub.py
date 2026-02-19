@@ -23,7 +23,7 @@ import uvicorn
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 
-from hub_config import HUB_PORT, KOKORO_URL, WHISPER_URL
+from hub_config import HUB_PORT, HUB_START_TIME, KOKORO_URL, WHISPER_URL
 from session_manager import SessionManager
 
 # Logging
@@ -39,18 +39,6 @@ logging.basicConfig(
 log = logging.getLogger("hub")
 
 session_mgr = SessionManager()
-
-
-async def _on_claude_id_found(session_id: str, claude_id: str) -> None:
-    """Notify browser when Claude session ID is discovered."""
-    await send_to_browser({
-        "type": "claude_id",
-        "session_id": session_id,
-        "claude_session_id": claude_id,
-    })
-
-
-session_mgr._on_claude_id_found = _on_claude_id_found
 
 # Browser WebSocket (single connection, last-wins)
 browser_ws: WebSocket | None = None
@@ -285,7 +273,6 @@ async def mcp_websocket(ws: WebSocket, session_id: str):
         "type": "session_status",
         "session_id": session_id,
         "status": "ready",
-        "claude_session_id": session.claude_session_id if session else "",
     })
 
     try:
@@ -376,6 +363,80 @@ async def set_session_speed(session_id: str, request: Request):
     session.speed = speed
     log.info("[%s] Speed changed to %s", session_id, speed)
     return JSONResponse({"speed": speed})
+
+
+@app.get("/api/debug")
+async def debug_info():
+    import time as _time
+
+    # Gather tmux sessions
+    tmux_sessions = []
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "tmux", "list-sessions", "-F",
+            "#{session_name}\t#{session_created}\t#{session_windows}\t#{session_attached}",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await proc.communicate()
+        if proc.returncode == 0:
+            for line in stdout.decode().strip().splitlines():
+                parts = line.split("\t")
+                if len(parts) >= 4:
+                    tmux_sessions.append({
+                        "name": parts[0],
+                        "created": int(parts[1]),
+                        "windows": int(parts[2]),
+                        "attached": int(parts[3]) > 0,
+                        "is_voice": parts[0].startswith("voice-"),
+                    })
+    except Exception:
+        pass
+
+    # Check service connectivity
+    services = {}
+    async with httpx.AsyncClient(timeout=3) as client:
+        for name, url in [("whisper", WHISPER_URL), ("kokoro", KOKORO_URL)]:
+            try:
+                resp = await client.get(url)
+                services[name] = {"status": "up", "code": resp.status_code, "url": url}
+            except Exception as e:
+                services[name] = {"status": "down", "error": str(e), "url": url}
+
+    # Hub sessions
+    hub_sessions = []
+    for sid, s in session_mgr.sessions.items():
+        hub_sessions.append({
+            **s.to_dict(),
+            "work_dir": s.work_dir,
+            "idle_seconds": round(_time.time() - s.last_activity),
+            "age_seconds": round(_time.time() - s.created_at),
+        })
+
+    return JSONResponse({
+        "hub": {
+            "port": HUB_PORT,
+            "uptime_seconds": round(_time.time() - HUB_START_TIME),
+            "browser_connected": browser_ws is not None,
+            "session_count": len(session_mgr.sessions),
+        },
+        "sessions": hub_sessions,
+        "tmux_sessions": tmux_sessions,
+        "services": services,
+    })
+
+
+@app.get("/api/debug/log")
+async def debug_log():
+    log_path = Path("/tmp/voice-chat-hub.log")
+    lines = []
+    try:
+        if log_path.exists():
+            text = log_path.read_text()
+            lines = text.strip().splitlines()[-50:]
+    except Exception:
+        pass
+    return JSONResponse({"lines": lines})
 
 
 if __name__ == "__main__":

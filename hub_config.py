@@ -1,8 +1,10 @@
 """Hub configuration constants."""
 
 import os
+import time
 
 HUB_PORT = int(os.environ.get("VOICE_CHAT_HUB_PORT", "3460"))
+HUB_START_TIME = time.time()
 SESSION_TIMEOUT_MINUTES = int(os.environ.get("VOICE_CHAT_TIMEOUT", "30"))
 HEALTH_CHECK_INTERVAL_SECONDS = 15
 CLAUDE_COMMAND = "claude --dangerously-skip-permissions"

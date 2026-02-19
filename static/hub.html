@@ -356,6 +356,48 @@ body {
   transition: left 0.2s;
 }
 #auto-interrupt-toggle .toggle-track.on .toggle-thumb { left: 18px; }
+/* Debug panel */
+.debug-section {
+  background: #16162a;
+  border: 1px solid #2a2a4a;
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.debug-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #3a86ff;
+  margin-bottom: 0.4rem;
+}
+.debug-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.debug-table th, .debug-table td {
+  text-align: left;
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid #2a2a4a;
+}
+.debug-table th { color: #666; font-weight: 500; font-size: 0.65rem; text-transform: uppercase; }
+.debug-table td { font-size: 0.75rem; }
+.debug-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+.debug-badge.up { background: rgba(46,204,113,0.2); color: #2ecc71; }
+.debug-badge.down { background: rgba(230,57,70,0.2); color: #e63946; }
+.debug-badge.yes { background: rgba(58,134,255,0.2); color: #3a86ff; }
+.debug-badge.no { background: rgba(136,136,136,0.2); color: #666; }
+.debug-badge.voice { background: rgba(241,196,15,0.15); color: #f1c40f; }
+.debug-badge.other { background: rgba(136,136,136,0.1); color: #555; }
+.debug-kv { display: flex; gap: 0.5rem; margin: 0.15rem 0; }
+.debug-kv .k { color: #666; min-width: 130px; }
+.debug-kv .v { color: #e0e0e0; }
+#debug-tab.active { color: #e0e0e0 !important; border-bottom: 2px solid #3a86ff; }
 </style>
 </head>
 <body>
@@ -368,6 +410,8 @@ body {
 
 <div id="tab-bar">
   <div id="spawn-btn" onclick="spawnSession()">+ New Session</div>
+  <div style="flex:1;"></div>
+  <div id="debug-tab" class="tab" onclick="showDebugPanel()" style="border-right:none; color:#666; font-size:0.7rem;">Debug</div>
 </div>
 
 <div id="voice-grid"></div>
@@ -375,7 +419,7 @@ body {
 <div id="chat-area" style="display:none;"></div>
 
 <div id="controls" style="display:none;">
-  <div id="session-info"><span id="tmux-label"></span> <span id="claude-id" style="cursor:pointer;" title="Click to copy resume command" onclick="copyResumeCmd()"></span></div>
+  <div id="session-info"><span id="tmux-label"></span></div>
   <div id="status"></div>
   <div id="mic-row">
     <button id="mic-mute" class="btn-icon" title="Mute microphone" onclick="toggleMicMute()">Mic</button>
@@ -409,6 +453,49 @@ body {
       <option value="1.5">1.5x</option>
       <option value="2.0">2x</option>
     </select>
+  </div>
+</div>
+
+<div id="debug-panel" style="display:none; flex:1; overflow-y:auto; padding:1rem; font-family:'SF Mono','Menlo','Monaco','Consolas',monospace; font-size:0.8rem;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+    <span style="font-size:0.95rem; font-weight:600;">Debug</span>
+    <span id="debug-refresh-info" style="color:#555; font-size:0.65rem;"></span>
+  </div>
+
+  <div class="debug-section">
+    <div class="debug-title">Hub</div>
+    <div id="debug-hub"></div>
+  </div>
+
+  <div class="debug-section">
+    <div class="debug-title">Services</div>
+    <table class="debug-table" id="debug-services">
+      <thead><tr><th>Service</th><th>URL</th><th>Status</th><th>Detail</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="debug-section">
+    <div class="debug-title">Hub Sessions</div>
+    <table class="debug-table" id="debug-sessions">
+      <thead><tr><th>ID</th><th>Voice</th><th>Status</th><th>MCP</th><th>Idle</th><th>Age</th><th>Work Dir</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div id="debug-no-sessions" style="color:#555; padding:0.35rem; display:none;">No active sessions</div>
+  </div>
+
+  <div class="debug-section">
+    <div class="debug-title">tmux Sessions</div>
+    <table class="debug-table" id="debug-tmux">
+      <thead><tr><th>Name</th><th>Type</th><th>Windows</th><th>Attached</th><th>Created</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div id="debug-no-tmux" style="color:#555; padding:0.35rem; display:none;">No tmux sessions</div>
+  </div>
+
+  <div class="debug-section">
+    <div class="debug-title">Hub Log (last 50 lines)</div>
+    <div id="debug-log" style="background:#0d0d1a; border:1px solid #2a2a4a; border-radius:6px; padding:0.5rem; max-height:300px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; font-size:0.7rem; color:#aaa; line-height:1.5;">Loading...</div>
   </div>
 </div>
 
@@ -494,7 +581,7 @@ const STORAGE_KEY = 'voice-hub-chats';
 function saveChats() {
   const data = {};
   for (const [id, s] of sessions) {
-    data[id] = { messages: s.messages, voice: s.voice, label: s.label, tmux_session: s.tmux_session, claude_session_id: s.claude_session_id };
+    data[id] = { messages: s.messages, voice: s.voice, label: s.label, tmux_session: s.tmux_session };
   }
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
 }
@@ -521,16 +608,19 @@ function setStatus(text) {
 }
 
 function updateLayout() {
+  if (debugActive) return; // debug panel handles its own layout
   const inChat = activeSessionId && sessions.has(activeSessionId);
   document.getElementById('voice-grid').style.display = inChat ? 'none' : 'flex';
   chatArea.style.display = inChat ? 'flex' : 'none';
   controls.style.display = inChat ? 'flex' : 'none';
+  document.getElementById('debug-panel').style.display = 'none';
   if (!inChat) renderVoiceGrid();
 }
 
 // --- Voice grid (landing page) ---
 function showVoiceGrid() {
   activeSessionId = null;
+  hideDebugPanel();
   tabBar.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   updateLayout();
 }
@@ -632,6 +722,7 @@ function stopActiveAudio() {
 }
 
 function switchTab(sessionId) {
+  hideDebugPanel();
   // Stop audio and recording from the tab we're leaving
   if (activeSessionId && activeSessionId !== sessionId) {
     stopActiveAudio();
@@ -662,14 +753,6 @@ function switchTab(sessionId) {
     voiceSelect.value = s.voice || 'af_sky';
     speedSelect.value = String(parseFloat(s.speed || 1.0).toFixed(1));
     document.getElementById('tmux-label').textContent = s.tmux_session || s.session_id;
-    const claudeIdEl = document.getElementById('claude-id');
-    if (s.claude_session_id) {
-      claudeIdEl.textContent = '| resume: ' + s.claude_session_id.slice(0, 8) + '...';
-      claudeIdEl.dataset.fullId = s.claude_session_id;
-    } else {
-      claudeIdEl.textContent = '';
-      claudeIdEl.dataset.fullId = '';
-    }
 
     // Resume thinking sound if this session is thinking
     if (s.isThinking) startThinkingSound(sessionId);
@@ -796,7 +879,6 @@ function addSession(data) {
     tmux_session: data.tmux_session || data.session_id,
     voice: data.voice || (saved && saved.voice) || 'af_sky',
     speed: data.speed || (saved && saved.speed) || 1.0,
-    claude_session_id: data.claude_session_id || (saved && saved.claude_session_id) || '',
     messages: (saved && saved.messages) || [],
     statusText: isReady ? 'Ready' : 'Waiting for Claude...',
     el,
@@ -878,21 +960,6 @@ async function changeVoice(voice) {
 
 // --- Speed selector ---
 const speedSelect = document.getElementById('speed-select');
-function copyResumeCmd() {
-  const el = document.getElementById('claude-id');
-  const id = el.dataset.fullId;
-  if (!id) return;
-  const cmd = `claude --resume ${id}`;
-  navigator.clipboard.writeText(cmd).then(() => {
-    el.textContent = '| copied!';
-    setTimeout(() => {
-      el.textContent = '| resume: ' + id.slice(0, 8) + '...';
-    }, 1500);
-  }).catch(() => {
-    // Fallback: select text
-    prompt('Resume command:', cmd);
-  });
-}
 
 async function changeSpeed(speed) {
   if (!activeSessionId) return;
@@ -1137,24 +1204,10 @@ function handleMessage(data) {
     const s = sessions.get(data.session_id);
     if (s) {
       s.status = data.status;
-      if (data.claude_session_id) s.claude_session_id = data.claude_session_id;
       if (s.el) s.el.statusDot.className = `status-dot ${data.status}`;
       if (data.status === 'ready') {
         cueSessionReady();
         addMessage(data.session_id, 'system', 'Claude connected.');
-      }
-    }
-    return;
-  }
-  if (type === 'claude_id') {
-    const s = sessions.get(data.session_id);
-    if (s) {
-      s.claude_session_id = data.claude_session_id;
-      saveChats();
-      if (data.session_id === activeSessionId) {
-        const claudeIdEl = document.getElementById('claude-id');
-        claudeIdEl.textContent = '| resume: ' + data.claude_session_id.slice(0, 8) + '...';
-        claudeIdEl.dataset.fullId = data.claude_session_id;
       }
     }
     return;
@@ -1473,6 +1526,110 @@ micBtn.addEventListener('click', () => {
     startRecording(activeSessionId);
   }
 });
+
+// --- Debug panel ---
+let debugActive = false;
+let debugTimer = null;
+
+function showDebugPanel() {
+  // Stop audio/recording when switching to debug
+  if (activeSessionId) {
+    stopActiveAudio();
+    stopThinkingSound();
+    if (recording) stopRecording(true);
+    pendingListenSessionId = null;
+  }
+  activeSessionId = null;
+  debugActive = true;
+
+  // Update tab styling
+  tabBar.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('debug-tab').classList.add('active');
+
+  // Show debug, hide everything else
+  document.getElementById('voice-grid').style.display = 'none';
+  chatArea.style.display = 'none';
+  controls.style.display = 'none';
+  document.getElementById('debug-panel').style.display = 'flex';
+  document.getElementById('debug-panel').style.flexDirection = 'column';
+
+  refreshDebug();
+  if (debugTimer) clearInterval(debugTimer);
+  debugTimer = setInterval(refreshDebug, 5000);
+}
+
+function hideDebugPanel() {
+  debugActive = false;
+  document.getElementById('debug-panel').style.display = 'none';
+  document.getElementById('debug-tab').classList.remove('active');
+  if (debugTimer) { clearInterval(debugTimer); debugTimer = null; }
+}
+
+function debugDuration(seconds) {
+  if (seconds < 60) return seconds + 's';
+  if (seconds < 3600) return Math.floor(seconds / 60) + 'm ' + (seconds % 60) + 's';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return h + 'h ' + m + 'm';
+}
+
+async function refreshDebug() {
+  if (!debugActive) return;
+  try {
+    const resp = await fetch('/api/debug');
+    if (!resp.ok) return;
+    const data = await resp.json();
+
+    // Hub info
+    const hub = data.hub;
+    document.getElementById('debug-hub').innerHTML = `
+      <div class="debug-kv"><span class="k">Port</span><span class="v">${hub.port}</span></div>
+      <div class="debug-kv"><span class="k">Uptime</span><span class="v">${debugDuration(hub.uptime_seconds)}</span></div>
+      <div class="debug-kv"><span class="k">Browser</span><span class="v"><span class="debug-badge ${hub.browser_connected ? 'yes' : 'no'}">${hub.browser_connected ? 'connected' : 'disconnected'}</span></span></div>
+      <div class="debug-kv"><span class="k">Sessions</span><span class="v">${hub.session_count}</span></div>
+    `;
+
+    // Services
+    const stb = document.querySelector('#debug-services tbody');
+    stb.innerHTML = '';
+    for (const [name, svc] of Object.entries(data.services)) {
+      const detail = svc.status === 'up' ? `HTTP ${svc.code}` : svc.error;
+      stb.innerHTML += `<tr><td>${name}</td><td style="color:#666">${svc.url}</td><td><span class="debug-badge ${svc.status}">${svc.status}</span></td><td style="color:#555;font-size:0.7rem">${detail}</td></tr>`;
+    }
+
+    // Hub sessions
+    const stb2 = document.querySelector('#debug-sessions tbody');
+    stb2.innerHTML = '';
+    document.getElementById('debug-no-sessions').style.display = data.sessions.length ? 'none' : 'block';
+    for (const s of data.sessions) {
+      const sc = s.status === 'ready' ? 'up' : s.status === 'starting' ? 'voice' : 'down';
+      stb2.innerHTML += `<tr><td>${s.session_id}</td><td>${s.voice}</td><td><span class="debug-badge ${sc}">${s.status}</span></td><td><span class="debug-badge ${s.mcp_connected ? 'yes' : 'no'}">${s.mcp_connected ? 'yes' : 'no'}</span></td><td>${debugDuration(s.idle_seconds)}</td><td>${debugDuration(s.age_seconds)}</td><td style="color:#555">${s.work_dir}</td></tr>`;
+    }
+
+    // tmux sessions
+    const stb3 = document.querySelector('#debug-tmux tbody');
+    stb3.innerHTML = '';
+    document.getElementById('debug-no-tmux').style.display = data.tmux_sessions.length ? 'none' : 'block';
+    for (const t of data.tmux_sessions) {
+      stb3.innerHTML += `<tr><td>${t.name}</td><td><span class="debug-badge ${t.is_voice ? 'voice' : 'other'}">${t.is_voice ? 'voice' : 'other'}</span></td><td>${t.windows}</td><td>${t.attached ? 'yes' : 'no'}</td><td>${new Date(t.created * 1000).toLocaleTimeString()}</td></tr>`;
+    }
+
+    document.getElementById('debug-refresh-info').textContent = 'Updated ' + new Date().toLocaleTimeString();
+  } catch (e) {
+    console.warn('Debug refresh error:', e);
+  }
+
+  // Log tail
+  try {
+    const logResp = await fetch('/api/debug/log');
+    if (logResp.ok) {
+      const logData = await logResp.json();
+      const el = document.getElementById('debug-log');
+      el.textContent = logData.lines.join('\n') || '(empty)';
+      el.scrollTop = el.scrollHeight;
+    }
+  } catch {}
+}
 
 // --- Init ---
 connect();
