@@ -216,7 +216,7 @@ body {
 }
 #mic-mute:hover { border-color: #888; color: #ccc; }
 #mic-mute.muted { border-color: #e63946; color: #e63946; background: rgba(230,57,70,0.15); }
-#auto-toggle {
+#auto-toggle, #vad-toggle {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -225,7 +225,7 @@ body {
   cursor: pointer;
   user-select: none;
 }
-#auto-toggle .toggle-track {
+#auto-toggle .toggle-track, #vad-toggle .toggle-track {
   width: 36px;
   height: 20px;
   border-radius: 10px;
@@ -233,8 +233,8 @@ body {
   position: relative;
   transition: background 0.2s;
 }
-#auto-toggle .toggle-track.on { background: #3a86ff; }
-#auto-toggle .toggle-thumb {
+#auto-toggle .toggle-track.on, #vad-toggle .toggle-track.on { background: #3a86ff; }
+#auto-toggle .toggle-thumb, #vad-toggle .toggle-thumb {
   width: 16px;
   height: 16px;
   border-radius: 50%;
@@ -244,7 +244,7 @@ body {
   left: 2px;
   transition: left 0.2s;
 }
-#auto-toggle .toggle-track.on .toggle-thumb { left: 18px; }
+#auto-toggle .toggle-track.on .toggle-thumb, #vad-toggle .toggle-track.on .toggle-thumb { left: 18px; }
 #voice-select {
   background: #2a2a4a;
   color: #e0e0e0;
@@ -298,6 +298,10 @@ body {
       <div class="toggle-track"><div class="toggle-thumb"></div></div>
       <span>Manual</span>
     </div>
+    <div id="vad-toggle" onclick="toggleVAD()" title="Auto-detect when you stop talking">
+      <div class="toggle-track on"><div class="toggle-thumb"></div></div>
+      <span>VAD</span>
+    </div>
     <select id="voice-select" onchange="changeVoice(this.value)" title="Session voice">
       <option value="af_sky">Sky (F)</option>
       <option value="af_alloy">Alloy (F)</option>
@@ -322,6 +326,8 @@ let recording = false;
 let micMuted = false;
 let autoMode = false;
 let pendingListenSessionId = null; // session waiting for manual mic click
+let vadEnabled = true;
+let vadInterval = null; // silence detection interval
 let currentAudio = null; // { audio, sessionId, url } — currently playing audio element
 let currentBufferedPlayer = null; // { sessionId, stop() } — active buffered playback
 
@@ -667,6 +673,59 @@ function toggleAutoMode() {
   label.textContent = autoMode ? 'Auto' : 'Manual';
 }
 
+// --- VAD (voice activity detection) ---
+function toggleVAD() {
+  vadEnabled = !vadEnabled;
+  const track = document.querySelector('#vad-toggle .toggle-track');
+  track.classList.toggle('on', vadEnabled);
+}
+
+function startVAD(stream) {
+  if (vadInterval) { clearInterval(vadInterval); vadInterval = null; }
+
+  const vadCtx = new AudioContext();
+  const source = vadCtx.createMediaStreamSource(stream);
+  const analyser = vadCtx.createAnalyser();
+  analyser.fftSize = 512;
+  source.connect(analyser);
+
+  const data = new Uint8Array(analyser.frequencyBinCount);
+  const SILENCE_THRESHOLD = 15; // RMS level below which = silence
+  const SILENCE_DURATION = 1500; // ms of silence before auto-stop
+  let silenceStart = null;
+
+  vadInterval = setInterval(() => {
+    if (!recording) {
+      clearInterval(vadInterval);
+      vadInterval = null;
+      vadCtx.close();
+      return;
+    }
+
+    analyser.getByteTimeDomainData(data);
+    // Calculate RMS
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) {
+      const v = (data[i] - 128) / 128;
+      sum += v * v;
+    }
+    const rms = Math.sqrt(sum / data.length) * 200;
+
+    if (rms < SILENCE_THRESHOLD) {
+      if (!silenceStart) silenceStart = Date.now();
+      else if (Date.now() - silenceStart > SILENCE_DURATION) {
+        // Silence detected — auto-stop
+        stopRecording();
+        clearInterval(vadInterval);
+        vadInterval = null;
+        vadCtx.close();
+      }
+    } else {
+      silenceStart = null;
+    }
+  }, 100);
+}
+
 // --- WebSocket ---
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -857,7 +916,8 @@ async function startRecording(sessionId) {
     recording = true;
     micBtn.classList.add('recording');
     micBtn.disabled = false;
-    setStatus('Recording... tap to stop');
+    setStatus(vadEnabled ? 'Recording... (auto-stop on silence)' : 'Recording... tap to stop');
+    if (vadEnabled) startVAD(stream);
   } catch (err) {
     setStatus('Microphone access denied');
   }
