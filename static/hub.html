@@ -426,6 +426,7 @@ body {
 <div id="controls" style="display:none;">
   <div id="session-info"><span id="tmux-label"></span></div>
   <div id="status"></div>
+  <button id="home-btn" onclick="showVoiceGrid()" style="background:none; border:1px solid #444; color:#888; font-size:0.75rem; padding:0.3rem 0.8rem; border-radius:6px; cursor:pointer; margin-bottom:0.25rem;">Home</button>
   <div id="mic-row">
     <button id="mic-mute" class="btn-icon" title="Mute microphone" onclick="toggleMicMute()">Mic</button>
     <button id="mic" disabled>Record</button>
@@ -632,6 +633,10 @@ function updateLayout() {
 
 // --- Voice grid (landing page) ---
 function showVoiceGrid() {
+  stopThinkingSound();
+  if (recording) stopRecording(true);
+  stopActiveAudio();
+  pendingListenSessionId = null;
   activeSessionId = null;
   hideDebugPanel();
   tabBar.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
