@@ -40,6 +40,18 @@ log = logging.getLogger("hub")
 
 session_mgr = SessionManager()
 
+
+async def _on_claude_id_found(session_id: str, claude_id: str) -> None:
+    """Notify browser when Claude session ID is discovered."""
+    await send_to_browser({
+        "type": "claude_id",
+        "session_id": session_id,
+        "claude_session_id": claude_id,
+    })
+
+
+session_mgr._on_claude_id_found = _on_claude_id_found
+
 # Browser WebSocket (single connection, last-wins)
 browser_ws: WebSocket | None = None
 

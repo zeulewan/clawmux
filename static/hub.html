@@ -314,17 +314,18 @@ body {
   gap: 0.3rem;
 }
 .thinking-dot {
-  width: 8px;
-  height: 8px;
+  display: block;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  background: #888;
+  background: #999;
   animation: thinkingPulse 1.4s infinite ease-in-out;
 }
 .thinking-dot:nth-child(2) { animation-delay: 0.2s; }
 .thinking-dot:nth-child(3) { animation-delay: 0.4s; }
 @keyframes thinkingPulse {
-  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
-  40% { opacity: 1; transform: scale(1); }
+  0%, 80%, 100% { opacity: 0.2; transform: scale(0.7); }
+  40% { opacity: 1; transform: scale(1.1); }
 }
 #auto-interrupt-toggle {
   display: flex;
@@ -1170,6 +1171,19 @@ function handleMessage(data) {
     }
     return;
   }
+  if (type === 'claude_id') {
+    const s = sessions.get(data.session_id);
+    if (s) {
+      s.claude_session_id = data.claude_session_id;
+      saveChats();
+      if (data.session_id === activeSessionId) {
+        const claudeIdEl = document.getElementById('claude-id');
+        claudeIdEl.textContent = '| resume: ' + data.claude_session_id.slice(0, 8) + '...';
+        claudeIdEl.dataset.fullId = data.claude_session_id;
+      }
+    }
+    return;
+  }
   if (type === 'error') {
     alert('Hub error: ' + data.message);
     return;
@@ -1199,7 +1213,10 @@ function handleMessage(data) {
       if (s.el) s.el.badge.classList.add('visible');
     }
   } else if (type === 'listening') {
-    if (micMuted) {
+    if (recording && recordingSessionId === session_id) {
+      // Already recording for this session (e.g. voice interrupt started it)
+      // Just ignore the listening message
+    } else if (micMuted) {
       // Mic muted: send empty audio so hub doesn't hang
       sendSilentAudio(session_id);
     } else if (session_id === activeSessionId && autoMode) {
@@ -1220,8 +1237,6 @@ function handleMessage(data) {
     s.statusText = data.text;
     if (session_id === activeSessionId) setStatus(data.text);
   } else if (type === 'done') {
-    hideThinking(session_id);
-    stopThinkingSound();
     s.statusText = 'Ready';
     s.status = 'ready';
     if (s.el) s.el.statusDot.className = 'status-dot ready';

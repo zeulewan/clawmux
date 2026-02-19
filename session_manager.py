@@ -71,6 +71,7 @@ class SessionManager:
     def __init__(self) -> None:
         self.sessions: dict[str, Session] = {}
         self._counter = 0
+        self._on_claude_id_found = None  # callback: async fn(session_id, claude_id)
         SESSION_DIR_BASE.mkdir(parents=True, exist_ok=True)
 
     async def cleanup_stale_sessions(self) -> None:
@@ -203,8 +204,9 @@ class SessionManager:
 
             session.status = "ready"
             session.touch()
-            session.claude_session_id = self._find_claude_session_id(session_id)
-            log.info("Session %s ready (claude_id=%s)", session_id, session.claude_session_id)
+            # Find Claude session ID in background (file might not exist yet)
+            asyncio.create_task(self._discover_claude_id(session))
+            log.info("Session %s ready", session_id)
             return session
 
         except Exception as e:
@@ -264,25 +266,40 @@ class SessionManager:
                     log.info("Session %s timed out (%.0fs idle)", session_id, idle)
                     await self.terminate_session(session_id)
 
-    def _find_claude_session_id(self, session_id: str) -> str:
+    async def _discover_claude_id(self, session: "Session") -> None:
+        """Background task to find and broadcast the Claude session ID."""
+        cid = await self._find_claude_session_id(session.session_id)
+        if cid:
+            session.claude_session_id = cid
+            log.info("Session %s claude_id=%s", session.session_id, cid)
+            # Notify via callback if set
+            if self._on_claude_id_found:
+                await self._on_claude_id_found(session.session_id, cid)
+
+    async def _find_claude_session_id(self, session_id: str) -> str:
         """Find the Claude Code session ID by scanning the projects dir."""
         # Claude stores sessions at ~/.claude/projects/{path-hash}/{uuid}.jsonl
         # For work dir /tmp/voice-hub-sessions/voice-1-abc123, the path hash is
         # -tmp-voice-hub-sessions-voice-1-abc123
         path_hash = f"-tmp-voice-hub-sessions-{session_id}"
         projects_dir = Path.home() / ".claude" / "projects" / path_hash
-        try:
-            if not projects_dir.exists():
-                return ""
-            jsonl_files = sorted(
-                projects_dir.glob("*.jsonl"),
-                key=lambda f: f.stat().st_mtime,
-                reverse=True,
-            )
-            if jsonl_files:
-                return jsonl_files[0].stem  # UUID without .jsonl
-        except Exception as e:
-            log.warning("Could not find Claude session ID for %s: %s", session_id, e)
+
+        # Retry a few times since Claude may not have created the file yet
+        for _ in range(5):
+            try:
+                if projects_dir.exists():
+                    jsonl_files = sorted(
+                        projects_dir.glob("*.jsonl"),
+                        key=lambda f: f.stat().st_mtime,
+                        reverse=True,
+                    )
+                    if jsonl_files:
+                        return jsonl_files[0].stem  # UUID without .jsonl
+            except Exception as e:
+                log.warning("Could not find Claude session ID for %s: %s", session_id, e)
+            await asyncio.sleep(2)
+
+        log.warning("Claude session ID not found for %s after retries", session_id)
         return ""
 
     def _cleanup_workdir(self, session: Session) -> None:
