@@ -433,9 +433,6 @@ let persistentStream = null; // persistent mic MediaStream, acquired once
 let autoInterruptEnabled = false; // voice-based interrupt during playback
 let playbackVadInterval = null; // VAD interval during playback for auto-interrupt
 let playbackVadCtx = null; // AudioContext for playback VAD
-let thinkingSoundCtx = null; // AudioContext for thinking sound
-let thinkingSoundOsc = null; // oscillator for thinking sound
-let thinkingSoundLfo = null; // LFO for thinking sound pulsing
 
 // --- DOM refs ---
 const tabBar = document.getElementById('tab-bar');
@@ -638,6 +635,7 @@ function switchTab(sessionId) {
   // Stop audio and recording from the tab we're leaving
   if (activeSessionId && activeSessionId !== sessionId) {
     stopActiveAudio();
+    stopThinkingSound();
     if (recording) stopRecording(true); // discard — don't send to old session
     pendingListenSessionId = null;
   }
@@ -672,6 +670,9 @@ function switchTab(sessionId) {
       claudeIdEl.textContent = '';
       claudeIdEl.dataset.fullId = '';
     }
+
+    // Resume thinking sound if this session is thinking
+    if (s.isThinking) startThinkingSound(sessionId);
 
     // Resume paused audio or play buffered audio
     if (s.pausedAudio) {
@@ -1065,54 +1066,28 @@ function hideThinking(sessionId) {
 }
 
 // --- Thinking sound ---
-function startThinkingSound() {
+let thinkingSoundTimer = null;
+let thinkingSoundSessionId = null;
+
+function startThinkingSound(sessionId) {
   stopThinkingSound();
-  try {
-    thinkingSoundCtx = new AudioContext();
-    // Soft sine tone
-    thinkingSoundOsc = thinkingSoundCtx.createOscillator();
-    thinkingSoundOsc.type = 'sine';
-    thinkingSoundOsc.frequency.value = 440;
-
-    // Main gain — very quiet
-    const mainGain = thinkingSoundCtx.createGain();
-    mainGain.gain.value = 0.03;
-
-    // LFO to pulse the volume
-    thinkingSoundLfo = thinkingSoundCtx.createOscillator();
-    thinkingSoundLfo.type = 'sine';
-    thinkingSoundLfo.frequency.value = 0.8; // pulse ~1Hz
-
-    const lfoGain = thinkingSoundCtx.createGain();
-    lfoGain.gain.value = 0.03; // modulation depth
-
-    // LFO modulates main gain
-    thinkingSoundLfo.connect(lfoGain);
-    lfoGain.connect(mainGain.gain);
-
-    thinkingSoundOsc.connect(mainGain);
-    mainGain.connect(thinkingSoundCtx.destination);
-
-    thinkingSoundOsc.start();
-    thinkingSoundLfo.start();
-  } catch (e) {
-    console.warn('Thinking sound error:', e);
-  }
+  thinkingSoundSessionId = sessionId;
+  if (sessionId !== activeSessionId) return; // only play for focused tab
+  const tick = () => {
+    // Double-tick pattern: two quick soft clicks
+    playTone(1200, 0.03, 0, 0.06);
+    playTone(900, 0.03, 0.08, 0.04);
+  };
+  tick();
+  thinkingSoundTimer = setInterval(tick, 2500);
 }
 
 function stopThinkingSound() {
-  if (thinkingSoundOsc) {
-    try { thinkingSoundOsc.stop(); } catch {}
-    thinkingSoundOsc = null;
+  if (thinkingSoundTimer) {
+    clearInterval(thinkingSoundTimer);
+    thinkingSoundTimer = null;
   }
-  if (thinkingSoundLfo) {
-    try { thinkingSoundLfo.stop(); } catch {}
-    thinkingSoundLfo = null;
-  }
-  if (thinkingSoundCtx) {
-    thinkingSoundCtx.close().catch(() => {});
-    thinkingSoundCtx = null;
-  }
+  thinkingSoundSessionId = null;
 }
 
 // --- WebSocket ---
@@ -1196,10 +1171,12 @@ function handleMessage(data) {
 
   if (type === 'assistant_text') {
     hideThinking(session_id);
+    stopThinkingSound();
     addMessage(session_id, 'assistant', data.text);
   } else if (type === 'user_text') {
     addMessage(session_id, 'user', data.text);
     showThinking(session_id);
+    startThinkingSound(session_id);
   } else if (type === 'audio') {
     s.status = 'active';
     if (s.el) s.el.statusDot.className = 'status-dot active';
