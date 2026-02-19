@@ -634,7 +634,7 @@ function updateLayout() {
 // --- Voice grid (landing page) ---
 function showVoiceGrid() {
   stopThinkingSound();
-  if (recording) stopRecording(true);
+  if (recording) stopRecording(false); // send recording before switching
   stopActiveAudio();
   pendingListenSessionId = null;
   activeSessionId = null;
