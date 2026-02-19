@@ -322,6 +322,8 @@ let recording = false;
 let micMuted = false;
 let autoMode = false;
 let pendingListenSessionId = null; // session waiting for manual mic click
+let currentAudio = null; // { audio, sessionId, url } — currently playing audio element
+let currentBufferedPlayer = null; // { sessionId, stop() } — active buffered playback
 
 // --- DOM refs ---
 const tabBar = document.getElementById('tab-bar');
@@ -448,7 +450,27 @@ function createTab(session) {
   return { tab, statusDot, badge };
 }
 
+function stopActiveAudio() {
+  // Stop currently playing audio — don't send playback_done (hub stays blocked)
+  if (currentAudio) {
+    currentAudio.audio.pause();
+    currentAudio.audio.onended = null;
+    currentAudio.audio.onerror = null;
+    URL.revokeObjectURL(currentAudio.url);
+    currentAudio = null;
+  }
+  // Stop buffered playback chain
+  if (currentBufferedPlayer) {
+    currentBufferedPlayer.stop();
+    currentBufferedPlayer = null;
+  }
+}
+
 function switchTab(sessionId) {
+  // Stop audio from the tab we're leaving
+  if (activeSessionId && activeSessionId !== sessionId) {
+    stopActiveAudio();
+  }
   activeSessionId = sessionId;
 
   // Update tab active state
@@ -748,8 +770,15 @@ function playAudio(sessionId, b64data) {
   const url = URL.createObjectURL(blob);
   const audio = new Audio(url);
 
-  const sendDone = () => {
+  currentAudio = { audio, sessionId, url };
+
+  const cleanup = () => {
     URL.revokeObjectURL(url);
+    if (currentAudio && currentAudio.audio === audio) currentAudio = null;
+  };
+
+  const sendDone = () => {
+    cleanup();
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ session_id: sessionId, type: 'playback_done' }));
     }
@@ -765,11 +794,17 @@ function playBufferedAudio(sessionId, chunks) {
   if (chunks.length === 0) return;
   micBtn.disabled = true;
   let i = 0;
+  let stopped = false;
+
+  currentBufferedPlayer = {
+    sessionId,
+    stop() { stopped = true; if (currentAudio) { currentAudio.audio.pause(); } },
+  };
 
   function playNext() {
-    if (i >= chunks.length) {
-      // All chunks played — send single playback_done
-      if (ws && ws.readyState === WebSocket.OPEN) {
+    if (stopped || i >= chunks.length) {
+      currentBufferedPlayer = null;
+      if (!stopped && ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ session_id: sessionId, type: 'playback_done' }));
       }
       return;
@@ -779,9 +814,10 @@ function playBufferedAudio(sessionId, chunks) {
     const blob = new Blob([bytes], { type: 'audio/mpeg' });
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
-    audio.onended = () => { URL.revokeObjectURL(url); playNext(); };
-    audio.onerror = () => { URL.revokeObjectURL(url); playNext(); };
-    audio.play().catch(() => playNext());
+    currentAudio = { audio, sessionId, url };
+    audio.onended = () => { URL.revokeObjectURL(url); currentAudio = null; playNext(); };
+    audio.onerror = () => { URL.revokeObjectURL(url); currentAudio = null; playNext(); };
+    audio.play().catch(() => { currentAudio = null; playNext(); });
   }
 
   playNext();
