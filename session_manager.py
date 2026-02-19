@@ -16,6 +16,7 @@ from hub_config import (
     HUB_PORT,
     SESSION_TIMEOUT_MINUTES,
     TMUX_SESSION_PREFIX,
+    VOICES,
 )
 
 log = logging.getLogger("hub.sessions")
@@ -71,6 +72,16 @@ class SessionManager:
     def list_sessions(self) -> list[dict]:
         return [s.to_dict() for s in self.sessions.values()]
 
+    def _next_voice(self) -> tuple[str, str]:
+        """Return the next unused (voice_id, display_name) from the rotation."""
+        used = {s.voice for s in self.sessions.values()}
+        for voice_id, name in VOICES:
+            if voice_id not in used:
+                return voice_id, name
+        # All used — wrap around using counter
+        idx = self._counter % len(VOICES)
+        return VOICES[idx]
+
     async def spawn_session(self, label: str = "") -> Session:
         """Create a temp dir with .mcp.json, tmux session, and start Claude."""
         self._counter += 1
@@ -81,10 +92,13 @@ class SessionManager:
         # Kill stale tmux session with same name if it exists
         await self._run(f"tmux kill-session -t {tmux_name} 2>/dev/null || true")
 
+        voice_id, voice_name = self._next_voice()
+
         session = Session(
             session_id=session_id,
             tmux_session=tmux_name,
-            label=label or f"Session {self._counter}",
+            label=voice_name,
+            voice=voice_id,
         )
         session.init_bridge()
         self.sessions[session_id] = session
@@ -113,6 +127,13 @@ class SessionManager:
             mcp_json_path = work_dir / ".mcp.json"
             mcp_json_path.write_text(json.dumps(mcp_config, indent=2))
             log.info("Wrote %s", mcp_json_path)
+
+            # Write CLAUDE.md with agent identity
+            claude_md = work_dir / "CLAUDE.md"
+            claude_md.write_text(
+                f"Your name is {voice_name}. "
+                f"When greeting the user, say: \"Hi, I'm {voice_name}! How can I help?\"\n"
+            )
 
             # Create tmux session starting in the work dir
             await self._run(
