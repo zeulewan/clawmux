@@ -526,6 +526,20 @@ function switchTab(sessionId) {
       setStatus('Playing buffered audio...');
       playBufferedAudio(sessionId, s.audioBuffer);
       s.audioBuffer = [];
+    } else if (s.pendingListen) {
+      // Session was waiting for mic input
+      s.pendingListen = false;
+      if (micMuted) {
+        sendSilentAudio(sessionId);
+      } else if (autoMode) {
+        cueListening();
+        startRecording(sessionId);
+      } else {
+        cueListening();
+        pendingListenSessionId = sessionId;
+        micBtn.disabled = false;
+        setStatus('Tap mic to respond');
+      }
     }
   }
 }
@@ -826,7 +840,8 @@ function handleMessage(data) {
       micBtn.disabled = false;
       setStatus('Tap mic to respond');
     } else {
-      // Show badge on inactive tab
+      // Background tab — mark pending, show badge
+      s.pendingListen = true;
       if (s.el) s.el.badge.classList.add('visible');
     }
   } else if (type === 'status') {
