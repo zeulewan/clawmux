@@ -525,6 +525,7 @@ let persistentStream = null; // persistent mic MediaStream, acquired once
 let autoInterruptEnabled = false; // voice-based interrupt during playback
 let playbackVadInterval = null; // VAD interval during playback for auto-interrupt
 let playbackVadCtx = null; // AudioContext for playback VAD
+const spawningVoices = new Set(); // voice IDs currently being spawned
 
 // --- DOM refs ---
 const tabBar = document.getElementById('tab-bar');
@@ -643,9 +644,12 @@ function renderVoiceGrid() {
       if (s.voice === voiceId) { sessionForVoice = s; break; }
     }
 
+    const isSpawning = spawningVoices.has(voiceId);
     const card = document.createElement('div');
     card.className = 'voice-card';
-    if (sessionForVoice) {
+    if (isSpawning) {
+      card.classList.add('starting');
+    } else if (sessionForVoice) {
       if (sessionForVoice.status === 'starting') {
         card.classList.add('starting');
       } else if (sessionForVoice.isThinking) {
@@ -668,7 +672,9 @@ function renderVoiceGrid() {
     const vdot = document.createElement('span');
     vdot.className = 'voice-dot';
     const vlabel = document.createElement('span');
-    if (!sessionForVoice) {
+    if (isSpawning) {
+      vlabel.textContent = 'Spawning...';
+    } else if (!sessionForVoice) {
       vlabel.textContent = 'Available';
     } else if (sessionForVoice.status === 'starting') {
       vlabel.textContent = 'Starting...';
@@ -690,6 +696,7 @@ function renderVoiceGrid() {
     card.appendChild(vstatus);
 
     card.onclick = () => {
+      if (isSpawning) return;
       if (sessionForVoice) {
         switchTab(sessionForVoice.session_id);
       } else {
@@ -874,8 +881,15 @@ function addMessage(sessionId, role, text) {
 // --- Session management ---
 async function spawnSession(voiceId = '') {
   if (spawnBtn.classList.contains('disabled')) return;
+  if (voiceId && spawningVoices.has(voiceId)) return; // already spawning this voice
   spawnBtn.classList.add('disabled');
   spawnBtn.textContent = 'Spawning...';
+
+  // Mark voice as spawning immediately and update grid
+  if (voiceId) {
+    spawningVoices.add(voiceId);
+    renderVoiceGridIfActive();
+  }
 
   // Acquire mic permission now while page is focused (avoids background focus issues)
   try { await getMicStream(); } catch (e) { console.warn('Mic permission denied:', e); }
@@ -899,8 +913,10 @@ async function spawnSession(voiceId = '') {
   } catch (e) {
     alert('Spawn error: ' + e.message);
   } finally {
+    if (voiceId) spawningVoices.delete(voiceId);
     spawnBtn.classList.remove('disabled');
     spawnBtn.textContent = '+ New Session';
+    renderVoiceGridIfActive();
   }
 }
 
