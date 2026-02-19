@@ -100,4 +100,4 @@ If anything is missing, Claude will walk you through it.
 - **Background work** — If an agent is talking while you're on another tab, the audio is saved and plays when you switch back.
 - You can **attach to the tmux session** shown in the bottom bar to see what Claude is doing behind the scenes.
 
-For the full details on every state, button, toggle, and audio behavior, see the [UI Behavior Reference](../agents/ui-behavior.md).
+For the full details on every state, button, toggle, and audio behavior, see the [UI Behavior Reference](../agents/reference/ui-behavior.md).
