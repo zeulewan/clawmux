@@ -94,25 +94,3 @@ alternate_style = true
 
 [project.markdown_extensions.pymdownx.tasklist]
 custom_checkbox = true
-
-[[project.nav]]
-Home = "index.md"
-
-[[project.nav]]
-"For Humans" = "humans/index.md"
-
-[[project.nav]]
-"For Agents" = "agents/index.md"
-
-[[project.nav]]
-"iOS App" = "guide/ios.md"
-
-[[project.nav]]
-Roadmap = [
-  { "Planned Features" = "roadmap/planned-features.md" },
-  { "v0.3.0" = "roadmap/v0.3.0.md" },
-  { "v0.4.0" = "roadmap/v0.4.0.md" },
-  { "v0.2.0" = "roadmap/v0.2.0.md" },
-  { "v0.1.0" = "roadmap/v0.1.0.md" },
-  { "v0.0.1" = "roadmap/v0.0.1.md" },
-]
