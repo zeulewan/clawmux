@@ -61,8 +61,12 @@ final class VADProcessor: @unchecked Sendable {
     private let onSilenceDetected: @Sendable () -> Void
     private var detectedSpeech = false
     private var silenceStart: Date?
+    private var startedAt: Date?
     private let silenceThreshold: Float
     private let silenceDuration: TimeInterval
+    // Ignore the first N seconds so audio cues played through the speaker
+    // don't get picked up by the mic and falsely trigger speech detection
+    private let gracePeriod: TimeInterval = 0.8
 
     init(
         silenceThreshold: Float = 10,
@@ -75,6 +79,11 @@ final class VADProcessor: @unchecked Sendable {
     }
 
     func processBuffer(_ buffer: AVAudioPCMBuffer) {
+        let now = Date()
+        if startedAt == nil { startedAt = now }
+        // Skip processing during grace period so cue tones don't register as speech
+        guard now.timeIntervalSince(startedAt!) >= gracePeriod else { return }
+
         guard let data = buffer.floatChannelData?[0] else { return }
         let count = Int(buffer.frameLength)
         var sum: Float = 0
@@ -82,10 +91,10 @@ final class VADProcessor: @unchecked Sendable {
         let rms = sqrt(sum / Float(count)) * 200
 
         if rms < silenceThreshold {
-            if silenceStart == nil { silenceStart = Date() }
+            if silenceStart == nil { silenceStart = now }
             if detectedSpeech,
                 let start = silenceStart,
-                Date().timeIntervalSince(start) > silenceDuration
+                now.timeIntervalSince(start) > silenceDuration
             {
                 detectedSpeech = false
                 silenceStart = nil
