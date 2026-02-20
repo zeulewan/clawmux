@@ -421,17 +421,18 @@ struct ContentView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
             }
-            .mask(
-                VStack(spacing: 0) {
-                    Color.black
-                    LinearGradient(
-                        colors: [.black, .clear],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 72)
-                }
-            )
+            .overlay(alignment: .bottom) {
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0),
+                        .init(color: Theme.bg, location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 120)
+                .allowsHitTesting(false)
+            }
             .onAppear {
                 scrollToBottom(proxy)
             }
