@@ -972,12 +972,14 @@ struct SettingsView: View {
                                 vm.updateSetting("auto_interrupt", value: val)
                             }
                     }
-
-                    if !vm.typingMode {
-                        Toggle("Mic Muted", isOn: $vm.micMuted)
-                    }
                 } header: {
                     Text("Input")
+                }
+
+                if !vm.typingMode {
+                    Section("Microphone") {
+                        Toggle("Mic Muted", isOn: $vm.micMuted)
+                    }
                 }
 
                 if vm.activeSessionId != nil {
@@ -1018,24 +1020,49 @@ struct SettingsView: View {
                     }
                 }
 
-                Section("Audio Cues") {
-                    Toggle("Thinking Sound", isOn: $vm.soundThinking)
-                    if vm.isAutoMode {
-                        Toggle("Listening Cue", isOn: $vm.soundListening)
-                        Toggle("Processing Cue", isOn: $vm.soundProcessing)
-                    }
-                    Toggle("Session Ready Chime", isOn: $vm.soundSessionReady)
+                Section("Notifications") {
+                    Toggle("Auto Mode", isOn: $vm.notifyAuto)
+                    Toggle("PTT Mode", isOn: $vm.notifyPTT)
+                    Toggle("Typing Mode", isOn: $vm.notifyTyping)
+                    Text("Notifications are sent when the agent responds while the app is in the background.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
-                Section("Haptics") {
-                    if !vm.typingMode {
-                        Toggle("Recording Start / Stop", isOn: $vm.hapticsRecording)
-                        Toggle("Playback Start", isOn: $vm.hapticsPlayback)
-                    }
-                    if vm.typingMode {
-                        Toggle("Send Message", isOn: $vm.hapticsSend)
-                    }
-                    Toggle("Session Events", isOn: $vm.hapticsSession)
+                Section("Live Activity") {
+                    Toggle("Show Live Activity", isOn: $vm.liveActivityEnabled)
+                    Text("Displays session status on the Dynamic Island and Lock Screen. Typing mode never shows a Live Activity.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("Sounds — Auto") {
+                    Toggle("Thinking", isOn: $vm.soundThinkingAuto)
+                    Toggle("Listening Cue", isOn: $vm.soundListeningAuto)
+                    Toggle("Processing Cue", isOn: $vm.soundProcessingAuto)
+                    Toggle("Session Ready", isOn: $vm.soundReadyAuto)
+                }
+
+                Section("Sounds — PTT") {
+                    Toggle("Thinking", isOn: $vm.soundThinkingPTT)
+                    Toggle("Session Ready", isOn: $vm.soundReadyPTT)
+                }
+
+                Section("Haptics — Auto") {
+                    Toggle("Recording Start / Stop", isOn: $vm.hapticsRecordingAuto)
+                    Toggle("Playback Start", isOn: $vm.hapticsPlaybackAuto)
+                    Toggle("Session Events", isOn: $vm.hapticsSessionAuto)
+                }
+
+                Section("Haptics — PTT") {
+                    Toggle("Recording Start / Stop", isOn: $vm.hapticsRecordingPTT)
+                    Toggle("Playback Start", isOn: $vm.hapticsPlaybackPTT)
+                    Toggle("Session Events", isOn: $vm.hapticsSessionPTT)
+                }
+
+                Section("Haptics — Typing") {
+                    Toggle("Send Message", isOn: $vm.hapticsSend)
+                    Toggle("Session Events", isOn: $vm.hapticsSessionTyping)
                 }
             }
             .navigationTitle("Settings")

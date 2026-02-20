@@ -308,32 +308,69 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         didSet { UserDefaults.standard.set(backgroundMode, forKey: "backgroundMode") }
     }
 
-    // Sound toggles
-    @Published var soundThinking: Bool {
-        didSet { UserDefaults.standard.set(soundThinking, forKey: "soundThinking") }
+    // Sound toggles — per mode
+    @Published var soundThinkingAuto: Bool {
+        didSet { UserDefaults.standard.set(soundThinkingAuto, forKey: "soundThinkingAuto") }
     }
-    @Published var soundListening: Bool {
-        didSet { UserDefaults.standard.set(soundListening, forKey: "soundListening") }
+    @Published var soundThinkingPTT: Bool {
+        didSet { UserDefaults.standard.set(soundThinkingPTT, forKey: "soundThinkingPTT") }
     }
-    @Published var soundProcessing: Bool {
-        didSet { UserDefaults.standard.set(soundProcessing, forKey: "soundProcessing") }
+    @Published var soundListeningAuto: Bool {
+        didSet { UserDefaults.standard.set(soundListeningAuto, forKey: "soundListeningAuto") }
     }
-    @Published var soundSessionReady: Bool {
-        didSet { UserDefaults.standard.set(soundSessionReady, forKey: "soundSessionReady") }
+    @Published var soundProcessingAuto: Bool {
+        didSet { UserDefaults.standard.set(soundProcessingAuto, forKey: "soundProcessingAuto") }
+    }
+    @Published var soundReadyAuto: Bool {
+        didSet { UserDefaults.standard.set(soundReadyAuto, forKey: "soundReadyAuto") }
+    }
+    @Published var soundReadyPTT: Bool {
+        didSet { UserDefaults.standard.set(soundReadyPTT, forKey: "soundReadyPTT") }
     }
 
-    // Haptics toggles
-    @Published var hapticsRecording: Bool {
-        didSet { UserDefaults.standard.set(hapticsRecording, forKey: "hapticsRecording") }
+    // Haptics toggles — per mode
+    @Published var hapticsRecordingAuto: Bool {
+        didSet { UserDefaults.standard.set(hapticsRecordingAuto, forKey: "hapticsRecordingAuto") }
     }
-    @Published var hapticsPlayback: Bool {
-        didSet { UserDefaults.standard.set(hapticsPlayback, forKey: "hapticsPlayback") }
+    @Published var hapticsRecordingPTT: Bool {
+        didSet { UserDefaults.standard.set(hapticsRecordingPTT, forKey: "hapticsRecordingPTT") }
+    }
+    @Published var hapticsPlaybackAuto: Bool {
+        didSet { UserDefaults.standard.set(hapticsPlaybackAuto, forKey: "hapticsPlaybackAuto") }
+    }
+    @Published var hapticsPlaybackPTT: Bool {
+        didSet { UserDefaults.standard.set(hapticsPlaybackPTT, forKey: "hapticsPlaybackPTT") }
     }
     @Published var hapticsSend: Bool {
         didSet { UserDefaults.standard.set(hapticsSend, forKey: "hapticsSend") }
     }
-    @Published var hapticsSession: Bool {
-        didSet { UserDefaults.standard.set(hapticsSession, forKey: "hapticsSession") }
+    @Published var hapticsSessionAuto: Bool {
+        didSet { UserDefaults.standard.set(hapticsSessionAuto, forKey: "hapticsSessionAuto") }
+    }
+    @Published var hapticsSessionPTT: Bool {
+        didSet { UserDefaults.standard.set(hapticsSessionPTT, forKey: "hapticsSessionPTT") }
+    }
+    @Published var hapticsSessionTyping: Bool {
+        didSet { UserDefaults.standard.set(hapticsSessionTyping, forKey: "hapticsSessionTyping") }
+    }
+
+    // Notification toggles — per mode
+    @Published var notifyAuto: Bool {
+        didSet { UserDefaults.standard.set(notifyAuto, forKey: "notifyAuto") }
+    }
+    @Published var notifyPTT: Bool {
+        didSet { UserDefaults.standard.set(notifyPTT, forKey: "notifyPTT") }
+    }
+    @Published var notifyTyping: Bool {
+        didSet { UserDefaults.standard.set(notifyTyping, forKey: "notifyTyping") }
+    }
+
+    // Live Activity toggle
+    @Published var liveActivityEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(liveActivityEnabled, forKey: "liveActivityEnabled")
+            if !liveActivityEnabled { endLiveActivity() }
+        }
     }
 
     @Published var selectedModel: String = "opus"
@@ -408,20 +445,42 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         self.inputMode = UserDefaults.standard.string(forKey: "inputMode") ?? "auto"
         self.backgroundMode =
             UserDefaults.standard.object(forKey: "backgroundMode") as? Bool ?? true
-        self.soundThinking = UserDefaults.standard.object(forKey: "soundThinking") as? Bool ?? true
-        self.soundListening =
-            UserDefaults.standard.object(forKey: "soundListening") as? Bool ?? true
-        self.soundProcessing =
-            UserDefaults.standard.object(forKey: "soundProcessing") as? Bool ?? true
-        self.soundSessionReady =
-            UserDefaults.standard.object(forKey: "soundSessionReady") as? Bool ?? true
-        self.hapticsRecording =
-            UserDefaults.standard.object(forKey: "hapticsRecording") as? Bool ?? true
-        self.hapticsPlayback =
-            UserDefaults.standard.object(forKey: "hapticsPlayback") as? Bool ?? true
-        self.hapticsSend = UserDefaults.standard.object(forKey: "hapticsSend") as? Bool ?? true
-        self.hapticsSession =
-            UserDefaults.standard.object(forKey: "hapticsSession") as? Bool ?? true
+        self.soundThinkingAuto =
+            UserDefaults.standard.object(forKey: "soundThinkingAuto") as? Bool ?? true
+        self.soundThinkingPTT =
+            UserDefaults.standard.object(forKey: "soundThinkingPTT") as? Bool ?? true
+        self.soundListeningAuto =
+            UserDefaults.standard.object(forKey: "soundListeningAuto") as? Bool ?? true
+        self.soundProcessingAuto =
+            UserDefaults.standard.object(forKey: "soundProcessingAuto") as? Bool ?? true
+        self.soundReadyAuto =
+            UserDefaults.standard.object(forKey: "soundReadyAuto") as? Bool ?? true
+        self.soundReadyPTT =
+            UserDefaults.standard.object(forKey: "soundReadyPTT") as? Bool ?? true
+        self.hapticsRecordingAuto =
+            UserDefaults.standard.object(forKey: "hapticsRecordingAuto") as? Bool ?? true
+        self.hapticsRecordingPTT =
+            UserDefaults.standard.object(forKey: "hapticsRecordingPTT") as? Bool ?? true
+        self.hapticsPlaybackAuto =
+            UserDefaults.standard.object(forKey: "hapticsPlaybackAuto") as? Bool ?? true
+        self.hapticsPlaybackPTT =
+            UserDefaults.standard.object(forKey: "hapticsPlaybackPTT") as? Bool ?? true
+        self.hapticsSend =
+            UserDefaults.standard.object(forKey: "hapticsSend") as? Bool ?? true
+        self.hapticsSessionAuto =
+            UserDefaults.standard.object(forKey: "hapticsSessionAuto") as? Bool ?? true
+        self.hapticsSessionPTT =
+            UserDefaults.standard.object(forKey: "hapticsSessionPTT") as? Bool ?? true
+        self.hapticsSessionTyping =
+            UserDefaults.standard.object(forKey: "hapticsSessionTyping") as? Bool ?? true
+        self.notifyAuto =
+            UserDefaults.standard.object(forKey: "notifyAuto") as? Bool ?? true
+        self.notifyPTT =
+            UserDefaults.standard.object(forKey: "notifyPTT") as? Bool ?? true
+        self.notifyTyping =
+            UserDefaults.standard.object(forKey: "notifyTyping") as? Bool ?? true
+        self.liveActivityEnabled =
+            UserDefaults.standard.object(forKey: "liveActivityEnabled") as? Bool ?? true
         self.showDebug = UserDefaults.standard.bool(forKey: "showDebug")
         self.recordingURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("recording.wav")
@@ -716,7 +775,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
 
     func startThinkingSound() {
         stopThinkingSound()
-        guard soundThinking else { return }
+        guard (isAutoMode && soundThinkingAuto) || (pushToTalk && soundThinkingPTT) else { return }
         thinkingSoundTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: true) {
             [weak self] _ in
             Task { @MainActor in
@@ -896,8 +955,12 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                     addMessage(sid, role: "system", text: "Claude connected.")
                     // Show thinking indicator while waiting for agent's first message
                     sessions[idx].isThinking = true
-                    if soundSessionReady { tonePlayer.cueSessionReady() }
-                    if hapticsSession { haptic(.success) }
+                    if (isAutoMode && soundReadyAuto) || (pushToTalk && soundReadyPTT) {
+                        tonePlayer.cueSessionReady()
+                    }
+                    if (isAutoMode && hapticsSessionAuto) || (pushToTalk && hapticsSessionPTT)
+                        || (typingMode && hapticsSessionTyping)
+                    { haptic(.success) }
                 }
             }
 
@@ -930,10 +993,16 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                     isProcessing = false
                     updateLiveActivity()
                 }
-                // Notify in background (always in typing mode, others when backgrounded)
+                // Notify in background, gated by per-mode toggle
                 if appInBackground {
-                    let voiceName = sessions.first(where: { $0.id == sid })?.label ?? "Agent"
-                    sendNotification(title: voiceName, body: t)
+                    let shouldNotify =
+                        (isAutoMode && notifyAuto) || (pushToTalk && notifyPTT)
+                        || (typingMode && notifyTyping)
+                    if shouldNotify {
+                        let voiceName =
+                            sessions.first(where: { $0.id == sid })?.label ?? "Agent"
+                        sendNotification(title: voiceName, body: t)
+                    }
                 }
             }
 
@@ -1012,8 +1081,15 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                         }
                         statusText = "Type a message"
                     } else if effectiveAutoRecord || bgAutoRecord {
-                        if soundListening && !isBackground { tonePlayer.cueListening() }
-                        startRecording(sessionId: sid)
+                        if isPlaying {
+                            // Still playing audio - defer until playback finishes
+                            if let idx = sessionIndex(sid) {
+                                sessions[idx].pendingListen = true
+                            }
+                        } else {
+                            if soundListeningAuto && !isBackground { tonePlayer.cueListening() }
+                            startRecording(sessionId: sid)
+                        }
                     } else {
                         if let idx = sessionIndex(sid) {
                             sessions[idx].pendingListen = true
@@ -1162,7 +1238,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                         sendJSON(["session_id": id, "type": "audio", "data": ""])
                         statusText = "Muted"
                     } else if effectiveAutoRecord {
-                        if soundListening { tonePlayer.cueListening() }
+                        if soundListeningAuto { tonePlayer.cueListening() }
                         startRecording(sessionId: id)
                     } else {
                         statusText = pushToTalk ? "Hold to Talk" : "Tap Record"
@@ -1407,7 +1483,9 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     // MARK: - Audio Playback
 
     private func playAudio(_ sessionId: String, data: Data) {
-        if hapticsPlayback && !typingMode { haptic(.soft) }
+        if (isAutoMode && hapticsPlaybackAuto) || (pushToTalk && hapticsPlaybackPTT) {
+            haptic(.soft)
+        }
         statusText = "Speaking..."
         isPlaying = true
         playingSessionId = sessionId
@@ -1497,7 +1575,9 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     }
 
     private func beginRecording() {
-        if hapticsRecording && !typingMode { haptic(.medium) }
+        if (isAutoMode && hapticsRecordingAuto) || (pushToTalk && hapticsRecordingPTT) {
+            haptic(.medium)
+        }
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatLinearPCM),
             AVSampleRateKey: 16000,
@@ -1561,8 +1641,10 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             return
         }
 
-        if hapticsRecording && !typingMode { haptic(.light) }
-        if soundProcessing { tonePlayer.cueProcessing() }
+        if (isAutoMode && hapticsRecordingAuto) || (pushToTalk && hapticsRecordingPTT) {
+            haptic(.light)
+        }
+        if soundProcessingAuto && isAutoMode { tonePlayer.cueProcessing() }
         statusText = "Processing..."
         isProcessing = true
         if let idx = sessionIndex(sid) {
@@ -1882,6 +1964,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     // MARK: - Live Activity
 
     private func startLiveActivity(sessionId: String) {
+        guard liveActivityEnabled else { return }
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         guard let session = sessions.first(where: { $0.id == sessionId }) else { return }
 
@@ -2019,6 +2102,19 @@ extension VoiceChatViewModel: AVAudioPlayerDelegate {
                 self.sendJSON(["session_id": sid, "type": "playback_done"])
             }
             self.updateLiveActivity()
+
+            // Handle deferred listen: listening arrived while audio was playing
+            if !sid.isEmpty, let idx = self.sessionIndex(sid),
+                self.sessions[idx].pendingListen, sid == self.activeSessionId
+            {
+                let isBackground = UIApplication.shared.applicationState != .active
+                let bgAutoRecord = isBackground && self.backgroundMode && self.isAutoMode
+                if !self.micMuted && (self.effectiveAutoRecord || bgAutoRecord) {
+                    self.sessions[idx].pendingListen = false
+                    if self.soundListeningAuto && !isBackground { self.tonePlayer.cueListening() }
+                    self.startRecording(sessionId: sid)
+                }
+            }
         }
     }
 
