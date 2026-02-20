@@ -46,8 +46,9 @@ session_mgr = SessionManager(history_store=history)
 browser_clients: set[WebSocket] = set()
 
 
-async def send_to_browser(data: dict) -> None:
-    """Broadcast a message to all connected browser/app clients."""
+async def send_to_browser(data: dict) -> bool:
+    """Broadcast a message to all connected browser/app clients.
+    Returns True if at least one client received the message."""
     dead = []
     for ws in browser_clients:
         try:
@@ -56,6 +57,7 @@ async def send_to_browser(data: dict) -> None:
             dead.append(ws)
     for ws in dead:
         browser_clients.discard(ws)
+    return len(browser_clients) > 0
 
 
 async def heartbeat_loop() -> None:
@@ -125,7 +127,12 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
 
     # Send audio to browser
     session.playback_done.clear()
-    await send_to_browser({"session_id": session_id, "type": "audio", "data": audio_b64})
+    has_clients = await send_to_browser({"session_id": session_id, "type": "audio", "data": audio_b64})
+
+    if not has_clients:
+        # No clients received the audio — no one will send playback_done
+        log.warning("[%s] No clients connected, skipping playback wait", session_id)
+        session.playback_done.set()
 
     if not wait_for_response:
         session.status_text = ""
@@ -134,33 +141,67 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
         await send_to_browser({"session_id": session_id, "type": "session_ended"})
         return "Message delivered."
 
-    # Wait for playback_done from browser
+    # Wait for playback_done OR user audio (user interrupting/switching devices)
     log.info("[%s] Waiting for playback_done", session_id)
-    await session.playback_done.wait()
+    early_audio = None
+    while not session.playback_done.is_set():
+        # Check if audio arrived (user spoke before playback finished)
+        if not session.audio_queue.empty():
+            early_audio = session.audio_queue.get_nowait()
+            if early_audio and len(early_audio) > 0:
+                log.info("[%s] Audio arrived during playback wait (%d bytes), skipping playback_done", session_id, len(early_audio))
+                break
+            early_audio = None  # empty audio, keep waiting
+        await asyncio.sleep(0.2)
 
-    # Drain stale audio
-    while not session.audio_queue.empty():
-        try:
-            session.audio_queue.get_nowait()
-        except asyncio.QueueEmpty:
+    # Retry loop: wait for a client to connect and send real audio
+    while True:
+        # If we got early audio from the playback wait, use it
+        if early_audio and len(early_audio) > 0:
+            audio_bytes = early_audio
+            early_audio = None
             break
 
-    # Tell browser to start recording
-    session.status_text = "Listening..."
-    await send_to_browser({"session_id": session_id, "type": "listening"})
-    log.info("[%s] Listening...", session_id)
+        # Drain stale audio
+        while not session.audio_queue.empty():
+            try:
+                session.audio_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
 
-    # Wait for recorded audio
-    audio_bytes = await session.audio_queue.get()
-    log.info("[%s] Got audio: %d bytes", session_id, len(audio_bytes))
+        # Wait for at least one client to be connected
+        while not browser_clients:
+            log.info("[%s] No clients, waiting for reconnect...", session_id)
+            session.status_text = "Waiting for client..."
+            await asyncio.sleep(2)
 
-    # Empty audio = session muted in browser
-    if len(audio_bytes) == 0:
-        log.info("[%s] Empty audio (muted)", session_id)
-        session.status_text = ""
-        await send_to_browser({"session_id": session_id, "type": "done"})
-        session.touch()
-        return "(session muted)"
+        # Tell browser to start recording
+        session.status_text = "Listening..."
+        await send_to_browser({"session_id": session_id, "type": "listening"})
+        log.info("[%s] Listening...", session_id)
+
+        # Wait for recorded audio (re-send listening every 5s in case client reconnected)
+        while True:
+            try:
+                audio_bytes = await asyncio.wait_for(session.audio_queue.get(), timeout=5)
+                break
+            except asyncio.TimeoutError:
+                # Re-send listening to any newly connected clients
+                if browser_clients:
+                    await send_to_browser({"session_id": session_id, "type": "listening"})
+                else:
+                    # All clients gone — push back to outer reconnect loop
+                    audio_bytes = b""
+                    break
+
+        log.info("[%s] Got audio: %d bytes", session_id, len(audio_bytes))
+
+        # Empty audio = session muted or client disconnected — retry
+        if len(audio_bytes) == 0:
+            log.info("[%s] Empty audio (muted/disconnect), retrying listen", session_id)
+            continue
+
+        break  # Got real audio
 
     # STT
     session.status_text = "Transcribing..."
@@ -248,6 +289,8 @@ async def browser_websocket(ws: WebSocket):
             for session in session_mgr.sessions.values():
                 if session.playback_done:
                     session.playback_done.set()
+                if session.audio_queue:
+                    await session.audio_queue.put(b"")  # unblock audio_queue.get()
 
 
 async def handle_browser_message(data: dict) -> None:

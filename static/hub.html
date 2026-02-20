@@ -711,7 +711,7 @@ function renderVoiceGrid() {
     if (isSpawning) {
       vlabel.textContent = 'Spawning...';
     } else if (!sessionForVoice) {
-      vlabel.textContent = 'Available';
+      vlabel.textContent = 'Offline';
     } else if (sessionForVoice.status === 'starting') {
       vlabel.textContent = 'Starting...';
     } else if (sessionForVoice.isThinking) {

@@ -221,6 +221,12 @@ class SessionManager:
                 f"tmux new-session -d -s {tmux_name} -x 200 -y 50 -c {work_dir}"
             )
 
+            # Send a marker so we can detect fresh output from Claude
+            marker = f"__CLAUDE_INIT_{short_id}__"
+            await self._run(
+                f'tmux send-keys -t {tmux_name} "echo {marker}" Enter'
+            )
+
             # Start Claude with session ID (resume or fresh)
             if resuming:
                 claude_cmd = f"{CLAUDE_COMMAND} --resume {claude_session_id}"
@@ -230,15 +236,27 @@ class SessionManager:
                 f'tmux send-keys -t {tmux_name} "{claude_cmd}" Enter'
             )
 
-            # Wait for Claude to initialize and MCP servers to start
-            await asyncio.sleep(10)
+            # Wait for Claude to initialize (poll for input prompt AFTER marker)
+            start = time.time()
+            init_deadline = start + 30
+            while time.time() < init_deadline:
+                try:
+                    result = await self._run(
+                        f"tmux capture-pane -t {tmux_name} -p"
+                    )
+                    if result and marker in result:
+                        # Look for Claude's prompt after the marker
+                        after_marker = result.split(marker, 1)[1]
+                        if ">" in after_marker or "❯" in after_marker:
+                            log.info("[%s] Claude ready (%.1fs)", session_id, time.time() - start)
+                            break
+                except Exception:
+                    pass
+                await asyncio.sleep(1)
+            else:
+                log.warning("[%s] Claude init poll timed out, sending command anyway", session_id)
 
-            # Send /voice-hub slash command
-            await self._run(f'tmux send-keys -t {tmux_name} "/voice-hub" Enter')
-            await asyncio.sleep(1)
-            await self._run(f'tmux send-keys -t {tmux_name} Enter')
-
-            # Wait for the MCP server to connect to the hub
+            # Wait for the MCP server to connect to the hub (Claude loads it on startup)
             deadline = time.time() + 45
             while time.time() < deadline:
                 if session.mcp_ws is not None:
@@ -248,6 +266,12 @@ class SessionManager:
                 raise TimeoutError(
                     f"MCP server for session {session_id} did not connect within 45s"
                 )
+
+            # MCP connected — now send the /voice-hub skill command
+            log.info("[%s] MCP connected, sending /voice-hub", session_id)
+            await self._run(f'tmux send-keys -t {tmux_name} "/voice-hub" Enter')
+            await asyncio.sleep(0.5)
+            await self._run(f'tmux send-keys -t {tmux_name} Enter')
 
             session.status = "ready"
             session.touch()
