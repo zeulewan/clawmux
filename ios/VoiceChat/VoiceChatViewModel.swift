@@ -289,6 +289,23 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             }
             // Clear mute when leaving auto mode (mute is auto-only)
             if inputMode != "auto" { micMuted = false }
+            // Update status text for the new mode
+            if let sid = activeSessionId, let idx = sessionIndex(sid) {
+                if sessions[idx].pendingListen {
+                    if inputMode == "typing" {
+                        sessions[idx].statusText = "Type a message"
+                        statusText = "Type a message"
+                    } else if inputMode == "ptt" {
+                        sessions[idx].statusText = "Hold to Talk"
+                        statusText = "Hold to Talk"
+                    } else {
+                        sessions[idx].statusText = "Tap Record"
+                        statusText = "Tap Record"
+                    }
+                } else if !sessions[idx].isThinking && !isRecording && !isPlaying && !isProcessing {
+                    statusText = "Ready"
+                }
+            }
             // Manage live activity based on per-mode toggle
             endLiveActivity()
             if let sid = activeSessionId {

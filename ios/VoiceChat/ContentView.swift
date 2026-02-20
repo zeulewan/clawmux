@@ -53,8 +53,8 @@ struct ContentView: View {
             if vm.activeSessionId != nil {
                 sessionView
                     .transition(.asymmetric(
-                        insertion: .push(from: .trailing),
-                        removal: .push(from: .trailing)
+                        insertion: .move(edge: .trailing),
+                        removal: .move(edge: .trailing)
                     ))
                     .zIndex(1)
             }
@@ -642,10 +642,9 @@ struct ContentView: View {
                 .padding(.top, 6)
 
                 bottomStatusBar
-                    .padding(.top, 6)
-                    .padding(.bottom, 4)
+                    .padding(.top, 12)
             }
-            .padding(.bottom, 8)
+            .padding(.bottom, 4)
             .background(Theme.bg)
         }
         .padding(.horizontal, 12)
@@ -877,10 +876,8 @@ struct ContentView: View {
                     .padding(.vertical, 4)
                     .background(statusColor.opacity(0.12), in: Capsule())
             }
-
-            Spacer()
         }
-        .padding(.horizontal, 20)
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Mode Toggle
