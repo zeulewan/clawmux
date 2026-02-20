@@ -1082,7 +1082,9 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             // Hub is about to speak - show thinking indicator
             if let sid = sessionId, let idx = sessionIndex(sid) {
                 sessions[idx].isThinking = true
+                sessions[idx].statusText = "Thinking..."
                 if sid == activeSessionId {
+                    statusText = "Thinking..."
                     if !typingMode { startThinkingSound() }
                     updateLiveActivity()
                 }
@@ -1093,11 +1095,17 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             if let sid = sessionId, let t = json["text"] as? String {
                 if let idx = sessionIndex(sid) {
                     sessions[idx].isThinking = false
+                    // In voice modes, audio will follow and set "Speaking..."
+                    // In typing mode, go straight to ready-ish state
+                    if typingMode {
+                        sessions[idx].statusText = "Ready"
+                    }
                 }
                 stopThinkingSound()
                 addMessage(sid, role: "assistant", text: t)
                 if sid == activeSessionId {
                     isProcessing = false
+                    if typingMode { statusText = "Ready" }
                     updateLiveActivity()
                 }
                 // Notify in background, gated by per-mode toggle
@@ -1759,9 +1767,12 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         if showPTTTextField {
             recordingSessionId = nil
             if let audioData = try? Data(contentsOf: recordingURL) {
+                print("[ptt-preview] Recording stopped for preview, \(audioData.count) bytes")
                 isTranscribing = true
                 statusText = "Transcribing..."
                 transcribeAudio(audioData)
+            } else {
+                print("[ptt-preview] No audio data at recording URL")
             }
             return
         }
@@ -1816,10 +1827,12 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
 
     private func transcribeAudio(_ audioData: Data) {
         guard let baseURL = httpBaseURL() else {
+            print("[ptt-preview] No base URL, aborting transcription")
             isTranscribing = false
             return
         }
 
+        print("[ptt-preview] Sending \(audioData.count) bytes to transcribe")
         let url = baseURL.appendingPathComponent("api/transcribe")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -1827,16 +1840,25 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         request.setValue("audio/wav", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 15
 
-        URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             Task { @MainActor in
                 guard let self else { return }
                 self.isTranscribing = false
                 self.statusText = ""
+                if let error {
+                    print("[ptt-preview] Transcription error: \(error)")
+                    return
+                }
+                let httpCode = (response as? HTTPURLResponse)?.statusCode ?? 0
                 if let data,
                     let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                     let text = json["text"] as? String, !text.isEmpty
                 {
+                    print("[ptt-preview] Got transcription (\(httpCode)): \(text)")
                     self.pttPreviewText = text
+                } else {
+                    let body = data.flatMap { String(data: $0, encoding: .utf8) } ?? "nil"
+                    print("[ptt-preview] Empty/failed response (\(httpCode)): \(body)")
                 }
             }
         }.resume()
