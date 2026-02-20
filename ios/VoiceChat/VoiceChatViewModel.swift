@@ -278,6 +278,8 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             if let sid = activeSessionId {
                 sendJSON(["session_id": sid, "type": "set_mode", "mode": inputMode == "typing" ? "text" : "voice"])
             }
+            // Clear mute when leaving auto mode (mute is auto-only)
+            if inputMode != "auto" { micMuted = false }
             // No live activity in typing mode — use notifications instead
             if inputMode == "typing" {
                 endLiveActivity()

@@ -359,6 +359,16 @@ struct ContentView: View {
                     .background(statusColor.opacity(0.12), in: Capsule())
             }
 
+            if vm.isAutoMode {
+                Button { vm.micMuted.toggle() } label: {
+                    Image(systemName: vm.micMuted ? "mic.slash.fill" : "mic.fill")
+                        .font(.system(size: 13))
+                        .foregroundStyle(vm.micMuted ? Theme.red : Theme.textSecondary)
+                        .frame(width: 36, height: 36)
+                        .background(.ultraThinMaterial, in: Circle())
+                }
+            }
+
             Button { vm.showSettings = true } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 14))
@@ -1057,11 +1067,6 @@ struct InputSettingsView: View {
                 }
             }
 
-            if !vm.typingMode {
-                Section("Microphone") {
-                    Toggle("Mic Muted", isOn: $vm.micMuted)
-                }
-            }
         }
         .navigationTitle("Input & Microphone")
         .navigationBarTitleDisplayMode(.inline)
