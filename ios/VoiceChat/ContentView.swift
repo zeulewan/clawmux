@@ -311,6 +311,8 @@ struct ContentView: View {
 
     // MARK: - Session View
 
+    @State private var backSwipeOffset: CGFloat = 0
+
     private var sessionView: some View {
         ZStack(alignment: .bottom) {
             VStack(spacing: 0) {
@@ -328,6 +330,31 @@ struct ContentView: View {
                     .transition(.opacity)
             }
         }
+        .offset(x: backSwipeOffset)
+        .gesture(
+            DragGesture()
+                .onChanged { value in
+                    // Only allow right swipe from left edge (start < 40pt from left)
+                    if value.startLocation.x < 40 && value.translation.width > 0 {
+                        backSwipeOffset = value.translation.width
+                    }
+                }
+                .onEnded { value in
+                    if backSwipeOffset > 100 {
+                        withAnimation(.spring(response: 0.3)) {
+                            backSwipeOffset = UIScreen.main.bounds.width
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                            vm.goHome()
+                            backSwipeOffset = 0
+                        }
+                    } else {
+                        withAnimation(.spring(response: 0.3)) {
+                            backSwipeOffset = 0
+                        }
+                    }
+                }
+        )
         .animation(.easeInOut(duration: 0.18), value: vm.typingMode)
         .animation(.spring(response: 0.3, dampingFraction: 0.9), value: vm.showPTTTextField)
     }
@@ -536,41 +563,35 @@ struct ContentView: View {
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
 
-            ZStack {
-                // Cancel button (auto mode) - left aligned
+            HStack(alignment: .center) {
+                // Left: Cancel (auto) or Cancel label (PTT) or spacer
                 if vm.isRecording && !vm.pushToTalk {
-                    HStack {
-                        Button { vm.cancelRecording() } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(Theme.red)
-                                .frame(width: 40, height: 40)
-                                .background(Theme.red.opacity(0.12), in: Circle())
-                        }
-                        .transition(.scale.combined(with: .opacity))
-                        Spacer()
+                    Button { vm.cancelRecording() } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(Theme.red)
+                            .frame(width: 40, height: 40)
+                            .background(Theme.red.opacity(0.12), in: Circle())
                     }
-                    .padding(.horizontal, 24)
+                    .transition(.scale.combined(with: .opacity))
+                } else if vm.isRecording && vm.pushToTalk {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 11, weight: .bold))
+                        Text("Cancel")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .foregroundStyle(pttDragOffset < -80 ? Theme.red : Theme.textTertiary)
+                    .opacity(pttDragOffset < -10 ? min(1.0, Double(-pttDragOffset - 10) / 60.0) : 0.3)
+                    .frame(width: 64)
+                    .transition(.opacity)
+                } else {
+                    Color.clear.frame(width: 64, height: 40)
                 }
 
-                // Cancel label (PTT mode) - left aligned
-                if vm.isRecording && vm.pushToTalk {
-                    HStack {
-                        HStack(spacing: 4) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 11, weight: .bold))
-                            Text("Cancel")
-                                .font(.system(size: 12, weight: .semibold))
-                        }
-                        .foregroundStyle(pttDragOffset < -80 ? Theme.red : Theme.textTertiary)
-                        .opacity(pttDragOffset < -10 ? min(1.0, Double(-pttDragOffset - 10) / 60.0) : 0.3)
-                        .transition(.opacity)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 24)
-                }
+                Spacer()
 
-                // Mic button - always centered
+                // Center: Mic button
                 Group {
                     if vm.pushToTalk {
                         micButtonVisual
@@ -612,7 +633,24 @@ struct ContentView: View {
                 }
                 .disabled(vm.isProcessing || vm.recordBlockedByThinking || (vm.micMuted && !vm.isPlaying && !vm.isRecording))
                 .opacity(vm.isProcessing || vm.recordBlockedByThinking || (vm.micMuted && !vm.isPlaying) ? 0.5 : 1.0)
+
+                Spacer()
+
+                // Right: Mode toggle
+                if !vm.isRecording {
+                    Button { cycleInputMode() } label: {
+                        Image(systemName: modeIcon)
+                            .font(.system(size: 14))
+                            .foregroundStyle(Theme.textSecondary)
+                            .frame(width: 40, height: 40)
+                            .background(.ultraThinMaterial, in: Circle())
+                    }
+                    .transition(.scale.combined(with: .opacity))
+                } else {
+                    Color.clear.frame(width: 64, height: 40)
+                }
             }
+            .padding(.horizontal, 20)
             .padding(.top, 10)
             .padding(.bottom, 4)
 
@@ -798,6 +836,23 @@ struct ContentView: View {
         if vm.isProcessing { return Theme.gray }
         if vm.micMuted { return Theme.red }
         return Theme.blue
+    }
+
+    // MARK: - Mode Toggle
+
+    private var modeIcon: String {
+        switch vm.inputMode {
+        case "auto": return "waveform"
+        case "ptt": return "hand.tap"
+        default: return "keyboard"
+        }
+    }
+
+    private func cycleInputMode() {
+        let modes = ["auto", "ptt", "typing"]
+        if let idx = modes.firstIndex(of: vm.inputMode) {
+            vm.inputMode = modes[(idx + 1) % modes.count]
+        }
     }
 
     // MARK: - Voice Colors
@@ -1020,7 +1075,6 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // Connection + Model
                 Section("Server") {
                     TextField("Server URL", text: $draftURL)
                         .textInputAutocapitalization(.never)
@@ -1059,7 +1113,6 @@ struct SettingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
 
-                // Active session quick access
                 if vm.activeSessionId != nil {
                     Section("Active Session") {
                         Picker("Voice", selection: Binding(
@@ -1075,20 +1128,34 @@ struct SettingsView: View {
                     }
                 }
 
-                // Sub-pages
+                Section("Mode Settings") {
+                    NavigationLink {
+                        AutoModeSettingsView(vm: vm)
+                    } label: {
+                        Label("Auto", systemImage: "waveform")
+                    }
+                    NavigationLink {
+                        PTTModeSettingsView(vm: vm)
+                    } label: {
+                        Label("Push to Talk", systemImage: "hand.tap")
+                    }
+                    NavigationLink {
+                        TypingModeSettingsView(vm: vm)
+                    } label: {
+                        Label("Typing", systemImage: "keyboard")
+                    }
+                }
+
                 Section {
-                    NavigationLink("Input & Microphone") {
-                        InputSettingsView(vm: vm)
-                    }
-                    NavigationLink("Audio Cues & Haptics") {
-                        AudioHapticsSettingsView(vm: vm)
-                    }
-                    NavigationLink("Notifications") {
-                        NotificationSettingsView(vm: vm)
-                    }
-                    NavigationLink("Background & Live Activity") {
-                        BackgroundSettingsView(vm: vm)
-                    }
+                    Toggle("Background Mode", isOn: $vm.backgroundMode)
+                } header: {
+                    Text("Background")
+                } footer: {
+                    Text(
+                        vm.backgroundMode
+                            ? "Voice sessions stay alive when the app is backgrounded using a silent audio loop."
+                            : "The WebSocket connection may drop when the app is backgrounded."
+                    )
                 }
             }
             .navigationTitle("Settings")
@@ -1102,177 +1169,148 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - Input Settings
+// MARK: - Auto Mode Settings
 
-struct InputSettingsView: View {
+struct AutoModeSettingsView: View {
     @ObservedObject var vm: VoiceChatViewModel
 
     var body: some View {
         Form {
             Section {
-                Picker("Input Mode", selection: $vm.inputMode) {
-                    Text("Auto").tag("auto")
-                    Text("PTT").tag("ptt")
-                    Text("Typing").tag("typing")
-                }
-                .pickerStyle(.segmented)
+                Toggle("Auto Record", isOn: $vm.autoRecord)
+                    .onChange(of: vm.autoRecord) { _, v in vm.updateSetting("auto_record", value: v) }
+                Toggle("Voice Detection (VAD)", isOn: $vm.vadEnabled)
+                    .onChange(of: vm.vadEnabled) { _, v in vm.updateSetting("auto_end", value: v) }
+                Toggle("Auto Interrupt", isOn: $vm.autoInterrupt)
+                    .onChange(of: vm.autoInterrupt) { _, v in vm.updateSetting("auto_interrupt", value: v) }
+                Toggle("Record While Thinking", isOn: $vm.allowRecordWhileThinking)
             } header: {
-                Text("Mode")
+                Text("Input")
             } footer: {
-                Group {
-                    if vm.inputMode == "auto" {
-                        Text("Mic opens automatically after the agent speaks.")
-                    } else if vm.inputMode == "ptt" {
-                        Text("Hold the mic button to record. Release to send. Slide left to cancel.")
-                    } else {
-                        Text("Type messages using the keyboard. No voice input or TTS output.")
-                    }
-                }
+                Text("Mic opens automatically after the agent speaks.")
             }
 
-            if vm.isAutoMode {
-                Section("Auto Mode") {
-                    Toggle("Auto Record", isOn: $vm.autoRecord)
-                        .onChange(of: vm.autoRecord) { _, v in vm.updateSetting("auto_record", value: v) }
-                    Toggle("Voice Detection (VAD)", isOn: $vm.vadEnabled)
-                        .onChange(of: vm.vadEnabled) { _, v in vm.updateSetting("auto_end", value: v) }
-                    Toggle("Auto Interrupt", isOn: $vm.autoInterrupt)
-                        .onChange(of: vm.autoInterrupt) { _, v in vm.updateSetting("auto_interrupt", value: v) }
-                    Toggle("Record While Thinking", isOn: $vm.allowRecordWhileThinking)
-                }
-            }
-
-            if vm.pushToTalk {
+            if vm.vadEnabled {
                 Section {
-                    Toggle("Record While Thinking", isOn: $vm.allowRecordWhileThinking)
-                } footer: {
-                    Text("When off, PTT is blocked while the agent is generating a response.")
-                }
-            }
-
-            if vm.isAutoMode {
-
-                if vm.vadEnabled {
-                    Section {
-                        Picker("Stop After", selection: $vm.vadSilenceDuration) {
-                            Text("0.5 s").tag(0.5)
-                            Text("1 s").tag(1.0)
-                            Text("1.5 s").tag(1.5)
-                            Text("2 s").tag(2.0)
-                            Text("3 s").tag(3.0)
-                            Text("4 s").tag(4.0)
-                            Text("5 s").tag(5.0)
-                        }
-                        Picker("Silence Cutoff", selection: $vm.vadThreshold) {
-                            Text("Sensitive (quiet room)").tag(5.0)
-                            Text("Normal").tag(10.0)
-                            Text("Relaxed (noisy room)").tag(20.0)
-                        }
-                    } header: {
-                        Text("VAD Tuning")
-                    } footer: {
-                        Text("Stop After: silence duration before auto-stopping. Silence Cutoff: how quiet the mic must be to count as silence.")
+                    Picker("Stop After", selection: $vm.vadSilenceDuration) {
+                        Text("0.5 s").tag(0.5)
+                        Text("1 s").tag(1.0)
+                        Text("1.5 s").tag(1.5)
+                        Text("2 s").tag(2.0)
+                        Text("3 s").tag(3.0)
+                        Text("4 s").tag(4.0)
+                        Text("5 s").tag(5.0)
                     }
+                    Picker("Silence Cutoff", selection: $vm.vadThreshold) {
+                        Text("Sensitive (quiet room)").tag(5.0)
+                        Text("Normal").tag(10.0)
+                        Text("Relaxed (noisy room)").tag(20.0)
+                    }
+                } header: {
+                    Text("VAD Tuning")
+                } footer: {
+                    Text("Stop After: silence duration before auto-stopping. Silence Cutoff: how quiet the mic must be to count as silence.")
                 }
             }
 
-        }
-        .navigationTitle("Input & Microphone")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-// MARK: - Audio Cues & Haptics Settings
-
-struct AudioHapticsSettingsView: View {
-    @ObservedObject var vm: VoiceChatViewModel
-
-    var body: some View {
-        Form {
-            Section("Sounds — Auto") {
+            Section("Sounds") {
                 Toggle("Thinking", isOn: $vm.soundThinkingAuto)
                 Toggle("Listening Cue", isOn: $vm.soundListeningAuto)
                 Toggle("Processing Cue", isOn: $vm.soundProcessingAuto)
                 Toggle("Session Ready", isOn: $vm.soundReadyAuto)
             }
 
-            Section("Sounds — PTT") {
-                Toggle("Thinking", isOn: $vm.soundThinkingPTT)
-                Toggle("Session Ready", isOn: $vm.soundReadyPTT)
-            }
-
-            Section("Haptics — Auto") {
+            Section("Haptics") {
                 Toggle("Recording Start / Stop", isOn: $vm.hapticsRecordingAuto)
                 Toggle("Playback Start", isOn: $vm.hapticsPlaybackAuto)
                 Toggle("Session Events", isOn: $vm.hapticsSessionAuto)
             }
 
-            Section("Haptics — PTT") {
+            Section {
+                Toggle("Notifications", isOn: $vm.notifyAuto)
+            } footer: {
+                Text("Notify when the agent responds while the app is in the background.")
+            }
+
+            Section {
+                Toggle("Live Activity", isOn: $vm.liveActivityAuto)
+            } footer: {
+                Text("Show session status on Dynamic Island and Lock Screen.")
+            }
+        }
+        .navigationTitle("Auto Mode")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - PTT Mode Settings
+
+struct PTTModeSettingsView: View {
+    @ObservedObject var vm: VoiceChatViewModel
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Record While Thinking", isOn: $vm.allowRecordWhileThinking)
+            } header: {
+                Text("Input")
+            } footer: {
+                Text("Hold the mic button to record. Release to send. Slide left to cancel. Swipe right for text input.")
+            }
+
+            Section("Sounds") {
+                Toggle("Thinking", isOn: $vm.soundThinkingPTT)
+                Toggle("Session Ready", isOn: $vm.soundReadyPTT)
+            }
+
+            Section("Haptics") {
                 Toggle("Recording Start / Stop", isOn: $vm.hapticsRecordingPTT)
                 Toggle("Playback Start", isOn: $vm.hapticsPlaybackPTT)
                 Toggle("Session Events", isOn: $vm.hapticsSessionPTT)
             }
 
-            Section("Haptics — Typing") {
+            Section {
+                Toggle("Notifications", isOn: $vm.notifyPTT)
+            } footer: {
+                Text("Notify when the agent responds while the app is in the background.")
+            }
+
+            Section {
+                Toggle("Live Activity", isOn: $vm.liveActivityPTT)
+            } footer: {
+                Text("Show session status on Dynamic Island and Lock Screen.")
+            }
+        }
+        .navigationTitle("Push to Talk")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Typing Mode Settings
+
+struct TypingModeSettingsView: View {
+    @ObservedObject var vm: VoiceChatViewModel
+
+    var body: some View {
+        Form {
+            Section("Haptics") {
                 Toggle("Send Message", isOn: $vm.hapticsSend)
                 Toggle("Session Events", isOn: $vm.hapticsSessionTyping)
             }
-        }
-        .navigationTitle("Audio Cues & Haptics")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
 
-// MARK: - Notification Settings
-
-struct NotificationSettingsView: View {
-    @ObservedObject var vm: VoiceChatViewModel
-
-    var body: some View {
-        Form {
             Section {
-                Toggle("Auto Mode", isOn: $vm.notifyAuto)
-                Toggle("PTT Mode", isOn: $vm.notifyPTT)
-                Toggle("Typing Mode", isOn: $vm.notifyTyping)
-            } header: {
-                Text("Agent Response")
+                Toggle("Notifications", isOn: $vm.notifyTyping)
             } footer: {
-                Text("Sends a notification when the agent responds while the app is in the background. Each mode can be toggled independently.")
-            }
-        }
-        .navigationTitle("Notifications")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-// MARK: - Background & Live Activity Settings
-
-struct BackgroundSettingsView: View {
-    @ObservedObject var vm: VoiceChatViewModel
-
-    var body: some View {
-        Form {
-            Section {
-                Toggle("Background Mode", isOn: $vm.backgroundMode)
-            } header: {
-                Text("Background")
-            } footer: {
-                Text(
-                    vm.backgroundMode
-                        ? "Voice sessions stay alive when the app is backgrounded using a silent audio loop."
-                        : "The WebSocket connection may drop when the app is backgrounded."
-                )
+                Text("Notify when the agent responds while the app is in the background.")
             }
 
             Section {
-                Toggle("Show Live Activity", isOn: $vm.liveActivityEnabled)
-            } header: {
-                Text("Live Activity")
-            } footer: {
-                Text("Displays session status on the Dynamic Island and Lock Screen. Typing mode never shows a Live Activity regardless of this setting.")
+                Text("No Live Activity in typing mode. Notifications are used instead.")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.textSecondary)
             }
         }
-        .navigationTitle("Background & Live Activity")
+        .navigationTitle("Typing")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

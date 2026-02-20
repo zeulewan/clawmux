@@ -289,10 +289,9 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             }
             // Clear mute when leaving auto mode (mute is auto-only)
             if inputMode != "auto" { micMuted = false }
-            // No live activity in typing mode — use notifications instead
-            if inputMode == "typing" {
-                endLiveActivity()
-            } else if let sid = activeSessionId {
+            // Manage live activity based on per-mode toggle
+            endLiveActivity()
+            if let sid = activeSessionId {
                 startLiveActivity(sessionId: sid)
             }
         }
@@ -401,11 +400,17 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         didSet { UserDefaults.standard.set(notifyTyping, forKey: "notifyTyping") }
     }
 
-    // Live Activity toggle
-    @Published var liveActivityEnabled: Bool {
+    // Live Activity toggles — per mode
+    @Published var liveActivityAuto: Bool {
         didSet {
-            UserDefaults.standard.set(liveActivityEnabled, forKey: "liveActivityEnabled")
-            if !liveActivityEnabled { endLiveActivity() }
+            UserDefaults.standard.set(liveActivityAuto, forKey: "liveActivityAuto")
+            if !liveActivityAuto && isAutoMode { endLiveActivity() }
+        }
+    }
+    @Published var liveActivityPTT: Bool {
+        didSet {
+            UserDefaults.standard.set(liveActivityPTT, forKey: "liveActivityPTT")
+            if !liveActivityPTT && pushToTalk { endLiveActivity() }
         }
     }
 
@@ -526,8 +531,10 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             UserDefaults.standard.object(forKey: "notifyPTT") as? Bool ?? true
         self.notifyTyping =
             UserDefaults.standard.object(forKey: "notifyTyping") as? Bool ?? true
-        self.liveActivityEnabled =
-            UserDefaults.standard.object(forKey: "liveActivityEnabled") as? Bool ?? true
+        self.liveActivityAuto =
+            UserDefaults.standard.object(forKey: "liveActivityAuto") as? Bool ?? true
+        self.liveActivityPTT =
+            UserDefaults.standard.object(forKey: "liveActivityPTT") as? Bool ?? true
         self.showDebug = UserDefaults.standard.bool(forKey: "showDebug")
         self.recordingURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("recording.wav")
@@ -1166,10 +1173,17 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         case "done":
             if let sid = sessionId, let idx = sessionIndex(sid) {
                 sessions[idx].status = "ready"
-                sessions[idx].statusText = "Ready"
+                sessions[idx].isThinking = false
+                stopThinkingSound()
+                // Don't override status if user still needs to respond
+                if !sessions[idx].pendingListen {
+                    sessions[idx].statusText = "Ready"
+                }
                 if sid == activeSessionId {
-                    statusText = "Ready"
                     isProcessing = false
+                    if !sessions[idx].pendingListen {
+                        statusText = "Ready"
+                    }
                     updateLiveActivity()
                 }
             }
@@ -2077,7 +2091,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     // MARK: - Live Activity
 
     private func startLiveActivity(sessionId: String) {
-        guard liveActivityEnabled else { return }
+        guard (isAutoMode && liveActivityAuto) || (pushToTalk && liveActivityPTT) else { return }
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         guard let session = sessions.first(where: { $0.id == sessionId }) else { return }
 
