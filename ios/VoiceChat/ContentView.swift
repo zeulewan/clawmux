@@ -1017,6 +1017,26 @@ struct SettingsView: View {
                         )
                     }
                 }
+
+                Section("Audio Cues") {
+                    Toggle("Thinking Sound", isOn: $vm.soundThinking)
+                    if vm.isAutoMode {
+                        Toggle("Listening Cue", isOn: $vm.soundListening)
+                        Toggle("Processing Cue", isOn: $vm.soundProcessing)
+                    }
+                    Toggle("Session Ready Chime", isOn: $vm.soundSessionReady)
+                }
+
+                Section("Haptics") {
+                    if !vm.typingMode {
+                        Toggle("Recording Start / Stop", isOn: $vm.hapticsRecording)
+                        Toggle("Playback Start", isOn: $vm.hapticsPlayback)
+                    }
+                    if vm.typingMode {
+                        Toggle("Send Message", isOn: $vm.hapticsSend)
+                    }
+                    Toggle("Session Events", isOn: $vm.hapticsSession)
+                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)

@@ -307,6 +307,35 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     @Published var backgroundMode: Bool {
         didSet { UserDefaults.standard.set(backgroundMode, forKey: "backgroundMode") }
     }
+
+    // Sound toggles
+    @Published var soundThinking: Bool {
+        didSet { UserDefaults.standard.set(soundThinking, forKey: "soundThinking") }
+    }
+    @Published var soundListening: Bool {
+        didSet { UserDefaults.standard.set(soundListening, forKey: "soundListening") }
+    }
+    @Published var soundProcessing: Bool {
+        didSet { UserDefaults.standard.set(soundProcessing, forKey: "soundProcessing") }
+    }
+    @Published var soundSessionReady: Bool {
+        didSet { UserDefaults.standard.set(soundSessionReady, forKey: "soundSessionReady") }
+    }
+
+    // Haptics toggles
+    @Published var hapticsRecording: Bool {
+        didSet { UserDefaults.standard.set(hapticsRecording, forKey: "hapticsRecording") }
+    }
+    @Published var hapticsPlayback: Bool {
+        didSet { UserDefaults.standard.set(hapticsPlayback, forKey: "hapticsPlayback") }
+    }
+    @Published var hapticsSend: Bool {
+        didSet { UserDefaults.standard.set(hapticsSend, forKey: "hapticsSend") }
+    }
+    @Published var hapticsSession: Bool {
+        didSet { UserDefaults.standard.set(hapticsSession, forKey: "hapticsSession") }
+    }
+
     @Published var selectedModel: String = "opus"
     @Published var typingText = ""
 
@@ -379,6 +408,20 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         self.inputMode = UserDefaults.standard.string(forKey: "inputMode") ?? "auto"
         self.backgroundMode =
             UserDefaults.standard.object(forKey: "backgroundMode") as? Bool ?? true
+        self.soundThinking = UserDefaults.standard.object(forKey: "soundThinking") as? Bool ?? true
+        self.soundListening =
+            UserDefaults.standard.object(forKey: "soundListening") as? Bool ?? true
+        self.soundProcessing =
+            UserDefaults.standard.object(forKey: "soundProcessing") as? Bool ?? true
+        self.soundSessionReady =
+            UserDefaults.standard.object(forKey: "soundSessionReady") as? Bool ?? true
+        self.hapticsRecording =
+            UserDefaults.standard.object(forKey: "hapticsRecording") as? Bool ?? true
+        self.hapticsPlayback =
+            UserDefaults.standard.object(forKey: "hapticsPlayback") as? Bool ?? true
+        self.hapticsSend = UserDefaults.standard.object(forKey: "hapticsSend") as? Bool ?? true
+        self.hapticsSession =
+            UserDefaults.standard.object(forKey: "hapticsSession") as? Bool ?? true
         self.showDebug = UserDefaults.standard.bool(forKey: "showDebug")
         self.recordingURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("recording.wav")
@@ -673,6 +716,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
 
     func startThinkingSound() {
         stopThinkingSound()
+        guard soundThinking else { return }
         thinkingSoundTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: true) {
             [weak self] _ in
             Task { @MainActor in
@@ -852,6 +896,8 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                     addMessage(sid, role: "system", text: "Claude connected.")
                     // Show thinking indicator while waiting for agent's first message
                     sessions[idx].isThinking = true
+                    if soundSessionReady { tonePlayer.cueSessionReady() }
+                    if hapticsSession { haptic(.success) }
                 }
             }
 
@@ -966,6 +1012,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                         }
                         statusText = "Type a message"
                     } else if effectiveAutoRecord || bgAutoRecord {
+                        if soundListening && !isBackground { tonePlayer.cueListening() }
                         startRecording(sessionId: sid)
                     } else {
                         if let idx = sessionIndex(sid) {
@@ -1115,6 +1162,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                         sendJSON(["session_id": id, "type": "audio", "data": ""])
                         statusText = "Muted"
                     } else if effectiveAutoRecord {
+                        if soundListening { tonePlayer.cueListening() }
                         startRecording(sessionId: id)
                     } else {
                         statusText = pushToTalk ? "Hold to Talk" : "Tap Record"
@@ -1359,6 +1407,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     // MARK: - Audio Playback
 
     private func playAudio(_ sessionId: String, data: Data) {
+        if hapticsPlayback && !typingMode { haptic(.soft) }
         statusText = "Speaking..."
         isPlaying = true
         playingSessionId = sessionId
@@ -1448,6 +1497,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     }
 
     private func beginRecording() {
+        if hapticsRecording && !typingMode { haptic(.medium) }
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatLinearPCM),
             AVSampleRateKey: 16000,
@@ -1511,6 +1561,8 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             return
         }
 
+        if hapticsRecording && !typingMode { haptic(.light) }
+        if soundProcessing { tonePlayer.cueProcessing() }
         statusText = "Processing..."
         isProcessing = true
         if let idx = sessionIndex(sid) {
@@ -1543,6 +1595,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     func sendText() {
         let text = typingText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, let sid = activeSessionId else { return }
+        if hapticsSend && typingMode { haptic(.medium) }
         typingText = ""
         // Clear pending listen since we're responding with text
         if let idx = sessionIndex(sid) {
