@@ -584,8 +584,8 @@ struct ContentView: View {
                         }
                     }
                 }
-                .disabled(vm.isProcessing || (vm.micMuted && !vm.isPlaying && !vm.isRecording))
-                .opacity(vm.isProcessing || (vm.micMuted && !vm.isPlaying) ? 0.5 : 1.0)
+                .disabled(vm.isProcessing || vm.recordBlockedByThinking || (vm.micMuted && !vm.isPlaying && !vm.isRecording))
+                .opacity(vm.isProcessing || vm.recordBlockedByThinking || (vm.micMuted && !vm.isPlaying) ? 0.5 : 1.0)
             }
             .padding(.top, 10)
             .padding(.bottom, 4)
@@ -690,6 +690,7 @@ struct ContentView: View {
             }
             return "Send"
         }
+        if vm.recordBlockedByThinking { return "Thinking..." }
         if vm.isProcessing { return "Processing..." }
         if vm.micMuted { return "Muted" }
         return vm.pushToTalk ? "Hold to Talk" : "Record"
@@ -1041,7 +1042,19 @@ struct InputSettingsView: View {
                         .onChange(of: vm.vadEnabled) { _, v in vm.updateSetting("auto_end", value: v) }
                     Toggle("Auto Interrupt", isOn: $vm.autoInterrupt)
                         .onChange(of: vm.autoInterrupt) { _, v in vm.updateSetting("auto_interrupt", value: v) }
+                    Toggle("Record While Thinking", isOn: $vm.allowRecordWhileThinking)
                 }
+            }
+
+            if vm.pushToTalk {
+                Section {
+                    Toggle("Record While Thinking", isOn: $vm.allowRecordWhileThinking)
+                } footer: {
+                    Text("When off, PTT is blocked while the agent is generating a response.")
+                }
+            }
+
+            if vm.isAutoMode {
 
                 if vm.vadEnabled {
                     Section {

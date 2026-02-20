@@ -306,6 +306,12 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     var effectiveVAD: Bool { isAutoMode && vadEnabled }
     var effectiveAutoInterrupt: Bool { isAutoMode && autoInterrupt }
 
+    // True when the toggle is off and the agent is actively thinking/processing
+    var recordBlockedByThinking: Bool {
+        guard !allowRecordWhileThinking else { return false }
+        return activeSession?.isThinking == true || isProcessing
+    }
+
     @Published var autoRecord: Bool {
         didSet { UserDefaults.standard.set(autoRecord, forKey: "autoRecord") }
     }
@@ -321,6 +327,12 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     }
     @Published var vadThreshold: Double {
         didSet { UserDefaults.standard.set(vadThreshold, forKey: "vadThreshold") }
+    }
+    // Allow recording while agent is still thinking/generating
+    // When on: audio is queued and used immediately, skipping the agent's spoken response
+    // When off: record button is blocked until agent finishes and sends "listening"
+    @Published var allowRecordWhileThinking: Bool {
+        didSet { UserDefaults.standard.set(allowRecordWhileThinking, forKey: "allowRecordWhileThinking") }
     }
     @Published var micMuted: Bool {
         didSet {
@@ -469,6 +481,8 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             UserDefaults.standard.object(forKey: "vadSilenceDuration") as? Double ?? 3.0
         self.vadThreshold =
             UserDefaults.standard.object(forKey: "vadThreshold") as? Double ?? 10.0
+        self.allowRecordWhileThinking =
+            UserDefaults.standard.object(forKey: "allowRecordWhileThinking") as? Bool ?? true
         self.micMuted = UserDefaults.standard.bool(forKey: "micMuted")
         self.inputMode = UserDefaults.standard.string(forKey: "inputMode") ?? "auto"
         self.backgroundMode =
@@ -1749,7 +1763,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         if pttInterrupted { return }
         // Don't re-trigger if already recording
         if isRecording { return }
-        if isProcessing || micMuted { return }
+        if isProcessing || micMuted || recordBlockedByThinking { return }
         if let sid = activeSessionId {
             suppressNextAutoRecord = false
             if let idx = sessionIndex(sid), sessions[idx].pendingListen {
