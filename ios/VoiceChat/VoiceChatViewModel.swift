@@ -1,3 +1,4 @@
+import ActivityKit
 import AVFoundation
 import Foundation
 import UIKit
@@ -20,6 +21,8 @@ struct VoiceSession: Identifiable {
     var tmuxSession: String = ""
     var isThinking: Bool = false
     var pendingListen: Bool = false
+    var statusText: String = ""
+    var audioBuffer: [Data] = []
 }
 
 struct VoiceInfo: Identifiable {
@@ -85,6 +88,47 @@ final class VADProcessor: @unchecked Sendable {
             silenceStart = nil
             detectedSpeech = true
         }
+    }
+}
+
+// MARK: - Playback VAD Processor (for auto-interrupt during playback)
+
+final class PlaybackVADProcessor: @unchecked Sendable {
+    private let onSpeechDetected: @Sendable () -> Void
+    private var speechStart: Date?
+    private let speechThreshold: Float = 25
+    private let speechDuration: TimeInterval = 0.3
+
+    init(onSpeechDetected: @escaping @Sendable () -> Void) {
+        self.onSpeechDetected = onSpeechDetected
+    }
+
+    func processBuffer(_ buffer: AVAudioPCMBuffer) {
+        guard let data = buffer.floatChannelData?[0] else { return }
+        let count = Int(buffer.frameLength)
+        var sum: Float = 0
+        for i in 0..<count { sum += data[i] * data[i] }
+        let rms = sqrt(sum / Float(count)) * 200
+
+        if rms > speechThreshold {
+            if speechStart == nil { speechStart = Date() }
+            if let start = speechStart,
+                Date().timeIntervalSince(start) > speechDuration
+            {
+                speechStart = nil
+                onSpeechDetected()
+            }
+        } else {
+            speechStart = nil
+        }
+    }
+}
+
+private func installPlaybackVADTap(
+    on input: AVAudioInputNode, format: AVAudioFormat, processor: PlaybackVADProcessor
+) {
+    input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+        processor.processBuffer(buffer)
     }
 }
 
@@ -198,6 +242,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
 
     // Connection
     @Published var isConnected = false
+    @Published var isConnecting = false
     @Published var showSettings = false
     @Published var serverURL: String {
         didSet { UserDefaults.standard.set(serverURL, forKey: "serverURL") }
@@ -205,21 +250,43 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
 
     // Sessions
     @Published var sessions: [VoiceSession] = []
-    @Published var activeSessionId: String?
-    @Published var spawningVoiceId: String?
+    @Published var activeSessionId: String? {
+        didSet { UserDefaults.standard.set(activeSessionId, forKey: "activeSessionId") }
+    }
+    @Published var spawningVoiceIds: Set<String> = []
+    @Published var errorMessage: String?
 
     // Active session UI state
     @Published var statusText = ""
     @Published var isRecording = false
     @Published var isPlaying = false
     @Published var isProcessing = false
+    @Published var audioLevels: [CGFloat] = []
 
     // Controls
-    @Published var autoRecord = false
-    @Published var vadEnabled = true
+    @Published var autoRecord: Bool {
+        didSet { UserDefaults.standard.set(autoRecord, forKey: "autoRecord") }
+    }
+    @Published var vadEnabled: Bool {
+        didSet { UserDefaults.standard.set(vadEnabled, forKey: "vadEnabled") }
+    }
+    @Published var autoInterrupt: Bool {
+        didSet { UserDefaults.standard.set(autoInterrupt, forKey: "autoInterrupt") }
+    }
+    @Published var micMuted: Bool {
+        didSet {
+            UserDefaults.standard.set(micMuted, forKey: "micMuted")
+            if micMuted { handleMuteActivated() }
+        }
+    }
+    @Published var backgroundMode: Bool {
+        didSet { UserDefaults.standard.set(backgroundMode, forKey: "backgroundMode") }
+    }
 
     // Debug
-    @Published var showDebug = false
+    @Published var showDebug: Bool {
+        didSet { UserDefaults.standard.set(showDebug, forKey: "showDebug") }
+    }
     @Published var debugHub = DebugHubInfo()
     @Published var debugServices: [DebugService] = []
     @Published var debugSessions: [DebugHubSession] = []
@@ -234,7 +301,8 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     }
 
     var activeMessages: [ChatMessage] {
-        activeSession?.messages ?? []
+        let msgs = activeSession?.messages ?? []
+        return msgs.count > 50 ? Array(msgs.suffix(50)) : msgs
     }
 
     var activeVoice: String {
@@ -258,17 +326,36 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     private var recordingSessionId: String?
     private lazy var tonePlayer = TonePlayer()
     private var thinkingSoundTimer: Timer?
+    private var meteringTimer: Timer?
+    private var backgroundRecordingTimer: Timer?
+    private let maxLevelSamples = 50
     private var debugRefreshTimer: Timer?
+    private var pausedAudioSessionId: String?
+    private var currentActivity: Activity<VoiceChatActivityAttributes>?
+    private var silencePlayer: AVAudioPlayer?
+    private var playbackVADEngine: AVAudioEngine?
+    private var playbackVADProcessor: PlaybackVADProcessor?
+    private var lastPingTime: Date?
+    private var pingWatchdogTimer: Timer?
 
     // MARK: - Init
 
     override init() {
         self.serverURL = UserDefaults.standard.string(forKey: "serverURL") ?? ""
+        self.autoRecord = UserDefaults.standard.object(forKey: "autoRecord") as? Bool ?? false
+        self.vadEnabled = UserDefaults.standard.object(forKey: "vadEnabled") as? Bool ?? true
+        self.autoInterrupt = UserDefaults.standard.object(forKey: "autoInterrupt") as? Bool ?? false
+        self.micMuted = UserDefaults.standard.bool(forKey: "micMuted")
+        self.backgroundMode =
+            UserDefaults.standard.object(forKey: "backgroundMode") as? Bool ?? true
+        self.showDebug = UserDefaults.standard.bool(forKey: "showDebug")
         self.recordingURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("recording.wav")
         super.init()
 
         setupAudioSession()
+        observeAppLifecycle()
+        endStaleLiveActivities()
 
         if serverURL.isEmpty {
             showSettings = true
@@ -282,6 +369,100 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         urlSession?.invalidateAndCancel()
     }
 
+    private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
+
+    private func observeAppLifecycle() {
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                // Start silence loop if background mode is on and there are sessions
+                if self.backgroundMode && !self.sessions.isEmpty {
+                    // Request background execution time to ensure silence loop starts
+                    self.backgroundTaskID = UIApplication.shared.beginBackgroundTask {
+                        UIApplication.shared.endBackgroundTask(self.backgroundTaskID)
+                        self.backgroundTaskID = .invalid
+                    }
+                    self.startSilenceLoop()
+                    // End background task after silence is playing
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                        if self.backgroundTaskID != .invalid {
+                            UIApplication.shared.endBackgroundTask(self.backgroundTaskID)
+                            self.backgroundTaskID = .invalid
+                        }
+                    }
+                }
+            }
+        }
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.stopSilenceLoop()
+            }
+        }
+    }
+
+    private func startSilenceLoop() {
+        guard silencePlayer == nil else { return }
+        // Ensure audio session is active for background playback
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setActive(true)
+        } catch {
+            print("[audio] Failed to activate session for background: \(error)")
+        }
+        // Generate 1 second of near-silence as WAV (very low amplitude, not zero)
+        let sampleRate: Int = 16000
+        let numSamples = sampleRate
+        var header = Data()
+        let dataSize = numSamples * 2
+        let fileSize = 36 + dataSize
+        header.append(contentsOf: [0x52, 0x49, 0x46, 0x46])  // RIFF
+        header.append(contentsOf: withUnsafeBytes(of: UInt32(fileSize).littleEndian) { Array($0) })
+        header.append(contentsOf: [0x57, 0x41, 0x56, 0x45])  // WAVE
+        header.append(contentsOf: [0x66, 0x6D, 0x74, 0x20])  // fmt
+        header.append(contentsOf: withUnsafeBytes(of: UInt32(16).littleEndian) { Array($0) })
+        header.append(contentsOf: withUnsafeBytes(of: UInt16(1).littleEndian) { Array($0) })  // PCM
+        header.append(contentsOf: withUnsafeBytes(of: UInt16(1).littleEndian) { Array($0) })  // mono
+        header.append(contentsOf: withUnsafeBytes(of: UInt32(sampleRate).littleEndian) {
+            Array($0)
+        })
+        header.append(contentsOf: withUnsafeBytes(of: UInt32(sampleRate * 2).littleEndian) {
+            Array($0)
+        })
+        header.append(contentsOf: withUnsafeBytes(of: UInt16(2).littleEndian) { Array($0) })
+        header.append(contentsOf: withUnsafeBytes(of: UInt16(16).littleEndian) { Array($0) })
+        header.append(contentsOf: [0x64, 0x61, 0x74, 0x61])  // data
+        header.append(contentsOf: withUnsafeBytes(of: UInt32(dataSize).littleEndian) {
+            Array($0)
+        })
+        // Write near-silent samples (amplitude 1 out of 32767) instead of true zero
+        var samples = Data(count: dataSize)
+        for i in stride(from: 0, to: dataSize, by: 2) {
+            samples[i] = 1  // LSB = 1
+            samples[i + 1] = 0  // MSB = 0
+        }
+        header.append(samples)
+
+        do {
+            silencePlayer = try AVAudioPlayer(data: header)
+            silencePlayer?.numberOfLoops = -1  // loop forever
+            silencePlayer?.volume = 0.05
+            silencePlayer?.prepareToPlay()
+            silencePlayer?.play()
+            print("[audio] Silence loop started for background keepalive")
+        } catch {
+            print("[audio] Silence loop failed: \(error)")
+        }
+    }
+
+    private func stopSilenceLoop() {
+        silencePlayer?.stop()
+        silencePlayer = nil
+    }
+
     // MARK: - Helpers
 
     private func sessionIndex(_ id: String) -> Int? {
@@ -291,6 +472,101 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     private func addMessage(_ sessionId: String, role: String, text: String) {
         guard let idx = sessionIndex(sessionId) else { return }
         sessions[idx].messages.append(ChatMessage(role: role, text: text))
+        saveChats()
+    }
+
+    // MARK: - Chat Persistence
+
+    private let chatsKey = "voice-hub-chats"
+
+    private func saveChats() {
+        var data: [String: [[String: String]]] = [:]
+        for session in sessions {
+            data[session.id] = session.messages.map { ["role": $0.role, "text": $0.text] }
+        }
+        if let jsonData = try? JSONSerialization.data(withJSONObject: data) {
+            UserDefaults.standard.set(jsonData, forKey: chatsKey)
+        }
+    }
+
+    private func loadSavedMessages(for sessionId: String) -> [ChatMessage]? {
+        guard let jsonData = UserDefaults.standard.data(forKey: chatsKey),
+            let data = try? JSONSerialization.jsonObject(with: jsonData)
+                as? [String: [[String: String]]],
+            let messages = data[sessionId], !messages.isEmpty
+        else { return nil }
+        return messages.compactMap { dict in
+            guard let role = dict["role"], let text = dict["text"] else { return nil }
+            return ChatMessage(role: role, text: text)
+        }
+    }
+
+    private func clearSavedChat(for sessionId: String) {
+        guard let jsonData = UserDefaults.standard.data(forKey: chatsKey),
+            var data = try? JSONSerialization.jsonObject(with: jsonData)
+                as? [String: [[String: String]]]
+        else { return }
+        data.removeValue(forKey: sessionId)
+        if let updated = try? JSONSerialization.data(withJSONObject: data) {
+            UserDefaults.standard.set(updated, forKey: chatsKey)
+        }
+    }
+
+    // MARK: - Server-Side History
+
+    private func fetchHistory(voiceId: String, sessionId: String) {
+        guard let baseURL = httpBaseURL() else { return }
+        let url = baseURL.appendingPathComponent("api/history/\(voiceId)")
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+            guard let data,
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                let messages = json["messages"] as? [[String: Any]]
+            else { return }
+            Task { @MainActor in
+                guard let self, let idx = self.sessionIndex(sessionId) else { return }
+                let chatMessages = messages.suffix(50).compactMap { msg -> ChatMessage? in
+                    guard let role = msg["role"] as? String,
+                        let text = msg["text"] as? String
+                    else { return nil }
+                    return ChatMessage(role: role, text: text)
+                }
+                if !chatMessages.isEmpty {
+                    // Keep any system messages, prepend history
+                    let systemMessages = self.sessions[idx].messages.filter { $0.role == "system" }
+                    self.sessions[idx].messages = chatMessages + systemMessages
+                }
+            }
+        }.resume()
+    }
+
+    func resetHistory(voiceId: String) {
+        guard let baseURL = httpBaseURL() else { return }
+        let url = baseURL.appendingPathComponent("api/history/\(voiceId)")
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        URLSession.shared.dataTask(with: request) { _, _, _ in }.resume()
+
+        // Terminate session if active (reset clears everything)
+        if let session = sessions.first(where: { $0.voice == voiceId }) {
+            terminateSession(session.id)
+        }
+    }
+
+    // MARK: - Ping Watchdog
+
+    private func startPingWatchdog() {
+        lastPingTime = Date()
+        pingWatchdogTimer?.invalidate()
+        pingWatchdogTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) {
+            [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.isConnected, let last = self.lastPingTime else { return }
+                if Date().timeIntervalSince(last) > 60 {
+                    print("[ws] No ping for 60s, reconnecting")
+                    self.handleDisconnect()
+                }
+            }
+        }
     }
 
     // MARK: - Audio Session
@@ -348,6 +624,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             return
         }
 
+        isConnecting = true
         statusText = "Connecting..."
         urlSession = URLSession(
             configuration: .default, delegate: self, delegateQueue: nil)
@@ -358,11 +635,15 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     func disconnect() {
         reconnectWork?.cancel()
         reconnectWork = nil
+        pingWatchdogTimer?.invalidate()
+        pingWatchdogTimer = nil
+        lastPingTime = nil
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         urlSession?.invalidateAndCancel()
         urlSession = nil
         isConnected = false
+        isConnecting = false
         stopThinkingSound()
     }
 
@@ -392,10 +673,14 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
 
     private func handleDisconnect() {
         isConnected = false
+        isConnecting = false
         isRecording = false
         isPlaying = false
         isProcessing = false
         statusText = "Disconnected"
+        pingWatchdogTimer?.invalidate()
+        pingWatchdogTimer = nil
+        lastPingTime = nil
         stopThinkingSound()
         scheduleReconnect()
     }
@@ -430,6 +715,13 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                         addSessionFromDict(s)
                     }
                 }
+                // Restore saved active session if it still exists
+                if activeSessionId == nil,
+                    let savedId = UserDefaults.standard.string(forKey: "activeSessionId"),
+                    sessionIndex(savedId) != nil
+                {
+                    switchToSession(savedId)
+                }
             }
 
         case "session_spawned":
@@ -438,11 +730,14 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                 sessionIndex(sid) == nil
             {
                 // Clear spawning state for the voice
-                if let voice = s["voice"] as? String, spawningVoiceId == voice {
-                    spawningVoiceId = nil
+                if let voice = s["voice"] as? String {
+                    spawningVoiceIds.remove(voice)
                 }
                 addSessionFromDict(s)
-                switchToSession(sid)
+                // Only auto-switch if on the home page
+                if activeSessionId == nil && !showDebug {
+                    switchToSession(sid)
+                }
             }
 
         case "session_terminated":
@@ -462,6 +757,9 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                 }
             }
 
+        case "ping":
+            lastPingTime = Date()
+
         case "error":
             let msg = json["message"] as? String ?? "Unknown error"
             statusText = "Error: \(msg)"
@@ -474,6 +772,10 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                 }
                 stopThinkingSound()
                 addMessage(sid, role: "assistant", text: t)
+                if sid == activeSessionId {
+                    isProcessing = false
+                    updateLiveActivity()
+                }
             }
 
         case "user_text":
@@ -481,9 +783,12 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                 addMessage(sid, role: "user", text: t)
                 if let idx = sessionIndex(sid) {
                     sessions[idx].isThinking = true
+                    sessions[idx].statusText = "Thinking..."
                 }
                 if sid == activeSessionId {
+                    isProcessing = false
                     startThinkingSound()
+                    updateLiveActivity()
                 }
             }
 
@@ -493,34 +798,69 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             {
                 if let idx = sessionIndex(sid) {
                     sessions[idx].status = "active"
+                    sessions[idx].statusText = "Speaking..."
                 }
                 if sid == activeSessionId {
+                    // Play audio for active session (works in foreground and background)
                     playAudio(sid, data: audioData)
+                    updateLiveActivity()
+                } else if activeSessionId == nil {
+                    // No active session (on home screen) - buffer it
+                    if let idx = sessionIndex(sid) {
+                        sessions[idx].audioBuffer.append(audioData)
+                    }
+                } else {
+                    // Different session active - buffer it
+                    if let idx = sessionIndex(sid) {
+                        sessions[idx].audioBuffer.append(audioData)
+                    }
                 }
             }
 
         case "listening":
             if let sid = sessionId {
-                if sid == activeSessionId {
-                    tonePlayer.cueListening()
-                    haptic(.light)
+                // Mic muted: send silent audio immediately
+                if micMuted {
+                    sendJSON(["session_id": sid, "type": "audio", "data": ""])
+                    if let idx = sessionIndex(sid) {
+                        sessions[idx].pendingListen = false
+                        sessions[idx].statusText = "Muted"
+                    }
+                    if sid == activeSessionId { statusText = "Muted" }
+                    break
+                }
+
+                let isActive = sid == activeSessionId
+                let isBackground = UIApplication.shared.applicationState != .active
+
+                if isActive || (isBackground && autoRecord) {
+                    if isActive {
+                        tonePlayer.cueListening()
+                        haptic(.light)
+                    }
                     if autoRecord {
                         startRecording(sessionId: sid)
                     } else {
                         if let idx = sessionIndex(sid) {
                             sessions[idx].pendingListen = true
+                            sessions[idx].statusText = "Tap Record"
                         }
                         statusText = "Tap Record"
                     }
+                    updateLiveActivity()
                 } else {
                     if let idx = sessionIndex(sid) {
                         sessions[idx].pendingListen = true
+                        sessions[idx].statusText = "Waiting..."
                     }
                 }
             }
 
         case "status":
             if let sid = sessionId, let t = json["text"] as? String {
+                if let idx = sessionIndex(sid) {
+                    sessions[idx].statusText = t
+                }
                 if sid == activeSessionId {
                     statusText = t
                 }
@@ -529,9 +869,11 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         case "done":
             if let sid = sessionId, let idx = sessionIndex(sid) {
                 sessions[idx].status = "ready"
+                sessions[idx].statusText = "Ready"
                 if sid == activeSessionId {
                     statusText = "Ready"
                     isProcessing = false
+                    updateLiveActivity()
                 }
             }
 
@@ -559,8 +901,14 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         let tmux = dict["tmux_session"] as? String ?? sid
         let isReady = status == "ready" || dict["mcp_connected"] as? Bool == true
 
+        // Restore saved voice/speed preferences
+        let savedPrefs = loadSessionPrefs(sid)
+        let sessionVoice = savedPrefs?.voice ?? voice
+        let sessionSpeed = savedPrefs?.speed ?? 1.0
+        let sessionLabel = ALL_VOICES.first { $0.id == sessionVoice }?.name ?? label
+
         var session = VoiceSession(
-            id: sid, label: label, voice: voice, speed: 1.0,
+            id: sid, label: sessionLabel, voice: sessionVoice, speed: sessionSpeed,
             status: isReady ? "ready" : status, tmuxSession: tmux)
 
         if isReady {
@@ -571,32 +919,63 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         }
 
         sessions.append(session)
+
+        // Fetch message history from server
+        fetchHistory(voiceId: voice, sessionId: sid)
     }
 
     func switchToSession(_ id: String) {
         if activeSessionId != id {
-            // Stop audio/recording from previous session
-            if isPlaying { interruptPlayback() }
+            // Pause audio from previous session (don't stop/interrupt)
+            if isPlaying, let player = audioPlayer, player.isPlaying {
+                stopPlaybackVAD()
+                player.pause()
+                pausedAudioSessionId = playingSessionId
+                isPlaying = false
+            }
             if isRecording { stopRecording(discard: true) }
             stopThinkingSound()
         }
         activeSessionId = id
         showDebug = false
 
+        endLiveActivity()
+        startLiveActivity(sessionId: id)
+
         if let session = activeSession {
-            statusText = session.status == "ready" ? "Ready" : "Waiting for Claude..."
+            statusText = session.statusText.isEmpty
+                ? (session.status == "ready" ? "Ready" : "Waiting for Claude...")
+                : session.statusText
+
+            // Derive processing state from session (don't carry over from previous session)
+            isProcessing = session.statusText == "Processing..."
 
             // Resume thinking sound if session is thinking
             if session.isThinking {
                 startThinkingSound()
             }
 
+            // Resume paused audio for this session
+            if pausedAudioSessionId == id, let player = audioPlayer {
+                player.play()
+                isPlaying = true
+                playingSessionId = id
+                pausedAudioSessionId = nil
+                statusText = "Speaking..."
+            }
+            // Play buffered audio received while in background
+            else if let idx = sessionIndex(id), !sessions[idx].audioBuffer.isEmpty {
+                playBufferedAudio(id)
+            }
             // Handle pending listen
-            if session.pendingListen {
+            else if session.pendingListen {
                 if let idx = sessionIndex(id) {
                     sessions[idx].pendingListen = false
                 }
-                if autoRecord {
+                if micMuted {
+                    sendJSON(["session_id": id, "type": "audio", "data": ""])
+                    statusText = "Muted"
+                } else if autoRecord {
                     tonePlayer.cueListening()
                     startRecording(sessionId: id)
                 } else {
@@ -612,28 +991,61 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         guard let baseURL = httpBaseURL() else { return }
         let url = baseURL.appendingPathComponent("api/sessions")
 
-        spawningVoiceId = voiceId.isEmpty ? nil : voiceId
+        if !voiceId.isEmpty { spawningVoiceIds.insert(voiceId) }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try? JSONSerialization.data(
             withJSONObject: ["voice": voiceId])
+        request.timeoutInterval = 90  // Spawn takes 30-60s
 
-        URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             Task { @MainActor in
-                guard let self, let data,
+                guard let self else { return }
+
+                // Handle 503 (duplicate voice) silently
+                if let httpResponse = response as? HTTPURLResponse,
+                    httpResponse.statusCode == 503
+                {
+                    self.spawningVoiceIds.remove(voiceId)
+                    // Voice already has a session, switch to it
+                    if let existing = self.sessions.first(where: { $0.voice == voiceId }) {
+                        self.switchToSession(existing.id)
+                    }
+                    return
+                }
+
+                if let error {
+                    self.spawningVoiceIds.remove(voiceId)
+                    self.errorMessage = "Spawn failed: \(error.localizedDescription)"
+                    return
+                }
+
+                guard let data,
                     let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                     let sid = json["session_id"] as? String
                 else {
-                    self?.spawningVoiceId = nil
+                    self.spawningVoiceIds.remove(voiceId)
+                    if let data,
+                        let json = try? JSONSerialization.jsonObject(with: data)
+                            as? [String: Any],
+                        let errMsg = json["error"] as? String
+                    {
+                        self.errorMessage = "Spawn failed: \(errMsg)"
+                    } else {
+                        self.errorMessage = "Failed to spawn session"
+                    }
                     return
                 }
-                self.spawningVoiceId = nil
+                self.spawningVoiceIds.remove(voiceId)
                 if self.sessionIndex(sid) == nil {
                     self.addSessionFromDict(json)
                 }
-                self.switchToSession(sid)
+                // Only auto-switch if still on the home page
+                if self.activeSessionId == nil && !self.showDebug {
+                    self.switchToSession(sid)
+                }
             }
         }.resume()
     }
@@ -644,20 +1056,38 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
         URLSession.shared.dataTask(with: request) { _, _, _ in }.resume()
+        if activeSessionId == id { endLiveActivity() }
         removeSession(id)
     }
 
     private func removeSession(_ id: String) {
+        clearSavedChat(for: id)
+        clearSessionPrefs(id)
         sessions.removeAll { $0.id == id }
         if activeSessionId == id {
             activeSessionId = sessions.first?.id
         }
     }
 
+    func goHome() {
+        // Pause audio (don't interrupt) so it resumes on switch back
+        if isPlaying, let player = audioPlayer, player.isPlaying {
+            player.pause()
+            pausedAudioSessionId = playingSessionId
+            isPlaying = false
+        }
+        if isRecording { stopRecording(discard: true) }
+        stopThinkingSound()
+        showDebug = false
+        activeSessionId = nil
+        endLiveActivity()
+    }
+
     private func updateSessionVoice(_ voice: String) {
         guard let sid = activeSessionId, let idx = sessionIndex(sid) else { return }
         sessions[idx].voice = voice
         sessions[idx].label = ALL_VOICES.first { $0.id == voice }?.name ?? voice
+        saveSessionPrefs(sid, voice: voice, speed: sessions[idx].speed)
 
         guard let baseURL = httpBaseURL() else { return }
         let url = baseURL.appendingPathComponent("api/sessions/\(sid)/voice")
@@ -671,6 +1101,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     private func updateSessionSpeed(_ speed: Double) {
         guard let sid = activeSessionId, let idx = sessionIndex(sid) else { return }
         sessions[idx].speed = speed
+        saveSessionPrefs(sid, voice: sessions[idx].voice, speed: speed)
 
         guard let baseURL = httpBaseURL() else { return }
         let url = baseURL.appendingPathComponent("api/sessions/\(sid)/speed")
@@ -679,6 +1110,40 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try? JSONSerialization.data(withJSONObject: ["speed": speed])
         URLSession.shared.dataTask(with: request) { _, _, _ in }.resume()
+    }
+
+    // MARK: - Session Preferences Persistence
+
+    private func saveSessionPrefs(_ sessionId: String, voice: String, speed: Double) {
+        var prefs = loadAllSessionPrefs()
+        prefs[sessionId] = ["voice": voice, "speed": speed]
+        if let data = try? JSONSerialization.data(withJSONObject: prefs) {
+            UserDefaults.standard.set(data, forKey: "sessionPrefs")
+        }
+    }
+
+    private func loadSessionPrefs(_ sessionId: String) -> (voice: String, speed: Double)? {
+        let prefs = loadAllSessionPrefs()
+        guard let p = prefs[sessionId],
+            let voice = p["voice"] as? String,
+            let speed = p["speed"] as? Double
+        else { return nil }
+        return (voice, speed)
+    }
+
+    private func loadAllSessionPrefs() -> [String: [String: Any]] {
+        guard let data = UserDefaults.standard.data(forKey: "sessionPrefs"),
+            let prefs = try? JSONSerialization.jsonObject(with: data) as? [String: [String: Any]]
+        else { return [:] }
+        return prefs
+    }
+
+    private func clearSessionPrefs(_ sessionId: String) {
+        var prefs = loadAllSessionPrefs()
+        prefs.removeValue(forKey: sessionId)
+        if let data = try? JSONSerialization.data(withJSONObject: prefs) {
+            UserDefaults.standard.set(data, forKey: "sessionPrefs")
+        }
     }
 
     func httpBaseURL() -> URL? {
@@ -692,14 +1157,17 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     // MARK: - Audio Playback
 
     private func playAudio(_ sessionId: String, data: Data) {
-        statusText = "Playing..."
+        statusText = "Speaking..."
         isPlaying = true
         playingSessionId = sessionId
 
         do {
+            // Ensure audio session is active (important for background playback)
+            try AVAudioSession.sharedInstance().setActive(true)
             audioPlayer = try AVAudioPlayer(data: data)
             audioPlayer?.delegate = self
             audioPlayer?.play()
+            startPlaybackVAD()
         } catch {
             print("[audio] Playback error: \(error)")
             statusText = "Audio error"
@@ -713,12 +1181,43 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
 
     func interruptPlayback() {
         guard isPlaying, let sid = playingSessionId else { return }
+        stopPlaybackVAD()
         audioPlayer?.stop()
         audioPlayer = nil
         isPlaying = false
         playingSessionId = nil
+        pausedAudioSessionId = nil
+        // Clear any remaining buffered audio
+        if let idx = sessionIndex(sid) {
+            sessions[idx].audioBuffer.removeAll()
+            sessions[idx].statusText = "Ready"
+        }
+        statusText = "Ready"
         haptic(.medium)
         sendJSON(["session_id": sid, "type": "playback_done"])
+    }
+
+    private func playBufferedAudio(_ sessionId: String) {
+        guard let idx = sessionIndex(sessionId), !sessions[idx].audioBuffer.isEmpty else { return }
+        let data = sessions[idx].audioBuffer.removeFirst()
+        statusText = "Speaking..."
+        isPlaying = true
+        playingSessionId = sessionId
+
+        do {
+            audioPlayer = try AVAudioPlayer(data: data)
+            audioPlayer?.delegate = self
+            audioPlayer?.play()
+        } catch {
+            print("[audio] Buffered playback error: \(error)")
+            if let idx2 = sessionIndex(sessionId), !sessions[idx2].audioBuffer.isEmpty {
+                playBufferedAudio(sessionId)
+            } else {
+                isPlaying = false
+                playingSessionId = nil
+                sendJSON(["session_id": sessionId, "type": "playback_done"])
+            }
+        }
     }
 
     // MARK: - Recording
@@ -728,14 +1227,22 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         guard let sid else { return }
         recordingSessionId = sid
 
-        AVAudioApplication.requestRecordPermission { [weak self] granted in
-            Task { @MainActor in
-                guard let self, granted else {
-                    self?.statusText = "Microphone access denied"
-                    return
+        // Check permission status directly (avoid async request which is unreliable in background)
+        switch AVAudioApplication.shared.recordPermission {
+        case .granted:
+            beginRecording()
+        case .undetermined:
+            AVAudioApplication.requestRecordPermission { [weak self] granted in
+                Task { @MainActor in
+                    guard let self, granted else {
+                        self?.statusText = "Microphone access denied"
+                        return
+                    }
+                    self.beginRecording()
                 }
-                self.beginRecording()
             }
+        default:
+            statusText = "Microphone access denied"
         }
     }
 
@@ -750,14 +1257,38 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         ]
 
         do {
+            // Ensure audio session is active (critical for background recording)
+            try AVAudioSession.sharedInstance().setActive(true)
             audioRecorder = try AVAudioRecorder(url: recordingURL, settings: settings)
+            audioRecorder?.isMeteringEnabled = true
             audioRecorder?.record()
             isRecording = true
+            audioLevels = []
             statusText = "Recording..."
+            if let sid = recordingSessionId, let idx = sessionIndex(sid) {
+                sessions[idx].statusText = "Recording..."
+            }
             haptic(.light)
+            updateLiveActivity()
+            startMetering()
 
-            if vadEnabled {
+            let isBackground = UIApplication.shared.applicationState != .active
+            // Always enable VAD in background (only way to stop recording without UI)
+            if vadEnabled || isBackground {
                 startVAD()
+            }
+            // Safety timeout: auto-stop recording after 30s in background
+            if isBackground {
+                backgroundRecordingTimer?.invalidate()
+                backgroundRecordingTimer = Timer.scheduledTimer(
+                    withTimeInterval: 30, repeats: false
+                ) { [weak self] _ in
+                    Task { @MainActor in
+                        if self?.isRecording == true {
+                            self?.stopRecording()
+                        }
+                    }
+                }
             }
         } catch {
             print("[mic] Recording error: \(error)")
@@ -770,7 +1301,10 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         recorder.stop()
         audioRecorder = nil
         isRecording = false
+        stopMetering()
         stopVAD()
+        backgroundRecordingTimer?.invalidate()
+        backgroundRecordingTimer = nil
 
         guard !discard, let sid = recordingSessionId else {
             recordingSessionId = nil
@@ -779,12 +1313,21 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
 
         statusText = "Processing..."
         isProcessing = true
+        if let idx = sessionIndex(sid) {
+            sessions[idx].statusText = "Processing..."
+        }
         tonePlayer.cueProcessing()
         haptic(.light)
+        updateLiveActivity()
 
         if let audioData = try? Data(contentsOf: recordingURL) {
             let b64 = audioData.base64EncodedString()
             sendJSON(["session_id": sid, "type": "audio", "data": b64])
+        } else {
+            statusText = "Error reading audio"
+            isProcessing = false
+            // Send empty audio so hub doesn't hang
+            sendJSON(["session_id": sid, "type": "audio", "data": ""])
         }
         recordingSessionId = nil
     }
@@ -803,6 +1346,9 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             interruptPlayback()
         } else if isRecording {
             stopRecording()
+        } else if micMuted {
+            // Muted: do nothing (button shows muted state)
+            return
         } else if let sid = activeSessionId {
             // Clear pending listen flag
             if let idx = sessionIndex(sid), sessions[idx].pendingListen {
@@ -846,6 +1392,91 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         vadAudioEngine?.stop()
         vadAudioEngine = nil
         vadProcessor = nil
+    }
+
+    // MARK: - Playback VAD (Auto Interrupt)
+
+    private func startPlaybackVAD() {
+        guard autoInterrupt, !micMuted else { return }
+        stopPlaybackVAD()
+
+        let engine = AVAudioEngine()
+        let input = engine.inputNode
+        let format = input.outputFormat(forBus: 0)
+
+        let processor = PlaybackVADProcessor { [weak self] in
+            Task { @MainActor in
+                guard let self, self.isPlaying else { return }
+                self.stopPlaybackVAD()
+                self.interruptPlayback()
+                if let sid = self.activeSessionId {
+                    self.startRecording(sessionId: sid)
+                }
+            }
+        }
+        playbackVADProcessor = processor
+
+        installPlaybackVADTap(on: input, format: format, processor: processor)
+
+        do {
+            try engine.start()
+            playbackVADEngine = engine
+        } catch {
+            print("[playback-vad] Engine start failed: \(error)")
+        }
+    }
+
+    private func stopPlaybackVAD() {
+        playbackVADEngine?.inputNode.removeTap(onBus: 0)
+        playbackVADEngine?.stop()
+        playbackVADEngine = nil
+        playbackVADProcessor = nil
+    }
+
+    // MARK: - Mic Mute
+
+    private func handleMuteActivated() {
+        // Stop any active recording
+        if isRecording {
+            stopRecording(discard: true)
+            if let sid = recordingSessionId ?? activeSessionId {
+                sendJSON(["session_id": sid, "type": "audio", "data": ""])
+            }
+        }
+        // Send silent audio for any sessions with pending listen
+        for i in sessions.indices where sessions[i].pendingListen {
+            sendJSON(["session_id": sessions[i].id, "type": "audio", "data": ""])
+            sessions[i].pendingListen = false
+            sessions[i].statusText = "Muted"
+        }
+        stopPlaybackVAD()
+    }
+
+    // MARK: - Audio Metering
+
+    private func startMetering() {
+        stopMetering()
+        meteringTimer = Timer.scheduledTimer(withTimeInterval: 0.04, repeats: true) {
+            [weak self] _ in
+            Task { @MainActor in
+                guard let self, let recorder = self.audioRecorder, recorder.isRecording else {
+                    return
+                }
+                recorder.updateMeters()
+                // averagePower is in dB (-160 to 0), normalize to 0...1
+                let db = recorder.averagePower(forChannel: 0)
+                let normalized = max(0, min(1, CGFloat((db + 50) / 50)))
+                self.audioLevels.append(normalized)
+                if self.audioLevels.count > self.maxLevelSamples {
+                    self.audioLevels.removeFirst(self.audioLevels.count - self.maxLevelSamples)
+                }
+            }
+        }
+    }
+
+    private func stopMetering() {
+        meteringTimer?.invalidate()
+        meteringTimer = nil
     }
 
     // MARK: - Debug
@@ -950,6 +1581,72 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         }.resume()
     }
 
+    // MARK: - Live Activity
+
+    private func startLiveActivity(sessionId: String) {
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+        guard let session = sessions.first(where: { $0.id == sessionId }) else { return }
+
+        let attributes = VoiceChatActivityAttributes(sessionId: sessionId)
+        let state = VoiceChatActivityAttributes.ContentState(
+            voiceName: session.label,
+            status: voiceChatStatus(for: session),
+            lastMessage: session.messages.last(where: { $0.role == "assistant" })?
+                .text.prefix(80).description ?? ""
+        )
+
+        do {
+            currentActivity = try Activity.request(
+                attributes: attributes,
+                content: ActivityContent(state: state, staleDate: nil),
+                pushType: nil
+            )
+        } catch {
+            print("[liveactivity] Failed to start: \(error)")
+        }
+    }
+
+    private func updateLiveActivity() {
+        guard let activity = currentActivity,
+            let sessionId = activeSessionId,
+            let session = sessions.first(where: { $0.id == sessionId })
+        else { return }
+
+        let state = VoiceChatActivityAttributes.ContentState(
+            voiceName: session.label,
+            status: voiceChatStatus(for: session),
+            lastMessage: session.messages.last(where: { $0.role == "assistant" })?
+                .text.prefix(80).description ?? ""
+        )
+
+        Task {
+            await activity.update(ActivityContent(state: state, staleDate: nil))
+        }
+    }
+
+    private func endLiveActivity() {
+        guard let activity = currentActivity else { return }
+        Task { await activity.end(nil, dismissalPolicy: .immediate) }
+        currentActivity = nil
+    }
+
+    private func endStaleLiveActivities() {
+        // Clean up any activities left over from a previous launch (e.g. force-kill)
+        Task {
+            for activity in Activity<VoiceChatActivityAttributes>.activities {
+                await activity.end(nil, dismissalPolicy: .immediate)
+            }
+        }
+    }
+
+    private func voiceChatStatus(for session: VoiceSession) -> VoiceChatStatus {
+        if session.isThinking { return .thinking }
+        let st = session.statusText
+        if st == "Speaking..." || st == "Playing..." { return .speaking }
+        if st == "Recording..." || st == "Tap Record" || session.pendingListen { return .listening }
+        return .ready
+    }
+
     // MARK: - Haptics
 
     private func haptic(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
@@ -971,7 +1668,9 @@ extension VoiceChatViewModel: URLSessionWebSocketDelegate {
     ) {
         Task { @MainActor in
             self.isConnected = true
+            self.isConnecting = false
             self.statusText = "Connected"
+            self.startPingWatchdog()
             self.receiveMessage()
         }
     }
@@ -1003,11 +1702,22 @@ extension VoiceChatViewModel: AVAudioPlayerDelegate {
     ) {
         Task { @MainActor in
             let sid = self.playingSessionId ?? ""
+
+            // Check for more buffered audio to play
+            if !sid.isEmpty, let idx = self.sessionIndex(sid),
+                !self.sessions[idx].audioBuffer.isEmpty
+            {
+                self.playBufferedAudio(sid)
+                return
+            }
+
+            self.stopPlaybackVAD()
             self.isPlaying = false
             self.playingSessionId = nil
             if !sid.isEmpty {
                 self.sendJSON(["session_id": sid, "type": "playback_done"])
             }
+            self.updateLiveActivity()
         }
     }
 

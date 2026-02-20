@@ -10,6 +10,9 @@ targets:
     platform: iOS
     sources:
       - VoiceChat
+      - VoiceChatShared
+    dependencies:
+      - target: VoiceChatWidgetExtension
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.zeul.voicechat
@@ -17,8 +20,19 @@ targets:
         DEVELOPMENT_TEAM: 25QMAKVCBN
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "6.0"
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Voice Chat needs microphone access for voice conversations"
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
-        INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking: YES
+        INFOPLIST_FILE: VoiceChat/Info.plist
+
+  VoiceChatWidgetExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - VoiceChatWidget
+      - VoiceChatShared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.zeul.voicechat.widget
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 25QMAKVCBN
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "6.0"
+        INFOPLIST_FILE: VoiceChatWidget/Info.plist

@@ -1,142 +1,159 @@
 import SwiftUI
 
+// MARK: - Adaptive Theme Colors
+
+private enum Theme {
+    // Backgrounds
+    static let bg = Color(.systemBackground)
+    static let bgSecondary = Color(.secondarySystemBackground)
+    static let bgTertiary = Color(.tertiarySystemBackground)
+    static let bgGrouped = Color(.systemGroupedBackground)
+
+    // Card
+    static let card = Color(.secondarySystemGroupedBackground)
+    static let cardBorder = Color(.separator)
+
+    // Text
+    static let textPrimary = Color(.label)
+    static let textSecondary = Color(.secondaryLabel)
+    static let textTertiary = Color(.tertiaryLabel)
+
+    // Accents (Apple HIG system colors - work in both modes)
+    static let blue = Color(.systemBlue)
+    static let green = Color(.systemGreen)
+    static let red = Color(.systemRed)
+    static let orange = Color(.systemOrange)
+    static let yellow = Color(.systemYellow)
+    static let gray = Color(.systemGray)
+    static let gray3 = Color(.systemGray3)
+    static let gray5 = Color(.systemGray5)
+}
+
 struct ContentView: View {
     @StateObject private var vm = VoiceChatViewModel()
     @State private var isPulsing = false
+    @State private var resetVoiceId: String?
+    @State private var showResetConfirm = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            headerBar
-            sessionTabBar
+        ZStack {
+            Theme.bg.ignoresSafeArea()
+
             if vm.showDebug {
-                DebugView(vm: vm)
+                VStack(spacing: 0) {
+                    headerBar
+                    DebugView(vm: vm)
+                }
+                .transition(.opacity)
             } else if vm.activeSessionId != nil {
-                chatArea
-                controlsBar
+                sessionView
+                    .transition(.asymmetric(
+                        insertion: .push(from: .trailing),
+                        removal: .push(from: .trailing)
+                    ))
             } else {
-                voiceGrid
+                VStack(spacing: 0) {
+                    headerBar
+                    voiceGrid
+                }
+                .transition(.asymmetric(
+                    insertion: .push(from: .leading),
+                    removal: .push(from: .leading)
+                ))
             }
         }
-        .background(Color(hex: 0x1A1A2E))
-        .preferredColorScheme(.dark)
+        .animation(.spring(response: 0.35, dampingFraction: 0.92), value: vm.activeSessionId)
+        .animation(.spring(response: 0.3, dampingFraction: 0.9), value: vm.showDebug)
         .sheet(isPresented: $vm.showSettings) {
             SettingsView(vm: vm)
+        }
+        .alert("Error", isPresented: Binding(
+            get: { vm.errorMessage != nil },
+            set: { if !$0 { vm.errorMessage = nil } }
+        )) {
+            Button("OK") { vm.errorMessage = nil }
+        } message: {
+            Text(vm.errorMessage ?? "")
+        }
+        .alert("Reset History", isPresented: $showResetConfirm) {
+            Button("Reset", role: .destructive) {
+                if let vid = resetVoiceId {
+                    vm.resetHistory(voiceId: vid)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            let name = ALL_VOICES.first { $0.id == resetVoiceId }?.name ?? "this voice"
+            Text("Clear all history for \(name)? This also ends the active session.")
         }
     }
 
     // MARK: - Header
 
     private var headerBar: some View {
-        HStack(spacing: 8) {
-            Text("Voice Hub")
-                .font(.headline)
-                .onTapGesture {
-                    vm.showDebug = false
-                    vm.activeSessionId = nil
+        HStack(spacing: 12) {
+            if vm.activeSession != nil {
+                Button { vm.goHome() } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Theme.textSecondary)
+                        .frame(width: 36, height: 36)
+                        .background(.ultraThinMaterial, in: Circle())
                 }
-            Spacer()
-            Circle()
-                .fill(vm.isConnected ? Color(hex: 0x2ECC71) : Color(hex: 0xE63946))
-                .frame(width: 10, height: 10)
-            Text(vm.isConnected ? "Connected" : "Disconnected")
-                .font(.caption2)
-                .foregroundStyle(Color(hex: 0x888888))
-            Button { vm.showSettings = true } label: {
-                Image(systemName: "gear")
-                    .font(.callout)
-                    .foregroundStyle(Color(hex: 0x888888))
             }
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 10)
-        .background(Color(hex: 0x16162A))
-    }
 
-    // MARK: - Session Tabs
+            Text(vm.activeSession?.label ?? "Voice Hub")
+                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .foregroundStyle(Theme.textPrimary)
 
-    private var sessionTabBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 0) {
-                ForEach(vm.sessions) { session in
-                    sessionTab(session)
-                }
-                Button("+ New") { vm.spawnSession() }
-                    .font(.caption)
-                    .foregroundStyle(Color(hex: 0x3A86FF))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+            Spacer()
 
-                Spacer()
+            // Connection indicator
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(connectionDotColor)
+                    .frame(width: 7, height: 7)
+                    .opacity(vm.isConnecting ? 0.6 : 1.0)
+                    .animation(
+                        vm.isConnecting
+                            ? .easeInOut(duration: 0.8).repeatForever(autoreverses: true) : .default,
+                        value: vm.isConnecting
+                    )
+                Text(connectionLabel)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Theme.textTertiary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(.ultraThinMaterial, in: Capsule())
 
-                // Debug tab
-                Button("Debug") {
+            Button {
+                if vm.showDebug {
+                    vm.stopDebugRefresh()
+                    vm.goHome()
+                } else {
+                    vm.goHome()
                     vm.showDebug = true
-                    vm.activeSessionId = nil
-                    vm.stopThinkingSound()
                     vm.startDebugRefresh()
                 }
-                .font(.system(size: 11))
-                .foregroundStyle(vm.showDebug ? Color(hex: 0xE0E0E0) : Color(hex: 0x666666))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .overlay(alignment: .bottom) {
-                    if vm.showDebug {
-                        Rectangle()
-                            .fill(Color(hex: 0x3A86FF))
-                            .frame(height: 2)
-                    }
-                }
-            }
-        }
-        .background(Color(hex: 0x12122A))
-        .overlay(alignment: .bottom) {
-            Divider().background(Color(hex: 0x2A2A4A))
-        }
-    }
-
-    private func sessionTab(_ session: VoiceSession) -> some View {
-        HStack(spacing: 4) {
-            Circle()
-                .fill(tabDotColor(session.status))
-                .frame(width: 6, height: 6)
-            Text(session.label)
-                .font(.caption)
-                .lineLimit(1)
-            Button {
-                vm.terminateSession(session.id)
             } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(Color(hex: 0x666666))
+                Image(systemName: "ant")
+                    .font(.system(size: 14))
+                    .foregroundStyle(vm.showDebug ? Theme.blue : Theme.textTertiary)
+                    .frame(width: 32, height: 32)
+                    .background(.ultraThinMaterial, in: Circle())
             }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .foregroundStyle(
-            session.id == vm.activeSessionId
-                ? Color(hex: 0xE0E0E0) : Color(hex: 0x888888)
-        )
-        .background(
-            session.id == vm.activeSessionId
-                ? Color(hex: 0x1A1A2E) : Color.clear
-        )
-        .overlay(alignment: .bottom) {
-            if session.id == vm.activeSessionId {
-                Rectangle()
-                    .fill(Color(hex: 0x3A86FF))
-                    .frame(height: 2)
-            }
-        }
-        .onTapGesture { vm.switchToSession(session.id) }
-    }
 
-    private func tabDotColor(_ status: String) -> Color {
-        switch status {
-        case "ready": Color(hex: 0x2ECC71)
-        case "starting": Color(hex: 0xF1C40F)
-        case "active": Color(hex: 0x3A86FF)
-        default: Color(hex: 0x888888)
+            Button { vm.showSettings = true } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Theme.textTertiary)
+                    .frame(width: 32, height: 32)
+                    .background(.ultraThinMaterial, in: Circle())
+            }
         }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
     }
 
     // MARK: - Voice Grid (Landing)
@@ -145,72 +162,295 @@ struct ContentView: View {
         ScrollView {
             LazyVGrid(
                 columns: [
-                    GridItem(.adaptive(minimum: 100), spacing: 12)
-                ], spacing: 12
+                    GridItem(.flexible(), spacing: 14),
+                    GridItem(.flexible(), spacing: 14),
+                ], spacing: 14
             ) {
                 ForEach(ALL_VOICES) { voice in
                     voiceCard(voice)
                 }
             }
-            .padding()
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 20)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func voiceCard(_ voice: VoiceInfo) -> some View {
         let activeForVoice = vm.sessions.first { $0.voice == voice.id }
-        let isSpawning = vm.spawningVoiceId == voice.id
+        let isSpawning = vm.spawningVoiceIds.contains(voice.id)
+        let color = voiceColor(voice.id)
+        let isActive = activeForVoice != nil
+        let statusLabel = voiceCardLabel(active: activeForVoice, spawning: isSpawning)
+        let hasBadge =
+            activeForVoice.map { !$0.audioBuffer.isEmpty || $0.pendingListen } ?? false
 
-        return VStack(spacing: 8) {
+        return VStack(spacing: 10) {
+            ZStack(alignment: .topTrailing) {
+                ZStack {
+                    Circle()
+                        .fill(color.opacity(isActive ? 0.2 : 0.1))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: voiceIconName(voice.id))
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(color)
+                }
+                if hasBadge {
+                    Circle()
+                        .fill(Theme.red)
+                        .frame(width: 10, height: 10)
+                        .overlay(Circle().strokeBorder(Theme.card, lineWidth: 1.5))
+                        .offset(x: 2, y: -2)
+                }
+            }
+
             Text(voice.name)
-                .font(.system(size: 16, weight: .semibold))
-            HStack(spacing: 4) {
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(Theme.textPrimary)
+
+            HStack(spacing: 5) {
                 Circle()
                     .fill(voiceCardDotColor(active: activeForVoice, spawning: isSpawning))
-                    .frame(width: 7, height: 7)
-                Text(voiceCardLabel(active: activeForVoice, spawning: isSpawning))
-                    .font(.caption2)
-                    .foregroundStyle(Color(hex: 0x888888))
+                    .frame(width: 6, height: 6)
+                Text(statusLabel)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Theme.textSecondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 3)
+            .background(
+                isActive || isSpawning
+                    ? voiceCardDotColor(active: activeForVoice, spawning: isSpawning).opacity(0.1)
+                    : Color.clear
+            )
+            .clipShape(Capsule())
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
+        .background {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Theme.card)
+                .shadow(color: Color(.label).opacity(0.06), radius: 8, y: 2)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .strokeBorder(
+                            isActive || isSpawning
+                                ? voiceCardDotColor(active: activeForVoice, spawning: isSpawning)
+                                    .opacity(0.5)
+                                : Theme.cardBorder,
+                            lineWidth: 1
+                        )
+                }
+        }
+        .opacity(isSpawning ? 0.7 : 1.0)
+        .scaleEffect(isSpawning ? 0.97 : 1.0)
+        .animation(.spring(response: 0.3), value: isSpawning)
+        .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .onTapGesture {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.92)) {
+                if let s = activeForVoice {
+                    vm.switchToSession(s.id)
+                } else if !isSpawning {
+                    vm.spawnSession(voiceId: voice.id)
+                }
             }
         }
-        .frame(width: 110, height: 80)
-        .background(Color(hex: 0x2A2A4A))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(voiceCardBorderColor(active: activeForVoice, spawning: isSpawning),
-                    lineWidth: 2)
-        )
-        .opacity(isSpawning ? 0.7 : 1.0)
-        .onTapGesture {
+        .contextMenu {
             if let s = activeForVoice {
-                vm.switchToSession(s.id)
-            } else if !isSpawning {
-                vm.spawnSession(voiceId: voice.id)
+                Button(role: .destructive) {
+                    vm.terminateSession(s.id)
+                } label: {
+                    Label("End Session", systemImage: "xmark.circle")
+                }
             }
+            Button(role: .destructive) {
+                resetVoiceId = voice.id
+                showResetConfirm = true
+            } label: {
+                Label("Reset History", systemImage: "trash")
+            }
+        }
+    }
+
+    private func voiceIconName(_ voiceId: String) -> String {
+        switch voiceId {
+        case "af_sky": return "cloud.fill"
+        case "af_alloy": return "diamond.fill"
+        case "af_sarah": return "heart.fill"
+        case "am_adam": return "leaf.fill"
+        case "am_echo": return "waveform"
+        case "am_onyx": return "shield.fill"
+        case "bm_fable": return "book.fill"
+        default: return "person.fill"
         }
     }
 
     private func voiceCardDotColor(active: VoiceSession?, spawning: Bool) -> Color {
-        if spawning { return Color(hex: 0xF1C40F) }
-        if let s = active {
-            return s.status == "starting" ? Color(hex: 0xF1C40F) : Color(hex: 0x2ECC71)
+        if spawning { return Theme.yellow }
+        guard let s = active else { return Theme.gray3 }
+        if s.status == "starting" { return Theme.yellow }
+        if s.isThinking { return Theme.orange }
+        let st = s.statusText
+        if st == "Speaking..." || st == "Playing..." { return Theme.blue }
+        if st == "Recording..." || st == "Tap Record" || s.pendingListen {
+            return Theme.red
         }
-        return Color(hex: 0x555555)
+        return Theme.green
     }
 
     private func voiceCardLabel(active: VoiceSession?, spawning: Bool) -> String {
         if spawning { return "Starting..." }
-        if let s = active {
-            return s.status == "starting" ? "Starting..." : "Connected"
-        }
-        return "Available"
+        guard let s = active else { return "Available" }
+        if s.status == "starting" { return "Starting..." }
+        if s.isThinking { return "Thinking..." }
+        let st = s.statusText
+        if st == "Speaking..." || st == "Playing..." { return "Speaking..." }
+        if st == "Recording..." || st == "Tap Record" { return "Listening..." }
+        if s.pendingListen { return "Waiting..." }
+        return "Ready"
     }
 
-    private func voiceCardBorderColor(active: VoiceSession?, spawning: Bool) -> Color {
-        if spawning { return Color(hex: 0xF1C40F) }
-        if active != nil { return Color(hex: 0x2ECC71) }
-        return Color.clear
+    // MARK: - Session View
+
+    private var sessionView: some View {
+        ZStack(alignment: .bottom) {
+            VStack(spacing: 0) {
+                sessionHeader
+                chatArea
+            }
+            controlsOverlay
+        }
+    }
+
+    private var sessionHeader: some View {
+        let color = vm.activeSession.flatMap { voiceColor($0.voice) } ?? Theme.textPrimary
+
+        return HStack(spacing: 12) {
+            Button { vm.goHome() } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Theme.textSecondary)
+                    .frame(width: 36, height: 36)
+                    .background(.ultraThinMaterial, in: Circle())
+            }
+
+            Circle()
+                .fill(color)
+                .frame(width: 10, height: 10)
+
+            Text(vm.activeSession?.label ?? "Session")
+                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .foregroundStyle(Theme.textPrimary)
+
+            Spacer()
+
+            if !vm.statusText.isEmpty {
+                Text(vm.statusText)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(statusColor)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(statusColor.opacity(0.12), in: Capsule())
+            }
+
+            Menu {
+                Menu("Voice: \(vm.activeSession?.label ?? "")") {
+                    ForEach(ALL_VOICES) { v in
+                        Button {
+                            vm.activeVoice = v.id
+                        } label: {
+                            if v.id == vm.activeVoice {
+                                Label(v.name, systemImage: "checkmark")
+                            } else {
+                                Text(v.name)
+                            }
+                        }
+                    }
+                }
+                Menu(
+                    "Speed: \(SPEED_OPTIONS.first { $0.value == vm.activeSpeed }?.label ?? "1x")"
+                ) {
+                    ForEach(SPEED_OPTIONS, id: \.value) { opt in
+                        Button {
+                            vm.activeSpeed = opt.value
+                        } label: {
+                            if opt.value == vm.activeSpeed {
+                                Label(opt.label, systemImage: "checkmark")
+                            } else {
+                                Text(opt.label)
+                            }
+                        }
+                    }
+                }
+                Divider()
+                Button {
+                    vm.autoRecord.toggle()
+                } label: {
+                    if vm.autoRecord {
+                        Label("Auto Record", systemImage: "checkmark")
+                    } else {
+                        Text("Auto Record")
+                    }
+                }
+                Button {
+                    vm.vadEnabled.toggle()
+                } label: {
+                    if vm.vadEnabled {
+                        Label("Voice Detection", systemImage: "checkmark")
+                    } else {
+                        Text("Voice Detection")
+                    }
+                }
+                Button {
+                    vm.autoInterrupt.toggle()
+                } label: {
+                    if vm.autoInterrupt {
+                        Label("Auto Interrupt", systemImage: "checkmark")
+                    } else {
+                        Text("Auto Interrupt")
+                    }
+                }
+                Divider()
+                Button {
+                    vm.micMuted.toggle()
+                } label: {
+                    if vm.micMuted {
+                        Label("Mic Muted", systemImage: "checkmark")
+                    } else {
+                        Text("Mic Muted")
+                    }
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Theme.textSecondary)
+                    .frame(width: 36, height: 36)
+                    .background(.ultraThinMaterial, in: Circle())
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
+    private var statusColor: Color {
+        if vm.isRecording { return Theme.red }
+        if vm.isPlaying { return Theme.blue }
+        if vm.isProcessing { return Theme.orange }
+        if vm.activeSession?.isThinking == true { return Theme.orange }
+        return Theme.green
+    }
+
+    private var connectionDotColor: Color {
+        if vm.isConnected { return Theme.green }
+        if vm.isConnecting { return Theme.yellow }
+        return Theme.red
+    }
+
+    private var connectionLabel: String {
+        if vm.isConnected { return "Live" }
+        if vm.isConnecting { return "Connecting..." }
+        return "Offline"
     }
 
     // MARK: - Chat Area
@@ -218,192 +458,208 @@ struct ContentView: View {
     private var chatArea: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 8) {
+                LazyVStack(spacing: 10) {
                     ForEach(vm.activeMessages) { msg in
                         chatBubble(msg)
                             .id(msg.id)
                     }
                     if vm.activeSession?.isThinking == true {
                         thinkingIndicator
+                            .id("thinking")
                     }
+                    Color.clear.frame(height: vm.isRecording ? 180 : 120)
+                        .id("bottom")
                 }
-                .padding()
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+            }
+            .onAppear {
+                scrollToBottom(proxy)
             }
             .onChange(of: vm.activeMessages.count) { _, _ in
-                if let last = vm.activeMessages.last {
-                    withAnimation {
-                        proxy.scrollTo(last.id, anchor: .bottom)
-                    }
+                scrollToBottom(proxy)
+            }
+            .onChange(of: vm.activeSession?.isThinking) { _, _ in
+                scrollToBottom(proxy)
+            }
+            .onChange(of: vm.activeSessionId) { _, _ in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    scrollToBottom(proxy)
                 }
             }
+        }
+    }
+
+    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+        withAnimation(.easeOut(duration: 0.2)) {
+            proxy.scrollTo("bottom", anchor: .bottom)
         }
     }
 
     private func chatBubble(_ msg: ChatMessage) -> some View {
         HStack {
-            if msg.role == "user" { Spacer(minLength: 40) }
+            if msg.role == "user" { Spacer(minLength: 50) }
             if msg.role == "system" { Spacer() }
 
             Text(msg.text)
-                .font(msg.role == "system" ? .caption : .callout)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(bubbleBackground(msg.role))
+                .font(msg.role == "system" ? .caption : .subheadline)
+                .lineSpacing(2)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
                 .foregroundStyle(bubbleForeground(msg.role))
-                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .background(bubbleBackground(msg.role), in: bubbleShape)
 
-            if msg.role == "assistant" { Spacer(minLength: 40) }
+            if msg.role == "assistant" { Spacer(minLength: 50) }
             if msg.role == "system" { Spacer() }
         }
     }
 
-    private func bubbleBackground(_ role: String) -> Color {
+    private var bubbleShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+    }
+
+    private func bubbleBackground(_ role: String) -> some ShapeStyle {
         switch role {
-        case "user": Color(hex: 0x3A86FF)
-        case "assistant": Color(hex: 0x2A2A4A)
-        default: Color.clear
+        case "user":
+            return AnyShapeStyle(Theme.blue)
+        case "assistant":
+            if let voice = vm.activeSession?.voice {
+                return AnyShapeStyle(voiceColor(voice).opacity(0.12))
+            }
+            return AnyShapeStyle(Theme.bgSecondary)
+        default:
+            return AnyShapeStyle(Color.clear)
         }
     }
 
     private func bubbleForeground(_ role: String) -> Color {
         switch role {
         case "user": .white
-        case "system": Color(hex: 0x666666)
-        default: Color(hex: 0xE0E0E0)
+        case "system": Theme.textTertiary
+        default: Theme.textPrimary
         }
     }
 
     private var thinkingIndicator: some View {
         HStack {
-            HStack(spacing: 4) {
+            HStack(spacing: 5) {
                 ForEach(0..<3, id: \.self) { i in
                     Circle()
-                        .fill(Color(hex: 0x999999))
-                        .frame(width: 10, height: 10)
+                        .fill(Theme.textTertiary)
+                        .frame(width: 8, height: 8)
                         .opacity(isPulsing ? 1 : 0.2)
-                        .scaleEffect(isPulsing ? 1.1 : 0.7)
+                        .scaleEffect(isPulsing ? 1.15 : 0.7)
                         .animation(
-                            .easeInOut(duration: 0.7)
+                            .easeInOut(duration: 0.6)
                                 .repeatForever()
-                                .delay(Double(i) * 0.2),
+                                .delay(Double(i) * 0.15),
                             value: isPulsing
                         )
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(Color(hex: 0x2A2A4A))
-            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Theme.bgSecondary, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .onAppear { isPulsing = true }
             .onDisappear { isPulsing = false }
-            Spacer(minLength: 40)
+            Spacer(minLength: 50)
         }
     }
 
-    // MARK: - Controls Bar
+    // MARK: - Floating Controls
 
-    private var controlsBar: some View {
-        VStack(spacing: 8) {
-            // Session info
-            if let tmux = vm.activeSession?.tmuxSession, !tmux.isEmpty {
-                Text(tmux)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(Color(hex: 0x555555))
+    private var controlsOverlay: some View {
+        VStack(spacing: 0) {
+            if vm.isRecording {
+                waveformView
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
 
-            // Status
-            Text(vm.statusText)
-                .font(.caption)
-                .foregroundStyle(Color(hex: 0x888888))
-                .lineLimit(1)
-
-            // Mic row
-            HStack(spacing: 12) {
+            HStack(alignment: .center, spacing: 20) {
                 if vm.isRecording {
                     Button { vm.cancelRecording() } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(Theme.red)
                             .frame(width: 40, height: 40)
-                            .overlay(
-                                Circle().stroke(Color(hex: 0xE63946), lineWidth: 2)
-                            )
-                            .foregroundStyle(Color(hex: 0xE63946))
+                            .background(Theme.red.opacity(0.12), in: Circle())
                     }
+                    .transition(.scale.combined(with: .opacity))
                 }
+
+                Spacer()
 
                 Button(action: vm.micAction) {
-                    HStack(spacing: 6) {
+                    ZStack {
+                        if vm.isRecording {
+                            Circle()
+                                .fill(Theme.green.opacity(0.15))
+                                .frame(width: 80, height: 80)
+                                .scaleEffect(isPulsing ? 1.15 : 1.0)
+                                .animation(
+                                    .easeInOut(duration: 1.0).repeatForever(),
+                                    value: isPulsing
+                                )
+                        }
+
+                        Circle()
+                            .fill(micColor)
+                            .frame(width: 64, height: 64)
+                            .shadow(color: micColor.opacity(0.3), radius: 16, y: 4)
+
                         Image(systemName: micIcon)
-                            .font(.system(size: 14, weight: .semibold))
-                        Text(micLabel)
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundStyle(.white)
                     }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 20)
-                    .frame(height: 48)
-                    .background(micColor)
-                    .clipShape(Capsule())
-                    .opacity(vm.isProcessing ? 0.5 : 1.0)
                 }
-                .disabled(vm.isProcessing)
-            }
+                .disabled(vm.isProcessing || (vm.micMuted && !vm.isPlaying && !vm.isRecording))
+                .opacity(vm.isProcessing || (vm.micMuted && !vm.isPlaying) ? 0.5 : 1.0)
+                .animation(.spring(response: 0.3), value: vm.isRecording)
 
-            // Options: two rows for compact layout
-            VStack(spacing: 6) {
-                HStack(spacing: 16) {
-                    Toggle("Auto", isOn: $vm.autoRecord)
-                        .font(.caption2)
-                        .foregroundStyle(Color(hex: 0x888888))
-                        .toggleStyle(.switch)
-                        .controlSize(.mini)
-                        .fixedSize()
+                Spacer()
 
-                    Toggle("VAD", isOn: $vm.vadEnabled)
-                        .font(.caption2)
-                        .foregroundStyle(Color(hex: 0x888888))
-                        .toggleStyle(.switch)
-                        .controlSize(.mini)
-                        .fixedSize()
-
-                    Spacer()
-
-                    Picker("Voice", selection: Binding(
-                        get: { vm.activeVoice },
-                        set: { vm.activeVoice = $0 }
-                    )) {
-                        ForEach(ALL_VOICES) { v in
-                            Text(v.name).tag(v.id)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .font(.caption2)
-                    .tint(Color(hex: 0xE0E0E0))
-                    .fixedSize()
-
-                    Picker("Speed", selection: Binding(
-                        get: { vm.activeSpeed },
-                        set: { vm.activeSpeed = $0 }
-                    )) {
-                        ForEach(SPEED_OPTIONS, id: \.value) { opt in
-                            Text(opt.label).tag(opt.value)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .font(.caption2)
-                    .tint(Color(hex: 0xE0E0E0))
-                    .fixedSize()
+                if vm.isRecording {
+                    Color.clear.frame(width: 40, height: 40)
                 }
             }
-            .padding(.horizontal, 4)
+            .padding(.horizontal, 24)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
+            Text(micLabel)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(micColor.opacity(0.8))
+                .padding(.bottom, 12)
         }
-        .padding(.vertical, 10)
-        .padding(.horizontal)
-        .background(Color(hex: 0x16162A))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: vm.isRecording)
     }
+
+    // MARK: - Waveform
+
+    private var waveformView: some View {
+        let color = vm.activeSession.flatMap { voiceColor($0.voice) } ?? Theme.green
+        return HStack(alignment: .center, spacing: 2.5) {
+            ForEach(Array(vm.audioLevels.enumerated()), id: \.offset) { _, level in
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(color.opacity(0.5 + Double(level) * 0.5))
+                    .frame(width: 3, height: max(3, level * 28))
+            }
+        }
+        .frame(height: 32)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+    }
+
+    // MARK: - Mic Helpers
 
     private var micIcon: String {
         if vm.isPlaying { return "hand.raised.fill" }
         if vm.isRecording { return "arrow.up.circle.fill" }
+        if vm.micMuted { return "mic.slash.fill" }
         return "mic.fill"
     }
 
@@ -411,14 +667,31 @@ struct ContentView: View {
         if vm.isPlaying { return "Interrupt" }
         if vm.isRecording { return "Send" }
         if vm.isProcessing { return "Processing..." }
+        if vm.micMuted { return "Muted" }
         return "Record"
     }
 
     private var micColor: Color {
-        if vm.isPlaying { return Color(hex: 0xE67E22) }
-        if vm.isRecording { return Color(hex: 0x2ECC71) }
-        if vm.isProcessing { return Color(hex: 0x555555) }
-        return Color(hex: 0x3A86FF)
+        if vm.isPlaying { return Theme.orange }
+        if vm.isRecording { return Theme.green }
+        if vm.isProcessing { return Theme.gray }
+        if vm.micMuted { return Theme.red }
+        return Theme.blue
+    }
+
+    // MARK: - Voice Colors
+
+    private func voiceColor(_ voiceId: String) -> Color {
+        switch voiceId {
+        case "af_sky": return Color(.systemCyan)
+        case "af_alloy": return Color(.systemGray)
+        case "af_sarah": return Color(.systemPink)
+        case "am_adam": return Color(.systemGreen)
+        case "am_echo": return Color(.systemPurple)
+        case "am_onyx": return Color(.systemGray2)
+        case "bm_fable": return Color(.systemYellow)
+        default: return Color(.systemGray3)
+        }
     }
 }
 
@@ -436,24 +709,23 @@ struct DebugView: View {
                     Spacer()
                     Text(vm.debugLastUpdated)
                         .font(.system(size: 10))
-                        .foregroundStyle(Color(hex: 0x555555))
+                        .foregroundStyle(Theme.textTertiary)
                 }
 
-                // Hub
                 debugSection("Hub") {
                     debugKV("Port", "\(vm.debugHub.port)")
                     debugKV("Uptime", formatDuration(vm.debugHub.uptimeSeconds))
-                    debugKV("Browser", vm.debugHub.browserConnected ? "connected" : "disconnected",
+                    debugKV(
+                        "Browser", vm.debugHub.browserConnected ? "connected" : "disconnected",
                         badge: vm.debugHub.browserConnected ? .up : .down)
                     debugKV("Sessions", "\(vm.debugHub.sessionCount)")
                 }
 
-                // Services
                 debugSection("Services") {
                     if vm.debugServices.isEmpty {
                         Text("Loading...")
                             .font(.caption)
-                            .foregroundStyle(Color(hex: 0x555555))
+                            .foregroundStyle(Theme.textTertiary)
                     } else {
                         ForEach(vm.debugServices) { svc in
                             HStack(spacing: 8) {
@@ -463,7 +735,7 @@ struct DebugView: View {
                                 debugBadge(svc.status, style: svc.status == "up" ? .up : .down)
                                 Text(svc.detail)
                                     .font(.system(size: 10))
-                                    .foregroundStyle(Color(hex: 0x555555))
+                                    .foregroundStyle(Theme.textTertiary)
                                     .lineLimit(1)
                                 Spacer()
                             }
@@ -471,12 +743,11 @@ struct DebugView: View {
                     }
                 }
 
-                // Hub Sessions
                 debugSection("Hub Sessions") {
                     if vm.debugSessions.isEmpty {
                         Text("No active sessions")
                             .font(.caption)
-                            .foregroundStyle(Color(hex: 0x555555))
+                            .foregroundStyle(Theme.textTertiary)
                     } else {
                         ForEach(vm.debugSessions) { s in
                             VStack(alignment: .leading, spacing: 2) {
@@ -484,21 +755,23 @@ struct DebugView: View {
                                     Text(s.sessionId)
                                         .font(.system(size: 11, design: .monospaced))
                                         .lineLimit(1)
-                                    debugBadge(s.status,
+                                    debugBadge(
+                                        s.status,
                                         style: s.status == "ready" ? .up : .starting)
-                                    debugBadge(s.mcpConnected ? "mcp" : "no mcp",
+                                    debugBadge(
+                                        s.mcpConnected ? "mcp" : "no mcp",
                                         style: s.mcpConnected ? .up : .down)
                                 }
                                 HStack(spacing: 12) {
                                     Text(s.voice)
                                         .font(.system(size: 10))
-                                        .foregroundStyle(Color(hex: 0x888888))
+                                        .foregroundStyle(Theme.textSecondary)
                                     Text("idle \(formatDuration(s.idleSeconds))")
                                         .font(.system(size: 10))
-                                        .foregroundStyle(Color(hex: 0x666666))
+                                        .foregroundStyle(Theme.textTertiary)
                                     Text("age \(formatDuration(s.ageSeconds))")
                                         .font(.system(size: 10))
-                                        .foregroundStyle(Color(hex: 0x666666))
+                                        .foregroundStyle(Theme.textTertiary)
                                 }
                             }
                             .padding(.vertical, 2)
@@ -506,48 +779,42 @@ struct DebugView: View {
                     }
                 }
 
-                // tmux Sessions
                 debugSection("tmux Sessions") {
                     if vm.debugTmux.isEmpty {
                         Text("No tmux sessions")
                             .font(.caption)
-                            .foregroundStyle(Color(hex: 0x555555))
+                            .foregroundStyle(Theme.textTertiary)
                     } else {
                         ForEach(vm.debugTmux) { t in
                             HStack(spacing: 8) {
                                 Text(t.name)
                                     .font(.system(size: 11, design: .monospaced))
                                     .lineLimit(1)
-                                debugBadge(t.isVoice ? "voice" : "other",
+                                debugBadge(
+                                    t.isVoice ? "voice" : "other",
                                     style: t.isVoice ? .starting : .down)
                                 Text("\(t.windows)w")
                                     .font(.system(size: 10))
-                                    .foregroundStyle(Color(hex: 0x666666))
+                                    .foregroundStyle(Theme.textTertiary)
                                 Text(t.created)
                                     .font(.system(size: 10))
-                                    .foregroundStyle(Color(hex: 0x555555))
+                                    .foregroundStyle(Theme.textTertiary)
                                 Spacer()
                             }
                         }
                     }
                 }
 
-                // Hub Log
                 debugSection("Hub Log") {
                     ScrollView {
                         Text(vm.debugLog.joined(separator: "\n"))
                             .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(Color(hex: 0xAAAAAA))
+                            .foregroundStyle(Theme.textSecondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .frame(maxHeight: 300)
                     .padding(8)
-                    .background(Color(hex: 0x0D0D1A))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color(hex: 0x2A2A4A), lineWidth: 1)
-                    )
+                    .background(Theme.bg, in: RoundedRectangle(cornerRadius: 8))
                 }
             }
             .padding()
@@ -558,28 +825,21 @@ struct DebugView: View {
         }
     }
 
-    // MARK: - Debug Helpers
-
     enum BadgeStyle { case up, down, starting }
 
     @ViewBuilder
-    private func debugSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content)
-        -> some View
-    {
+    private func debugSection<Content: View>(
+        _ title: String, @ViewBuilder content: () -> Content
+    ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color(hex: 0x3A86FF))
+                .foregroundStyle(Theme.blue)
             content()
         }
-        .padding(10)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(hex: 0x16162A))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color(hex: 0x2A2A4A), lineWidth: 1)
-        )
+        .background(Theme.bgSecondary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     @ViewBuilder
@@ -587,14 +847,14 @@ struct DebugView: View {
         HStack(spacing: 8) {
             Text(key)
                 .font(.system(size: 11))
-                .foregroundStyle(Color(hex: 0x666666))
+                .foregroundStyle(Theme.textTertiary)
                 .frame(width: 80, alignment: .leading)
             if let badge {
                 debugBadge(value, style: badge)
             } else {
                 Text(value)
                     .font(.system(size: 12))
-                    .foregroundStyle(Color(hex: 0xE0E0E0))
+                    .foregroundStyle(Theme.textPrimary)
             }
             Spacer()
         }
@@ -605,25 +865,24 @@ struct DebugView: View {
         Text(text)
             .font(.system(size: 10, weight: .semibold))
             .padding(.horizontal, 6)
-            .padding(.vertical, 1)
-            .background(badgeBg(style))
+            .padding(.vertical, 2)
+            .background(badgeBg(style), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
             .foregroundStyle(badgeFg(style))
-            .clipShape(RoundedRectangle(cornerRadius: 3))
     }
 
     private func badgeBg(_ style: BadgeStyle) -> Color {
         switch style {
-        case .up: Color(hex: 0x2ECC71).opacity(0.2)
-        case .down: Color(hex: 0xE63946).opacity(0.2)
-        case .starting: Color(hex: 0xF1C40F).opacity(0.15)
+        case .up: Theme.green.opacity(0.15)
+        case .down: Theme.red.opacity(0.15)
+        case .starting: Theme.yellow.opacity(0.12)
         }
     }
 
     private func badgeFg(_ style: BadgeStyle) -> Color {
         switch style {
-        case .up: Color(hex: 0x2ECC71)
-        case .down: Color(hex: 0xE63946)
-        case .starting: Color(hex: 0xF1C40F)
+        case .up: Theme.green
+        case .down: Theme.red
+        case .starting: Theme.yellow
         }
     }
 }
@@ -647,6 +906,30 @@ struct SettingsView: View {
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                }
+
+                Section("Recording") {
+                    Toggle("Auto Record", isOn: $vm.autoRecord)
+                    Toggle("Voice Detection (VAD)", isOn: $vm.vadEnabled)
+                    Toggle("Auto Interrupt", isOn: $vm.autoInterrupt)
+                    Toggle("Mic Muted", isOn: $vm.micMuted)
+                }
+
+                Section {
+                    Toggle("Background Mode", isOn: $vm.backgroundMode)
+                    Text(
+                        "Keep voice conversations alive when the app is in the background. Uses a silent audio loop to prevent iOS from suspending the app."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                } header: {
+                    Text("Background")
+                } footer: {
+                    if !vm.backgroundMode {
+                        Text(
+                            "When off, the WebSocket connection may drop when backgrounded."
+                        )
+                    }
                 }
             }
             .navigationTitle("Settings")
