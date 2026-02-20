@@ -283,7 +283,7 @@ struct ContentView: View {
     private func voiceCardDotColor(active: VoiceSession?, spawning: Bool) -> Color {
         if spawning { return Theme.yellow }
         guard let s = active else { return Theme.gray3 }
-        if s.status == "starting" { return Theme.yellow }
+        if s.status == .starting { return Theme.yellow }
         if s.isThinking { return Theme.orange }
         let st = s.statusText
         if st == "Speaking..." || st == "Playing..." { return Theme.blue }
@@ -296,7 +296,7 @@ struct ContentView: View {
     private func voiceCardLabel(active: VoiceSession?, spawning: Bool) -> String {
         if spawning { return "Starting..." }
         guard let s = active else { return "Offline" }
-        if s.status == "starting" { return "Starting..." }
+        if s.status == .starting { return "Starting..." }
         if s.isThinking { return "Thinking..." }
         let st = s.statusText
         if st == "Speaking..." || st == "Playing..." { return "Speaking..." }
@@ -604,8 +604,7 @@ struct ContentView: View {
                                             if value.translation.width > 60
                                                 && abs(value.translation.height) < 40
                                             {
-                                                vm.showPTTTextField = true
-                                                if vm.isRecording { vm.stopRecording() }
+                                                vm.enterPTTTextMode()
                                                 return
                                             }
 
@@ -619,8 +618,8 @@ struct ContentView: View {
                                                 if pttDragOffset < -80 && vm.isRecording {
                                                     vm.cancelRecording()
                                                 }
-                                                vm.pttReleased()
                                             }
+                                            vm.pttReleased()
                                             pttDragOffset = 0
                                         }
                                 )
@@ -751,16 +750,24 @@ struct ContentView: View {
                         ProgressView()
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
-                        TextField("Edit message...", text: $vm.pttPreviewText, axis: .vertical)
-                            .textFieldStyle(.plain)
-                            .font(.subheadline)
-                            .lineLimit(1...5)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Theme.bgSecondary, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                            .focused($pttTextFieldFocused)
-                            .onSubmit { vm.sendPreviewText() }
-                            .submitLabel(.send)
+                        VStack(alignment: .leading, spacing: 4) {
+                            TextField("Edit message...", text: $vm.pttPreviewText, axis: .vertical)
+                                .textFieldStyle(.plain)
+                                .font(.subheadline)
+                                .lineLimit(1...5)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Theme.bgSecondary, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                                .focused($pttTextFieldFocused)
+                                .onSubmit { vm.sendPreviewText() }
+                                .submitLabel(.send)
+                            if let error = vm.pttTranscriptionError {
+                                Text(error)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(Theme.textTertiary)
+                                    .padding(.horizontal, 12)
+                            }
+                        }
                     }
 
                     // Send button

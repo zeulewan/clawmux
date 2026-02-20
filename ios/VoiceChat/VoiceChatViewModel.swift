@@ -12,12 +12,16 @@ struct ChatMessage: Identifiable, Equatable {
     let text: String
 }
 
+enum SessionStatus: String {
+    case starting, ready, active
+}
+
 struct VoiceSession: Identifiable {
     let id: String
     var label: String
     var voice: String
     var speed: Double
-    var status: String  // "starting", "ready", "active"
+    var status: SessionStatus = .starting
     var messages: [ChatMessage] = []
     var tmuxSession: String = ""
     var isThinking: Bool = false
@@ -292,18 +296,11 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             // Update status text for the new mode
             if let sid = activeSessionId, let idx = sessionIndex(sid) {
                 if sessions[idx].pendingListen {
-                    if inputMode == "typing" {
-                        sessions[idx].statusText = "Type a message"
-                        statusText = "Type a message"
-                    } else if inputMode == "ptt" {
-                        sessions[idx].statusText = "Hold to Talk"
-                        statusText = "Hold to Talk"
-                    } else {
-                        sessions[idx].statusText = "Tap Record"
-                        statusText = "Tap Record"
-                    }
+                    let text = inputMode == "typing" ? "Type a message"
+                        : inputMode == "ptt" ? "Hold to Talk" : "Tap Record"
+                    updateStatusText(text, for: sid)
                 } else if !sessions[idx].isThinking && !isRecording && !isPlaying && !isProcessing {
-                    statusText = "Ready"
+                    updateStatusText("Ready", for: sid)
                 }
             }
             // Manage live activity based on per-mode toggle
@@ -438,6 +435,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     @Published var showPTTTextField = false
     @Published var pttPreviewText = ""
     @Published var isTranscribing = false
+    @Published var pttTranscriptionError: String? = nil
 
     // Debug
     @Published var showDebug: Bool {
@@ -496,6 +494,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     private var lastPingTime: Date?
     private var lastMicActionTime: Date?
     private var pttInterrupted = false
+    private var recordingStartedAt: Date?
     private var pingWatchdogTimer: Timer?
 
     // MARK: - Init
@@ -756,6 +755,16 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         sessions.firstIndex { $0.id == id }
     }
 
+    /// Update status text for a session, and if it's the active session, also update the top-level statusText.
+    private func updateStatusText(_ text: String, for sessionId: String) {
+        if let idx = sessionIndex(sessionId) {
+            sessions[idx].statusText = text
+        }
+        if sessionId == activeSessionId {
+            statusText = text
+        }
+    }
+
     private func addMessage(_ sessionId: String, role: String, text: String) {
         guard let idx = sessionIndex(sessionId) else { return }
         sessions[idx].messages.append(ChatMessage(role: role, text: text))
@@ -978,6 +987,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             playingSessionId = nil
         }
         isProcessing = false
+        suppressNextAutoRecord = false
         stopPlaybackVAD()
         statusText = "Disconnected"
         pingWatchdogTimer?.invalidate()
@@ -1054,11 +1064,12 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             }
 
         case "session_status":
-            if let sid = sessionId, let status = json["status"] as? String,
+            if let sid = sessionId, let statusStr = json["status"] as? String,
+                let status = SessionStatus(rawValue: statusStr),
                 let idx = sessionIndex(sid)
             {
                 sessions[idx].status = status
-                if status == "ready" {
+                if status == .ready {
                     addMessage(sid, role: "system", text: "Claude connected.")
                     // Show thinking indicator while waiting for agent's first message
                     sessions[idx].isThinking = true
@@ -1082,9 +1093,8 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             // Hub is about to speak - show thinking indicator
             if let sid = sessionId, let idx = sessionIndex(sid) {
                 sessions[idx].isThinking = true
-                sessions[idx].statusText = "Thinking..."
+                updateStatusText("Thinking...", for: sid)
                 if sid == activeSessionId {
-                    statusText = "Thinking..."
                     if !typingMode { startThinkingSound() }
                     updateLiveActivity()
                 }
@@ -1098,14 +1108,13 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                     // In voice modes, audio will follow and set "Speaking..."
                     // In typing mode, go straight to ready-ish state
                     if typingMode {
-                        sessions[idx].statusText = "Ready"
+                        updateStatusText("Ready", for: sid)
                     }
                 }
                 stopThinkingSound()
                 addMessage(sid, role: "assistant", text: t)
                 if sid == activeSessionId {
                     isProcessing = false
-                    if typingMode { statusText = "Ready" }
                     updateLiveActivity()
                 }
                 // Notify in background, gated by per-mode toggle
@@ -1140,9 +1149,9 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                 let audioData = Data(base64Encoded: b64)
             {
                 if let idx = sessionIndex(sid) {
-                    sessions[idx].status = "active"
-                    sessions[idx].statusText = "Speaking..."
+                    sessions[idx].status = .active
                 }
+                updateStatusText("Speaking...", for: sid)
                 if sid == activeSessionId {
                     // Play audio for active session (works in foreground and background)
                     playAudio(sid, data: audioData)
@@ -1173,9 +1182,8 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                     sendJSON(["session_id": sid, "type": "audio", "data": ""])
                     if let idx = sessionIndex(sid) {
                         sessions[idx].pendingListen = false
-                        sessions[idx].statusText = "Muted"
                     }
-                    if sid == activeSessionId { statusText = "Muted" }
+                    updateStatusText("Muted", for: sid)
                     break
                 }
 
@@ -1192,9 +1200,8 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                     } else if typingMode {
                         if let idx = sessionIndex(sid) {
                             sessions[idx].pendingListen = true
-                            sessions[idx].statusText = "Type a message"
                         }
-                        statusText = "Type a message"
+                        updateStatusText("Type a message", for: sid)
                     } else if effectiveAutoRecord || bgAutoRecord {
                         if isPlaying {
                             // Still playing audio - defer until playback finishes
@@ -1208,43 +1215,34 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                     } else {
                         if let idx = sessionIndex(sid) {
                             sessions[idx].pendingListen = true
-                            sessions[idx].statusText = pushToTalk ? "Hold to Talk" : "Tap Record"
                         }
-                        statusText = pushToTalk ? "Hold to Talk" : "Tap Record"
+                        updateStatusText(pushToTalk ? "Hold to Talk" : "Tap Record", for: sid)
                     }
                     updateLiveActivity()
                 } else {
                     if let idx = sessionIndex(sid) {
                         sessions[idx].pendingListen = true
-                        sessions[idx].statusText = "Waiting..."
                     }
+                    updateStatusText("Waiting...", for: sid)
                 }
             }
 
         case "status":
             if let sid = sessionId, let t = json["text"] as? String {
-                if let idx = sessionIndex(sid) {
-                    sessions[idx].statusText = t
-                }
-                if sid == activeSessionId {
-                    statusText = t
-                }
+                updateStatusText(t, for: sid)
             }
 
         case "done":
             if let sid = sessionId, let idx = sessionIndex(sid) {
-                sessions[idx].status = "ready"
+                sessions[idx].status = .ready
                 sessions[idx].isThinking = false
                 stopThinkingSound()
                 // Don't override status if user still needs to respond
                 if !sessions[idx].pendingListen {
-                    sessions[idx].statusText = "Ready"
+                    updateStatusText("Ready", for: sid)
                 }
                 if sid == activeSessionId {
                     isProcessing = false
-                    if !sessions[idx].pendingListen {
-                        statusText = "Ready"
-                    }
                     updateLiveActivity()
                 }
             }
@@ -1255,7 +1253,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             // Just reset processing state so the UI isn't stuck.
             if let sid = sessionId, let idx = sessionIndex(sid) {
                 sessions[idx].isThinking = false
-                sessions[idx].statusText = "Ready"
+                updateStatusText("Ready", for: sid)
                 if sid == activeSessionId {
                     isProcessing = false
                     stopThinkingSound()
@@ -1276,9 +1274,10 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         let voice = dict["voice"] as? String ?? "af_sky"
         let label =
             ALL_VOICES.first { $0.id == voice }?.name ?? dict["label"] as? String ?? "Session"
-        let status = dict["status"] as? String ?? "starting"
+        let statusStr = dict["status"] as? String ?? "starting"
+        let status = SessionStatus(rawValue: statusStr) ?? .starting
         let tmux = dict["tmux_session"] as? String ?? sid
-        let isReady = status == "ready" || dict["mcp_connected"] as? Bool == true
+        let isReady = status == .ready || dict["mcp_connected"] as? Bool == true
 
         // Restore saved voice/speed preferences
         let savedPrefs = loadSessionPrefs(sid)
@@ -1288,7 +1287,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
 
         var session = VoiceSession(
             id: sid, label: sessionLabel, voice: sessionVoice, speed: sessionSpeed,
-            status: isReady ? "ready" : status, tmuxSession: tmux)
+            status: isReady ? .ready : status, tmuxSession: tmux)
 
         if isReady {
             session.messages.append(ChatMessage(role: "system", text: "Claude connected."))
@@ -1314,6 +1313,10 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             }
             if isRecording { stopRecording(discard: true) }
             stopThinkingSound()
+            suppressNextAutoRecord = false
+            showPTTTextField = false
+            pttPreviewText = ""
+            pttTranscriptionError = nil
         }
         activeSessionId = id
         showDebug = false
@@ -1325,7 +1328,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
 
         if let session = activeSession {
             statusText = session.statusText.isEmpty
-                ? (session.status == "ready" ? "Ready" : "Waiting for Claude...")
+                ? (session.status == .ready ? "Ready" : "Waiting for Claude...")
                 : session.statusText
 
             // Derive processing state from session (don't carry over from previous session)
@@ -1479,6 +1482,10 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         if isRecording { stopRecording(discard: true) }
         stopThinkingSound()
         stopPlaybackVAD()
+        suppressNextAutoRecord = false
+        showPTTTextField = false
+        pttPreviewText = ""
+        pttTranscriptionError = nil
         showDebug = false
         activeSessionId = nil
         endLiveActivity()
@@ -1716,10 +1723,12 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             audioRecorder?.isMeteringEnabled = true
             audioRecorder?.record()
             isRecording = true
+            recordingStartedAt = Date()
             audioLevels = []
-            statusText = "Recording..."
-            if let sid = recordingSessionId, let idx = sessionIndex(sid) {
-                sessions[idx].statusText = "Recording..."
+            if let sid = recordingSessionId {
+                updateStatusText("Recording...", for: sid)
+            } else {
+                statusText = "Recording..."
             }
             updateLiveActivity()
             startMetering()
@@ -1753,6 +1762,8 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         recorder.stop()
         audioRecorder = nil
         isRecording = false
+        let recordingDuration = recordingStartedAt.map { Date().timeIntervalSince($0) } ?? 0
+        recordingStartedAt = nil
         stopMetering()
         stopVAD()
         backgroundRecordingTimer?.invalidate()
@@ -1766,13 +1777,20 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         // PTT preview mode: transcribe locally instead of sending to hub
         if showPTTTextField {
             recordingSessionId = nil
-            if let audioData = try? Data(contentsOf: recordingURL) {
-                print("[ptt-preview] Recording stopped for preview, \(audioData.count) bytes")
+            if recordingDuration < 0.5 {
+                print("[ptt-preview] Recording too short (\(recordingDuration)s), skipping transcription")
+                pttTranscriptionError = "Recording too short. Hold the mic to record, then swipe right."
+                return
+            }
+            if let audioData = try? Data(contentsOf: recordingURL), audioData.count > 1000 {
+                print("[ptt-preview] Recording stopped for preview, \(audioData.count) bytes (\(recordingDuration)s)")
+                pttTranscriptionError = nil
                 isTranscribing = true
                 statusText = "Transcribing..."
                 transcribeAudio(audioData)
             } else {
                 print("[ptt-preview] No audio data at recording URL")
+                pttTranscriptionError = "No audio recorded. Hold the mic to record, then swipe right."
             }
             return
         }
@@ -1781,11 +1799,8 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             haptic(.light)
         }
         if soundProcessingAuto && isAutoMode { tonePlayer.cueProcessing() }
-        statusText = "Processing..."
         isProcessing = true
-        if let idx = sessionIndex(sid) {
-            sessions[idx].statusText = "Processing..."
-        }
+        updateStatusText("Processing...", for: sid)
         updateLiveActivity()
 
         if let audioData = try? Data(contentsOf: recordingURL) {
@@ -1829,6 +1844,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         guard let baseURL = httpBaseURL() else {
             print("[ptt-preview] No base URL, aborting transcription")
             isTranscribing = false
+            pttTranscriptionError = "Cannot connect to server"
             return
         }
 
@@ -1847,6 +1863,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                 self.statusText = ""
                 if let error {
                     print("[ptt-preview] Transcription error: \(error)")
+                    self.pttTranscriptionError = "Transcription failed. Type your message instead."
                     return
                 }
                 let httpCode = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -1856,9 +1873,11 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                 {
                     print("[ptt-preview] Got transcription (\(httpCode)): \(text)")
                     self.pttPreviewText = text
+                    self.pttTranscriptionError = nil
                 } else {
                     let body = data.flatMap { String(data: $0, encoding: .utf8) } ?? "nil"
                     print("[ptt-preview] Empty/failed response (\(httpCode)): \(body)")
+                    self.pttTranscriptionError = "No speech detected. Tap the mic to try again."
                 }
             }
         }.resume()
@@ -1874,12 +1893,14 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         if let idx = sessionIndex(sid) { sessions[idx].pendingListen = false }
         sendJSON(["session_id": sid, "type": "text", "text": text])
         pttPreviewText = ""
+        pttTranscriptionError = nil
         showPTTTextField = false
     }
 
     func dismissPTTTextField() {
         if isRecording { stopRecording(discard: true) }
         pttPreviewText = ""
+        pttTranscriptionError = nil
         isTranscribing = false
         showPTTTextField = false
     }
@@ -1932,6 +1953,17 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         pttInterrupted = false
         if isRecording {
             stopRecording()
+        }
+    }
+
+    /// Called when user swipes right on mic button in PTT mode.
+    /// If recording is active, stops and transcribes. Otherwise shows empty text field for typing.
+    func enterPTTTextMode() {
+        pttTranscriptionError = nil
+        pttInterrupted = false
+        showPTTTextField = true
+        if isRecording {
+            stopRecording()  // triggers transcription via showPTTTextField branch
         }
     }
 
@@ -2029,8 +2061,8 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         for i in sessions.indices where sessions[i].pendingListen {
             sendJSON(["session_id": sessions[i].id, "type": "audio", "data": ""])
             sessions[i].pendingListen = false
-            sessions[i].statusText = "Muted"
         }
+        updateStatusText("Muted", for: activeSessionId ?? "")
         stopPlaybackVAD()
     }
 
