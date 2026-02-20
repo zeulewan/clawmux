@@ -421,6 +421,17 @@ struct ContentView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
             }
+            .mask(
+                VStack(spacing: 0) {
+                    Color.black
+                    LinearGradient(
+                        colors: [.black, .clear],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 72)
+                }
+            )
             .onAppear {
                 scrollToBottom(proxy)
             }
