@@ -399,7 +399,7 @@ struct ContentView: View {
                         thinkingIndicator
                             .id("thinking")
                     }
-                    Color.clear.frame(height: vm.isRecording ? 180 : 120)
+                    Color.clear.frame(height: vm.isRecording ? 200 : 120)
                         .id("bottom")
                 }
                 .padding(.horizontal, 16)
@@ -502,25 +502,15 @@ struct ContentView: View {
 
     private var controlsOverlay: some View {
         VStack(spacing: 0) {
-            if vm.isRecording && !vm.pushToTalk {
+            if vm.isRecording {
                 waveformView
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
 
-            HStack(alignment: .center, spacing: 20) {
-                if vm.isRecording {
-                    if vm.pushToTalk {
-                        HStack(spacing: 4) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 11, weight: .bold))
-                            Text("Cancel")
-                                .font(.system(size: 12, weight: .semibold))
-                        }
-                        .foregroundStyle(pttDragOffset < -80 ? Theme.red : Theme.textTertiary)
-                        .opacity(pttDragOffset < -10 ? min(1.0, Double(-pttDragOffset - 10) / 60.0) : 0.3)
-                        .frame(width: 70)
-                        .transition(.scale.combined(with: .opacity))
-                    } else {
+            ZStack {
+                // Cancel button (auto mode) - left aligned
+                if vm.isRecording && !vm.pushToTalk {
+                    HStack {
                         Button { vm.cancelRecording() } label: {
                             Image(systemName: "xmark")
                                 .font(.system(size: 14, weight: .bold))
@@ -529,16 +519,33 @@ struct ContentView: View {
                                 .background(Theme.red.opacity(0.12), in: Circle())
                         }
                         .transition(.scale.combined(with: .opacity))
+                        Spacer()
                     }
+                    .padding(.horizontal, 24)
                 }
 
-                Spacer()
+                // Cancel label (PTT mode) - left aligned
+                if vm.isRecording && vm.pushToTalk {
+                    HStack {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 11, weight: .bold))
+                            Text("Cancel")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
+                        .foregroundStyle(pttDragOffset < -80 ? Theme.red : Theme.textTertiary)
+                        .opacity(pttDragOffset < -10 ? min(1.0, Double(-pttDragOffset - 10) / 60.0) : 0.3)
+                        .transition(.opacity)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 24)
+                }
 
+                // Mic button - always centered
                 Group {
-                    if vm.pushToTalk && !vm.isPlaying {
+                    if vm.pushToTalk {
                         micButtonVisual
                             .contentShape(Circle())
-                            .offset(x: vm.isRecording ? min(0, pttDragOffset * 0.3) : 0)
                             .gesture(
                                 DragGesture(minimumDistance: 0)
                                     .onChanged { value in
@@ -552,9 +559,7 @@ struct ContentView: View {
                                             vm.cancelRecording()
                                         }
                                         vm.pttReleased()
-                                        withAnimation(.spring(response: 0.25)) {
-                                            pttDragOffset = 0
-                                        }
+                                        pttDragOffset = 0
                                     }
                             )
                     } else {
@@ -565,15 +570,7 @@ struct ContentView: View {
                 }
                 .disabled(vm.isProcessing || (vm.micMuted && !vm.isPlaying && !vm.isRecording))
                 .opacity(vm.isProcessing || (vm.micMuted && !vm.isPlaying) ? 0.5 : 1.0)
-                .animation(.spring(response: 0.3), value: vm.isRecording)
-
-                Spacer()
-
-                if vm.isRecording {
-                    Color.clear.frame(width: 40, height: 40)
-                }
             }
-            .padding(.horizontal, 24)
             .padding(.top, 10)
             .padding(.bottom, 4)
 
@@ -582,10 +579,8 @@ struct ContentView: View {
                 .foregroundStyle(micColor.opacity(0.8))
                 .padding(.bottom, 8)
         }
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: vm.isRecording)
     }
 
     // MARK: - Text Input Bar
@@ -642,7 +637,7 @@ struct ContentView: View {
 
     private var micButtonVisual: some View {
         ZStack {
-            if vm.isRecording {
+            if vm.isRecording && !vm.pushToTalk {
                 Circle()
                     .fill(Theme.green.opacity(0.15))
                     .frame(width: 80, height: 80)
@@ -919,6 +914,12 @@ struct SettingsView: View {
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    Button("Connect") {
+                        vm.connect()
+                        dismiss()
+                    }
+                    .disabled(
+                        vm.serverURL.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
 
                 Section("Model") {
@@ -1014,17 +1015,8 @@ struct SettingsView: View {
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Connect") {
-                        vm.connect()
-                        dismiss()
-                    }
-                    .disabled(
-                        vm.serverURL.trimmingCharacters(in: .whitespaces)
-                            .isEmpty)
+                    Button("Done") { dismiss() }
                 }
             }
         }

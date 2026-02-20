@@ -275,6 +275,12 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     }
     var pushToTalk: Bool { inputMode == "ptt" }
     var typingMode: Bool { inputMode == "typing" }
+    var isAutoMode: Bool { inputMode == "auto" }
+
+    // These only take effect in auto mode
+    var effectiveAutoRecord: Bool { isAutoMode && autoRecord }
+    var effectiveVAD: Bool { isAutoMode && vadEnabled }
+    var effectiveAutoInterrupt: Bool { isAutoMode && autoInterrupt }
 
     @Published var autoRecord: Bool {
         didSet { UserDefaults.standard.set(autoRecord, forKey: "autoRecord") }
@@ -352,7 +358,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     private var playbackVADProcessor: PlaybackVADProcessor?
     private var lastPingTime: Date?
     private var lastMicActionTime: Date?
-    private var pttActive = false
+    private var pttInterrupted = false
     private var pingWatchdogTimer: Timer?
 
     // MARK: - Init
@@ -782,6 +788,8 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                 sessions[idx].status = status
                 if status == "ready" {
                     addMessage(sid, role: "system", text: "Claude connected.")
+                    // Show thinking indicator while waiting for agent's first message
+                    sessions[idx].isThinking = true
                 }
             }
 
@@ -815,7 +823,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                 }
                 if sid == activeSessionId {
                     isProcessing = false
-                    startThinkingSound()
+                    if !typingMode { startThinkingSound() }
                     updateLiveActivity()
                 }
             }
@@ -867,27 +875,25 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                 let isActive = sid == activeSessionId
                 let isBackground = UIApplication.shared.applicationState != .active
 
-                if isActive || (isBackground && autoRecord) {
-                    // User cancelled recording - stay idle, just absorb the hub's retries
+                if isActive || (isBackground && effectiveAutoRecord) {
                     if suppressNextAutoRecord {
                         if let idx = sessionIndex(sid) {
                             sessions[idx].pendingListen = true
                         }
                     } else if typingMode {
-                        // In typing mode, don't auto-record, just mark pending
                         if let idx = sessionIndex(sid) {
                             sessions[idx].pendingListen = true
                             sessions[idx].statusText = "Type a message"
                         }
                         statusText = "Type a message"
-                    } else if autoRecord {
+                    } else if effectiveAutoRecord {
                         startRecording(sessionId: sid)
                     } else {
                         if let idx = sessionIndex(sid) {
                             sessions[idx].pendingListen = true
-                            sessions[idx].statusText = "Tap Record"
+                            sessions[idx].statusText = pushToTalk ? "Hold to Talk" : "Tap Record"
                         }
-                        statusText = "Tap Record"
+                        statusText = pushToTalk ? "Hold to Talk" : "Tap Record"
                     }
                     updateLiveActivity()
                 } else {
@@ -992,8 +998,8 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             // Derive processing state from session (don't carry over from previous session)
             isProcessing = session.statusText == "Processing..."
 
-            // Resume thinking sound if session is thinking
-            if session.isThinking {
+            // Resume thinking sound if session is thinking (not in typing mode)
+            if session.isThinking && !typingMode {
                 startThinkingSound()
             }
 
@@ -1020,10 +1026,10 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                     if micMuted {
                         sendJSON(["session_id": id, "type": "audio", "data": ""])
                         statusText = "Muted"
-                    } else if autoRecord {
+                    } else if effectiveAutoRecord {
                         startRecording(sessionId: id)
                     } else {
-                        statusText = "Tap Record"
+                        statusText = pushToTalk ? "Hold to Talk" : "Tap Record"
                     }
                 }
             }
@@ -1116,6 +1122,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     }
 
     func goHome() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         // Pause audio (don't interrupt) so it resumes on switch back
         if isPlaying, let player = audioPlayer, player.isPlaying {
             player.pause()
@@ -1366,7 +1373,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
 
             let isBackground = UIApplication.shared.applicationState != .active
             // Always enable VAD in background (only way to stop recording without UI)
-            if vadEnabled || isBackground {
+            if effectiveVAD || isBackground {
                 startVAD()
             }
             // Safety timeout: auto-stop recording after 30s in background
@@ -1469,24 +1476,27 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     // MARK: - Push to Talk
 
     func pttPressed() {
-        guard !pttActive else { return }
-        pttActive = true
-
         if isPlaying {
             interruptPlayback()
-        } else if !isRecording && !isProcessing && !micMuted {
-            if let sid = activeSessionId {
-                suppressNextAutoRecord = false
-                if let idx = sessionIndex(sid), sessions[idx].pendingListen {
-                    sessions[idx].pendingListen = false
-                }
-                startRecording(sessionId: sid)
+            pttInterrupted = true
+            return
+        }
+        // Don't record on the same press that interrupted playback
+        if pttInterrupted { return }
+        // Don't re-trigger if already recording
+        if isRecording { return }
+        if isProcessing || micMuted { return }
+        if let sid = activeSessionId {
+            suppressNextAutoRecord = false
+            if let idx = sessionIndex(sid), sessions[idx].pendingListen {
+                sessions[idx].pendingListen = false
             }
+            startRecording(sessionId: sid)
         }
     }
 
     func pttReleased() {
-        pttActive = false
+        pttInterrupted = false
         if isRecording {
             stopRecording()
         }
@@ -1531,7 +1541,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     // MARK: - Playback VAD (Auto Interrupt)
 
     private func startPlaybackVAD() {
-        guard autoInterrupt, !micMuted else { return }
+        guard effectiveAutoInterrupt, !micMuted else { return }
         stopPlaybackVAD()
 
         let engine = AVAudioEngine()
