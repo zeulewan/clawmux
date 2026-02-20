@@ -906,24 +906,40 @@ struct DebugView: View {
 struct SettingsView: View {
     @ObservedObject var vm: VoiceChatViewModel
     @Environment(\.dismiss) var dismiss
+    @State private var draftURL: String = ""
+
+    var urlChanged: Bool { draftURL.trimmingCharacters(in: .whitespaces) != vm.serverURL.trimmingCharacters(in: .whitespaces) }
 
     var body: some View {
         NavigationStack {
             Form {
                 // Connection + Model
                 Section("Server") {
-                    TextField("Server URL", text: $vm.serverURL)
+                    TextField("Server URL", text: $draftURL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
-                    Button("Connect") {
-                        vm.connect()
-                        dismiss()
+
+                    if vm.isConnected && !urlChanged {
+                        HStack(spacing: 6) {
+                            Circle().fill(Color(.systemGreen)).frame(width: 8, height: 8)
+                            Text("Connected")
+                                .font(.subheadline)
+                                .foregroundStyle(Color(.systemGreen))
+                        }
+                    } else {
+                        Button("Connect") {
+                            vm.serverURL = draftURL.trimmingCharacters(in: .whitespaces)
+                            vm.connect()
+                            dismiss()
+                        }
+                        .disabled(draftURL.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
-                    .disabled(vm.serverURL.trimmingCharacters(in: .whitespaces).isEmpty)
+
                     Text("e.g. workstation.tailee9084.ts.net:3460")
                         .font(.caption).foregroundStyle(.secondary)
                 }
+                .onAppear { draftURL = vm.serverURL }
 
                 Section("Model") {
                     Picker("Claude Model", selection: $vm.selectedModel) {
