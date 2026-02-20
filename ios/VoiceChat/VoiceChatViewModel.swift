@@ -1867,16 +1867,25 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                     return
                 }
                 let httpCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-                if let data,
-                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                    let text = json["text"] as? String, !text.isEmpty
-                {
+                guard let data,
+                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                else {
+                    print("[ptt-preview] Invalid response (\(httpCode))")
+                    self.pttTranscriptionError = "Transcription failed. Type your message instead."
+                    return
+                }
+                // Check for server error
+                if let serverError = json["error"] as? String {
+                    print("[ptt-preview] Server error (\(httpCode)): \(serverError)")
+                    self.pttTranscriptionError = "Transcription error: \(serverError)"
+                    return
+                }
+                if let text = json["text"] as? String, !text.isEmpty {
                     print("[ptt-preview] Got transcription (\(httpCode)): \(text)")
                     self.pttPreviewText = text
                     self.pttTranscriptionError = nil
                 } else {
-                    let body = data.flatMap { String(data: $0, encoding: .utf8) } ?? "nil"
-                    print("[ptt-preview] Empty/failed response (\(httpCode)): \(body)")
+                    print("[ptt-preview] Empty text (\(httpCode))")
                     self.pttTranscriptionError = "No speech detected. Tap the mic to try again."
                 }
             }

@@ -310,24 +310,27 @@ struct ContentView: View {
     @State private var backSwipeOffset: CGFloat = 0
     @State private var backSwipeActive = false
 
-    private var sessionView: some View {
-        ZStack(alignment: .bottom) {
-            Theme.bg.ignoresSafeArea()
-            VStack(spacing: 0) {
-                sessionHeader
-                chatArea
-            }
-            if vm.typingMode {
-                textInputBar
-                    .transition(.opacity)
-            } else if vm.pushToTalk && vm.showPTTTextField {
-                pttTextInputBar
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            } else {
-                controlsOverlay
-                    .transition(.opacity)
-            }
+    @ViewBuilder
+    private var bottomControls: some View {
+        if vm.typingMode {
+            textInputBar
+                .transition(.opacity)
+        } else if vm.pushToTalk && vm.showPTTTextField {
+            pttTextInputBar
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+        } else {
+            controlsOverlay
+                .transition(.opacity)
         }
+    }
+
+    private var sessionView: some View {
+        VStack(spacing: 0) {
+            sessionHeader
+            chatArea
+            bottomControls
+        }
+        .background(Theme.bg.ignoresSafeArea())
         .offset(x: backSwipeOffset)
         .animation(.interactiveSpring, value: backSwipeOffset)
         .opacity(backSwipeOffset > 0 ? Double(1.0 - backSwipeOffset / 400.0) : 1.0)
