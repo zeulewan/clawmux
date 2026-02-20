@@ -6,6 +6,7 @@ struct VoiceChatActivityAttributes: ActivityAttributes {
         var voiceName: String
         var status: VoiceChatStatus
         var lastMessage: String
+        var inputMode: String  // "auto", "ptt", "typing"
     }
 
     var sessionId: String

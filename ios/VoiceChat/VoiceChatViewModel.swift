@@ -2,6 +2,7 @@ import ActivityKit
 import AVFoundation
 import Foundation
 import UIKit
+import UserNotifications
 
 // MARK: - Models
 
@@ -195,7 +196,7 @@ final class TonePlayer {
 
     // Double-tick: thinking
     func thinkingTick() {
-        play([(1200, 0.03, 0, 0.06), (900, 0.03, 0.08, 0.04)])
+        play([(1200, 0.03, 0, 0.025), (900, 0.03, 0.08, 0.015)])
     }
 }
 
@@ -270,6 +271,12 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             UserDefaults.standard.set(inputMode, forKey: "inputMode")
             if let sid = activeSessionId {
                 sendJSON(["session_id": sid, "type": "set_mode", "mode": inputMode == "typing" ? "text" : "voice"])
+            }
+            // No live activity in typing mode — use notifications instead
+            if inputMode == "typing" {
+                endLiveActivity()
+            } else if let sid = activeSessionId {
+                startLiveActivity(sessionId: sid)
             }
         }
     }
@@ -380,6 +387,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         setupAudioSession()
         observeAppLifecycle()
         endStaleLiveActivities()
+        requestNotificationPermission()
 
         if serverURL.isEmpty {
             showSettings = true
@@ -426,6 +434,54 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                 self?.stopSilenceLoop()
             }
         }
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.willTerminateNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.endLiveActivity()
+            }
+        }
+        // Handle audio session interruptions (e.g. user opens Spotify)
+        NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
+        ) { [weak self] notification in
+            // Extract value before Task to avoid Swift 6 data-race warning
+            let typeVal = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            Task { @MainActor in
+                guard let self,
+                    let typeVal,
+                    let kind = AVAudioSession.InterruptionType(rawValue: typeVal)
+                else { return }
+                switch kind {
+                case .began:
+                    // Another app took audio focus — let it (pause our silence keepalive)
+                    self.silencePlayer?.pause()
+                case .ended:
+                    // Resume silence loop only if we're still in background and need it
+                    if self.appInBackground && self.backgroundMode && !self.sessions.isEmpty {
+                        self.silencePlayer?.play()
+                    }
+                @unknown default:
+                    break
+                }
+            }
+        }
+    }
+
+    // MARK: - Notifications
+
+    private func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
+    func sendNotification(title: String, body: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = String(body.prefix(140))
+        content.sound = .default
+        let request = UNNotificationRequest(
+            identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
     }
 
     private func startSilenceLoop() {
@@ -746,6 +802,12 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         // Hub-level messages
         case "session_list":
             if let list = json["sessions"] as? [[String: Any]] {
+                let liveIds = Set(list.compactMap { $0["session_id"] as? String })
+                // Remove any sessions the hub no longer knows about
+                for s in sessions where !liveIds.contains(s.id) {
+                    removeSession(s.id)
+                }
+                // Add new sessions
                 for s in list {
                     if let sid = s["session_id"] as? String, sessionIndex(sid) == nil {
                         addSessionFromDict(s)
@@ -800,6 +862,16 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             let msg = json["message"] as? String ?? "Unknown error"
             statusText = "Error: \(msg)"
 
+        case "thinking":
+            // Hub is about to speak - show thinking indicator
+            if let sid = sessionId, let idx = sessionIndex(sid) {
+                sessions[idx].isThinking = true
+                if sid == activeSessionId {
+                    if !typingMode { startThinkingSound() }
+                    updateLiveActivity()
+                }
+            }
+
         // Session-scoped messages
         case "assistant_text":
             if let sid = sessionId, let t = json["text"] as? String {
@@ -811,6 +883,11 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                 if sid == activeSessionId {
                     isProcessing = false
                     updateLiveActivity()
+                }
+                // Notify in background (always in typing mode, others when backgrounded)
+                if appInBackground {
+                    let voiceName = sessions.first(where: { $0.id == sid })?.label ?? "Agent"
+                    sendNotification(title: voiceName, body: t)
                 }
             }
 
@@ -875,7 +952,9 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                 let isActive = sid == activeSessionId
                 let isBackground = UIApplication.shared.applicationState != .active
 
-                if isActive || (isBackground && effectiveAutoRecord) {
+                // Background mode should auto-record even if autoRecord setting is off
+                let bgAutoRecord = isBackground && backgroundMode && isAutoMode
+                if isActive || (isBackground && (effectiveAutoRecord || bgAutoRecord)) {
                     if suppressNextAutoRecord {
                         if let idx = sessionIndex(sid) {
                             sessions[idx].pendingListen = true
@@ -886,7 +965,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                             sessions[idx].statusText = "Type a message"
                         }
                         statusText = "Type a message"
-                    } else if effectiveAutoRecord {
+                    } else if effectiveAutoRecord || bgAutoRecord {
                         startRecording(sessionId: sid)
                     } else {
                         if let idx = sessionIndex(sid) {
@@ -926,10 +1005,17 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             }
 
         case "session_ended":
-            if let sid = sessionId {
-                addMessage(sid, role: "system", text: "Session ended.")
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
-                    self?.terminateSession(sid)
+            // Agent finished a fire-and-forget turn (wait_for_response=False).
+            // Do NOT terminate — the hub session is still alive; Claude may return.
+            // Just reset processing state so the UI isn't stuck.
+            if let sid = sessionId, let idx = sessionIndex(sid) {
+                sessions[idx].isThinking = false
+                sessions[idx].statusText = "Ready"
+                if sid == activeSessionId {
+                    isProcessing = false
+                    stopThinkingSound()
+                    statusText = "Ready"
+                    updateLiveActivity()
                 }
             }
 
@@ -988,7 +1074,9 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         showDebug = false
 
         endLiveActivity()
-        startLiveActivity(sessionId: id)
+        if !typingMode {
+            startLiveActivity(sessionId: id)
+        }
 
         if let session = activeSession {
             statusText = session.statusText.isEmpty
@@ -1118,6 +1206,19 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         sessions.removeAll { $0.id == id }
         if activeSessionId == id {
             activeSessionId = sessions.first?.id
+        }
+    }
+
+    func handleOpenURL(_ url: URL) {
+        guard url.scheme == "voicechat" else { return }
+        switch url.host {
+        case "mic":
+            // Tapped mic button in Live Activity - trigger mic action for current session
+            if activeSessionId != nil && !pushToTalk {
+                micAction()
+            }
+        default:
+            break
         }
     }
 
@@ -1736,7 +1837,8 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             voiceName: session.label,
             status: voiceChatStatus(for: session),
             lastMessage: session.messages.last(where: { $0.role == "assistant" })?
-                .text.prefix(80).description ?? ""
+                .text.prefix(80).description ?? "",
+            inputMode: inputMode
         )
 
         do {
@@ -1760,7 +1862,8 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             voiceName: session.label,
             status: voiceChatStatus(for: session),
             lastMessage: session.messages.last(where: { $0.role == "assistant" })?
-                .text.prefix(80).description ?? ""
+                .text.prefix(80).description ?? "",
+            inputMode: inputMode
         )
 
         Task {

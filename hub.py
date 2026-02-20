@@ -114,6 +114,9 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
     voice = session.voice
     speed = session.speed
 
+    # Signal that Claude is about to speak (lets client show thinking indicator)
+    await send_to_browser({"session_id": session_id, "type": "thinking"})
+
     # Send assistant text to browser for chat display
     await send_to_browser({"session_id": session_id, "type": "assistant_text", "text": message})
     history.append(session.voice, session.label, "assistant", message)

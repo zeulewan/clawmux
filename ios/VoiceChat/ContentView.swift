@@ -68,6 +68,9 @@ struct ContentView: View {
         .sheet(isPresented: $vm.showSettings) {
             SettingsView(vm: vm)
         }
+        .onOpenURL { url in
+            vm.handleOpenURL(url)
+        }
         .alert("Error", isPresented: Binding(
             get: { vm.errorMessage != nil },
             set: { if !$0 { vm.errorMessage = nil } }
@@ -316,10 +319,13 @@ struct ContentView: View {
             }
             if vm.typingMode {
                 textInputBar
+                    .transition(.opacity)
             } else {
                 controlsOverlay
+                    .transition(.opacity)
             }
         }
+        .animation(.easeInOut(duration: 0.18), value: vm.typingMode)
     }
 
     private var sessionHeader: some View {
@@ -399,7 +405,7 @@ struct ContentView: View {
                         thinkingIndicator
                             .id("thinking")
                     }
-                    Color.clear.frame(height: vm.isRecording ? 200 : 140)
+                    Color.clear.frame(height: vm.isRecording ? 220 : 160)
                         .id("bottom")
                 }
                 .padding(.horizontal, 16)
