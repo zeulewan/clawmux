@@ -399,7 +399,7 @@ struct ContentView: View {
                         thinkingIndicator
                             .id("thinking")
                     }
-                    Color.clear.frame(height: vm.isRecording ? 200 : 120)
+                    Color.clear.frame(height: vm.isRecording ? 200 : 140)
                         .id("bottom")
                 }
                 .padding(.horizontal, 16)
