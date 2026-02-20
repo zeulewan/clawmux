@@ -61,10 +61,16 @@ final class VADProcessor: @unchecked Sendable {
     private let onSilenceDetected: @Sendable () -> Void
     private var detectedSpeech = false
     private var silenceStart: Date?
-    private let silenceThreshold: Float = 10
-    private let silenceDuration: TimeInterval = 3.0
+    private let silenceThreshold: Float
+    private let silenceDuration: TimeInterval
 
-    init(onSilenceDetected: @escaping @Sendable () -> Void) {
+    init(
+        silenceThreshold: Float = 10,
+        silenceDuration: TimeInterval = 3.0,
+        onSilenceDetected: @escaping @Sendable () -> Void
+    ) {
+        self.silenceThreshold = silenceThreshold
+        self.silenceDuration = silenceDuration
         self.onSilenceDetected = onSilenceDetected
     }
 
@@ -298,6 +304,13 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     @Published var autoInterrupt: Bool {
         didSet { UserDefaults.standard.set(autoInterrupt, forKey: "autoInterrupt") }
     }
+    // VAD tuning
+    @Published var vadSilenceDuration: Double {
+        didSet { UserDefaults.standard.set(vadSilenceDuration, forKey: "vadSilenceDuration") }
+    }
+    @Published var vadThreshold: Double {
+        didSet { UserDefaults.standard.set(vadThreshold, forKey: "vadThreshold") }
+    }
     @Published var micMuted: Bool {
         didSet {
             UserDefaults.standard.set(micMuted, forKey: "micMuted")
@@ -441,6 +454,10 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         self.autoRecord = UserDefaults.standard.object(forKey: "autoRecord") as? Bool ?? false
         self.vadEnabled = UserDefaults.standard.object(forKey: "vadEnabled") as? Bool ?? true
         self.autoInterrupt = UserDefaults.standard.object(forKey: "autoInterrupt") as? Bool ?? false
+        self.vadSilenceDuration =
+            UserDefaults.standard.object(forKey: "vadSilenceDuration") as? Double ?? 3.0
+        self.vadThreshold =
+            UserDefaults.standard.object(forKey: "vadThreshold") as? Double ?? 10.0
         self.micMuted = UserDefaults.standard.bool(forKey: "micMuted")
         self.inputMode = UserDefaults.standard.string(forKey: "inputMode") ?? "auto"
         self.backgroundMode =
@@ -1750,7 +1767,12 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
 
-        let processor = VADProcessor { [weak self] in
+        let threshold = Float(vadThreshold)
+        let duration = vadSilenceDuration
+        let processor = VADProcessor(
+            silenceThreshold: threshold,
+            silenceDuration: duration
+        ) { [weak self] in
             Task { @MainActor in
                 self?.stopRecording()
             }
