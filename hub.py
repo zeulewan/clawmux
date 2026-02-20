@@ -484,6 +484,20 @@ async def clear_history(voice_id: str):
     return JSONResponse({"status": "cleared", "voice_id": voice_id})
 
 
+@app.post("/api/transcribe")
+async def transcribe_audio(request: Request):
+    """Transcribe audio without sending to Claude. Used by iOS PTT preview mode."""
+    audio_bytes = await request.body()
+    if not audio_bytes or len(audio_bytes) < 100:
+        return JSONResponse({"text": ""})
+    try:
+        text = await stt(audio_bytes)
+    except Exception as e:
+        log.error("Transcription failed: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+    return JSONResponse({"text": text})
+
+
 @app.get("/api/settings")
 async def get_settings():
     return JSONResponse(_load_settings())

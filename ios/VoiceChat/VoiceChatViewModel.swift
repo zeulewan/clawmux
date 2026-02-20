@@ -412,6 +412,11 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     @Published var selectedModel: String = "opus"
     @Published var typingText = ""
 
+    // PTT preview/keyboard mode (swipe right on mic)
+    @Published var showPTTTextField = false
+    @Published var pttPreviewText = ""
+    @Published var isTranscribing = false
+
     // Debug
     @Published var showDebug: Bool {
         didSet { UserDefaults.standard.set(showDebug, forKey: "showDebug") }
@@ -1129,7 +1134,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                                 sessions[idx].pendingListen = true
                             }
                         } else {
-                            if soundListeningAuto && !isBackground { tonePlayer.cueListening() }
+                            if soundListeningAuto { tonePlayer.cueListening() }
                             startRecording(sessionId: sid)
                         }
                     } else {
@@ -1683,6 +1688,17 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             return
         }
 
+        // PTT preview mode: transcribe locally instead of sending to hub
+        if showPTTTextField {
+            recordingSessionId = nil
+            if let audioData = try? Data(contentsOf: recordingURL) {
+                isTranscribing = true
+                statusText = "Transcribing..."
+                transcribeAudio(audioData)
+            }
+            return
+        }
+
         if (isAutoMode && hapticsRecordingAuto) || (pushToTalk && hapticsRecordingPTT) {
             haptic(.light)
         }
@@ -1727,6 +1743,56 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         }
         // Send text message to hub (hub will echo back user_text + start thinking)
         sendJSON(["session_id": sid, "type": "text", "text": text])
+    }
+
+    // MARK: - PTT Preview (swipe right to type/transcribe)
+
+    private func transcribeAudio(_ audioData: Data) {
+        guard let baseURL = httpBaseURL() else {
+            isTranscribing = false
+            return
+        }
+
+        let url = baseURL.appendingPathComponent("api/transcribe")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.httpBody = audioData
+        request.setValue("audio/wav", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 15
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
+            Task { @MainActor in
+                guard let self else { return }
+                self.isTranscribing = false
+                self.statusText = ""
+                if let data,
+                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                    let text = json["text"] as? String, !text.isEmpty
+                {
+                    self.pttPreviewText = text
+                }
+            }
+        }.resume()
+    }
+
+    func sendPreviewText() {
+        let text = pttPreviewText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, let sid = activeSessionId else {
+            dismissPTTTextField()
+            return
+        }
+        if hapticsSend { haptic(.medium) }
+        if let idx = sessionIndex(sid) { sessions[idx].pendingListen = false }
+        sendJSON(["session_id": sid, "type": "text", "text": text])
+        pttPreviewText = ""
+        showPTTTextField = false
+    }
+
+    func dismissPTTTextField() {
+        if isRecording { stopRecording(discard: true) }
+        pttPreviewText = ""
+        isTranscribing = false
+        showPTTTextField = false
     }
 
     // Mic button action: context-dependent (debounced to prevent double-taps)
@@ -2158,8 +2224,29 @@ extension VoiceChatViewModel: AVAudioPlayerDelegate {
                 let bgAutoRecord = isBackground && self.backgroundMode && self.isAutoMode
                 if !self.micMuted && (self.effectiveAutoRecord || bgAutoRecord) {
                     self.sessions[idx].pendingListen = false
-                    if self.soundListeningAuto && !isBackground { self.tonePlayer.cueListening() }
+                    if self.soundListeningAuto { self.tonePlayer.cueListening() }
                     self.startRecording(sessionId: sid)
+                }
+            }
+            // Background safety net: hub sends "listening" after playback_done,
+            // so pendingListen may not be set yet. Schedule a delayed re-check.
+            else if !sid.isEmpty, sid == self.activeSessionId,
+                UIApplication.shared.applicationState != .active,
+                self.backgroundMode, self.isAutoMode, !self.micMuted
+            {
+                let capturedSid = sid
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                    guard let self,
+                        let idx = self.sessionIndex(capturedSid),
+                        self.sessions[idx].pendingListen,
+                        !self.isRecording, !self.isPlaying,
+                        capturedSid == self.activeSessionId,
+                        UIApplication.shared.applicationState != .active
+                    else { return }
+                    self.sessions[idx].pendingListen = false
+                    self.suppressNextAutoRecord = false
+                    if self.soundListeningAuto { self.tonePlayer.cueListening() }
+                    self.startRecording(sessionId: capturedSid)
                 }
             }
         }

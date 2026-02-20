@@ -320,12 +320,16 @@ struct ContentView: View {
             if vm.typingMode {
                 textInputBar
                     .transition(.opacity)
+            } else if vm.pushToTalk && vm.showPTTTextField {
+                pttTextInputBar
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             } else {
                 controlsOverlay
                     .transition(.opacity)
             }
         }
         .animation(.easeInOut(duration: 0.18), value: vm.typingMode)
+        .animation(.spring(response: 0.3, dampingFraction: 0.9), value: vm.showPTTTextField)
     }
 
     private var sessionHeader: some View {
@@ -421,6 +425,8 @@ struct ContentView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
             }
+            .defaultScrollAnchor(.bottom)
+            .id(vm.activeSessionId ?? "")
             .overlay(alignment: .bottom) {
                 LinearGradient(
                     stops: [
@@ -441,11 +447,6 @@ struct ContentView: View {
             }
             .onChange(of: vm.activeSession?.isThinking) { _, _ in
                 scrollToBottom(proxy)
-            }
-            .onChange(of: vm.activeSessionId) { _, _ in
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    scrollToBottom(proxy)
-                }
             }
         }
     }
@@ -577,16 +578,29 @@ struct ContentView: View {
                             .gesture(
                                 DragGesture(minimumDistance: 0)
                                     .onChanged { value in
+                                        if vm.showPTTTextField { return }
+
+                                        // Right swipe: cancel recording, show text field
+                                        if value.translation.width > 60
+                                            && abs(value.translation.height) < 40
+                                        {
+                                            if vm.isRecording { vm.cancelRecording() }
+                                            vm.showPTTTextField = true
+                                            return
+                                        }
+
                                         vm.pttPressed()
                                         if vm.isRecording {
                                             pttDragOffset = value.translation.width
                                         }
                                     }
                                     .onEnded { _ in
-                                        if pttDragOffset < -80 && vm.isRecording {
-                                            vm.cancelRecording()
+                                        if !vm.showPTTTextField {
+                                            if pttDragOffset < -80 && vm.isRecording {
+                                                vm.cancelRecording()
+                                            }
+                                            vm.pttReleased()
                                         }
-                                        vm.pttReleased()
                                         pttDragOffset = 0
                                     }
                             )
@@ -642,6 +656,76 @@ struct ContentView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
+    }
+
+    // MARK: - PTT Text Input Bar (swipe right)
+
+    @FocusState private var pttTextFieldFocused: Bool
+
+    private var pttTextInputBar: some View {
+        VStack(spacing: 8) {
+            if vm.isRecording {
+                waveformView
+            }
+
+            HStack(spacing: 10) {
+                // Close button
+                Button { vm.dismissPTTTextField() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Theme.textTertiary)
+                        .frame(width: 32, height: 32)
+                        .background(.ultraThinMaterial, in: Circle())
+                }
+
+                // Mic button for voice-to-text
+                Button {
+                    if vm.isRecording {
+                        vm.stopRecording()
+                    } else {
+                        vm.startRecording()
+                    }
+                } label: {
+                    Image(systemName: vm.isRecording ? "stop.circle.fill" : "mic.circle.fill")
+                        .font(.system(size: 28))
+                        .foregroundStyle(vm.isRecording ? Theme.red : Theme.blue)
+                }
+                .disabled(vm.isTranscribing)
+
+                if vm.isTranscribing {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    TextField("Edit message...", text: $vm.pttPreviewText, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .font(.subheadline)
+                        .lineLimit(1...5)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Theme.bgSecondary, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .focused($pttTextFieldFocused)
+                        .onSubmit { vm.sendPreviewText() }
+                        .submitLabel(.send)
+                }
+
+                // Send button
+                Button { vm.sendPreviewText() } label: {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 28))
+                        .foregroundStyle(
+                            vm.pttPreviewText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                ? Theme.gray3 : Theme.blue
+                        )
+                }
+                .disabled(vm.pttPreviewText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || vm.isTranscribing)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
+        .onAppear { pttTextFieldFocused = true }
     }
 
     // MARK: - Waveform
