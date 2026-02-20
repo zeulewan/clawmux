@@ -1,89 +1,109 @@
 # iOS App
 
-Native iPhone companion app for Voice Hub. Connects to the hub over WebSocket and provides the same multi-session voice interface as the browser client.
+Native iPhone companion app for Voice Hub. Connects to the hub over WebSocket and provides a multi-session voice interface with three input modes.
 
-**Status:** Beta (v0.5.0) - feature-paired with the web client, background audio and Live Activity support.
+**Status:** Beta (v0.5.0)
 
 ## Features
 
+### Input Modes
+- **Auto** - Mic opens automatically after the agent speaks, VAD auto-stops on silence
+- **Push to Talk (PTT)** - Hold mic button to record, release to send, slide left to cancel
+- **Typing** - Keyboard input, no voice/TTS
+- Mode toggle in the session view (tap the mode pill below the mic button)
+
 ### Voice Sessions
-- **Multi-session support** - Spawn, switch between, and terminate voice sessions
-- **Voice grid landing** - Same voice card grid as the web client with real-time status
-- **Voice card states** - Thinking (orange), speaking (blue), listening (red), ready (green) per session
-- **Chat transcript** - User and assistant message bubbles with persistence across restarts
-- **Voice selection** - Pick from all 7 Kokoro voices per session (persisted per session)
-- **Speed control** - Adjustable TTS playback speed 0.75x-2x (persisted per session)
-- **Long-press to terminate** - Context menu on voice cards to kill sessions
+- Multi-session support with voice grid landing page
+- Voice card states: Thinking (orange), Speaking (blue), Listening (red), Ready (green)
+- Chat transcript with persistence across restarts
+- Voice selection (7 Kokoro voices) and speed control (0.75x-2x) per session
+- Context menu on voice cards to terminate or reset history
 
 ### Audio
-- **Background audio** - Conversations continue when the app is backgrounded
-- **Background recording** - Microphone recording works in background with auto-record
-- **Audio pause/resume** - Pauses audio when switching sessions or going home, resumes on return
-- **Audio buffering** - Background sessions buffer audio chunks, played sequentially on switch
-- **Interrupt** - Stop assistant audio playback mid-sentence
-- **Thinking sound** - Double-tick audio cue while Claude is thinking (matches web client)
-- **Audio cues** - Listening tone (ascending), processing tone (soft), session ready chime (three-note)
-
-### Recording
-- **Recording with VAD** - Voice activity detection auto-stops recording on silence
-- **Auto-record** - Automatically start recording after assistant finishes speaking
-- **Haptic feedback** - Tactile feedback on record/send/interrupt actions
+- Background audio with dual keepalive (AVAudioEngine input tap + silent audio loop)
+- Background recording with auto-record in auto mode
+- Audio buffering for background sessions, played on switch
+- Interrupt playback by tapping mic during speech
+- Audio cues: thinking tick, listening cue, processing cue, session ready chime
+- Per-mode sound and haptics toggles
 
 ### Live Activity
-- **Dynamic Island** - Shows active session status (thinking/speaking/listening/ready) with colored dot
-- **Lock Screen** - "Voice Hub" banner with voice name, status, and last message preview
-- **Auto-cleanup** - Stale activities from force-kills are cleaned up on next launch
+- Dynamic Island: session status dot + voice name
+- Lock Screen: voice name, status, last message preview
+- Per-mode toggle (auto and PTT only, typing uses notifications)
 
-### UI
-- **Modern controls** - Large centered mic button, back button, options menu (no cluttered toggles)
-- **Options menu** - Voice, speed, auto-record, and VAD toggles in a dropdown
-- **Debug panel** - Hub info, services, sessions, tmux, and log tail
-- **Spawning feedback** - Voice card shows "Starting..." with yellow border while session spawns
-- **State persistence** - Active page, settings, per-session voice/speed all restored on restart
+### PTT Extras
+- Swipe right on mic button to open text input with current recording transcribed
+- Mic button in text input bar for additional voice-to-text
+
+### Navigation
+- Left-edge swipe to go back to hub from session view
+- Swipe-back reveals home view underneath (no black flash)
 
 ## Requirements
 
 - iPhone running iOS 17.0+
-- Xcode (with iOS platform SDK)
+- Xcode 16+ (with iOS platform SDK)
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
 - Apple Developer account (free works, apps expire every 7 days)
 
 ## Build & Deploy
 
+The development workflow uses three commands: build, install, launch.
+
+### One-time setup
+
 ```bash
 cd ios/
 xcodegen generate
-xcodebuild -project VoiceChat.xcodeproj -scheme VoiceChat \
-  -destination 'id=<DEVICE_ID>' \
-  -derivedDataPath ./build \
-  -allowProvisioningUpdates \
-  DEVELOPMENT_TEAM=<YOUR_TEAM_ID> \
-  -quiet build
 ```
 
-Find your device ID with:
+Find your device ID:
 
 ```bash
-xcrun devicectl list devices
+xcrun xctrace list devices
 ```
 
-Install to device:
+### Build
+
+```bash
+cd ios/
+xcodebuild -project VoiceChat.xcodeproj -scheme VoiceChat \
+  -destination 'id=DEVICE_ID' 2>&1 | grep -E '(BUILD|error:)'
+```
+
+Use `generic/platform=iOS` as the destination if you just want to verify compilation without a connected device.
+
+### Install
 
 ```bash
 xcrun devicectl device install app \
-  --device <DEVICE_ID> \
-  build/Build/Products/Debug-iphoneos/VoiceChat.app
+  --device DEVICE_ID \
+  ~/Library/Developer/Xcode/DerivedData/VoiceChat-*/Build/Products/Debug-iphoneos/VoiceChat.app
 ```
 
-Launch remotely:
+### Launch
 
 ```bash
 xcrun devicectl device process launch \
-  --device <DEVICE_ID> \
+  --device DEVICE_ID \
   com.zeul.voicechat
 ```
 
+Phone must be unlocked for remote launch to work.
+
 On first install, go to **Settings > General > VPN & Device Management** and trust the developer certificate.
+
+### All-in-one
+
+```bash
+cd ios/ && \
+xcodebuild -project VoiceChat.xcodeproj -scheme VoiceChat \
+  -destination 'id=DEVICE_ID' 2>&1 | grep -E '(BUILD|error:)' && \
+xcrun devicectl device install app --device DEVICE_ID \
+  ~/Library/Developer/Xcode/DerivedData/VoiceChat-*/Build/Products/Debug-iphoneos/VoiceChat.app && \
+xcrun devicectl device process launch --device DEVICE_ID com.zeul.voicechat
+```
 
 ## Configuration
 
@@ -101,10 +121,10 @@ The app connects via WebSocket (`ws://` or `wss://` depending on scheme). Tailsc
 ios/
   project.yml                  # XcodeGen project definition
   VoiceChat/
-    Info.plist                 # App Info.plist (background modes, permissions)
+    Info.plist                 # Background modes, permissions, URL schemes
     VoiceChatApp.swift         # SwiftUI app entry point
-    VoiceChatViewModel.swift   # WebSocket, audio, state management, Live Activity
-    ContentView.swift          # UI (voice grid, chat, controls)
+    VoiceChatViewModel.swift   # WebSocket, audio, state, Live Activity, recording
+    ContentView.swift          # UI (voice grid, session view, settings, debug)
     Assets.xcassets/           # App icon, colors
   VoiceChatShared/
     VoiceChatActivityAttributes.swift  # ActivityKit attributes (shared with widget)
@@ -114,30 +134,45 @@ ios/
     VoiceChatLiveActivity.swift  # Dynamic Island + Lock Screen UI
 ```
 
-## Persistence
+### Key architecture
 
-All state is saved to UserDefaults and restored on launch:
+- **VoiceChatViewModel** (~2400 lines) - All state management. WebSocket connection, audio session, recording (AVAudioRecorder), playback (AVAudioPlayer), Live Activity lifecycle, background keepalive, VAD, tone player, notifications.
+- **ContentView** (~1350 lines) - All UI. Voice grid, session view with chat, three bottom control variants (auto/PTT controls, PTT text input, typing text input), settings (per-mode pages), debug panel.
 
-| Key | Type | Description |
-|-----|------|-------------|
-| `serverURL` | String | Hub WebSocket URL |
-| `activeSessionId` | String? | Which session was open (nil = home) |
-| `autoRecord` | Bool | Auto-record after assistant speaks |
-| `vadEnabled` | Bool | Voice activity detection enabled |
-| `showDebug` | Bool | Debug panel visible |
-| `voice-hub-chats` | JSON | Chat messages per session |
-| `sessionPrefs` | JSON | Per-session voice and speed settings |
+## Settings Structure
+
+Settings are organized by input mode:
+
+- **Auto** - Auto record, VAD + tuning, auto interrupt, record while thinking, sounds, haptics, notifications, Live Activity
+- **PTT** - Record while thinking, sounds, haptics, notifications, Live Activity
+- **Typing** - Haptics, notifications
+
+Global settings (server, model, background mode) are on the root settings page.
 
 ## Background Audio
 
-The app uses `UIBackgroundModes: audio` with a `.playAndRecord` audio session to keep conversations alive in background:
+The app uses `UIBackgroundModes: audio` with a layered keepalive strategy (modeled after the OpenClaw approach):
 
-- A near-silent audio loop plays when the app enters background (keeps the audio session and WebSocket alive)
-- TTS audio chunks play directly through AVAudioPlayer in background
-- Recording works in background when auto-record is enabled
-- The silence loop stops automatically when the app returns to foreground
+1. **Primary: AVAudioEngine** with a continuous input tap that keeps the audio processing pipeline alive. iOS won't suspend apps with active audio engine work.
+2. **Secondary: Silent audio loop** via AVAudioPlayer (8kHz, 1s, near-silent WAV, volume 0).
+3. **Audio session**: `.playAndRecord` with `.spokenAudio` mode, Bluetooth support, 48kHz preferred sample rate.
+4. **Interruption recovery**: On audio session interruption end, re-activates the session and restarts the keepalive engine if it died.
 
-## Known Issues
+Both keepalive mechanisms start when the app backgrounds with active sessions, and stop when returning to foreground.
 
-- **No auto-interrupt** - Voice-based interrupt during playback not implemented
-- **No mic mute** - Global mic mute toggle not yet added
+## Persistence
+
+All state is saved to UserDefaults:
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `serverURL` | String | Hub connection URL |
+| `inputMode` | String | auto, ptt, or typing |
+| `autoRecord` | Bool | Auto-record after assistant speaks |
+| `vadEnabled` | Bool | Voice activity detection |
+| `backgroundMode` | Bool | Background keepalive enabled |
+| `liveActivityAuto` | Bool | Live Activity for auto mode |
+| `liveActivityPTT` | Bool | Live Activity for PTT mode |
+| `voice-hub-chats` | JSON | Chat messages per session |
+| `sessionPrefs` | JSON | Per-session voice and speed |
+| Sound/haptic toggles | Bool | Per-mode audio cue and haptic settings |

@@ -40,27 +40,23 @@ struct ContentView: View {
         ZStack {
             Theme.bg.ignoresSafeArea()
 
-            if vm.showDebug {
-                VStack(spacing: 0) {
-                    headerBar
+            // Home view always rendered underneath so swipe-back reveals it
+            VStack(spacing: 0) {
+                headerBar
+                if vm.showDebug {
                     DebugView(vm: vm)
+                } else {
+                    voiceGrid
                 }
-                .transition(.opacity)
-            } else if vm.activeSessionId != nil {
+            }
+
+            if vm.activeSessionId != nil {
                 sessionView
                     .transition(.asymmetric(
                         insertion: .push(from: .trailing),
                         removal: .push(from: .trailing)
                     ))
-            } else {
-                VStack(spacing: 0) {
-                    headerBar
-                    voiceGrid
-                }
-                .transition(.asymmetric(
-                    insertion: .push(from: .leading),
-                    removal: .push(from: .leading)
-                ))
+                    .zIndex(1)
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.92), value: vm.activeSessionId)
@@ -312,9 +308,11 @@ struct ContentView: View {
     // MARK: - Session View
 
     @State private var backSwipeOffset: CGFloat = 0
+    @State private var backSwipeActive = false
 
     private var sessionView: some View {
         ZStack(alignment: .bottom) {
+            Theme.bg.ignoresSafeArea()
             VStack(spacing: 0) {
                 sessionHeader
                 chatArea
@@ -331,25 +329,34 @@ struct ContentView: View {
             }
         }
         .offset(x: backSwipeOffset)
-        .gesture(
-            DragGesture()
+        .animation(.interactiveSpring, value: backSwipeOffset)
+        .opacity(backSwipeOffset > 0 ? Double(1.0 - backSwipeOffset / 400.0) : 1.0)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 15, coordinateSpace: .global)
                 .onChanged { value in
-                    // Only allow right swipe from left edge (start < 40pt from left)
-                    if value.startLocation.x < 40 && value.translation.width > 0 {
-                        backSwipeOffset = value.translation.width
+                    let isFromEdge = value.startLocation.x < 30
+                    let isHorizontal = abs(value.translation.width) > abs(value.translation.height) * 1.5
+                    if isFromEdge && isHorizontal && value.translation.width > 0 {
+                        backSwipeActive = true
+                    }
+                    if backSwipeActive {
+                        backSwipeOffset = max(0, value.translation.width)
                     }
                 }
                 .onEnded { value in
-                    if backSwipeOffset > 100 {
-                        withAnimation(.spring(response: 0.3)) {
-                            backSwipeOffset = UIScreen.main.bounds.width
+                    guard backSwipeActive else { return }
+                    backSwipeActive = false
+                    let velocity = value.predictedEndTranslation.width - value.translation.width
+                    if backSwipeOffset > 120 || velocity > 200 {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) {
+                            backSwipeOffset = 500
                         }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                             vm.goHome()
                             backSwipeOffset = 0
                         }
                     } else {
-                        withAnimation(.spring(response: 0.3)) {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                             backSwipeOffset = 0
                         }
                     }
@@ -380,15 +387,6 @@ struct ContentView: View {
                 .foregroundStyle(Theme.textPrimary)
 
             Spacer()
-
-            if !vm.statusText.isEmpty {
-                Text(vm.statusText)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(statusColor)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(statusColor.opacity(0.12), in: Capsule())
-            }
 
             if vm.isAutoMode {
                 Button { vm.micMuted.toggle() } label: {
@@ -454,18 +452,6 @@ struct ContentView: View {
             }
             .defaultScrollAnchor(.bottom)
             .id(vm.activeSessionId ?? "")
-            .overlay(alignment: .bottom) {
-                LinearGradient(
-                    stops: [
-                        .init(color: .clear, location: 0),
-                        .init(color: Theme.bg, location: 1),
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 120)
-                .allowsHitTesting(false)
-            }
             .onAppear {
                 scrollToBottom(proxy)
             }
@@ -558,142 +544,160 @@ struct ContentView: View {
 
     private var controlsOverlay: some View {
         VStack(spacing: 0) {
-            if vm.isRecording {
-                waveformView
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-            }
+            // Fade edge above controls
+            LinearGradient(
+                stops: [
+                    .init(color: Theme.bg.opacity(0), location: 0),
+                    .init(color: Theme.bg, location: 1),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 28)
+            .allowsHitTesting(false)
 
-            HStack(alignment: .center) {
-                // Left: Cancel (auto) or Cancel label (PTT) or spacer
-                if vm.isRecording && !vm.pushToTalk {
-                    Button { vm.cancelRecording() } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(Theme.red)
-                            .frame(width: 40, height: 40)
-                            .background(Theme.red.opacity(0.12), in: Circle())
-                    }
-                    .transition(.scale.combined(with: .opacity))
-                } else if vm.isRecording && vm.pushToTalk {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 11, weight: .bold))
-                        Text("Cancel")
-                            .font(.system(size: 12, weight: .semibold))
-                    }
-                    .foregroundStyle(pttDragOffset < -80 ? Theme.red : Theme.textTertiary)
-                    .opacity(pttDragOffset < -10 ? min(1.0, Double(-pttDragOffset - 10) / 60.0) : 0.3)
-                    .frame(width: 64)
-                    .transition(.opacity)
-                } else {
-                    Color.clear.frame(width: 64, height: 40)
+            VStack(spacing: 0) {
+                if vm.isRecording {
+                    waveformView
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
 
-                Spacer()
-
-                // Center: Mic button
-                Group {
-                    if vm.pushToTalk {
-                        micButtonVisual
-                            .contentShape(Circle())
-                            .gesture(
-                                DragGesture(minimumDistance: 0)
-                                    .onChanged { value in
-                                        if vm.showPTTTextField { return }
-
-                                        // Right swipe: cancel recording, show text field
-                                        if value.translation.width > 60
-                                            && abs(value.translation.height) < 40
-                                        {
-                                            if vm.isRecording { vm.cancelRecording() }
-                                            vm.showPTTTextField = true
-                                            return
-                                        }
-
-                                        vm.pttPressed()
-                                        if vm.isRecording {
-                                            pttDragOffset = value.translation.width
-                                        }
-                                    }
-                                    .onEnded { _ in
-                                        if !vm.showPTTTextField {
-                                            if pttDragOffset < -80 && vm.isRecording {
-                                                vm.cancelRecording()
-                                            }
-                                            vm.pttReleased()
-                                        }
-                                        pttDragOffset = 0
-                                    }
-                            )
+                HStack(alignment: .center) {
+                    // Left: Cancel (auto) or Cancel label (PTT) or spacer
+                    if vm.isRecording && !vm.pushToTalk {
+                        Button { vm.cancelRecording() } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(Theme.red)
+                                .frame(width: 40, height: 40)
+                                .background(Theme.red.opacity(0.12), in: Circle())
+                        }
+                        .transition(.scale.combined(with: .opacity))
+                    } else if vm.isRecording && vm.pushToTalk {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 11, weight: .bold))
+                            Text("Cancel")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
+                        .foregroundStyle(pttDragOffset < -80 ? Theme.red : Theme.textTertiary)
+                        .opacity(pttDragOffset < -10 ? min(1.0, Double(-pttDragOffset - 10) / 60.0) : 0.3)
+                        .frame(width: 64)
+                        .transition(.opacity)
                     } else {
-                        Button(action: vm.micAction) {
+                        Color.clear.frame(width: 64, height: 40)
+                    }
+
+                    Spacer()
+
+                    // Center: Mic button
+                    Group {
+                        if vm.pushToTalk {
                             micButtonVisual
+                                .contentShape(Circle())
+                                .gesture(
+                                    DragGesture(minimumDistance: 0)
+                                        .onChanged { value in
+                                            if vm.showPTTTextField { return }
+
+                                            // Right swipe: transcribe current recording into text field
+                                            if value.translation.width > 60
+                                                && abs(value.translation.height) < 40
+                                            {
+                                                vm.showPTTTextField = true
+                                                if vm.isRecording { vm.stopRecording() }
+                                                return
+                                            }
+
+                                            vm.pttPressed()
+                                            if vm.isRecording {
+                                                pttDragOffset = value.translation.width
+                                            }
+                                        }
+                                        .onEnded { _ in
+                                            if !vm.showPTTTextField {
+                                                if pttDragOffset < -80 && vm.isRecording {
+                                                    vm.cancelRecording()
+                                                }
+                                                vm.pttReleased()
+                                            }
+                                            pttDragOffset = 0
+                                        }
+                                )
+                        } else {
+                            Button(action: vm.micAction) {
+                                micButtonVisual
+                            }
                         }
                     }
-                }
-                .disabled(vm.isProcessing || vm.recordBlockedByThinking || (vm.micMuted && !vm.isPlaying && !vm.isRecording))
-                .opacity(vm.isProcessing || vm.recordBlockedByThinking || (vm.micMuted && !vm.isPlaying) ? 0.5 : 1.0)
+                    .disabled(vm.isProcessing || vm.recordBlockedByThinking || (vm.micMuted && !vm.isPlaying && !vm.isRecording))
+                    .opacity(vm.isProcessing || vm.recordBlockedByThinking || (vm.micMuted && !vm.isPlaying) ? 0.5 : 1.0)
 
-                Spacer()
+                    Spacer()
 
-                // Right: Mode toggle
-                if !vm.isRecording {
-                    Button { cycleInputMode() } label: {
-                        Image(systemName: modeIcon)
-                            .font(.system(size: 14))
-                            .foregroundStyle(Theme.textSecondary)
-                            .frame(width: 40, height: 40)
-                            .background(.ultraThinMaterial, in: Circle())
-                    }
-                    .transition(.scale.combined(with: .opacity))
-                } else {
+                    // Right: balance spacer
                     Color.clear.frame(width: 64, height: 40)
                 }
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 10)
-            .padding(.bottom, 4)
+                .padding(.horizontal, 20)
+                .padding(.top, 6)
 
-            Text(micLabel)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(micColor.opacity(0.8))
-                .padding(.bottom, 8)
+                bottomStatusBar
+                    .padding(.top, 6)
+                    .padding(.bottom, 4)
+            }
+            .padding(.bottom, 8)
+            .background(Theme.bg)
         }
         .padding(.horizontal, 12)
-        .padding(.bottom, 8)
     }
 
     // MARK: - Text Input Bar
 
     private var textInputBar: some View {
-        HStack(spacing: 10) {
-            TextField("Message", text: $vm.typingText, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.subheadline)
-                .lineLimit(1...5)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Theme.bgSecondary, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .onSubmit { vm.sendText() }
-                .submitLabel(.send)
+        VStack(spacing: 0) {
+            LinearGradient(
+                stops: [
+                    .init(color: Theme.bg.opacity(0), location: 0),
+                    .init(color: Theme.bg, location: 1),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 28)
+            .allowsHitTesting(false)
 
-            Button {
-                vm.sendText()
-            } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 28))
-                    .foregroundStyle(
-                        vm.typingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            ? Theme.gray3 : Theme.blue
-                    )
+            VStack(spacing: 6) {
+                bottomStatusBar
+
+                HStack(spacing: 10) {
+                    TextField("Message", text: $vm.typingText, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .font(.subheadline)
+                        .lineLimit(1...5)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Theme.bgSecondary, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .onSubmit { vm.sendText() }
+                        .submitLabel(.send)
+
+                    Button {
+                        vm.sendText()
+                    } label: {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundStyle(
+                                vm.typingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                    ? Theme.gray3 : Theme.blue
+                            )
+                    }
+                    .disabled(vm.typingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
             }
-            .disabled(vm.typingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .background(Theme.bg)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         .padding(.horizontal, 12)
-        .padding(.bottom, 8)
     }
 
     // MARK: - PTT Text Input Bar (swipe right)
@@ -701,68 +705,82 @@ struct ContentView: View {
     @FocusState private var pttTextFieldFocused: Bool
 
     private var pttTextInputBar: some View {
-        VStack(spacing: 8) {
-            if vm.isRecording {
-                waveformView
-            }
+        VStack(spacing: 0) {
+            LinearGradient(
+                stops: [
+                    .init(color: Theme.bg.opacity(0), location: 0),
+                    .init(color: Theme.bg, location: 1),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 28)
+            .allowsHitTesting(false)
 
-            HStack(spacing: 10) {
-                // Close button
-                Button { vm.dismissPTTTextField() } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Theme.textTertiary)
-                        .frame(width: 32, height: 32)
-                        .background(.ultraThinMaterial, in: Circle())
+            VStack(spacing: 6) {
+                bottomStatusBar
+
+                if vm.isRecording {
+                    waveformView
                 }
 
-                // Mic button for voice-to-text
-                Button {
-                    if vm.isRecording {
-                        vm.stopRecording()
-                    } else {
-                        vm.startRecording()
+                HStack(spacing: 10) {
+                    // Close button
+                    Button { vm.dismissPTTTextField() } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(Theme.textTertiary)
+                            .frame(width: 32, height: 32)
+                            .background(.ultraThinMaterial, in: Circle())
                     }
-                } label: {
-                    Image(systemName: vm.isRecording ? "stop.circle.fill" : "mic.circle.fill")
-                        .font(.system(size: 28))
-                        .foregroundStyle(vm.isRecording ? Theme.red : Theme.blue)
-                }
-                .disabled(vm.isTranscribing)
 
-                if vm.isTranscribing {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    TextField("Edit message...", text: $vm.pttPreviewText, axis: .vertical)
-                        .textFieldStyle(.plain)
-                        .font(.subheadline)
-                        .lineLimit(1...5)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(Theme.bgSecondary, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .focused($pttTextFieldFocused)
-                        .onSubmit { vm.sendPreviewText() }
-                        .submitLabel(.send)
-                }
+                    // Mic button for voice-to-text
+                    Button {
+                        if vm.isRecording {
+                            vm.stopRecording()
+                        } else {
+                            vm.startRecording()
+                        }
+                    } label: {
+                        Image(systemName: vm.isRecording ? "stop.circle.fill" : "mic.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundStyle(vm.isRecording ? Theme.red : Theme.blue)
+                    }
+                    .disabled(vm.isTranscribing)
 
-                // Send button
-                Button { vm.sendPreviewText() } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 28))
-                        .foregroundStyle(
-                            vm.pttPreviewText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                ? Theme.gray3 : Theme.blue
-                        )
+                    if vm.isTranscribing {
+                        ProgressView()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        TextField("Edit message...", text: $vm.pttPreviewText, axis: .vertical)
+                            .textFieldStyle(.plain)
+                            .font(.subheadline)
+                            .lineLimit(1...5)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Theme.bgSecondary, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .focused($pttTextFieldFocused)
+                            .onSubmit { vm.sendPreviewText() }
+                            .submitLabel(.send)
+                    }
+
+                    // Send button
+                    Button { vm.sendPreviewText() } label: {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundStyle(
+                                vm.pttPreviewText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                    ? Theme.gray3 : Theme.blue
+                            )
+                    }
+                    .disabled(vm.pttPreviewText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || vm.isTranscribing)
                 }
-                .disabled(vm.pttPreviewText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || vm.isTranscribing)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
             }
+            .background(Theme.bg)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         .padding(.horizontal, 12)
-        .padding(.bottom, 8)
         .onAppear { pttTextFieldFocused = true }
     }
 
@@ -838,13 +856,40 @@ struct ContentView: View {
         return Theme.blue
     }
 
+    // MARK: - Bottom Status Bar
+
+    private var bottomStatusBar: some View {
+        HStack(spacing: 8) {
+            Button { cycleInputMode() } label: {
+                Text(modeLabel)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.textSecondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Theme.bgSecondary, in: Capsule())
+            }
+
+            if !vm.statusText.isEmpty {
+                Text(vm.statusText)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(statusColor)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(statusColor.opacity(0.12), in: Capsule())
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+    }
+
     // MARK: - Mode Toggle
 
-    private var modeIcon: String {
+    private var modeLabel: String {
         switch vm.inputMode {
-        case "auto": return "waveform"
-        case "ptt": return "hand.tap"
-        default: return "keyboard"
+        case "auto": return "Auto"
+        case "ptt": return "PTT"
+        default: return "Typing"
         }
     }
 

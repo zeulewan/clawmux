@@ -4,7 +4,7 @@ You are building a native iOS app that connects to the Voice Hub as a client, re
 
 ## How It Works
 
-The iOS app connects to the same hub WebSocket as the browser. The hub doesn't care what client is connected — it sends the same messages either way. Your job is to implement the same state machine and audio handling that `static/hub.html` does, but in Swift/SwiftUI.
+The iOS app connects to the same hub WebSocket as the browser. The hub doesn't care what client is connected. Your job is to implement the same state machine and audio handling, but in Swift/SwiftUI.
 
 ## Reference Docs
 
@@ -13,90 +13,107 @@ Read these before writing any code:
 | Document | What you'll learn |
 |----------|-------------------|
 | [WebSocket Protocol](reference/protocol.md) | Every message type, the converse flow sequence, session object schema, REST API |
-| [UI Behavior](reference/ui-behavior.md) | All states, button behaviors, toggles, audio handling for focused vs background sessions, tab switching |
+| [UI Behavior](reference/ui-behavior.md) | All states, button behaviors, toggles, audio handling |
 | [Hub Architecture](reference/hub.md) | How the hub works, what it expects from clients |
 
-The protocol doc is your contract. The UI behavior doc is your spec. The hub.html source is your reference implementation.
+## Key Files
 
-## Key Files to Watch
-
-These files define what the app needs to implement. When they change, your implementation may need updating:
+The app has two main source files:
 
 ```
-docs/agents/reference/protocol.md       # WebSocket messages and REST API — your integration contract
-docs/agents/reference/ui-behavior.md    # States, controls, audio behavior — your feature spec
-static/hub.html              # Reference implementation — how the browser does it
-docs/roadmap/v0.3.0.md       # Current release features (what's implemented)
-docs/roadmap/v0.4.0.md       # Next release features (what's coming)
+ios/VoiceChat/VoiceChatViewModel.swift   # All state: WebSocket, audio, recording, Live Activity
+ios/VoiceChat/ContentView.swift          # All UI: voice grid, session view, settings, debug
 ```
 
-## What to Implement
+Supporting files:
 
-The app needs to handle all the same WebSocket messages and user interactions as the browser. Core requirements:
+```
+ios/project.yml                          # XcodeGen project definition
+ios/VoiceChat/Info.plist                 # Background modes, permissions, URL schemes
+ios/VoiceChatShared/VoiceChatActivityAttributes.swift  # ActivityKit (shared with widget)
+ios/VoiceChatWidget/VoiceChatLiveActivity.swift         # Dynamic Island + Lock Screen
+```
 
-1. **WebSocket connection** to `wss://{host}:{port}/ws`
-2. **Session management** — list, spawn (POST), terminate (DELETE), switch between sessions
-3. **Audio playback** — decode base64 MP3 from `audio` messages, play through speaker
-4. **Audio recording** — record from mic, encode to webm/opus, send as base64 in `audio` messages
-5. **State machine** — track session states (starting/ready/active), button states (record/send/interrupt/processing), thinking indicators
-6. **Background session handling** — buffer audio for non-focused sessions, show badges, resume on switch
-7. **Toggles** — Auto Record, Auto End (VAD), Auto Interrupt, Mic Mute
-8. **Voice/speed selection** — per-session, via REST API
-9. **Message history** — fetch from `GET /api/history/{voice_id}` when opening a voice's chat, display previous messages. Reset via `DELETE /api/history/{voice_id}`
+## Build & Deploy Workflow
 
-See `docs/agents/reference/ui-behavior.md` for the exact behavior of every feature.
+The development cycle is: edit code, build, install, launch.
 
-## Message History
+```bash
+# Build (from ios/ directory)
+xcodebuild -project VoiceChat.xcodeproj -scheme VoiceChat \
+  -destination 'id=DEVICE_ID' 2>&1 | grep -E '(BUILD|error:)'
 
-Messages are persisted **server-side per voice** (not per session). When a session is terminated and respawned for the same voice, the conversation history carries over.
+# Install
+xcrun devicectl device install app --device DEVICE_ID \
+  ~/Library/Developer/Xcode/DerivedData/VoiceChat-*/Build/Products/Debug-iphoneos/VoiceChat.app
 
-- **Fetch history**: `GET /api/history/{voice_id}` → `{"voice_id": "af_sky", "messages": [{"role": "user"|"assistant", "text": "...", "ts": 1708300000.0}, ...]}`
-- **Clear history**: `DELETE /api/history/{voice_id}` → `{"status": "cleared", "voice_id": "af_sky"}`
-- The hub records messages automatically during `converse()` — clients do NOT need to send messages to be stored
-- On session open, fetch history and display it as the chat transcript
-- Only display the **last 50 messages** — server stores up to 200 but rendering all is unnecessary
-- Provide a "Reset History" action (e.g. in a context menu or swipe action) that calls the DELETE endpoint
-- **Reset clears everything** — message history AND the Claude session. The next spawn for that voice starts completely fresh (new Claude context, default greeting)
+# Launch (phone must be unlocked)
+xcrun devicectl device process launch --device DEVICE_ID com.zeul.voicechat
+```
+
+Find device ID with `xcrun xctrace list devices`.
+
+After editing `project.yml`, regenerate with `xcodegen generate` before building.
+
+**SourceKit diagnostics**: The Swift SourceKit language server reports false errors ("Cannot find type 'VoiceChatViewModel' in scope", etc.) due to stale indexing. Ignore these. Only trust `xcodebuild` output for real errors.
+
+## Architecture
+
+### Input Modes
+
+The app supports three input modes, switchable via a mode pill in the session view:
+
+- **Auto** - Mic opens automatically after agent speaks, VAD stops recording on silence
+- **PTT** - Hold-to-talk with drag gestures (left to cancel, right to transcribe into text field)
+- **Typing** - Text-only, no audio
+
+### Audio Session
+
+```swift
+.playAndRecord, mode: .spokenAudio,
+options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .allowBluetoothHFP, .mixWithOthers]
+```
+
+### Background Keepalive
+
+Dual-layer keepalive to prevent iOS suspension:
+
+1. **AVAudioEngine** with continuous input tap (primary - active audio processing)
+2. **Silent AVAudioPlayer loop** (secondary - ensures audio session stays active)
+
+Both start on background entry, stop on foreground return. Interruption handler re-activates session and restarts engine on `.ended`.
+
+### Recording
+
+Uses `AVAudioRecorder` (not AVAudioEngine) for actual recording: 16kHz, mono, 16-bit PCM to a temp file. VAD runs via a separate `AVAudioEngine` input tap that monitors RMS levels.
+
+### Playback
+
+TTS audio arrives as base64 MP3 via WebSocket `audio` messages. Decoded and played via `AVAudioPlayer`. Audio for non-active sessions is buffered and played on switch.
+
+### Live Activity
+
+ActivityKit with `VoiceChatActivityAttributes`. Started/updated/ended from ViewModel at state transitions. Per-mode toggle (auto and PTT only).
 
 ## Connection Details
 
-The hub runs on the user's workstation, accessed via Tailscale:
-
-- **WebSocket**: `wss://{hostname}.ts.net:3460/ws`
-- **REST API**: `https://{hostname}.ts.net:3460/api/...`
-- **Multi-client** — multiple clients (browser + iOS app) can connect simultaneously. All receive the same messages.
-
-## Heartbeat & Sync
-
-The hub sends `{"type": "ping"}` to all clients every 30 seconds. Clients that fail to receive it are disconnected. The iOS app should:
-
-- **Ignore `ping` messages** — no response needed, just don't crash on them
-- **Detect stale connections** — if no `ping` received for ~60s, reconnect
-- **Stay in sync** — all session state changes (status, new messages, audio) are broadcast to every connected client simultaneously. The app doesn't need to poll — just listen to the WebSocket.
-- **On reconnect** — hub sends `session_list` on connect, which gives the full current state. Fetch history for each session via `GET /api/history/{voice_id}` to restore chat transcripts.
-
-## Navigation
-
-The app should use a **voice grid** as the landing page (not tabs). Each voice gets a card.
-
-- **Tapping a card with an active session** → switch to its chat view immediately
-- **Tapping an inactive card** → spawn via `POST /api/sessions`, stay on the grid showing "Spawning..." state on the card. When a `session_status` message arrives with `status: "ready"` for that session, auto-switch to the chat view.
-- **Duplicate voice guard** — the server returns 503 if that voice already has a session. Don't show an error, just ignore it.
-- **On app launch or reconnect** — always show the voice grid first, never auto-switch to a session
-
-Show a connection status indicator (pulsing yellow = connecting, green = connected, red = disconnected).
+- **WebSocket**: `wss://{hostname}:{port}/ws`
+- **REST API**: `https://{hostname}:{port}/api/...`
+- **Transcription**: `POST /api/transcribe` - accepts raw audio bytes, returns `{"text": "..."}`
+- Hub sends `ping` every 30s. On reconnect, hub sends `session_list` with full state.
 
 ## Settings
 
-Settings are persisted server-side and shared across all clients. The iOS app should:
+Per-mode settings pages (Auto, PTT, Typing) with relevant toggles for each mode:
 
-- **Fetch settings on connect**: `GET /api/settings` → `{"model": "opus", "auto_record": false, "auto_end": true, "auto_interrupt": false}`
-- **Update settings**: `PUT /api/settings` with a partial JSON object (e.g. `{"model": "haiku"}`) → returns full settings
-- **Sync with web client** — when settings change on one client, the other picks them up on next fetch
-- Available models: `opus`, `sonnet`, `haiku` (applies to newly spawned sessions only)
-- Provide a settings screen with toggles for auto_record, auto_end, auto_interrupt, and a model picker
+- Input controls (auto-record, VAD, interrupt, record-while-thinking)
+- Sounds (thinking, listening cue, processing cue, session ready)
+- Haptics (recording, playback, send, session events)
+- Notifications (background agent response alerts)
+- Live Activity toggle
 
 ## Audio Format
 
 - **Playback**: Hub sends base64-encoded MP3
-- **Recording**: Browser sends base64-encoded WebM/Opus. The hub passes this to Whisper STT which accepts webm. Other formats may work if Whisper supports them.
+- **Recording**: App records WAV (16kHz PCM), hub sends to Whisper which accepts it
+- **Transcription preview**: `POST /api/transcribe` with raw audio bytes for PTT text preview

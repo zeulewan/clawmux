@@ -473,6 +473,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     private var suppressNextAutoRecord = false
     private var currentActivity: Activity<VoiceChatActivityAttributes>?
     private var silencePlayer: AVAudioPlayer?
+    private var keepaliveEngine: AVAudioEngine?
     private var playbackVADEngine: AVAudioEngine?
     private var playbackVADProcessor: PlaybackVADProcessor?
     private var lastPingTime: Date?
@@ -610,12 +611,21 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                 else { return }
                 switch kind {
                 case .began:
-                    // Another app took audio focus — let it (pause our silence keepalive)
+                    // Another app took audio focus — pause keepalive
                     self.silencePlayer?.pause()
                 case .ended:
-                    // Resume silence loop only if we're still in background and need it
-                    if self.appInBackground && self.backgroundMode && !self.sessions.isEmpty {
-                        self.silencePlayer?.play()
+                    // Re-activate audio session and restart keepalive
+                    if self.backgroundMode && !self.sessions.isEmpty {
+                        self.setupAudioSession()
+                        if self.appInBackground {
+                            // Restart keepalive engine if it died
+                            if self.keepaliveEngine?.isRunning != true {
+                                self.stopSilenceLoop()
+                                self.startSilenceLoop()
+                            } else {
+                                self.silencePlayer?.play()
+                            }
+                        }
                     }
                 @unknown default:
                     break
@@ -641,17 +651,35 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     }
 
     private func startSilenceLoop() {
-        guard silencePlayer == nil else { return }
-        // Ensure audio session is active for background playback
+        // Ensure audio session is active
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setActive(true)
         } catch {
             print("[audio] Failed to activate session for background: \(error)")
         }
-        // Generate 1 second of near-silence as WAV (very low amplitude, not zero)
-        let sampleRate: Int = 16000
-        let numSamples = sampleRate
+
+        // Start keepalive engine with input tap (primary keepalive - active audio processing)
+        if keepaliveEngine == nil {
+            let engine = AVAudioEngine()
+            let input = engine.inputNode
+            let fmt = input.outputFormat(forBus: 0)
+            input.installTap(onBus: 0, bufferSize: 4096, format: fmt) { _, _ in
+                // Discard audio - just keeps the engine alive
+            }
+            do {
+                try engine.start()
+                keepaliveEngine = engine
+                print("[audio] Keepalive engine started")
+            } catch {
+                print("[audio] Keepalive engine failed: \(error)")
+            }
+        }
+
+        // Start silence player (secondary keepalive)
+        guard silencePlayer == nil else { return }
+        let sampleRate: Int = 8000
+        let numSamples = sampleRate  // 1 second
         var header = Data()
         let dataSize = numSamples * 2
         let fileSize = 36 + dataSize
@@ -674,18 +702,18 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         header.append(contentsOf: withUnsafeBytes(of: UInt32(dataSize).littleEndian) {
             Array($0)
         })
-        // Write near-silent samples (amplitude 1 out of 32767) instead of true zero
+        // Near-silent samples (amplitude 1 out of 32767)
         var samples = Data(count: dataSize)
         for i in stride(from: 0, to: dataSize, by: 2) {
-            samples[i] = 1  // LSB = 1
-            samples[i + 1] = 0  // MSB = 0
+            samples[i] = 1
+            samples[i + 1] = 0
         }
         header.append(samples)
 
         do {
             silencePlayer = try AVAudioPlayer(data: header)
-            silencePlayer?.numberOfLoops = -1  // loop forever
-            silencePlayer?.volume = 0.05
+            silencePlayer?.numberOfLoops = -1
+            silencePlayer?.volume = 0.0
             silencePlayer?.prepareToPlay()
             silencePlayer?.play()
             print("[audio] Silence loop started for background keepalive")
@@ -697,6 +725,12 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     private func stopSilenceLoop() {
         silencePlayer?.stop()
         silencePlayer = nil
+        if let engine = keepaliveEngine {
+            engine.inputNode.removeTap(onBus: 0)
+            engine.stop()
+            keepaliveEngine = nil
+            print("[audio] Keepalive engine stopped")
+        }
     }
 
     // MARK: - Helpers
@@ -811,8 +845,10 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(
-                .playAndRecord, mode: .default,
-                options: [.defaultToSpeaker, .allowBluetoothHFP, .mixWithOthers])
+                .playAndRecord, mode: .spokenAudio,
+                options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .allowBluetoothHFP, .mixWithOthers])
+            try session.setPreferredSampleRate(48000)
+            try session.setPreferredIOBufferDuration(0.02)
             try session.setActive(true)
         } catch {
             print("[audio] Session setup failed: \(error)")
