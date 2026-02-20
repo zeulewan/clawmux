@@ -46,14 +46,69 @@ body {
   color: #888;
 }
 
-/* Debug link in header */
-#debug-link {
+/* Header links */
+#debug-link, #settings-link {
   font-size: 0.7rem;
   color: #555;
   cursor: pointer;
   user-select: none;
+  margin-left: 10px;
 }
-#debug-link:hover { color: #888; }
+#debug-link:hover, #settings-link:hover { color: #888; }
+
+/* Settings page */
+#settings-page {
+  display: none;
+  padding: 1rem;
+  max-width: 400px;
+  margin: 0 auto;
+}
+#settings-page h2 {
+  margin: 0 0 1rem 0;
+  font-size: 1.1rem;
+  color: #ccc;
+}
+.settings-group {
+  margin-bottom: 1rem;
+}
+.settings-group label {
+  display: block;
+  font-size: 0.8rem;
+  color: #888;
+  margin-bottom: 4px;
+}
+.settings-group select {
+  width: 100%;
+  padding: 6px 8px;
+  background: #222;
+  color: #eee;
+  border: 1px solid #444;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+.settings-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #222;
+  cursor: pointer;
+}
+.settings-toggle span { font-size: 0.9rem; color: #ccc; }
+.settings-toggle .toggle-indicator {
+  width: 36px; height: 20px;
+  background: #444; border-radius: 10px;
+  position: relative; transition: background 0.2s;
+}
+.settings-toggle .toggle-indicator.on { background: #3a86ff; }
+.settings-toggle .toggle-indicator::after {
+  content: '';
+  position: absolute; top: 2px; left: 2px;
+  width: 16px; height: 16px;
+  background: #fff; border-radius: 50%;
+  transition: left 0.2s;
+}
+.settings-toggle .toggle-indicator.on::after { left: 18px; }
 
 /* Chat area */
 #chat-area {
@@ -375,6 +430,7 @@ body {
   <div style="flex:1;"></div>
   <div id="dot" class="connecting"></div>
   <span id="conn-label">Connecting...</span>
+  <span id="settings-link" onclick="showSettingsPage()">Settings</span>
   <span id="debug-link" onclick="showDebugPanel()">Debug</span>
 </div>
 
@@ -418,6 +474,30 @@ body {
     <option value="1.5">1.5x</option>
     <option value="2.0">2x</option>
   </select></div>
+</div>
+
+<div id="settings-page">
+  <h2>Settings</h2>
+  <div class="settings-group">
+    <label>Claude Model (applies to new sessions)</label>
+    <select id="setting-model" onchange="updateSetting('model', this.value)">
+      <option value="opus">Opus</option>
+      <option value="sonnet">Sonnet</option>
+      <option value="haiku">Haiku</option>
+    </select>
+  </div>
+  <div class="settings-toggle" onclick="toggleSetting('auto_record')">
+    <span>Auto Record</span>
+    <div class="toggle-indicator" id="toggle-auto_record"></div>
+  </div>
+  <div class="settings-toggle" onclick="toggleSetting('auto_end')">
+    <span>Auto End (silence detection)</span>
+    <div class="toggle-indicator on" id="toggle-auto_end"></div>
+  </div>
+  <div class="settings-toggle" onclick="toggleSetting('auto_interrupt')">
+    <span>Auto Interrupt</span>
+    <div class="toggle-indicator" id="toggle-auto_interrupt"></div>
+  </div>
 </div>
 
 <div id="context-menu">
@@ -653,6 +733,7 @@ function updateLayout() {
   chatArea.style.display = inChat ? 'flex' : 'none';
   controls.style.display = inChat ? 'flex' : 'none';
   document.getElementById('debug-panel').style.display = 'none';
+  document.getElementById('settings-page').style.display = 'none';
   if (!inChat) renderVoiceGrid();
 }
 
@@ -1043,17 +1124,85 @@ async function changeSpeed(speed) {
   }
 }
 
+// --- Settings page ---
+function showSettingsPage() {
+  document.getElementById('voice-grid').style.display = 'none';
+  document.getElementById('chat-area').style.display = 'none';
+  document.getElementById('controls').style.display = 'none';
+  document.getElementById('waveform').style.display = 'none';
+  const dbg = document.getElementById('debug-panel');
+  if (dbg) dbg.style.display = 'none';
+  document.getElementById('settings-page').style.display = 'block';
+  document.getElementById('active-voice').style.display = 'none';
+  activeSessionId = null;
+  loadSettings();
+}
+
+async function loadSettings() {
+  try {
+    const r = await fetch('/api/settings');
+    const s = await r.json();
+    document.getElementById('setting-model').value = s.model || 'opus';
+    setToggle('auto_record', s.auto_record || false);
+    setToggle('auto_end', s.auto_end !== false); // default true
+    setToggle('auto_interrupt', s.auto_interrupt || false);
+    // Apply locally
+    autoMode = s.auto_record || false;
+    vadEnabled = s.auto_end !== false;
+    autoInterruptEnabled = s.auto_interrupt || false;
+    document.getElementById('opt-auto').textContent = autoMode ? '\u2713' : '';
+    document.getElementById('opt-vad').textContent = vadEnabled ? '\u2713' : '';
+    document.getElementById('opt-interrupt').textContent = autoInterruptEnabled ? '\u2713' : '';
+  } catch (e) {
+    console.error('Failed to load settings:', e);
+  }
+}
+
+function setToggle(key, on) {
+  const el = document.getElementById('toggle-' + key);
+  if (el) { if (on) el.classList.add('on'); else el.classList.remove('on'); }
+}
+
+async function toggleSetting(key) {
+  const el = document.getElementById('toggle-' + key);
+  if (!el) return;
+  const isOn = el.classList.toggle('on');
+  // Apply locally
+  if (key === 'auto_record') { autoMode = isOn; document.getElementById('opt-auto').textContent = isOn ? '\u2713' : ''; updateMicUI(); }
+  if (key === 'auto_end') { vadEnabled = isOn; document.getElementById('opt-vad').textContent = isOn ? '\u2713' : ''; }
+  if (key === 'auto_interrupt') { autoInterruptEnabled = isOn; document.getElementById('opt-interrupt').textContent = isOn ? '\u2713' : ''; }
+  try {
+    await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [key]: isOn }),
+    });
+  } catch (e) { console.error('Failed to save setting:', e); }
+}
+
+async function updateSetting(key, value) {
+  try {
+    await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [key]: value }),
+    });
+  } catch (e) { console.error('Failed to save setting:', e); }
+}
+
 // --- Auto mode ---
 function toggleAutoMode() {
   autoMode = !autoMode;
   document.getElementById('opt-auto').textContent = autoMode ? '\u2713' : '';
   updateMicUI();
+  fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ auto_record: autoMode }) }).catch(() => {});
 }
 
 // --- VAD (voice activity detection) ---
 function toggleVAD() {
   vadEnabled = !vadEnabled;
   document.getElementById('opt-vad').textContent = vadEnabled ? '\u2713' : '';
+  fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ auto_end: vadEnabled }) }).catch(() => {});
 }
 
 function startVAD(stream) {
@@ -1108,6 +1257,7 @@ function startVAD(stream) {
 function toggleAutoInterrupt() {
   autoInterruptEnabled = !autoInterruptEnabled;
   document.getElementById('opt-interrupt').textContent = autoInterruptEnabled ? '\u2713' : '';
+  fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ auto_interrupt: autoInterruptEnabled }) }).catch(() => {});
 }
 
 function startPlaybackVAD(sessionId) {
@@ -1231,6 +1381,15 @@ function connect() {
   ws.onopen = () => {
     setConnected('connected');
     if (!activeSessionId) setStatus('Connected');
+    // Restore persisted settings
+    fetch('/api/settings').then(r => r.json()).then(s => {
+      autoMode = s.auto_record || false;
+      vadEnabled = s.auto_end !== false;
+      autoInterruptEnabled = s.auto_interrupt || false;
+      document.getElementById('opt-auto').textContent = autoMode ? '\u2713' : '';
+      document.getElementById('opt-vad').textContent = vadEnabled ? '\u2713' : '';
+      document.getElementById('opt-interrupt').textContent = autoInterruptEnabled ? '\u2713' : '';
+    }).catch(() => {});
   };
 
   ws.onclose = () => {
@@ -1626,6 +1785,7 @@ function showDebugPanel() {
   document.getElementById('voice-grid').style.display = 'none';
   chatArea.style.display = 'none';
   controls.style.display = 'none';
+  document.getElementById('settings-page').style.display = 'none';
   document.getElementById('debug-panel').style.display = 'flex';
   document.getElementById('debug-panel').style.flexDirection = 'column';
 

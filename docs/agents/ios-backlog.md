@@ -138,6 +138,25 @@ The web client shows a live audio waveform while recording. Use `AVAudioEngine`'
 
 Only render the last 50 messages in the chat view. The server stores up to 200 per voice, but displaying all of them is unnecessary. New messages during the session still append live.
 
+### Settings Page
+
+The web client has a dedicated settings page (accessible from header) with persistent server-side settings. Add a settings view to the iOS app:
+
+- Fetch settings on launch: `GET /api/settings`
+- Model picker (Opus/Sonnet/Haiku) — changes apply to new sessions only
+- Auto Record, Auto End, Auto Interrupt toggles
+- Save changes via `PUT /api/settings` with partial JSON
+- Settings are shared across all clients (browser + iOS)
+
+### Device Switching
+
+The hub supports seamless device switching mid-conversation. If the user closes the browser while an agent is speaking or listening, and then opens the iOS app:
+
+- The hub waits for a client to reconnect (no timeout, no error)
+- When the iOS app connects, the hub re-sends `listening` every 5 seconds until a client responds
+- Audio that was playing on the old device is skipped — the conversation continues from the listen phase
+- The app should handle receiving `listening` messages for sessions it didn't initiate — switch to the session or mark it as pending
+
 ### Voice Colors
 
 Each voice has a unique accent color. Use these for the voice name text on cards and as a left border on assistant chat bubbles:

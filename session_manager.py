@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from hub_config import (
-    CLAUDE_COMMAND,
+    CLAUDE_BASE_COMMAND,
     HEALTH_CHECK_INTERVAL_SECONDS,
     HUB_PORT,
     SESSION_TIMEOUT_MINUTES,
@@ -228,10 +228,12 @@ class SessionManager:
             )
 
             # Start Claude with session ID (resume or fresh)
+            import hub_config
+            model_flag = f" --model {hub_config.CLAUDE_MODEL}" if hub_config.CLAUDE_MODEL != "opus" else ""
             if resuming:
-                claude_cmd = f"{CLAUDE_COMMAND} --resume {claude_session_id}"
+                claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag} --resume {claude_session_id}"
             else:
-                claude_cmd = f"{CLAUDE_COMMAND} --session-id {claude_session_id}"
+                claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag} --session-id {claude_session_id}"
             await self._run(
                 f'tmux send-keys -t {tmux_name} "{claude_cmd}" Enter'
             )

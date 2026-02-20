@@ -226,6 +226,11 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("Hub starting on port %d", HUB_PORT)
+    # Restore saved settings
+    saved = _load_settings()
+    import hub_config
+    hub_config.CLAUDE_MODEL = saved.get("model", "opus")
+    log.info("Model: %s", hub_config.CLAUDE_MODEL)
     await session_mgr.cleanup_stale_sessions()
     timeout_task = asyncio.create_task(session_mgr.run_timeout_loop())
     hb_task = asyncio.create_task(heartbeat_loop())
@@ -442,6 +447,43 @@ async def get_history(voice_id: str):
 async def clear_history(voice_id: str):
     history.clear(voice_id)
     return JSONResponse({"status": "cleared", "voice_id": voice_id})
+
+
+@app.get("/api/settings")
+async def get_settings():
+    return JSONResponse(_load_settings())
+
+
+@app.put("/api/settings")
+async def update_settings(request: Request):
+    import hub_config
+    data = await request.json()
+    settings = _load_settings()
+    settings.update(data)
+    # Apply model change at runtime
+    if "model" in data and data["model"] in ("opus", "sonnet", "haiku"):
+        hub_config.CLAUDE_MODEL = data["model"]
+    _save_settings(settings)
+    log.info("Settings updated: %s", data)
+    return JSONResponse(settings)
+
+
+def _load_settings() -> dict:
+    settings_path = Path("data/settings.json")
+    defaults = {"model": "opus", "auto_record": False, "auto_end": True, "auto_interrupt": False}
+    if settings_path.exists():
+        try:
+            stored = json.loads(settings_path.read_text())
+            defaults.update(stored)
+        except Exception:
+            pass
+    return defaults
+
+
+def _save_settings(settings: dict) -> None:
+    settings_path = Path("data/settings.json")
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.write_text(json.dumps(settings, indent=2))
 
 
 @app.get("/api/debug")

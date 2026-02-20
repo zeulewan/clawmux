@@ -112,10 +112,11 @@ Note: The `voice` field in `converse` is ignored by the hub. The hub uses the se
 | Value | Meaning |
 |-------|---------|
 | User's speech | Normal transcribed text |
-| `(session muted)` | Mic was muted, empty audio received |
 | `(no speech detected)` | STT returned empty text |
 | `Message delivered.` | `wait_for_response` was false, audio played |
 | `Error: ...` | Something went wrong |
+
+Note: `(session muted)` is no longer returned. The hub now retries internally when audio is empty or clients disconnect — the converse call blocks until real audio arrives or a client reconnects.
 
 ## Session Object
 
@@ -131,7 +132,8 @@ Returned by REST API and included in `session_list`:
   "label": "Sky",
   "voice": "af_sky",
   "speed": 1.0,
-  "mcp_connected": true
+  "mcp_connected": true,
+  "status_text": ""
 }
 ```
 
@@ -146,6 +148,7 @@ Returned by REST API and included in `session_list`:
 | `voice` | string | Kokoro voice ID |
 | `speed` | float | TTS speed multiplier |
 | `mcp_connected` | bool | Whether the MCP server WebSocket is connected |
+| `status_text` | string | Current activity: `"Speaking..."`, `"Listening..."`, `"Transcribing..."`, `"Waiting for client..."`, or `""` (idle) |
 
 ## REST API
 
@@ -158,6 +161,8 @@ Returned by REST API and included in `session_list`:
 | `PUT` | `/api/sessions/{id}/speed` | `{"speed": 1.5}` | `{"speed": 1.5}` |
 | `GET` | `/api/history/{voice_id}` | — | `{"voice_id": "...", "messages": [{role, text, ts}, ...]}` |
 | `DELETE` | `/api/history/{voice_id}` | — | `{"status": "cleared", "voice_id": "..."}` |
+| `GET` | `/api/settings` | — | `{"model": "opus", "auto_record": false, "auto_end": true, "auto_interrupt": false}` |
+| `PUT` | `/api/settings` | `{"model": "haiku"}` (partial update) | Full settings object |
 | `GET` | `/api/debug` | — | Hub info, sessions, tmux, services |
 | `GET` | `/api/debug/log` | — | `{"lines": [...]}` (last 50 hub log lines) |
 
@@ -185,3 +190,14 @@ MCP Server                    Hub                         Browser
 ```
 
 If `wait_for_response=false`, the flow ends after audio playback with `done` + `session_ended`.
+
+### Resilience
+
+The hub handles client disconnects gracefully during converse:
+
+- **No clients when sending audio** — `playback_done` is auto-set, flow continues to listen phase
+- **Client disconnects during playback** — `playback_done` is set by the disconnect handler
+- **Audio arrives during playback wait** — the hub skips the `playback_done` wait and uses the audio immediately (supports device switching mid-flow)
+- **No clients during listen phase** — hub waits for a client to reconnect, then re-sends `listening`
+- **Empty/muted audio** — hub retries listening instead of returning to Claude
+- **`listening` re-sent every 5 seconds** — ensures newly connected clients pick up the pending listen

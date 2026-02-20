@@ -86,6 +86,16 @@ The app should use a **voice grid** as the landing page (not tabs). Each voice g
 
 Show a connection status indicator (pulsing yellow = connecting, green = connected, red = disconnected).
 
+## Settings
+
+Settings are persisted server-side and shared across all clients. The iOS app should:
+
+- **Fetch settings on connect**: `GET /api/settings` → `{"model": "opus", "auto_record": false, "auto_end": true, "auto_interrupt": false}`
+- **Update settings**: `PUT /api/settings` with a partial JSON object (e.g. `{"model": "haiku"}`) → returns full settings
+- **Sync with web client** — when settings change on one client, the other picks them up on next fetch
+- Available models: `opus`, `sonnet`, `haiku` (applies to newly spawned sessions only)
+- Provide a settings screen with toggles for auto_record, auto_end, auto_interrupt, and a model picker
+
 ## Audio Format
 
 - **Playback**: Hub sends base64-encoded MP3
