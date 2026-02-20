@@ -39,6 +39,8 @@ class Session:
     voice: str = "af_sky"
     speed: float = 1.0
     status_text: str = ""  # last status sent to browser (e.g. "Speaking...", "Transcribing...")
+    text_override: str = ""  # set by browser "text" message, consumed by handle_converse
+    text_mode: bool = False  # when True, skip TTS and just send text
     # Per-session bridge state (set by hub after creation)
     audio_queue: asyncio.Queue | None = field(default=None, repr=False)
     playback_done: asyncio.Event | None = field(default=None, repr=False)

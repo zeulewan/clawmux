@@ -34,6 +34,7 @@ struct ContentView: View {
     @State private var isPulsing = false
     @State private var resetVoiceId: String?
     @State private var showResetConfirm = false
+    @State private var pttDragOffset: CGFloat = 0
 
     var body: some View {
         ZStack {
@@ -113,12 +114,6 @@ struct ContentView: View {
                 Circle()
                     .fill(connectionDotColor)
                     .frame(width: 7, height: 7)
-                    .opacity(vm.isConnecting ? 0.6 : 1.0)
-                    .animation(
-                        vm.isConnecting
-                            ? .easeInOut(duration: 0.8).repeatForever(autoreverses: true) : .default,
-                        value: vm.isConnecting
-                    )
                 Text(connectionLabel)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Theme.textTertiary)
@@ -301,7 +296,7 @@ struct ContentView: View {
 
     private func voiceCardLabel(active: VoiceSession?, spawning: Bool) -> String {
         if spawning { return "Starting..." }
-        guard let s = active else { return "Available" }
+        guard let s = active else { return "Offline" }
         if s.status == "starting" { return "Starting..." }
         if s.isThinking { return "Thinking..." }
         let st = s.statusText
@@ -319,7 +314,11 @@ struct ContentView: View {
                 sessionHeader
                 chatArea
             }
-            controlsOverlay
+            if vm.typingMode {
+                textInputBar
+            } else {
+                controlsOverlay
+            }
         }
     }
 
@@ -354,75 +353,8 @@ struct ContentView: View {
                     .background(statusColor.opacity(0.12), in: Capsule())
             }
 
-            Menu {
-                Menu("Voice: \(vm.activeSession?.label ?? "")") {
-                    ForEach(ALL_VOICES) { v in
-                        Button {
-                            vm.activeVoice = v.id
-                        } label: {
-                            if v.id == vm.activeVoice {
-                                Label(v.name, systemImage: "checkmark")
-                            } else {
-                                Text(v.name)
-                            }
-                        }
-                    }
-                }
-                Menu(
-                    "Speed: \(SPEED_OPTIONS.first { $0.value == vm.activeSpeed }?.label ?? "1x")"
-                ) {
-                    ForEach(SPEED_OPTIONS, id: \.value) { opt in
-                        Button {
-                            vm.activeSpeed = opt.value
-                        } label: {
-                            if opt.value == vm.activeSpeed {
-                                Label(opt.label, systemImage: "checkmark")
-                            } else {
-                                Text(opt.label)
-                            }
-                        }
-                    }
-                }
-                Divider()
-                Button {
-                    vm.autoRecord.toggle()
-                } label: {
-                    if vm.autoRecord {
-                        Label("Auto Record", systemImage: "checkmark")
-                    } else {
-                        Text("Auto Record")
-                    }
-                }
-                Button {
-                    vm.vadEnabled.toggle()
-                } label: {
-                    if vm.vadEnabled {
-                        Label("Voice Detection", systemImage: "checkmark")
-                    } else {
-                        Text("Voice Detection")
-                    }
-                }
-                Button {
-                    vm.autoInterrupt.toggle()
-                } label: {
-                    if vm.autoInterrupt {
-                        Label("Auto Interrupt", systemImage: "checkmark")
-                    } else {
-                        Text("Auto Interrupt")
-                    }
-                }
-                Divider()
-                Button {
-                    vm.micMuted.toggle()
-                } label: {
-                    if vm.micMuted {
-                        Label("Mic Muted", systemImage: "checkmark")
-                    } else {
-                        Text("Mic Muted")
-                    }
-                }
-            } label: {
-                Image(systemName: "ellipsis")
+            Button { vm.showSettings = true } label: {
+                Image(systemName: "gearshape")
                     .font(.system(size: 14))
                     .foregroundStyle(Theme.textSecondary)
                     .frame(width: 36, height: 36)
@@ -570,46 +502,65 @@ struct ContentView: View {
 
     private var controlsOverlay: some View {
         VStack(spacing: 0) {
-            if vm.isRecording {
+            if vm.isRecording && !vm.pushToTalk {
                 waveformView
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
 
             HStack(alignment: .center, spacing: 20) {
                 if vm.isRecording {
-                    Button { vm.cancelRecording() } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(Theme.red)
-                            .frame(width: 40, height: 40)
-                            .background(Theme.red.opacity(0.12), in: Circle())
+                    if vm.pushToTalk {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 11, weight: .bold))
+                            Text("Cancel")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
+                        .foregroundStyle(pttDragOffset < -80 ? Theme.red : Theme.textTertiary)
+                        .opacity(pttDragOffset < -10 ? min(1.0, Double(-pttDragOffset - 10) / 60.0) : 0.3)
+                        .frame(width: 70)
+                        .transition(.scale.combined(with: .opacity))
+                    } else {
+                        Button { vm.cancelRecording() } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(Theme.red)
+                                .frame(width: 40, height: 40)
+                                .background(Theme.red.opacity(0.12), in: Circle())
+                        }
+                        .transition(.scale.combined(with: .opacity))
                     }
-                    .transition(.scale.combined(with: .opacity))
                 }
 
                 Spacer()
 
-                Button(action: vm.micAction) {
-                    ZStack {
-                        if vm.isRecording {
-                            Circle()
-                                .fill(Theme.green.opacity(0.15))
-                                .frame(width: 80, height: 80)
-                                .scaleEffect(isPulsing ? 1.15 : 1.0)
-                                .animation(
-                                    .easeInOut(duration: 1.0).repeatForever(),
-                                    value: isPulsing
-                                )
+                Group {
+                    if vm.pushToTalk && !vm.isPlaying {
+                        micButtonVisual
+                            .contentShape(Circle())
+                            .offset(x: vm.isRecording ? min(0, pttDragOffset * 0.3) : 0)
+                            .gesture(
+                                DragGesture(minimumDistance: 0)
+                                    .onChanged { value in
+                                        vm.pttPressed()
+                                        if vm.isRecording {
+                                            pttDragOffset = value.translation.width
+                                        }
+                                    }
+                                    .onEnded { _ in
+                                        if pttDragOffset < -80 && vm.isRecording {
+                                            vm.cancelRecording()
+                                        }
+                                        vm.pttReleased()
+                                        withAnimation(.spring(response: 0.25)) {
+                                            pttDragOffset = 0
+                                        }
+                                    }
+                            )
+                    } else {
+                        Button(action: vm.micAction) {
+                            micButtonVisual
                         }
-
-                        Circle()
-                            .fill(micColor)
-                            .frame(width: 64, height: 64)
-                            .shadow(color: micColor.opacity(0.3), radius: 16, y: 4)
-
-                        Image(systemName: micIcon)
-                            .font(.system(size: 22, weight: .semibold))
-                            .foregroundStyle(.white)
                     }
                 }
                 .disabled(vm.isProcessing || (vm.micMuted && !vm.isPlaying && !vm.isRecording))
@@ -623,18 +574,51 @@ struct ContentView: View {
                 }
             }
             .padding(.horizontal, 24)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
 
             Text(micLabel)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(micColor.opacity(0.8))
-                .padding(.bottom, 12)
+                .padding(.bottom, 8)
         }
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: vm.isRecording)
+    }
+
+    // MARK: - Text Input Bar
+
+    private var textInputBar: some View {
+        HStack(spacing: 10) {
+            TextField("Message", text: $vm.typingText, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.subheadline)
+                .lineLimit(1...5)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Theme.bgSecondary, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .onSubmit { vm.sendText() }
+                .submitLabel(.send)
+
+            Button {
+                vm.sendText()
+            } label: {
+                Image(systemName: "arrow.up.circle.fill")
+                    .font(.system(size: 28))
+                    .foregroundStyle(
+                        vm.typingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            ? Theme.gray3 : Theme.blue
+                    )
+            }
+            .disabled(vm.typingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
     }
 
     // MARK: - Waveform
@@ -656,6 +640,30 @@ struct ContentView: View {
 
     // MARK: - Mic Helpers
 
+    private var micButtonVisual: some View {
+        ZStack {
+            if vm.isRecording {
+                Circle()
+                    .fill(Theme.green.opacity(0.15))
+                    .frame(width: 80, height: 80)
+                    .scaleEffect(isPulsing ? 1.15 : 1.0)
+                    .animation(
+                        .easeInOut(duration: 1.0).repeatForever(),
+                        value: isPulsing
+                    )
+            }
+
+            Circle()
+                .fill(micColor)
+                .frame(width: 64, height: 64)
+                .shadow(color: micColor.opacity(0.3), radius: 16, y: 4)
+
+            Image(systemName: micIcon)
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(.white)
+        }
+    }
+
     private var micIcon: String {
         if vm.isPlaying { return "hand.raised.fill" }
         if vm.isRecording { return "arrow.up.circle.fill" }
@@ -665,10 +673,15 @@ struct ContentView: View {
 
     private var micLabel: String {
         if vm.isPlaying { return "Interrupt" }
-        if vm.isRecording { return "Send" }
+        if vm.isRecording {
+            if vm.pushToTalk {
+                return pttDragOffset < -80 ? "Release to Cancel" : "Release to Send"
+            }
+            return "Send"
+        }
         if vm.isProcessing { return "Processing..." }
         if vm.micMuted { return "Muted" }
-        return "Record"
+        return vm.pushToTalk ? "Hold to Talk" : "Record"
     }
 
     private var micColor: Color {
@@ -683,13 +696,13 @@ struct ContentView: View {
 
     private func voiceColor(_ voiceId: String) -> Color {
         switch voiceId {
-        case "af_sky": return Color(.systemCyan)
-        case "af_alloy": return Color(.systemGray)
-        case "af_sarah": return Color(.systemPink)
-        case "am_adam": return Color(.systemGreen)
-        case "am_echo": return Color(.systemPurple)
-        case "am_onyx": return Color(.systemGray2)
-        case "bm_fable": return Color(.systemYellow)
+        case "af_sky": return Color(hex: 0x3A86FF)    // blue
+        case "af_alloy": return Color(hex: 0xE67E22)  // orange
+        case "af_sarah": return Color(hex: 0xE63946)  // red
+        case "am_adam": return Color(hex: 0x2ECC71)   // green
+        case "am_echo": return Color(hex: 0x9B59B6)   // purple
+        case "am_onyx": return Color(hex: 0x1ABC9C)   // teal
+        case "bm_fable": return Color(hex: 0xF1C40F)  // gold
         default: return Color(.systemGray3)
         }
     }
@@ -908,11 +921,77 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                 }
 
-                Section("Recording") {
-                    Toggle("Auto Record", isOn: $vm.autoRecord)
-                    Toggle("Voice Detection (VAD)", isOn: $vm.vadEnabled)
-                    Toggle("Auto Interrupt", isOn: $vm.autoInterrupt)
-                    Toggle("Mic Muted", isOn: $vm.micMuted)
+                Section("Model") {
+                    Picker("Claude Model", selection: $vm.selectedModel) {
+                        Text("Opus").tag("opus")
+                        Text("Sonnet").tag("sonnet")
+                        Text("Haiku").tag("haiku")
+                    }
+                    .onChange(of: vm.selectedModel) { _, newValue in
+                        vm.updateSetting("model", value: newValue)
+                    }
+                    Text("Applies to newly spawned sessions only.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section {
+                    Picker("Input Mode", selection: $vm.inputMode) {
+                        Text("Auto").tag("auto")
+                        Text("PTT").tag("ptt")
+                        Text("Typing").tag("typing")
+                    }
+                    .pickerStyle(.segmented)
+
+                    if vm.inputMode == "ptt" {
+                        Text("Hold the mic button to record. Release to send. Slide left to cancel.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if vm.inputMode == "typing" {
+                        Text("Type messages using the keyboard. No voice input or output.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Toggle("Auto Record", isOn: $vm.autoRecord)
+                            .onChange(of: vm.autoRecord) { _, val in
+                                vm.updateSetting("auto_record", value: val)
+                            }
+                        Toggle("Voice Detection (VAD)", isOn: $vm.vadEnabled)
+                            .onChange(of: vm.vadEnabled) { _, val in
+                                vm.updateSetting("auto_end", value: val)
+                            }
+                        Toggle("Auto Interrupt", isOn: $vm.autoInterrupt)
+                            .onChange(of: vm.autoInterrupt) { _, val in
+                                vm.updateSetting("auto_interrupt", value: val)
+                            }
+                    }
+
+                    if !vm.typingMode {
+                        Toggle("Mic Muted", isOn: $vm.micMuted)
+                    }
+                } header: {
+                    Text("Input")
+                }
+
+                if vm.activeSessionId != nil {
+                    Section("Session") {
+                        Picker("Voice", selection: Binding(
+                            get: { vm.activeVoice },
+                            set: { vm.activeVoice = $0 }
+                        )) {
+                            ForEach(ALL_VOICES) { v in
+                                Text(v.name).tag(v.id)
+                            }
+                        }
+                        Picker("Speed", selection: Binding(
+                            get: { vm.activeSpeed },
+                            set: { vm.activeSpeed = $0 }
+                        )) {
+                            ForEach(SPEED_OPTIONS, id: \.value) { opt in
+                                Text(opt.label).tag(opt.value)
+                            }
+                        }
+                    }
                 }
 
                 Section {

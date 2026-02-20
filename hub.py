@@ -114,45 +114,56 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
     voice = session.voice
     speed = session.speed
 
-    # Send assistant text + status to browser
+    # Send assistant text to browser for chat display
     await send_to_browser({"session_id": session_id, "type": "assistant_text", "text": message})
     history.append(session.voice, session.label, "assistant", message)
-    session.status_text = "Speaking..."
-    await send_to_browser({"session_id": session_id, "type": "status", "text": "Speaking..."})
 
-    # TTS
-    log.info("[%s] TTS: %s", session_id, message[:80])
-    mp3 = await tts(message, voice, speed)
-    audio_b64 = base64.b64encode(mp3).decode()
+    if session.text_mode:
+        # Text mode: skip TTS entirely, go straight to listen phase
+        log.info("[%s] Text mode, skipping TTS: %s", session_id, message[:80])
+        if not wait_for_response:
+            session.status_text = ""
+            await send_to_browser({"session_id": session_id, "type": "done"})
+            await send_to_browser({"session_id": session_id, "type": "session_ended"})
+            return "Message delivered."
+        early_audio = None
+    else:
+        session.status_text = "Speaking..."
+        await send_to_browser({"session_id": session_id, "type": "status", "text": "Speaking..."})
 
-    # Send audio to browser
-    session.playback_done.clear()
-    has_clients = await send_to_browser({"session_id": session_id, "type": "audio", "data": audio_b64})
+        # TTS
+        log.info("[%s] TTS: %s", session_id, message[:80])
+        mp3 = await tts(message, voice, speed)
+        audio_b64 = base64.b64encode(mp3).decode()
 
-    if not has_clients:
-        # No clients received the audio — no one will send playback_done
-        log.warning("[%s] No clients connected, skipping playback wait", session_id)
-        session.playback_done.set()
+        # Send audio to browser
+        session.playback_done.clear()
+        has_clients = await send_to_browser({"session_id": session_id, "type": "audio", "data": audio_b64})
 
-    if not wait_for_response:
-        session.status_text = ""
-        await send_to_browser({"session_id": session_id, "type": "done"})
-        # Session ending — notify browser to close tab after playback
-        await send_to_browser({"session_id": session_id, "type": "session_ended"})
-        return "Message delivered."
+        if not has_clients:
+            # No clients received the audio — no one will send playback_done
+            log.warning("[%s] No clients connected, skipping playback wait", session_id)
+            session.playback_done.set()
 
-    # Wait for playback_done OR user audio (user interrupting/switching devices)
-    log.info("[%s] Waiting for playback_done", session_id)
-    early_audio = None
-    while not session.playback_done.is_set():
-        # Check if audio arrived (user spoke before playback finished)
-        if not session.audio_queue.empty():
-            early_audio = session.audio_queue.get_nowait()
-            if early_audio and len(early_audio) > 0:
-                log.info("[%s] Audio arrived during playback wait (%d bytes), skipping playback_done", session_id, len(early_audio))
-                break
-            early_audio = None  # empty audio, keep waiting
-        await asyncio.sleep(0.2)
+        if not wait_for_response:
+            session.status_text = ""
+            await send_to_browser({"session_id": session_id, "type": "done"})
+            # Session ending — notify browser to close tab after playback
+            await send_to_browser({"session_id": session_id, "type": "session_ended"})
+            return "Message delivered."
+
+        # Wait for playback_done OR user audio (user interrupting/switching devices)
+        log.info("[%s] Waiting for playback_done", session_id)
+        early_audio = None
+        while not session.playback_done.is_set():
+            # Check if audio arrived (user spoke before playback finished)
+            if not session.audio_queue.empty():
+                early_audio = session.audio_queue.get_nowait()
+                if early_audio and len(early_audio) > 0:
+                    log.info("[%s] Audio arrived during playback wait (%d bytes), skipping playback_done", session_id, len(early_audio))
+                    break
+                early_audio = None  # empty audio, keep waiting
+            await asyncio.sleep(0.2)
 
     # Retry loop: wait for a client to connect and send real audio
     while True:
@@ -162,10 +173,14 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
             early_audio = None
             break
 
-        # Drain stale audio
+        # Drain stale audio (but preserve text input markers)
         while not session.audio_queue.empty():
             try:
-                session.audio_queue.get_nowait()
+                item = session.audio_queue.get_nowait()
+                if item == b"__text__":
+                    # Put it back — this is a typed response, not stale audio
+                    await session.audio_queue.put(item)
+                    break
             except asyncio.QueueEmpty:
                 break
 
@@ -203,11 +218,16 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
 
         break  # Got real audio
 
-    # STT
-    session.status_text = "Transcribing..."
-    await send_to_browser({"session_id": session_id, "type": "status", "text": "Transcribing..."})
-    text = await stt(audio_bytes)
-    log.info("[%s] STT: %s", session_id, text[:100])
+    # Text override (typed input from client) or STT
+    if audio_bytes == b"__text__" and session.text_override:
+        text = session.text_override
+        session.text_override = ""
+        log.info("[%s] Text input: %s", session_id, text[:100])
+    else:
+        session.status_text = "Transcribing..."
+        await send_to_browser({"session_id": session_id, "type": "status", "text": "Transcribing..."})
+        text = await stt(audio_bytes)
+        log.info("[%s] STT: %s", session_id, text[:100])
 
     # Send user's transcribed text to browser for chat display
     if text:
@@ -322,6 +342,18 @@ async def handle_browser_message(data: dict) -> None:
         audio_bytes = base64.b64decode(data["data"])
         log.info("[%s] Audio from browser: %d bytes", session_id, len(audio_bytes))
         await session.audio_queue.put(audio_bytes)
+
+    elif msg_type == "text":
+        text = data.get("text", "").strip()
+        if text:
+            log.info("[%s] Text from browser: %s", session_id, text[:100])
+            session.text_override = text
+            await session.audio_queue.put(b"__text__")
+
+    elif msg_type == "set_mode":
+        mode = data.get("mode", "voice")
+        session.text_mode = (mode == "text")
+        log.info("[%s] Mode set to %s", session_id, mode)
 
 
 # --- MCP Server WebSocket (one per session) ---

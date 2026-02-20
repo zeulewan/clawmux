@@ -264,6 +264,18 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     @Published var audioLevels: [CGFloat] = []
 
     // Controls
+    // Input mode: "auto", "ptt", "typing"
+    @Published var inputMode: String {
+        didSet {
+            UserDefaults.standard.set(inputMode, forKey: "inputMode")
+            if let sid = activeSessionId {
+                sendJSON(["session_id": sid, "type": "set_mode", "mode": inputMode == "typing" ? "text" : "voice"])
+            }
+        }
+    }
+    var pushToTalk: Bool { inputMode == "ptt" }
+    var typingMode: Bool { inputMode == "typing" }
+
     @Published var autoRecord: Bool {
         didSet { UserDefaults.standard.set(autoRecord, forKey: "autoRecord") }
     }
@@ -282,6 +294,8 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     @Published var backgroundMode: Bool {
         didSet { UserDefaults.standard.set(backgroundMode, forKey: "backgroundMode") }
     }
+    @Published var selectedModel: String = "opus"
+    @Published var typingText = ""
 
     // Debug
     @Published var showDebug: Bool {
@@ -331,11 +345,14 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     private let maxLevelSamples = 50
     private var debugRefreshTimer: Timer?
     private var pausedAudioSessionId: String?
+    private var suppressNextAutoRecord = false
     private var currentActivity: Activity<VoiceChatActivityAttributes>?
     private var silencePlayer: AVAudioPlayer?
     private var playbackVADEngine: AVAudioEngine?
     private var playbackVADProcessor: PlaybackVADProcessor?
     private var lastPingTime: Date?
+    private var lastMicActionTime: Date?
+    private var pttActive = false
     private var pingWatchdogTimer: Timer?
 
     // MARK: - Init
@@ -346,6 +363,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         self.vadEnabled = UserDefaults.standard.object(forKey: "vadEnabled") as? Bool ?? true
         self.autoInterrupt = UserDefaults.standard.object(forKey: "autoInterrupt") as? Bool ?? false
         self.micMuted = UserDefaults.standard.bool(forKey: "micMuted")
+        self.inputMode = UserDefaults.standard.string(forKey: "inputMode") ?? "auto"
         self.backgroundMode =
             UserDefaults.standard.object(forKey: "backgroundMode") as? Bool ?? true
         self.showDebug = UserDefaults.standard.bool(forKey: "showDebug")
@@ -583,15 +601,21 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         }
     }
 
+    // MARK: - Audio Cues (background only)
+
+    private var appInBackground: Bool {
+        UIApplication.shared.applicationState != .active
+    }
+
     // MARK: - Thinking Sound
 
     func startThinkingSound() {
         stopThinkingSound()
-        tonePlayer.thinkingTick()
         thinkingSoundTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: true) {
             [weak self] _ in
             Task { @MainActor in
-                self?.tonePlayer.thinkingTick()
+                guard let self, !self.appInBackground else { return }
+                self.tonePlayer.thinkingTick()
             }
         }
     }
@@ -674,9 +698,15 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     private func handleDisconnect() {
         isConnected = false
         isConnecting = false
-        isRecording = false
-        isPlaying = false
+        if isRecording { stopRecording(discard: true) }
+        if isPlaying {
+            audioPlayer?.stop()
+            audioPlayer = nil
+            isPlaying = false
+            playingSessionId = nil
+        }
         isProcessing = false
+        stopPlaybackVAD()
         statusText = "Disconnected"
         pingWatchdogTimer?.invalidate()
         pingWatchdogTimer = nil
@@ -752,8 +782,6 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                 sessions[idx].status = status
                 if status == "ready" {
                     addMessage(sid, role: "system", text: "Claude connected.")
-                    tonePlayer.cueSessionReady()
-                    haptic(.success)
                 }
             }
 
@@ -819,6 +847,12 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
 
         case "listening":
             if let sid = sessionId {
+                // Skip if already recording for this session
+                if isRecording, recordingSessionId == sid { break }
+
+                // Skip repeated listening if session already has pending listen
+                if let idx = sessionIndex(sid), sessions[idx].pendingListen { break }
+
                 // Mic muted: send silent audio immediately
                 if micMuted {
                     sendJSON(["session_id": sid, "type": "audio", "data": ""])
@@ -834,11 +868,19 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                 let isBackground = UIApplication.shared.applicationState != .active
 
                 if isActive || (isBackground && autoRecord) {
-                    if isActive {
-                        tonePlayer.cueListening()
-                        haptic(.light)
-                    }
-                    if autoRecord {
+                    // User cancelled recording - stay idle, just absorb the hub's retries
+                    if suppressNextAutoRecord {
+                        if let idx = sessionIndex(sid) {
+                            sessions[idx].pendingListen = true
+                        }
+                    } else if typingMode {
+                        // In typing mode, don't auto-record, just mark pending
+                        if let idx = sessionIndex(sid) {
+                            sessions[idx].pendingListen = true
+                            sessions[idx].statusText = "Type a message"
+                        }
+                        statusText = "Type a message"
+                    } else if autoRecord {
                         startRecording(sessionId: sid)
                     } else {
                         if let idx = sessionIndex(sid) {
@@ -969,21 +1011,25 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             }
             // Handle pending listen
             else if session.pendingListen {
-                if let idx = sessionIndex(id) {
-                    sessions[idx].pendingListen = false
-                }
-                if micMuted {
-                    sendJSON(["session_id": id, "type": "audio", "data": ""])
-                    statusText = "Muted"
-                } else if autoRecord {
-                    tonePlayer.cueListening()
-                    startRecording(sessionId: id)
+                if typingMode {
+                    statusText = "Type a message"
                 } else {
-                    tonePlayer.cueListening()
-                    haptic(.light)
-                    statusText = "Tap Record"
+                    if let idx = sessionIndex(id) {
+                        sessions[idx].pendingListen = false
+                    }
+                    if micMuted {
+                        sendJSON(["session_id": id, "type": "audio", "data": ""])
+                        statusText = "Muted"
+                    } else if autoRecord {
+                        startRecording(sessionId: id)
+                    } else {
+                        statusText = "Tap Record"
+                    }
                 }
             }
+
+            // Sync mode with hub
+            sendJSON(["session_id": id, "type": "set_mode", "mode": typingMode ? "text" : "voice"])
         }
     }
 
@@ -1078,6 +1124,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         }
         if isRecording { stopRecording(discard: true) }
         stopThinkingSound()
+        stopPlaybackVAD()
         showDebug = false
         activeSessionId = nil
         endLiveActivity()
@@ -1154,6 +1201,53 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         return URL(string: base)
     }
 
+    // MARK: - Server Settings
+
+    func fetchSettings() {
+        guard let baseURL = httpBaseURL() else { return }
+        let url = baseURL.appendingPathComponent("api/settings")
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+            guard let data,
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { return }
+            Task { @MainActor in
+                guard let self else { return }
+                if let model = json["model"] as? String {
+                    self.selectedModel = model
+                }
+                if let autoRecord = json["auto_record"] as? Bool {
+                    self.autoRecord = autoRecord
+                }
+                if let autoEnd = json["auto_end"] as? Bool {
+                    self.vadEnabled = autoEnd
+                }
+                if let autoInterrupt = json["auto_interrupt"] as? Bool {
+                    self.autoInterrupt = autoInterrupt
+                }
+            }
+        }.resume()
+    }
+
+    func updateSetting(_ key: String, value: Any) {
+        guard let baseURL = httpBaseURL() else { return }
+        let url = baseURL.appendingPathComponent("api/settings")
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: [key: value])
+        URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
+            guard let data,
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { return }
+            Task { @MainActor in
+                guard let self else { return }
+                if let model = json["model"] as? String {
+                    self.selectedModel = model
+                }
+            }
+        }.resume()
+    }
+
     // MARK: - Audio Playback
 
     private func playAudio(_ sessionId: String, data: Data) {
@@ -1193,7 +1287,6 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             sessions[idx].statusText = "Ready"
         }
         statusText = "Ready"
-        haptic(.medium)
         sendJSON(["session_id": sid, "type": "playback_done"])
     }
 
@@ -1268,7 +1361,6 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             if let sid = recordingSessionId, let idx = sessionIndex(sid) {
                 sessions[idx].statusText = "Recording..."
             }
-            haptic(.light)
             updateLiveActivity()
             startMetering()
 
@@ -1316,8 +1408,6 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         if let idx = sessionIndex(sid) {
             sessions[idx].statusText = "Processing..."
         }
-        tonePlayer.cueProcessing()
-        haptic(.light)
         updateLiveActivity()
 
         if let audioData = try? Data(contentsOf: recordingURL) {
@@ -1335,26 +1425,70 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     func cancelRecording() {
         guard isRecording, let sid = recordingSessionId else { return }
         stopRecording(discard: true)
+        // Suppress next auto-record so cancel doesn't immediately re-trigger
+        suppressNextAutoRecord = true
         // Send empty audio so hub doesn't hang
         sendJSON(["session_id": sid, "type": "audio", "data": ""])
         statusText = "Recording cancelled"
     }
 
-    // Mic button action: context-dependent
+    func sendText() {
+        let text = typingText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, let sid = activeSessionId else { return }
+        typingText = ""
+        // Clear pending listen since we're responding with text
+        if let idx = sessionIndex(sid) {
+            sessions[idx].pendingListen = false
+        }
+        // Send text message to hub (hub will echo back user_text + start thinking)
+        sendJSON(["session_id": sid, "type": "text", "text": text])
+    }
+
+    // Mic button action: context-dependent (debounced to prevent double-taps)
     func micAction() {
+        let now = Date()
+        if let last = lastMicActionTime, now.timeIntervalSince(last) < 0.4 { return }
+        lastMicActionTime = now
+
         if isPlaying {
             interruptPlayback()
         } else if isRecording {
             stopRecording()
         } else if micMuted {
-            // Muted: do nothing (button shows muted state)
             return
         } else if let sid = activeSessionId {
-            // Clear pending listen flag
+            // User manually tapped mic - clear cancel suppress and pending listen
+            suppressNextAutoRecord = false
             if let idx = sessionIndex(sid), sessions[idx].pendingListen {
                 sessions[idx].pendingListen = false
             }
             startRecording(sessionId: sid)
+        }
+    }
+
+    // MARK: - Push to Talk
+
+    func pttPressed() {
+        guard !pttActive else { return }
+        pttActive = true
+
+        if isPlaying {
+            interruptPlayback()
+        } else if !isRecording && !isProcessing && !micMuted {
+            if let sid = activeSessionId {
+                suppressNextAutoRecord = false
+                if let idx = sessionIndex(sid), sessions[idx].pendingListen {
+                    sessions[idx].pendingListen = false
+                }
+                startRecording(sessionId: sid)
+            }
+        }
+    }
+
+    func pttReleased() {
+        pttActive = false
+        if isRecording {
+            stopRecording()
         }
     }
 
@@ -1672,6 +1806,7 @@ extension VoiceChatViewModel: URLSessionWebSocketDelegate {
             self.statusText = "Connected"
             self.startPingWatchdog()
             self.receiveMessage()
+            self.fetchSettings()
         }
     }
 
