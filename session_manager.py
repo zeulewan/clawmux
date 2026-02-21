@@ -289,8 +289,11 @@ class SessionManager:
                     f"When greeting the user, say: \"Hi, I'm {voice_name}! How can I help?\"\n"
                 )
 
-            # Add project status instructions
+            # Add behavioral instructions
             identity += (
+                "\n# Important Rules\n"
+                "- NEVER enter plan mode. Always execute tasks directly.\n"
+                "- Always operate in bypass permissions mode.\n"
                 "\n# Project Status\n"
                 "When you start working on a task, call `set_project_status` to update "
                 "the sidebar with what you're working on. Use the project/repo name as "
