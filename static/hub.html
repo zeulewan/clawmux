@@ -72,6 +72,122 @@ body {
   -webkit-text-size-adjust: 100%;
 }
 
+/* App layout: header + body (sidebar + main) */
+#app-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Sidebar */
+#sidebar {
+  width: 200px;
+  min-width: 200px;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+#sidebar-list {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+.sidebar-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+  position: relative;
+}
+.sidebar-card:hover {
+  background: var(--bg-card-hover);
+}
+.sidebar-card.selected {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+}
+.sidebar-card:not(.selected) {
+  border: 1px solid transparent;
+}
+.sidebar-card .sb-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+.sidebar-card .sb-info {
+  flex: 1;
+  min-width: 0;
+}
+.sidebar-card .sb-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-card .sb-status {
+  font-size: 0.6rem;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.sidebar-card .sb-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  flex-shrink: 0;
+}
+.sidebar-card.active .sb-dot { background: var(--green); }
+.sidebar-card.starting .sb-dot { background: var(--yellow); animation: thinkingPulse 1.4s infinite ease-in-out; }
+.sidebar-card.thinking .sb-dot { background: var(--orange); animation: thinkingPulse 1.4s infinite ease-in-out; }
+.sidebar-card.speaking .sb-dot { background: var(--blue); }
+.sidebar-card.listening .sb-dot { background: var(--red); animation: pulse 1.5s infinite; }
+.sidebar-card .sb-unread {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--red);
+  flex-shrink: 0;
+}
+
+/* Main content area */
+#main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* Welcome state (no chat selected) */
+#welcome-view {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 2rem;
+}
+
 /* Header */
 #header {
   padding: 12px 20px;
@@ -133,6 +249,8 @@ body {
   max-width: 440px;
   margin: 0 auto;
   width: 100%;
+  overflow-y: auto;
+  flex: 1;
 }
 #settings-page h2 {
   margin: 0 0 1.25rem 0;
@@ -235,21 +353,12 @@ body {
   padding: 4px 0;
 }
 
-/* Voice grid (landing page) */
+/* Voice grid (legacy - hidden, replaced by sidebar) */
 #voice-grid {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
+  display: none !important;
 }
 #voice-grid-inner {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  padding: 8px 16px;
-  max-width: 360px;
-  width: 100%;
+  display: none;
 }
 .voice-card {
   padding: 14px 10px 12px;
@@ -653,28 +762,24 @@ body {
 ::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
 
 /* Mobile optimizations */
-@media (max-width: 480px) {
+@media (max-width: 600px) {
+  #sidebar {
+    width: 56px;
+    min-width: 56px;
+  }
+  .sidebar-card .sb-info { display: none; }
+  .sidebar-card { justify-content: center; padding: 8px 4px; }
+  .sidebar-card .sb-icon { margin: 0; }
   #header { padding: 8px 12px; }
   #header h1 { font-size: 1rem; }
-  #voice-grid-inner { padding: 8px 12px; gap: 8px; }
-  .voice-card { padding: 10px 8px 8px; border-radius: 14px; }
-  .voice-card .voice-icon { width: 30px; height: 30px; font-size: 0.85rem; margin-bottom: 4px; }
-  .voice-card .voice-name { font-size: 0.8rem; margin-bottom: 3px; }
   .msg { max-width: 88%; }
-}
-@media (max-height: 700px) {
-  #voice-grid-inner { padding: 6px 12px; gap: 6px; }
-  .voice-card { padding: 8px 6px 6px; }
-  .voice-card .voice-icon { width: 28px; height: 28px; font-size: 0.8rem; margin-bottom: 3px; }
-  .voice-card .voice-name { font-size: 0.75rem; margin-bottom: 2px; }
-  .voice-card .voice-status { font-size: 0.55rem; padding: 1px 6px; }
 }
 </style>
 </head>
 <body>
 
 <div id="header">
-  <h1 onclick="showVoiceGrid()">Voice Hub</h1>
+  <h1 onclick="showWelcome()">Voice Hub</h1>
   <span id="active-voice" style="display:none; font-size:0.85rem; font-weight:600;"></span>
   <div style="flex:1;"></div>
   <div style="display:flex;align-items:center;gap:6px;padding:4px 12px;background:rgba(128,128,128,0.08);border-radius:12px;">
@@ -685,7 +790,19 @@ body {
   <span id="debug-link" onclick="showDebugPanel()" title="Debug"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="vertical-align:middle;"><path d="M20 8h-2.81a5.985 5.985 0 0 0-1.82-1.96L17 4.41 15.59 3l-2.17 2.17C12.96 5.06 12.49 5 12 5s-.96.06-1.41.17L8.41 3 7 4.41l1.62 1.63C7.88 6.55 7.26 7.22 6.81 8H4v2h2.09c-.05.33-.09.66-.09 1v1H4v2h2v1c0 .34.04.67.09 1H4v2h2.81c1.04 1.79 2.97 3 5.19 3s4.15-1.21 5.19-3H20v-2h-2.09c.05-.33.09-.66.09-1v-1h2v-2h-2v-1c0-.34-.04-.67-.09-1H20V8zm-6 8h-4v-2h4v2zm0-4h-4v-2h4v2z"/></svg></span>
 </div>
 
+<div id="app-body">
+
+<div id="sidebar">
+  <div id="sidebar-list"></div>
+</div>
+
+<div id="main-content">
+
 <div id="voice-grid"></div>
+
+<div id="welcome-view">
+  <div>Select a voice to start chatting</div>
+</div>
 
 <div id="chat-area" style="display:none;"></div>
 
@@ -696,7 +813,7 @@ body {
     <div id="status"></div>
   </div>
   <div id="mic-row">
-    <button id="home-btn" class="btn-icon" onclick="showVoiceGrid()" title="Home">&#8962;</button>
+    <!-- Home button removed — sidebar is always visible -->
     <button id="mic-cancel" class="btn-icon" style="display:none;" title="Cancel recording" onclick="cancelRecording()">&#10005;</button>
     <button id="mic" disabled><svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg></button>
     <button id="options-btn" class="btn-icon" onclick="toggleOptions(event)" title="Options">&#8943;</button>
@@ -704,7 +821,7 @@ body {
 </div>
 
 <div id="text-input-bar">
-  <button id="home-btn-text" class="btn-icon" onclick="showVoiceGrid()" title="Home">&#8962;</button>
+  <!-- Home button removed — sidebar is always visible -->
   <textarea id="text-input" rows="1" placeholder="Type a message..."></textarea>
   <button id="text-send" onclick="sendTextMessage()" disabled>&#8593;</button>
   <div style="display:flex;flex-direction:column;gap:4px;">
@@ -820,6 +937,9 @@ body {
     <div id="debug-log" style="background:var(--bg-card); border:1px solid var(--border); border-radius:6px; padding:0.5rem; max-height:300px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; font-size:0.7rem; color:var(--text-secondary); line-height:1.5;">Loading...</div>
   </div>
 </div>
+
+</div><!-- /main-content -->
+</div><!-- /app-body -->
 
 <script>
 // --- State ---
@@ -1055,9 +1175,10 @@ function setStatus(text, sessionId) {
 }
 
 function updateLayout() {
+  renderSidebar(); // always keep sidebar up to date
   if (debugActive) return; // debug panel handles its own layout
   const inChat = activeSessionId && sessions.has(activeSessionId);
-  document.getElementById('voice-grid').style.display = inChat ? 'none' : 'flex';
+  document.getElementById('welcome-view').style.display = inChat ? 'none' : 'flex';
   chatArea.style.display = inChat ? 'flex' : 'none';
   document.getElementById('debug-panel').style.display = 'none';
   document.getElementById('settings-page').style.display = 'none';
@@ -1072,12 +1193,11 @@ function updateLayout() {
   } else {
     controls.style.display = 'none';
     textInputBar.classList.remove('active');
-    renderVoiceGrid();
   }
 }
 
-// --- Voice grid (landing page) ---
-function showVoiceGrid() {
+// --- Welcome view (no chat selected) ---
+function showWelcome() {
   stopThinkingSound();
   if (recording) stopRecording(false); // send recording before switching
   stopActiveAudio();
@@ -1088,17 +1208,16 @@ function showVoiceGrid() {
   textInputBar.classList.remove('active');
   updateLayout();
 }
+// Alias for compatibility
+function showVoiceGrid() { showWelcome(); }
 
-function renderVoiceGrid() {
-  const gridOuter = document.getElementById('voice-grid');
-  gridOuter.innerHTML = '';
-  const grid = document.createElement('div');
-  grid.id = 'voice-grid-inner';
-  gridOuter.appendChild(grid);
-  const allVoices = Object.entries(VOICE_NAMES); // [[id, name], ...]
+// --- Sidebar rendering ---
+function renderSidebar() {
+  const list = document.getElementById('sidebar-list');
+  list.innerHTML = '';
+  const allVoices = Object.entries(VOICE_NAMES);
 
   for (const [voiceId, name] of allVoices) {
-    // Check if this voice has an active session
     let sessionForVoice = null;
     for (const [sid, s] of sessions) {
       if (s.voice === voiceId) { sessionForVoice = s; break; }
@@ -1106,7 +1225,9 @@ function renderVoiceGrid() {
 
     const isSpawning = spawningVoices.has(voiceId);
     const card = document.createElement('div');
-    card.className = 'voice-card';
+    card.className = 'sidebar-card';
+
+    // State classes
     if (isSpawning) {
       card.classList.add('starting');
     } else if (sessionForVoice) {
@@ -1123,60 +1244,70 @@ function renderVoiceGrid() {
       }
     }
 
-    const vicon = document.createElement('div');
-    vicon.className = 'voice-icon';
+    // Highlight selected
+    if (sessionForVoice && sessionForVoice.session_id === activeSessionId) {
+      card.classList.add('selected');
+    }
+
+    // Icon
+    const icon = document.createElement('div');
+    icon.className = 'sb-icon';
     const iconVal = voiceIcon(voiceId);
     if (iconVal.startsWith('<')) {
-      vicon.innerHTML = iconVal;
+      icon.innerHTML = iconVal;
     } else {
-      vicon.textContent = iconVal;
+      icon.textContent = iconVal;
     }
     const vc = voiceColor(voiceId);
-    vicon.style.background = vc + '20';
-    vicon.style.color = vc;
+    icon.style.background = vc + '20';
+    icon.style.color = vc;
 
-    const vname = document.createElement('div');
-    vname.className = 'voice-name';
-    vname.textContent = name;
+    // Info
+    const info = document.createElement('div');
+    info.className = 'sb-info';
 
-    const vstatus = document.createElement('div');
-    vstatus.className = 'voice-status';
-    const vdot = document.createElement('span');
-    vdot.className = 'voice-dot';
-    const vlabel = document.createElement('span');
+    const nameEl = document.createElement('div');
+    nameEl.className = 'sb-name';
+    nameEl.textContent = name;
+    nameEl.style.color = voiceColor(voiceId);
+
+    const statusEl2 = document.createElement('div');
+    statusEl2.className = 'sb-status';
+    const dot2 = document.createElement('span');
+    dot2.className = 'sb-dot';
+    const label = document.createElement('span');
     if (isSpawning) {
-      vlabel.textContent = 'Starting...';
+      label.textContent = 'Starting...';
     } else if (!sessionForVoice) {
-      vlabel.textContent = 'Offline';
+      label.textContent = 'Offline';
     } else if (sessionForVoice.status === 'starting') {
-      vlabel.textContent = 'Starting...';
+      label.textContent = 'Starting...';
     } else if (sessionForVoice.isThinking) {
-      vlabel.textContent = 'Thinking...';
+      label.textContent = 'Thinking...';
     } else if (sessionForVoice.statusText === 'Playing...' || sessionForVoice.statusText === 'Speaking...') {
-      vlabel.textContent = 'Speaking...';
+      label.textContent = 'Speaking...';
     } else if (sessionForVoice.statusText === 'Recording...' || sessionForVoice.statusText === 'Tap Record') {
-      vlabel.textContent = 'Listening...';
+      label.textContent = 'Listening...';
     } else if (sessionForVoice.pendingListen) {
-      vlabel.textContent = 'Waiting...';
+      label.textContent = 'Waiting...';
     } else {
-      vlabel.textContent = 'Ready';
+      label.textContent = 'Ready';
     }
-    vstatus.appendChild(vdot);
-    vstatus.appendChild(vlabel);
+    statusEl2.appendChild(dot2);
+    statusEl2.appendChild(label);
 
-    // Voice name color
-    vname.style.color = voiceColor(voiceId);
+    info.appendChild(nameEl);
+    info.appendChild(statusEl2);
+
+    card.appendChild(icon);
+    card.appendChild(info);
 
     // Unread badge
     if (sessionForVoice && sessionForVoice.hasUnread) {
       const badge = document.createElement('span');
-      badge.className = 'unread-badge';
+      badge.className = 'sb-unread';
       card.appendChild(badge);
     }
-
-    card.appendChild(vicon);
-    card.appendChild(vname);
-    card.appendChild(vstatus);
 
     card.onclick = () => {
       if (isSpawning) return;
@@ -1187,7 +1318,6 @@ function renderVoiceGrid() {
       }
     };
 
-    // Context menu: connected cards get terminate + reset, others get reset only
     card.oncontextmenu = (e) => {
       e.preventDefault();
       if (sessionForVoice) {
@@ -1197,13 +1327,13 @@ function renderVoiceGrid() {
       }
     };
 
-    grid.appendChild(card);
+    list.appendChild(card);
   }
 }
 
-function renderVoiceGridIfActive() {
-  if (!activeSessionId && !debugActive) renderVoiceGrid();
-}
+// Legacy compatibility
+function renderVoiceGrid() { renderSidebar(); }
+function renderVoiceGridIfActive() { renderSidebar(); }
 
 // --- Tab management (via voice grid) ---
 
@@ -1465,7 +1595,7 @@ async function changeSpeed(speed) {
 
 // --- Settings page ---
 function showSettingsPage() {
-  document.getElementById('voice-grid').style.display = 'none';
+  document.getElementById('welcome-view').style.display = 'none';
   document.getElementById('chat-area').style.display = 'none';
   document.getElementById('controls').style.display = 'none';
   document.getElementById('waveform').style.display = 'none';
@@ -1473,7 +1603,10 @@ function showSettingsPage() {
   if (dbg) dbg.style.display = 'none';
   document.getElementById('settings-page').style.display = 'block';
   document.getElementById('active-voice').style.display = 'none';
+  textInputBar.classList.remove('active');
   activeSessionId = null;
+  debugActive = false;
+  renderSidebar();
   loadSettings();
 }
 
@@ -2151,12 +2284,14 @@ function showDebugPanel() {
   document.getElementById('active-voice').style.display = 'none';
 
   // Show debug, hide everything else
-  document.getElementById('voice-grid').style.display = 'none';
+  document.getElementById('welcome-view').style.display = 'none';
   chatArea.style.display = 'none';
   controls.style.display = 'none';
   document.getElementById('settings-page').style.display = 'none';
   document.getElementById('debug-panel').style.display = 'flex';
   document.getElementById('debug-panel').style.flexDirection = 'column';
+  textInputBar.classList.remove('active');
+  renderSidebar();
 
   refreshDebug();
   if (debugTimer) clearInterval(debugTimer);
@@ -2167,6 +2302,7 @@ function hideDebugPanel() {
   debugActive = false;
   document.getElementById('debug-panel').style.display = 'none';
   if (debugTimer) { clearInterval(debugTimer); debugTimer = null; }
+  renderSidebar();
 }
 
 async function killAllSessions() {
@@ -2397,6 +2533,7 @@ function sendTextMessage() {
 }
 
 // --- Init ---
+renderSidebar();
 connect();
 </script>
 </body>
