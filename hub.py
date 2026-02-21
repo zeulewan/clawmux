@@ -169,6 +169,16 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
                 early_audio = None  # empty audio, keep waiting
             await asyncio.sleep(0.2)
 
+    # Check for interjections (user spoke/typed while agent was busy)
+    if session.interjections:
+        text = " ... ".join(session.interjections)
+        session.interjections.clear()
+        log.info("[%s] Returning %d interjection(s): %s", session_id, text.count("...")+1, text[:100])
+        session.status_text = ""
+        await send_to_browser({"session_id": session_id, "type": "done"})
+        session.touch()
+        return text
+
     # Retry loop: wait for a client to connect and send real audio
     while True:
         # If we got early audio from the playback wait, use it
@@ -189,8 +199,11 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
                 break
 
         # Wait for at least one client to be connected
+        logged_once = False
         while not browser_clients:
-            log.info("[%s] No clients, waiting for reconnect...", session_id)
+            if not logged_once:
+                log.info("[%s] No clients, waiting for reconnect...", session_id)
+                logged_once = True
             session.status_text = "Waiting for client..."
             await asyncio.sleep(2)
 
@@ -357,6 +370,25 @@ async def handle_browser_message(data: dict) -> None:
             log.info("[%s] Text from browser: %s", session_id, text[:100])
             session.text_override = text
             await session.audio_queue.put(b"__text__")
+
+    elif msg_type == "interjection":
+        # User spoke/typed while agent was busy — transcribe and queue
+        payload = data.get("data", "")
+        text = data.get("text", "").strip()
+        if text:
+            # Text interjection
+            log.info("[%s] Text interjection: %s", session_id, text[:100])
+        elif payload:
+            # Audio interjection — transcribe now
+            audio_bytes = base64.b64decode(payload)
+            log.info("[%s] Audio interjection: %d bytes, transcribing...", session_id, len(audio_bytes))
+            await send_to_browser({"session_id": session_id, "type": "status", "text": "Transcribing..."})
+            text = await stt(audio_bytes)
+            log.info("[%s] Interjection STT: %s", session_id, text[:100] if text else "(empty)")
+        if text:
+            session.interjections.append(text)
+            await send_to_browser({"session_id": session_id, "type": "user_text", "text": text})
+            history.append(session.voice, session.label, "user", text)
 
     elif msg_type == "set_mode":
         mode = data.get("mode", "voice")
