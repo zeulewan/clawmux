@@ -81,6 +81,7 @@ async def converse(
     message: str,
     wait_for_response: bool = True,
     voice: str = "af_sky",
+    goodbye: bool = False,
 ) -> str:
     """Speak a message to the user via TTS and optionally listen for their spoken response via STT.
 
@@ -88,6 +89,7 @@ async def converse(
         message: Text to speak to the user.
         wait_for_response: If True, listen for the user's spoken response after playback.
         voice: Kokoro TTS voice name (default: af_sky).
+        goodbye: If True, end the session after speaking. Only use when the user explicitly says goodbye.
 
     Returns:
         The user's transcribed speech, or a status message if not listening.
@@ -104,6 +106,7 @@ async def converse(
             "message": message,
             "wait_for_response": wait_for_response,
             "voice": voice,
+            "goodbye": goodbye,
         }))
 
         # Wait for result from hub

@@ -6,7 +6,7 @@ hide:
   - toc
 ---
 
-<h1 style="text-align: center;">Voice Hub</h1>
+<h1 style="text-align: center;">Voice Hub Docs</h1>
 <p style="text-align: center; color: #888; max-width: 600px; margin: 0 auto;">A voice interface for AI agents that actually do things.</p>
 
 ---

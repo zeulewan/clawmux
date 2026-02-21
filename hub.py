@@ -50,7 +50,7 @@ async def send_to_browser(data: dict) -> bool:
     """Broadcast a message to all connected browser/app clients.
     Returns True if at least one client received the message."""
     dead = []
-    for ws in browser_clients:
+    for ws in list(browser_clients):
         try:
             await ws.send_json(data)
         except Exception:
@@ -102,7 +102,7 @@ async def stt(audio_bytes: bytes) -> str:
 
 # --- Converse logic (called by MCP sessions via WS) ---
 
-async def handle_converse(session_id: str, message: str, wait_for_response: bool, voice: str) -> str:
+async def handle_converse(session_id: str, message: str, wait_for_response: bool, voice: str, goodbye: bool = False) -> str:
     """Full converse flow: TTS → browser → record → STT → return text."""
     session = session_mgr.sessions.get(session_id)
     if not session:
@@ -127,7 +127,8 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
         if not wait_for_response:
             session.status_text = ""
             await send_to_browser({"session_id": session_id, "type": "done"})
-            await send_to_browser({"session_id": session_id, "type": "session_ended"})
+            if goodbye:
+                await send_to_browser({"session_id": session_id, "type": "session_ended"})
             return "Message delivered."
         early_audio = None
     else:
@@ -151,8 +152,8 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
         if not wait_for_response:
             session.status_text = ""
             await send_to_browser({"session_id": session_id, "type": "done"})
-            # Session ending — notify browser to close tab after playback
-            await send_to_browser({"session_id": session_id, "type": "session_ended"})
+            if goodbye:
+                await send_to_browser({"session_id": session_id, "type": "session_ended"})
             return "Message delivered."
 
         # Wait for playback_done OR user audio (user interrupting/switching devices)
@@ -276,7 +277,11 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 @app.get("/")
 async def index():
-    return FileResponse(STATIC_DIR / "hub.html")
+    return FileResponse(STATIC_DIR / "hub.html", headers={
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    })
 
 
 @app.get("/static/{filename:path}")
@@ -395,6 +400,7 @@ async def mcp_websocket(ws: WebSocket, session_id: str):
                         message=data["message"],
                         wait_for_response=data.get("wait_for_response", True),
                         voice=data.get("voice", "af_sky"),
+                        goodbye=data.get("goodbye", False),
                     )
                 except Exception as e:
                     result = f"Error: {e}"
