@@ -1,8 +1,3 @@
----
-hide:
-  - navigation
----
-
 # For Humans
 
 Voice Hub lets you talk to Claude Code with your voice. Run multiple voice agents from a single browser tab, each with their own voice and personality. Everything runs locally on your machine — no cloud audio processing.
