@@ -598,6 +598,31 @@ body {
   border-radius: 32px;
 }
 #mic:disabled { opacity: 0.3; cursor: not-allowed; box-shadow: none; transform: none; }
+#transport-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 4px 0;
+}
+.transport-btn {
+  width: 36px;
+  height: 36px;
+  font-size: 1.1rem;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+.transport-btn:hover {
+  background: var(--bg-hover, rgba(128,128,128,0.15));
+  border-color: var(--text-secondary);
+}
 #mic-row {
   display: flex;
   align-items: center;
@@ -850,6 +875,11 @@ body {
     <button id="mode-toggle" onclick="cycleInputMode()">Auto</button>
     <div id="status"></div>
   </div>
+  <div id="transport-bar" style="display:none;">
+    <button class="btn-icon transport-btn" id="transport-prev" onclick="transportPrev()" title="Previous">&#9198;</button>
+    <button class="btn-icon transport-btn" id="transport-pause" onclick="transportPause()" title="Pause">&#9208;</button>
+    <button class="btn-icon transport-btn" id="transport-next" onclick="transportNext()" title="Next">&#9197;</button>
+  </div>
   <div id="mic-row">
     <!-- Home button removed — sidebar is always visible -->
     <button id="mic-cancel" class="btn-icon" style="display:none;" title="Cancel recording" onclick="cancelRecording()">&#10005;</button>
@@ -873,6 +903,9 @@ body {
   <div class="opt-item" onclick="toggleAutoMode()"><span>Auto Record</span><span class="opt-check" id="opt-auto"></span></div>
   <div class="opt-item" onclick="toggleVAD()"><span>Auto End</span><span class="opt-check" id="opt-vad">&#10003;</span></div>
   <div class="opt-item" onclick="toggleAutoInterrupt()"><span>Auto Interrupt</span><span class="opt-check" id="opt-interrupt"></span></div>
+  <div class="opt-divider"></div>
+  <div class="opt-item" onclick="toggleThinkingSounds()"><span>Thinking Sounds</span><span class="opt-check" id="opt-thinking">&#10003;</span></div>
+  <div class="opt-item" onclick="toggleAudioCues()"><span>Audio Cues</span><span class="opt-check" id="opt-cues">&#10003;</span></div>
   <div class="opt-divider"></div>
   <div class="opt-label">Voice</div>
   <div class="opt-item"><select id="voice-select" onchange="changeVoice(this.value)" style="width:100%;">
@@ -915,6 +948,14 @@ body {
   <div class="settings-toggle" onclick="toggleSetting('auto_interrupt')">
     <span>Auto Interrupt</span>
     <div class="toggle-indicator" id="toggle-auto_interrupt"></div>
+  </div>
+  <div class="settings-toggle" onclick="toggleSetting('thinking_sounds')">
+    <span>Thinking Sounds</span>
+    <div class="toggle-indicator on" id="toggle-thinking_sounds"></div>
+  </div>
+  <div class="settings-toggle" onclick="toggleSetting('audio_cues')">
+    <span>Audio Cues</span>
+    <div class="toggle-indicator on" id="toggle-audio_cues"></div>
   </div>
 </div>
 
@@ -1003,6 +1044,13 @@ let autoInterruptEnabled = false; // voice-based interrupt during playback
 let playbackVadInterval = null; // VAD interval during playback for auto-interrupt
 let playbackVadCtx = null; // AudioContext for playback VAD
 const spawningVoices = new Set(); // voice IDs currently being spawned
+let thinkingSoundsEnabled = true; // thinking tick sounds
+let audioCuesEnabled = true; // listening/processing/ready cues
+let playbackPaused = false; // transport: is playback paused?
+let pausedBuffer = null; // transport: decoded AudioBuffer for resume
+let pauseOffset = 0; // transport: seconds into buffer when paused
+let pausedSessionId = null; // transport: session that was paused
+let playbackStartTime = 0; // transport: audioCtx.currentTime when source started
 
 // --- DOM refs ---
 const chatArea = document.getElementById('chat-area');
@@ -1134,6 +1182,7 @@ function playTone(freq, duration, startDelay = 0, gain = 0.15) {
 
 let lastCueTime = 0;
 function cueListening() {
+  if (!audioCuesEnabled) return;
   const now = Date.now();
   if (now - lastCueTime < 2000) return; // cooldown: skip if played within 2s
   lastCueTime = now;
@@ -1143,11 +1192,13 @@ function cueListening() {
 }
 
 function cueProcessing() {
+  if (!audioCuesEnabled) return;
   // Single soft low tone: thinking
   playTone(440, 0.2, 0, 0.08);
 }
 
 function cueSessionReady() {
+  if (!audioCuesEnabled) return;
   // Three-note chime: connected
   playTone(523, 0.1, 0);
   playTone(659, 0.1, 0.1);
@@ -1398,6 +1449,11 @@ function stopActiveAudio() {
     currentBufferedPlayer.stop();
     currentBufferedPlayer = null;
   }
+  // Clear paused state
+  playbackPaused = false;
+  pausedBuffer = null;
+  pauseOffset = 0;
+  pausedSessionId = null;
   updateMicUI();
 }
 
@@ -1551,7 +1607,7 @@ async function spawnSession(voiceId = '') {
   }
 }
 
-async function addSession(data, autoSwitch = true) {
+async function addSession(data, autoSwitch = false) {
   const isReady = data.status === 'ready' || data.mcp_connected;
 
   // Fetch persistent history from server
@@ -1678,13 +1734,19 @@ async function loadSettings() {
     setToggle('auto_record', s.auto_record || false);
     setToggle('auto_end', s.auto_end !== false); // default true
     setToggle('auto_interrupt', s.auto_interrupt || false);
+    setToggle('thinking_sounds', s.thinking_sounds !== false);
+    setToggle('audio_cues', s.audio_cues !== false);
     // Apply locally
     autoMode = s.auto_record || false;
     vadEnabled = s.auto_end !== false;
     autoInterruptEnabled = s.auto_interrupt || false;
+    thinkingSoundsEnabled = s.thinking_sounds !== false;
+    audioCuesEnabled = s.audio_cues !== false;
     document.getElementById('opt-auto').textContent = autoMode ? '\u2713' : '';
     document.getElementById('opt-vad').textContent = vadEnabled ? '\u2713' : '';
     document.getElementById('opt-interrupt').textContent = autoInterruptEnabled ? '\u2713' : '';
+    document.getElementById('opt-thinking').textContent = thinkingSoundsEnabled ? '\u2713' : '';
+    document.getElementById('opt-cues').textContent = audioCuesEnabled ? '\u2713' : '';
   } catch (e) {
     console.error('Failed to load settings:', e);
   }
@@ -1703,6 +1765,8 @@ async function toggleSetting(key) {
   if (key === 'auto_record') { autoMode = isOn; document.getElementById('opt-auto').textContent = isOn ? '\u2713' : ''; updateMicUI(); }
   if (key === 'auto_end') { vadEnabled = isOn; document.getElementById('opt-vad').textContent = isOn ? '\u2713' : ''; }
   if (key === 'auto_interrupt') { autoInterruptEnabled = isOn; document.getElementById('opt-interrupt').textContent = isOn ? '\u2713' : ''; }
+  if (key === 'thinking_sounds') { thinkingSoundsEnabled = isOn; document.getElementById('opt-thinking').textContent = isOn ? '\u2713' : ''; if (!isOn) stopThinkingSound(); }
+  if (key === 'audio_cues') { audioCuesEnabled = isOn; document.getElementById('opt-cues').textContent = isOn ? '\u2713' : ''; }
   try {
     await fetch('/api/settings', {
       method: 'PUT',
@@ -1790,6 +1854,131 @@ function toggleAutoInterrupt() {
   autoInterruptEnabled = !autoInterruptEnabled;
   document.getElementById('opt-interrupt').textContent = autoInterruptEnabled ? '\u2713' : '';
   fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ auto_interrupt: autoInterruptEnabled }) }).catch(() => {});
+}
+
+function toggleThinkingSounds() {
+  thinkingSoundsEnabled = !thinkingSoundsEnabled;
+  document.getElementById('opt-thinking').textContent = thinkingSoundsEnabled ? '\u2713' : '';
+  setToggle('thinking_sounds', thinkingSoundsEnabled);
+  if (!thinkingSoundsEnabled) stopThinkingSound();
+  fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ thinking_sounds: thinkingSoundsEnabled }) }).catch(() => {});
+}
+
+function toggleAudioCues() {
+  audioCuesEnabled = !audioCuesEnabled;
+  document.getElementById('opt-cues').textContent = audioCuesEnabled ? '\u2713' : '';
+  setToggle('audio_cues', audioCuesEnabled);
+  fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ audio_cues: audioCuesEnabled }) }).catch(() => {});
+}
+
+// --- Transport controls (pause/resume, skip) ---
+function updateTransportBar() {
+  const bar = document.getElementById('transport-bar');
+  const isPlaying = !!(currentAudio || currentBufferedPlayer);
+  if (isPlaying || playbackPaused) {
+    bar.style.display = 'flex';
+    document.getElementById('transport-pause').innerHTML = playbackPaused ? '&#9654;' : '&#9208;';
+    document.getElementById('transport-pause').title = playbackPaused ? 'Resume' : 'Pause';
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+function transportPause() {
+  if (playbackPaused) {
+    // Resume from paused state
+    if (!pausedBuffer || !pausedSessionId) return;
+    const source = audioCtx.createBufferSource();
+    source.buffer = pausedBuffer;
+    source.connect(audioCtx.destination);
+    currentAudio = { source, sessionId: pausedSessionId, decodedBuffer: pausedBuffer };
+    playbackStartTime = audioCtx.currentTime - pauseOffset;
+    playbackPaused = false;
+    source.onended = () => {
+      if (!playbackPaused) {
+        currentAudio = null;
+        pausedBuffer = null;
+        // If part of buffered playback, continue to next chunk
+        if (currentBufferedPlayer) {
+          currentBufferedPlayer.skipNext();
+        } else {
+          // Single-chunk playback done
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ session_id: pausedSessionId, type: 'playback_done' }));
+          }
+          stopPlaybackVAD();
+          updateMicUI();
+          updateTransportBar();
+        }
+      }
+    };
+    source.start(0, pauseOffset);
+    updateTransportBar();
+    updateMicUI();
+  } else {
+    // Pause current playback
+    if (!currentAudio || !currentAudio.source) return;
+    pauseOffset = audioCtx.currentTime - playbackStartTime;
+    pausedBuffer = currentAudio.decodedBuffer || null;
+    pausedSessionId = currentAudio.sessionId;
+    playbackPaused = true;
+    try { currentAudio.source.onended = null; currentAudio.source.stop(); } catch(e) {}
+    currentAudio = null;
+    updateTransportBar();
+    updateMicUI();
+  }
+}
+
+function transportNext() {
+  playbackPaused = false;
+  pausedBuffer = null;
+  if (currentBufferedPlayer) {
+    currentBufferedPlayer.skipNext();
+  } else if (currentAudio) {
+    const sid = currentAudio.sessionId;
+    stopActiveAudio();
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ session_id: sid, type: 'playback_done' }));
+    }
+  } else {
+    // Was paused on single chunk — just end
+    if (pausedSessionId && ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ session_id: pausedSessionId, type: 'playback_done' }));
+    }
+    pausedSessionId = null;
+    updateTransportBar();
+    updateMicUI();
+  }
+}
+
+function transportPrev() {
+  playbackPaused = false;
+  pausedBuffer = null;
+  if (currentBufferedPlayer) {
+    currentBufferedPlayer.skipPrev();
+  } else if (currentAudio && currentAudio.decodedBuffer) {
+    // Restart current single chunk from beginning
+    try { currentAudio.source.onended = null; currentAudio.source.stop(); } catch(e) {}
+    const decoded = currentAudio.decodedBuffer;
+    const sid = currentAudio.sessionId;
+    const source = audioCtx.createBufferSource();
+    source.buffer = decoded;
+    source.connect(audioCtx.destination);
+    currentAudio = { source, sessionId: sid, decodedBuffer: decoded };
+    playbackStartTime = audioCtx.currentTime;
+    source.onended = () => {
+      if (!playbackPaused) {
+        stopPlaybackVAD();
+        currentAudio = null;
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ session_id: sid, type: 'playback_done' }));
+        }
+        updateMicUI();
+        updateTransportBar();
+      }
+    };
+    source.start(0);
+  }
 }
 
 function startPlaybackVAD(sessionId) {
@@ -1885,6 +2074,7 @@ let thinkingSoundSessionId = null;
 function startThinkingSound(sessionId) {
   stopThinkingSound();
   thinkingSoundSessionId = sessionId;
+  if (!thinkingSoundsEnabled) return;
   if (!activeSessionId || sessionId !== activeSessionId) return; // only play for focused session tab
   const tick = () => {
     // Double-tick pattern: two quick soft clicks
@@ -1986,7 +2176,7 @@ function handleMessage(data) {
       if (data.status === 'ready') {
         cueSessionReady();
         addMessage(data.session_id, 'system', 'Claude connected.');
-        switchTab(data.session_id);
+        // Don't auto-switch — let user stay where they are
       }
     }
     renderVoiceGridIfActive();
@@ -2015,6 +2205,7 @@ function handleMessage(data) {
     hideThinking(session_id);
     stopThinkingSound();
     s.userSpokeThisCycle = false;
+    s.awaitingInput = true;  // Converse cycle started — expect normal input flow
     addMessage(session_id, 'assistant', data.text);
     renderVoiceGridIfActive();
   } else if (type === 'user_text') {
@@ -2024,7 +2215,6 @@ function handleMessage(data) {
     s.userSpokeThisCycle = true;
     renderVoiceGridIfActive();
   } else if (type === 'audio') {
-    s.awaitingInput = false;
     s.status = 'active';
     if (session_id === activeSessionId) {
       playAudio(session_id, data.data);
@@ -2131,9 +2321,12 @@ function playAudio(sessionId, b64data) {
       const source = audioCtx.createBufferSource();
       source.buffer = decoded;
       source.connect(audioCtx.destination);
-      if (currentAudio) currentAudio.source = source;
-      source.onended = () => { stopPlaybackVAD(); sendDone(); };
+      if (currentAudio) { currentAudio.source = source; currentAudio.decodedBuffer = decoded; }
+      playbackStartTime = audioCtx.currentTime;
+      playbackPaused = false;
+      source.onended = () => { if (!playbackPaused) { stopPlaybackVAD(); sendDone(); } };
       source.start(0);
+      updateTransportBar();
       if (autoInterruptEnabled && !micMuted) startPlaybackVAD(sessionId);
     })
     .catch(() => { stopPlaybackVAD(); sendDone(); setStatus('Audio error'); });
@@ -2147,16 +2340,24 @@ function playBufferedAudio(sessionId, chunks) {
 
   currentBufferedPlayer = {
     sessionId,
+    chunks,
+    get chunkIndex() { return i; },
+    set chunkIndex(v) { i = v; },
     stop() { stopped = true; stopPlaybackVAD(); if (currentAudio && currentAudio.source) { try { currentAudio.source.stop(); } catch(e) {} } },
+    skipNext() { if (currentAudio && currentAudio.source) { try { currentAudio.source.onended = null; currentAudio.source.stop(); } catch(e) {} } currentAudio = null; playNext(); },
+    skipPrev() { i = Math.max(0, i - 2); if (currentAudio && currentAudio.source) { try { currentAudio.source.onended = null; currentAudio.source.stop(); } catch(e) {} } currentAudio = null; playNext(); },
   };
   updateMicUI();
+  updateTransportBar();
   if (autoInterruptEnabled && !micMuted) startPlaybackVAD(sessionId);
 
   function playNext() {
     if (stopped || i >= chunks.length) {
       currentBufferedPlayer = null;
       currentAudio = null;
+      playbackPaused = false;
       updateMicUI();
+      updateTransportBar();
       if (!stopped && ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ session_id: sessionId, type: 'playback_done' }));
       }
@@ -2173,9 +2374,12 @@ function playBufferedAudio(sessionId, chunks) {
         const source = audioCtx.createBufferSource();
         source.buffer = decoded;
         source.connect(audioCtx.destination);
-        currentAudio = { source, sessionId };
-        source.onended = () => { currentAudio = null; playNext(); };
+        currentAudio = { source, sessionId, decodedBuffer: decoded };
+        playbackStartTime = audioCtx.currentTime;
+        playbackPaused = false;
+        source.onended = () => { if (!playbackPaused) { currentAudio = null; playNext(); } };
         source.start(0);
+        updateTransportBar();
       })
       .catch(() => { currentAudio = null; playNext(); });
   }
@@ -2191,6 +2395,7 @@ const MIC_INTERRUPT_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" width="2
 
 function updateMicUI() {
   const isPlaying = !!(currentAudio || currentBufferedPlayer);
+  updateTransportBar();
 
   micBtn.classList.remove('recording', 'interruptable', 'processing');
 
@@ -2838,6 +3043,7 @@ function startUsagePolling() {
 restoreInputMode();
 renderSidebar();
 connect();
+loadSettings();
 startUsagePolling();
 </script>
 </body>
