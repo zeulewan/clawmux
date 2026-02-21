@@ -2634,20 +2634,6 @@ function stopElapsedTimer() {
   sessionElapsedEl.style.display = 'none';
 }
 
-// --- Interrupt gesture (tap to stop playback) ---
-function handleInterruptGesture() {
-  if (!currentAudio && !currentBufferedPlayer) return;
-  const sid = (currentAudio && currentAudio.sessionId) || (currentBufferedPlayer && currentBufferedPlayer.sessionId) || activeSessionId;
-  interruptPlayback(sid);
-}
-
-chatArea.addEventListener('click', (e) => {
-  if (e.target.closest('button, a, .msg')) return;
-  handleInterruptGesture();
-});
-
-statusEl.addEventListener('click', () => handleInterruptGesture());
-
 // --- Copy on long-press ---
 let longPressTimer = null;
 let longPressTarget = null;
