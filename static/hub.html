@@ -678,6 +678,31 @@ body {
   transition: all 0.1s;
 }
 #context-menu .ctx-item:hover { background: rgba(128,128,128,0.1); }
+/* Copy toast */
+#copy-toast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--bg-card);
+  color: var(--text);
+  padding: 8px 18px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 300;
+}
+#copy-toast.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+/* Long-press highlight */
+.msg.long-press-active {
+  background: rgba(128,128,128,0.15) !important;
+}
 @keyframes pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(74,144,255,0.3); }
   50% { box-shadow: 0 0 0 14px rgba(74,144,255,0); }
@@ -781,6 +806,7 @@ body {
 <div id="header">
   <h1 onclick="showWelcome()">Voice Hub</h1>
   <span id="active-voice" style="display:none; font-size:0.85rem; font-weight:600;"></span>
+  <span id="session-elapsed" style="display:none; font-size:0.7rem; color:var(--text-tertiary); margin-left:6px;"></span>
   <div style="flex:1;"></div>
   <div style="display:flex;align-items:center;gap:6px;padding:4px 12px;background:rgba(128,128,128,0.08);border-radius:12px;">
     <div id="dot" class="connecting"></div>
@@ -884,6 +910,8 @@ body {
   <div class="ctx-item" id="ctx-reset">Reset History</div>
   <div class="ctx-item" id="ctx-terminate" style="color:#e63946;">Terminate Session</div>
 </div>
+
+<div id="copy-toast">Copied!</div>
 
 <div id="debug-panel" style="display:none; flex:1; overflow-y:auto; padding:1.25rem; font-family:'SF Mono','Menlo','Monaco','Consolas',monospace; font-size:0.75rem;">
   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
@@ -1201,6 +1229,7 @@ function showWelcome() {
   stopThinkingSound();
   if (recording) stopRecording(false); // send recording before switching
   stopActiveAudio();
+  stopElapsedTimer();
   pendingListenSessionId = null;
   activeSessionId = null;
   hideDebugPanel();
@@ -1362,6 +1391,12 @@ function switchTab(sessionId) {
   }
   activeSessionId = sessionId;
 
+  // Persist active voice for reconnection
+  const sv = sessions.get(sessionId);
+  if (sv) {
+    try { localStorage.setItem('hub_active_voice', sv.voice); } catch(e) {}
+  }
+
   const s = sessions.get(sessionId);
   if (s) s.hasUnread = false;
 
@@ -1376,6 +1411,7 @@ function switchTab(sessionId) {
   // Render chat messages
   renderChat();
   updateLayout();
+  startElapsedTimer();
 
   // Scroll to bottom after layout is applied
   requestAnimationFrame(() => {
@@ -1445,7 +1481,8 @@ function renderChat() {
 function addMessage(sessionId, role, text) {
   const s = sessions.get(sessionId);
   if (!s) return;
-  s.messages.push({ role, text });
+  s.messages.push({ role, text, ts: Date.now() / 1000 });
+  if (sessionId === activeSessionId) updateElapsedTime();
   if (sessionId === activeSessionId) {
     const div = document.createElement('div');
     div.className = `msg ${role}`;
@@ -1539,10 +1576,12 @@ async function terminateSession(sessionId) {
 }
 
 function removeSession(sessionId) {
+  const s = sessions.get(sessionId);
   sessions.delete(sessionId);
 
   if (activeSessionId === sessionId) {
     activeSessionId = null;
+    try { localStorage.removeItem('hub_active_voice'); } catch(e) {}
   }
   updateLayout();
 }
@@ -1890,7 +1929,23 @@ function handleMessage(data) {
     for (const s of data.sessions) {
       if (!sessions.has(s.session_id)) promises.push(addSession(s, false));
     }
-    Promise.all(promises).then(() => renderVoiceGridIfActive());
+    Promise.all(promises).then(() => {
+      renderVoiceGridIfActive();
+      // Auto-restore previously active session on reconnect
+      if (!activeSessionId) {
+        try {
+          const savedVoice = localStorage.getItem('hub_active_voice');
+          if (savedVoice) {
+            for (const [sid, s] of sessions) {
+              if (s.voice === savedVoice) {
+                switchTab(sid);
+                break;
+              }
+            }
+          }
+        } catch(e) {}
+      }
+    });
     return;
   }
   if (type === 'session_spawned') {
@@ -2488,6 +2543,7 @@ const textSendBtn = document.getElementById('text-send');
 function cycleInputMode() {
   inputMode = inputMode === 'auto' ? 'typing' : 'auto';
   applyInputMode();
+  saveInputMode();
   // Tell hub about mode change
   if (ws && ws.readyState === WebSocket.OPEN && activeSessionId) {
     ws.send(JSON.stringify({ session_id: activeSessionId, type: 'set_mode', mode: inputMode === 'typing' ? 'text' : 'voice' }));
@@ -2532,7 +2588,143 @@ function sendTextMessage() {
   textSendBtn.disabled = true;
 }
 
+// --- Session elapsed time ---
+let elapsedTimer = null;
+const sessionElapsedEl = document.getElementById('session-elapsed');
+
+function updateElapsedTime() {
+  if (!activeSessionId) {
+    sessionElapsedEl.style.display = 'none';
+    return;
+  }
+  const s = sessions.get(activeSessionId);
+  if (!s || !s.messages || s.messages.length === 0) {
+    sessionElapsedEl.style.display = 'none';
+    return;
+  }
+  // Find the last message with a timestamp (from server history) or use session start
+  let lastTs = null;
+  for (let i = s.messages.length - 1; i >= 0; i--) {
+    if (s.messages[i].ts) { lastTs = s.messages[i].ts * 1000; break; }
+  }
+  if (!lastTs) {
+    // Use current time for messages added client-side (no ts)
+    sessionElapsedEl.style.display = 'none';
+    return;
+  }
+  const elapsed = Date.now() - lastTs;
+  const secs = Math.floor(elapsed / 1000);
+  let text;
+  if (secs < 60) text = 'just now';
+  else if (secs < 3600) text = Math.floor(secs / 60) + 'm ago';
+  else if (secs < 86400) text = Math.floor(secs / 3600) + 'h ago';
+  else text = Math.floor(secs / 86400) + 'd ago';
+  sessionElapsedEl.textContent = text;
+  sessionElapsedEl.style.display = 'inline';
+}
+
+function startElapsedTimer() {
+  stopElapsedTimer();
+  updateElapsedTime();
+  elapsedTimer = setInterval(updateElapsedTime, 30000);
+}
+
+function stopElapsedTimer() {
+  if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null; }
+  sessionElapsedEl.style.display = 'none';
+}
+
+// --- Interrupt gesture (tap to stop playback) ---
+function handleInterruptGesture() {
+  if (!currentAudio && !currentBufferedPlayer) return;
+  const sid = (currentAudio && currentAudio.sessionId) || (currentBufferedPlayer && currentBufferedPlayer.sessionId) || activeSessionId;
+  interruptPlayback(sid);
+}
+
+chatArea.addEventListener('click', (e) => {
+  if (e.target.closest('button, a, .msg')) return;
+  handleInterruptGesture();
+});
+
+statusEl.addEventListener('click', () => handleInterruptGesture());
+
+// --- Copy on long-press ---
+let longPressTimer = null;
+let longPressTarget = null;
+
+function handleMsgPointerDown(e) {
+  const msgEl = e.target.closest('.msg');
+  if (!msgEl || msgEl.classList.contains('thinking') || msgEl.classList.contains('system')) return;
+  longPressTarget = msgEl;
+  longPressTimer = setTimeout(() => {
+    if (!longPressTarget) return;
+    longPressTarget.classList.add('long-press-active');
+    const text = longPressTarget.textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      showCopyToast();
+    }).catch(() => {
+      // Fallback for older browsers
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      showCopyToast();
+    });
+    setTimeout(() => {
+      if (longPressTarget) longPressTarget.classList.remove('long-press-active');
+    }, 200);
+    longPressTarget = null;
+  }, 500);
+}
+
+function handleMsgPointerUp() {
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+  if (longPressTarget) {
+    longPressTarget.classList.remove('long-press-active');
+    longPressTarget = null;
+  }
+}
+
+let copyToastTimer = null;
+function showCopyToast() {
+  const toast = document.getElementById('copy-toast');
+  toast.classList.add('visible');
+  if (copyToastTimer) clearTimeout(copyToastTimer);
+  copyToastTimer = setTimeout(() => toast.classList.remove('visible'), 1500);
+}
+
+chatArea.addEventListener('pointerdown', handleMsgPointerDown);
+chatArea.addEventListener('pointerup', handleMsgPointerUp);
+chatArea.addEventListener('pointercancel', handleMsgPointerUp);
+chatArea.addEventListener('pointermove', (e) => {
+  // Cancel long-press if user moves finger too much
+  if (longPressTimer && longPressTarget) {
+    longPressTimer && clearTimeout(longPressTimer);
+    longPressTimer = null;
+    longPressTarget = null;
+  }
+});
+
+// Persist input mode
+function saveInputMode() {
+  try { localStorage.setItem('hub_input_mode', inputMode); } catch(e) {}
+}
+function restoreInputMode() {
+  try {
+    const saved = localStorage.getItem('hub_input_mode');
+    if (saved === 'auto' || saved === 'typing') {
+      inputMode = saved;
+      applyInputMode();
+    }
+  } catch(e) {}
+}
+
 // --- Init ---
+restoreInputMode();
 renderSidebar();
 connect();
 </script>
