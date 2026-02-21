@@ -13,16 +13,30 @@ When you click a voice card in the sidebar:
 1. The hub creates a working directory and starts Claude Code in a tmux session
 2. Claude loads the MCP server, which connects to the hub via WebSocket
 3. The hub sends the `/voice-hub` skill to Claude, activating voice mode
-4. Claude greets you and starts listening
+4. Claude sets its project status in the sidebar
+5. Claude greets you and starts listening
 
 Each agent runs independently — they have their own terminal, their own MCP connection, and their own conversation history.
 
 ## Available Tools
 
-Agents currently have two tools:
+Agents currently have three tools:
 
 - **converse** — Speak a message to the user. Can optionally wait for a spoken reply. This is the main tool agents use for all voice interaction.
+- **set_project_status** — Update the sidebar to show what project and area the agent is working on (e.g. "voice-chat · frontend"). Agents call this on startup and whenever their context changes.
 - **voice_chat_status** — Check if a browser is connected. Agents call this on startup to make sure someone is listening.
+
+## The /voice-hub Skill
+
+The `/voice-hub` skill is a Claude Code slash command that activates voice chat mode. It's sent to each agent automatically when they start up. The skill tells Claude to:
+
+1. Check browser connection with `voice_chat_status`
+2. Set project status with `set_project_status`
+3. Greet the user via `converse`
+4. Process spoken requests and respond via `converse`
+5. Keep the conversation going until the user says goodbye
+
+See the raw skill: [/voice-hub skill](voice-hub-skill.md)
 
 ## Agent Identity (CLAUDE.md)
 
@@ -44,7 +58,7 @@ The pattern is always the same: Claude calls tool → MCP server forwards to hub
 
 ## Session Lifecycle
 
-**Starting:** Click a voice card → hub creates tmux + working directory + MCP config + CLAUDE.md → Claude starts → MCP server connects → agent greets you
+**Starting:** Click a voice card → hub creates tmux + working directory + MCP config + CLAUDE.md → Claude starts → MCP server connects → /voice-hub skill activates → agent sets project status → agent greets you
 
 **Running:** You speak → hub transcribes → Claude thinks and works → Claude calls `converse()` → hub synthesizes speech → you hear it
 
@@ -59,3 +73,4 @@ The pattern is always the same: Claude calls tool → MCP server forwards to hub
 | `session_manager.py` | Creates and manages agent sessions (tmux, working dirs, CLAUDE.md) |
 | `hub_config.py` | Configuration (ports, timeouts, model settings) |
 | `static/hub.html` | The browser interface (HTML + CSS + JS, all in one file) |
+| `.claude/commands/voice-hub.md` | The /voice-hub skill that activates voice mode |
