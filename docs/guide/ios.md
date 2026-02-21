@@ -8,7 +8,11 @@ Native iPhone companion app for Voice Hub. Connects to the hub over WebSocket an
 
 ### Input Modes
 - **Auto** - Mic opens automatically after the agent speaks, VAD auto-stops on silence
-- **Push to Talk (PTT)** - Hold mic button to record, release to send, slide left to cancel
+- **Push to Talk (PTT)** - Hold mic button to record with 4-direction gestures:
+  - Swipe up: send audio immediately
+  - Swipe left: cancel recording
+  - Swipe right: open keyboard with transcription for editing
+  - Release: show inline transcript preview (tap to edit, send, or dismiss)
 - **Typing** - Keyboard input, no voice/TTS
 - Mode toggle in the session view (tap the mode pill below the mic button)
 
@@ -33,8 +37,11 @@ Native iPhone companion app for Voice Hub. Connects to the hub over WebSocket an
 - Per-mode toggle (auto and PTT only, typing uses notifications)
 
 ### PTT Extras
-- Swipe right on mic button to open text input with current recording transcribed
-- Mic button in text input bar for additional voice-to-text
+- 4-direction gesture: up=send, left=cancel, right=keyboard, release=preview transcript
+- Inline transcript preview with send/edit/dismiss after recording
+- Keyboard mode with mic button for additional voice-to-text
+- Dismissing keyboard returns to transcript preview if text exists
+- Parallel transcription on send shows what you said while waiting for response
 
 ### Navigation
 - Left-edge swipe to go back to hub from session view

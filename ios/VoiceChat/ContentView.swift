@@ -35,6 +35,8 @@ struct ContentView: View {
     @State private var resetVoiceId: String?
     @State private var showResetConfirm = false
     @State private var pttDragOffset: CGFloat = 0
+    @State private var pttDragOffsetY: CGFloat = 0
+    @State private var pttGestureCommitted = false
 
     var body: some View {
         ZStack {
@@ -367,6 +369,7 @@ struct ContentView: View {
         )
         .animation(.easeInOut(duration: 0.18), value: vm.typingMode)
         .animation(.spring(response: 0.3, dampingFraction: 0.9), value: vm.showPTTTextField)
+        .animation(.spring(response: 0.3, dampingFraction: 0.9), value: vm.showTranscriptPreview)
     }
 
     private var sessionHeader: some View {
@@ -565,6 +568,61 @@ struct ContentView: View {
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
 
+                // Inline transcript preview (PTT release or auto-mode send)
+                if vm.showTranscriptPreview {
+                    HStack(spacing: 8) {
+                        Button { vm.clearTranscriptPreview() } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(Theme.textTertiary)
+                                .frame(width: 24, height: 24)
+                                .background(.ultraThinMaterial, in: Circle())
+                        }
+
+                        Group {
+                            if vm.isTranscribingPreview {
+                                HStack(spacing: 6) {
+                                    ProgressView().scaleEffect(0.7)
+                                    Text("Transcribing...")
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(Theme.textTertiary)
+                                }
+                            } else if let error = vm.pttTranscriptionError {
+                                Text(error)
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(Theme.orange)
+                            } else {
+                                Text(vm.transcriptPreviewText)
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(Theme.textPrimary)
+                                    .lineLimit(3)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Theme.bgSecondary, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .onTapGesture {
+                            if vm.pushToTalk { vm.tapTranscriptToEdit() }
+                        }
+
+                        if vm.pushToTalk {
+                            Button { vm.sendTranscriptPreview() } label: {
+                                Image(systemName: "arrow.up.circle.fill")
+                                    .font(.system(size: 28))
+                                    .foregroundStyle(
+                                        vm.transcriptPreviewText.isEmpty || vm.isTranscribingPreview
+                                            ? Theme.gray3 : Theme.blue
+                                    )
+                            }
+                            .disabled(vm.transcriptPreviewText.isEmpty || vm.isTranscribingPreview)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 4)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+
                 HStack(alignment: .center) {
                     // Left: Cancel (auto) or Cancel label (PTT) or spacer
                     if vm.isRecording && !vm.pushToTalk {
@@ -601,29 +659,52 @@ struct ContentView: View {
                                 .gesture(
                                     DragGesture(minimumDistance: 0)
                                         .onChanged { value in
-                                            if vm.showPTTTextField { return }
+                                            if vm.showPTTTextField || vm.showTranscriptPreview { return }
+                                            if pttGestureCommitted { return }
 
-                                            // Right swipe: transcribe current recording into text field
-                                            if value.translation.width > 60
-                                                && abs(value.translation.height) < 40
-                                            {
+                                            let dx = value.translation.width
+                                            let dy = value.translation.height
+
+                                            // Swipe UP: send audio immediately
+                                            if dy < -60 && abs(dx) < 40 && vm.isRecording {
+                                                pttGestureCommitted = true
+                                                vm.pttSwipeUpSend()
+                                                return
+                                            }
+                                            // Swipe LEFT: cancel recording
+                                            if dx < -80 && abs(dy) < 40 && vm.isRecording {
+                                                pttGestureCommitted = true
+                                                vm.cancelRecording()
+                                                return
+                                            }
+                                            // Swipe RIGHT: keyboard with transcription
+                                            if dx > 60 && abs(dy) < 40 {
+                                                pttGestureCommitted = true
                                                 vm.enterPTTTextMode()
                                                 return
                                             }
 
                                             vm.pttPressed()
                                             if vm.isRecording {
-                                                pttDragOffset = value.translation.width
+                                                pttDragOffset = dx
+                                                pttDragOffsetY = dy
                                             }
                                         }
                                         .onEnded { _ in
-                                            if !vm.showPTTTextField {
-                                                if pttDragOffset < -80 && vm.isRecording {
-                                                    vm.cancelRecording()
+                                            if !pttGestureCommitted && !vm.showPTTTextField {
+                                                if vm.isRecording {
+                                                    // Normal release: show transcript preview
+                                                    vm.pttReleasedForPreview()
+                                                } else {
+                                                    // Was interrupted or very short press
+                                                    vm.pttReleased()
                                                 }
+                                            } else if !pttGestureCommitted {
+                                                vm.pttReleased()
                                             }
-                                            vm.pttReleased()
                                             pttDragOffset = 0
+                                            pttDragOffsetY = 0
+                                            pttGestureCommitted = false
                                         }
                                 )
                         } else {
@@ -637,8 +718,21 @@ struct ContentView: View {
 
                     Spacer()
 
-                    // Right: balance spacer
-                    Color.clear.frame(width: 64, height: 40)
+                    // Right: Keyboard hint (PTT recording) or balance spacer
+                    if vm.isRecording && vm.pushToTalk {
+                        HStack(spacing: 4) {
+                            Text("Aa")
+                                .font(.system(size: 12, weight: .semibold))
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 11, weight: .bold))
+                        }
+                        .foregroundStyle(pttDragOffset > 40 ? Theme.blue : Theme.textTertiary)
+                        .opacity(pttDragOffset > 10 ? min(1.0, Double(pttDragOffset - 10) / 50.0) : 0.3)
+                        .frame(width: 64)
+                        .transition(.opacity)
+                    } else {
+                        Color.clear.frame(width: 64, height: 40)
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 6)
@@ -847,7 +941,10 @@ struct ContentView: View {
         if vm.isPlaying { return "Interrupt" }
         if vm.isRecording {
             if vm.pushToTalk {
-                return pttDragOffset < -80 ? "Release to Cancel" : "Release to Send"
+                if pttDragOffsetY < -30 { return "Send" }
+                if pttDragOffset < -40 { return "Cancel" }
+                if pttDragOffset > 30 { return "Keyboard" }
+                return "Release to Preview"
             }
             return "Send"
         }
