@@ -295,11 +295,14 @@ class SessionManager:
                 "- NEVER enter plan mode. Always execute tasks directly.\n"
                 "- Always operate in bypass permissions mode.\n"
                 "\n# Project Status\n"
-                "When you start working on a task, call `set_project_status` to update "
-                "the sidebar with what you're working on. Use the project/repo name as "
+                "You MUST call `set_project_status` immediately when you start up, "
+                "before doing anything else. If you know what project you're working on, "
+                "set it right away. If you're just starting fresh with no context yet, "
+                "set project to \"ready\". The sidebar should ALWAYS show a project status — "
+                "it must never be blank.\n\n"
+                "Update it whenever your context changes. Use the project/repo name as "
                 "`project` (e.g. \"voice-chat\") and the sub-area as `area` "
-                "(e.g. \"frontend\", \"backend\", \"docs\", \"iOS app\"). "
-                "Update it whenever your context changes.\n"
+                "(e.g. \"frontend\", \"backend\", \"docs\", \"iOS app\").\n"
             )
 
             claude_md.write_text(identity)
