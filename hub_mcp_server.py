@@ -42,6 +42,7 @@ def log(msg: str) -> None:
 
 # Shared WebSocket connection to the hub
 hub_ws = None
+_reconnect_task = None
 
 
 async def connect_to_hub():
@@ -52,9 +53,23 @@ async def connect_to_hub():
     return ws
 
 
+async def _reconnect_loop():
+    """Background loop: reconnect to hub when connection is lost."""
+    global hub_ws
+    while True:
+        await asyncio.sleep(2)
+        if hub_ws is not None:
+            continue
+        try:
+            hub_ws = await connect_to_hub()
+            log("Reconnected to hub")
+        except Exception:
+            pass  # Retry silently every 2s
+
+
 @asynccontextmanager
 async def lifespan(server: FastMCP) -> AsyncIterator[dict]:
-    global hub_ws
+    global hub_ws, _reconnect_task
     if not SESSION_ID:
         log("WARNING: VOICE_HUB_SESSION_ID not set")
 
@@ -65,9 +80,14 @@ async def lifespan(server: FastMCP) -> AsyncIterator[dict]:
         log(f"Failed to connect to hub: {e}")
         hub_ws = None
 
+    # Start background reconnection loop
+    _reconnect_task = asyncio.create_task(_reconnect_loop())
+
     try:
         yield {}
     finally:
+        if _reconnect_task:
+            _reconnect_task.cancel()
         if hub_ws:
             await hub_ws.close()
             log("Disconnected from hub")
@@ -119,11 +139,49 @@ async def converse(
                 return text
 
     except ConnectionClosed:
-        log("Hub connection lost during converse()")
+        log("Hub connection lost during converse(), waiting for reconnect...")
+        hub_ws = None
+        # Wait for reconnection (up to 30s)
+        for _ in range(15):
+            await asyncio.sleep(2)
+            if hub_ws is not None:
+                log("Reconnected — retrying converse()")
+                return await converse(message, wait_for_response, voice, goodbye)
+        return "Error: Lost connection to hub and could not reconnect."
+    except Exception as e:
+        log(f"converse() error: {e}")
+        return f"Error: {e}"
+
+
+@mcp.tool
+async def set_project_status(project: str, area: str = "") -> str:
+    """Update the sidebar to show what project and area you're currently working on.
+
+    Call this whenever your project context changes — for example, when you start
+    working on a different repo or switch between frontend/backend/docs work.
+
+    Args:
+        project: The project or repo name (e.g. "voice-chat", "isaac-sim").
+        area: Optional sub-area (e.g. "frontend", "backend", "docs", "iOS app").
+
+    Returns:
+        Confirmation that the status was updated.
+    """
+    global hub_ws
+    if hub_ws is None:
+        return "Error: Not connected to hub."
+
+    try:
+        await hub_ws.send(json.dumps({
+            "type": "set_project_status",
+            "project": project,
+            "area": area,
+        }))
+        return f"Project status updated: {project}" + (f" · {area}" if area else "")
+    except ConnectionClosed:
         hub_ws = None
         return "Error: Lost connection to hub."
     except Exception as e:
-        log(f"converse() error: {e}")
         return f"Error: {e}"
 
 
@@ -136,7 +194,13 @@ async def voice_chat_status() -> str:
     """
     global hub_ws
     if hub_ws is None:
-        return "Error: Not connected to hub."
+        # Wait briefly for reconnection
+        for _ in range(5):
+            await asyncio.sleep(1)
+            if hub_ws is not None:
+                break
+        if hub_ws is None:
+            return "Error: Not connected to hub."
 
     try:
         await hub_ws.send(json.dumps({"type": "status_check"}))
@@ -147,6 +211,9 @@ async def voice_chat_status() -> str:
                 if data["connected"]:
                     return "Connected: Browser is connected and ready."
                 return f"Disconnected: Open https://workstation.tailee9084.ts.net:{HUB_PORT} in your browser."
+    except ConnectionClosed:
+        hub_ws = None
+        return "Error: Lost connection to hub."
     except Exception as e:
         return f"Error: {e}"
 

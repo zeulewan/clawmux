@@ -67,12 +67,14 @@ No `session_id`:
 |------|--------|-------------|
 | `session_list` | `sessions` (array of session objects) | Full session list, sent on connect |
 | `session_status` | `session_id`, `status` | Session state changed (e.g. "ready") |
+| `project_status` | `session_id`, `project`, `area` | Agent's current project context updated |
 | `session_terminated` | `session_id` | Session was terminated |
 | `ping` | — | Heartbeat every 30s. Clients should ignore (no response needed). |
 
 ```json
 {"type": "session_list", "sessions": [{...}, {...}]}
 {"type": "session_status", "session_id": "voice-1-abc123", "status": "ready"}
+{"type": "project_status", "session_id": "voice-1-abc123", "project": "voice-chat", "area": "frontend"}
 {"type": "session_terminated", "session_id": "voice-1-abc123"}
 {"type": "ping"}
 ```
@@ -86,10 +88,12 @@ One connection per session. The `hub_mcp_server.py` instance connects here after
 | Type | Fields | Description |
 |------|--------|-------------|
 | `converse` | `message`, `wait_for_response` (bool), `voice` (ignored) | Speak and optionally listen |
+| `set_project_status` | `project`, `area` (optional) | Update sidebar with current project context |
 | `status_check` | — | Check if browser is connected |
 
 ```json
 {"type": "converse", "message": "Hello!", "wait_for_response": true, "voice": "af_sky"}
+{"type": "set_project_status", "project": "voice-chat", "area": "frontend"}
 {"type": "status_check"}
 ```
 
@@ -149,6 +153,8 @@ Returned by REST API and included in `session_list`:
 | `speed` | float | TTS speed multiplier |
 | `mcp_connected` | bool | Whether the MCP server WebSocket is connected |
 | `status_text` | string | Current activity: `"Speaking..."`, `"Listening..."`, `"Transcribing..."`, `"Waiting for client..."`, or `""` (idle) |
+| `project` | string | Current project/repo name (set by agent via `set_project_status`) |
+| `project_area` | string | Current sub-area (e.g. `"frontend"`, `"docs"`) |
 
 ## REST API
 

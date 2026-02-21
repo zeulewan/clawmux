@@ -39,8 +39,11 @@ class Session:
     voice: str = "af_sky"
     speed: float = 1.0
     status_text: str = ""  # last status sent to browser (e.g. "Speaking...", "Transcribing...")
+    project: str = ""  # current project/repo name (set by agent via set_project_status)
+    project_area: str = ""  # current sub-area (e.g. "frontend", "docs")
     text_override: str = ""  # set by browser "text" message, consumed by handle_converse
     text_mode: bool = False  # when True, skip TTS and just send text
+    interjections: list[str] = field(default_factory=list)  # queued user messages sent while agent was busy
     # Per-session bridge state (set by hub after creation)
     audio_queue: asyncio.Queue | None = field(default=None, repr=False)
     playback_done: asyncio.Event | None = field(default=None, repr=False)
@@ -58,6 +61,8 @@ class Session:
             "speed": self.speed,
             "mcp_connected": self.mcp_ws is not None,
             "status_text": self.status_text,
+            "project": self.project,
+            "project_area": self.project_area,
         }
 
     def touch(self) -> None:
@@ -76,7 +81,13 @@ class SessionManager:
         SESSION_DIR_BASE.mkdir(parents=True, exist_ok=True)
 
     async def cleanup_stale_sessions(self) -> None:
-        """Kill orphaned voice-* tmux sessions from previous hub runs."""
+        """Adopt orphaned voice-* tmux sessions from previous hub runs.
+
+        Instead of killing orphaned sessions, re-create Session objects so the
+        MCP servers inside them can reconnect to the hub.
+        """
+        # Build set of live tmux sessions
+        live_tmux: set[str] = set()
         try:
             proc = await asyncio.create_subprocess_exec(
                 "tmux", "list-sessions", "-F", "#{session_name}",
@@ -84,18 +95,77 @@ class SessionManager:
                 stderr=asyncio.subprocess.DEVNULL,
             )
             stdout, _ = await proc.communicate()
-            if proc.returncode != 0:
-                return
-            for name in stdout.decode().strip().splitlines():
-                if name.startswith(TMUX_SESSION_PREFIX + "-"):
-                    if name not in {s.tmux_session for s in self.sessions.values()}:
-                        log.warning("Killing orphaned tmux session: %s", name)
-                        await self._cleanup_tmux(name)
+            if proc.returncode == 0:
+                for name in stdout.decode().strip().splitlines():
+                    if name.startswith(TMUX_SESSION_PREFIX + "-"):
+                        live_tmux.add(name)
         except Exception as e:
-            log.error("Error cleaning stale sessions: %s", e)
+            log.error("Error listing tmux sessions: %s", e)
+
+        # Scan voice work dirs for adoptable sessions
+        voice_ids = {v[0] for v in VOICES}
+        voice_names_map = dict(VOICES)
+        adopted = 0
+
+        for voice_id in voice_ids:
+            work_dir = SESSION_DIR_BASE / voice_id
+            mcp_json_path = work_dir / ".mcp.json"
+            if not mcp_json_path.exists():
+                continue
+
+            try:
+                mcp_config = json.loads(mcp_json_path.read_text())
+                old_session_id = (
+                    mcp_config.get("mcpServers", {})
+                    .get("voice-hub", {})
+                    .get("env", {})
+                    .get("VOICE_HUB_SESSION_ID", "")
+                )
+            except Exception:
+                continue
+
+            if not old_session_id:
+                continue
+
+            # Check if the tmux session for this session_id still exists
+            if old_session_id not in live_tmux:
+                # No tmux session — clean up the stale .mcp.json
+                log.info("No tmux for %s (%s), cleaning .mcp.json", voice_id, old_session_id)
+                mcp_json_path.unlink(missing_ok=True)
+                continue
+
+            # Already tracked by this hub instance
+            if old_session_id in self.sessions:
+                continue
+
+            # Adopt: create a Session object with the old session_id
+            voice_name = voice_names_map.get(voice_id, voice_id)
+            session = Session(
+                session_id=old_session_id,
+                tmux_session=old_session_id,
+                work_dir=str(work_dir),
+                status="ready",
+                label=voice_name,
+                voice=voice_id,
+            )
+            session.init_bridge()
+            self.sessions[old_session_id] = session
+            self._counter += 1
+            adopted += 1
+            log.info("Adopted orphaned session: %s (voice=%s, tmux=%s)",
+                     old_session_id, voice_id, old_session_id)
+
+        if adopted:
+            log.info("Adopted %d orphaned session(s)", adopted)
+
+        # Kill any remaining orphaned tmux sessions that we couldn't adopt
+        known_tmux = {s.tmux_session for s in self.sessions.values()}
+        for name in live_tmux:
+            if name not in known_tmux:
+                log.warning("Killing unadoptable orphaned tmux session: %s", name)
+                await self._cleanup_tmux(name)
 
         # Clean orphaned session work dirs (but keep voice dirs for --resume)
-        voice_ids = {v[0] for v in VOICES}
         try:
             for d in SESSION_DIR_BASE.iterdir():
                 if d.is_dir() and d.name not in self.sessions and d.name not in voice_ids:
@@ -127,11 +197,6 @@ class SessionManager:
 
         self._counter += 1
         short_id = uuid.uuid4().hex[:6]
-        session_id = f"{TMUX_SESSION_PREFIX}-{self._counter}-{short_id}"
-        tmux_name = session_id  # unique tmux name avoids collisions on restart
-
-        # Kill stale tmux session with same name if it exists
-        await self._run(f"tmux kill-session -t {tmux_name} 2>/dev/null || true")
 
         if voice:
             # Use specified voice
@@ -139,6 +204,13 @@ class SessionManager:
             voice_name = dict(VOICES).get(voice, voice)
         else:
             voice_id, voice_name = self._next_voice()
+
+        # Name session after the voice (e.g. "voice-sky")
+        session_id = f"{TMUX_SESSION_PREFIX}-{voice_name.lower()}"
+        tmux_name = session_id
+
+        # Kill stale tmux session with same name if it exists
+        await self._run(f"tmux kill-session -t {tmux_name} 2>/dev/null || true")
 
         session = Session(
             session_id=session_id,
@@ -216,11 +288,27 @@ class SessionManager:
                     f"Your name is {voice_name}. "
                     f"When greeting the user, say: \"Hi, I'm {voice_name}! How can I help?\"\n"
                 )
+
+            # Add project status instructions
+            identity += (
+                "\n# Project Status\n"
+                "When you start working on a task, call `set_project_status` to update "
+                "the sidebar with what you're working on. Use the project/repo name as "
+                "`project` (e.g. \"voice-chat\") and the sub-area as `area` "
+                "(e.g. \"frontend\", \"backend\", \"docs\", \"iOS app\"). "
+                "Update it whenever your context changes.\n"
+            )
+
             claude_md.write_text(identity)
 
             # Create tmux session starting in the work dir
             await self._run(
                 f"tmux new-session -d -s {tmux_name} -x 200 -y 50 -c {work_dir}"
+            )
+
+            # Unset CLAUDECODE so nested Claude Code sessions don't get blocked
+            await self._run(
+                f'tmux send-keys -t {tmux_name} "unset CLAUDECODE" Enter'
             )
 
             # Send a marker so we can detect fresh output from Claude

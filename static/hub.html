@@ -2014,14 +2014,17 @@ function handleMessage(data) {
   if (type === 'assistant_text') {
     hideThinking(session_id);
     stopThinkingSound();
+    s.userSpokeThisCycle = false;
     addMessage(session_id, 'assistant', data.text);
     renderVoiceGridIfActive();
   } else if (type === 'user_text') {
     addMessage(session_id, 'user', data.text);
     showThinking(session_id);
     startThinkingSound(session_id);
+    s.userSpokeThisCycle = true;
     renderVoiceGridIfActive();
   } else if (type === 'audio') {
+    s.awaitingInput = false;
     s.status = 'active';
     if (session_id === activeSessionId) {
       playAudio(session_id, data.data);
@@ -2035,6 +2038,7 @@ function handleMessage(data) {
       renderVoiceGridIfActive();
     }
   } else if (type === 'listening') {
+    s.awaitingInput = true;
     if (recording && recordingSessionId === session_id) {
       // Already recording for this session (e.g. voice interrupt started it)
       // Just ignore the listening message
@@ -2074,6 +2078,7 @@ function handleMessage(data) {
     if (session_id === activeSessionId) setStatus(data.text, session_id);
     else renderVoiceGridIfActive();
   } else if (type === 'done') {
+    s.awaitingInput = false;
     s.statusText = 'Ready';
     s.status = 'ready';
     if (session_id === activeSessionId) {
@@ -2082,6 +2087,12 @@ function handleMessage(data) {
       updateMicUI();
     } else {
       renderVoiceGridIfActive();
+    }
+    // If user sent a message this cycle, agent is now processing — re-show thinking
+    if (s.userSpokeThisCycle) {
+      s.userSpokeThisCycle = false;
+      showThinking(session_id);
+      startThinkingSound(session_id);
     }
   } else if (type === 'session_ended') {
     // Agent said goodbye — auto-close after a short delay
@@ -2268,14 +2279,23 @@ function cancelRecording() {
   }
 }
 
+let interjectionMode = false;  // true when recording an interjection (agent is busy)
+
 function sendAudio(sessionId) {
   if (!ws || ws.readyState !== WebSocket.OPEN) {
     setStatus('Not connected');
     return;
   }
+  const isInterjection = interjectionMode;
+  interjectionMode = false;
+
   const blob = new Blob(audioChunks, { type: 'audio/webm' });
-  cueProcessing();
-  setStatus('Processing...');
+  if (isInterjection) {
+    setStatus('Transcribing...', sessionId);
+  } else {
+    cueProcessing();
+    setStatus('Processing...');
+  }
   micBtn.classList.add('processing');
   micBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22" style="animation:spin 1s linear infinite"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="31.4 31.4"/></svg>';
   micBtn.disabled = true;
@@ -2283,7 +2303,16 @@ function sendAudio(sessionId) {
   const reader = new FileReader();
   reader.onload = () => {
     const b64 = reader.result.split(',')[1];
-    ws.send(JSON.stringify({ session_id: sessionId, type: 'audio', data: b64 }));
+    const msgType = isInterjection ? 'interjection' : 'audio';
+    ws.send(JSON.stringify({ session_id: sessionId, type: msgType, data: b64 }));
+    if (isInterjection) {
+      // Re-enable mic after sending interjection (agent is still busy)
+      setTimeout(() => {
+        micBtn.classList.remove('processing');
+        micBtn.disabled = false;
+        updateMicUI();
+      }, 500);
+    }
   };
   reader.onerror = () => {
     setStatus('Error reading audio');
@@ -2342,12 +2371,17 @@ micBtn.addEventListener('click', () => {
     return;
   }
 
-  // Record: tap when idle → start recording
+  // Record: tap when idle or agent busy → start recording
   if (pendingListenSessionId) {
     const sid = pendingListenSessionId;
     pendingListenSessionId = null;
     startRecording(sid);
   } else if (activeSessionId) {
+    // Check if agent is NOT awaiting input — record as interjection
+    const s = sessions.get(activeSessionId);
+    if (s && !s.awaitingInput) {
+      interjectionMode = true;
+    }
     startRecording(activeSessionId);
   }
 });
@@ -2612,7 +2646,11 @@ textInput.addEventListener('keydown', (e) => {
 function sendTextMessage() {
   const text = textInput.value.trim();
   if (!text || !ws || ws.readyState !== WebSocket.OPEN || !activeSessionId) return;
-  ws.send(JSON.stringify({ session_id: activeSessionId, type: 'text', text }));
+  // Check if agent is NOT awaiting input — send as interjection
+  const s = sessions.get(activeSessionId);
+  const isInterjection = s && !s.awaitingInput;
+  const msgType = isInterjection ? 'interjection' : 'text';
+  ws.send(JSON.stringify({ session_id: activeSessionId, type: msgType, text }));
   textInput.value = '';
   textInput.style.height = 'auto';
   textSendBtn.disabled = true;
