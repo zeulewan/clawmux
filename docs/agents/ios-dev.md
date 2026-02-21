@@ -64,8 +64,32 @@ After editing `project.yml`, regenerate with `xcodegen generate` before building
 The app supports three input modes, switchable via a mode pill in the session view:
 
 - **Auto** - Mic opens automatically after agent speaks, VAD stops recording on silence
-- **PTT** - Hold-to-talk with drag gestures (left to cancel, right to transcribe into text field)
+- **PTT** - Hold-to-talk with 4-direction drag gestures (see PTT Gestures below)
 - **Typing** - Text-only, no audio
+
+### PTT Gestures
+
+Four-direction gesture system on the mic button while recording:
+
+| Gesture | Action | Audio sent to hub? |
+|---------|--------|--------------------|
+| **Swipe UP** | Send audio immediately | Yes (as audio) |
+| **Swipe LEFT** | Cancel recording, discard | No |
+| **Swipe RIGHT** | Open keyboard with transcription | No (sent as text after editing) |
+| **Just release** | Show inline transcript preview | No (user decides) |
+
+**Transcript preview** is an intermediate state between the mic button and keyboard. After releasing:
+- Shows transcription spinner, then the recognized text
+- Tap the transcript text to open keyboard and edit
+- Tap send button to send as text immediately
+- Tap X to dismiss and return to normal mic
+- Press mic again to discard preview and start new recording
+
+**Keyboard return**: Dismissing the keyboard (X button) returns to transcript preview if text exists, rather than fully dismissing.
+
+**Direction hints during recording**: Left shows "Cancel" label, right shows "Aa" keyboard hint, mic label updates to reflect current drag direction.
+
+**Auto mode parallel transcription**: When audio is sent to the hub (via swipe-up or auto-mode), a parallel `/api/transcribe` call fires to show the user what they said while waiting for the agent response. Cleared when the hub echoes back `user_text`.
 
 ### Audio Session
 

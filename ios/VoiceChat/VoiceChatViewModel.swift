@@ -437,6 +437,11 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     @Published var isTranscribing = false
     @Published var pttTranscriptionError: String? = nil
 
+    // Transcript preview (inline preview after PTT release or auto-mode send)
+    @Published var showTranscriptPreview = false
+    @Published var transcriptPreviewText = ""
+    @Published var isTranscribingPreview = false
+
     // Debug
     @Published var showDebug: Bool {
         didSet { UserDefaults.standard.set(showDebug, forKey: "showDebug") }
@@ -988,6 +993,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         }
         isProcessing = false
         suppressNextAutoRecord = false
+        clearTranscriptPreview()
         stopPlaybackVAD()
         statusText = "Disconnected"
         pingWatchdogTimer?.invalidate()
@@ -1133,6 +1139,10 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         case "user_text":
             if let sid = sessionId, let t = json["text"] as? String {
                 addMessage(sid, role: "user", text: t)
+                // Clear transcript preview now that hub confirmed the text
+                if sid == activeSessionId && showTranscriptPreview {
+                    clearTranscriptPreview()
+                }
                 if let idx = sessionIndex(sid) {
                     sessions[idx].isThinking = true
                     sessions[idx].statusText = "Thinking..."
@@ -1317,6 +1327,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             showPTTTextField = false
             pttPreviewText = ""
             pttTranscriptionError = nil
+            clearTranscriptPreview()
         }
         activeSessionId = id
         showDebug = false
@@ -1486,6 +1497,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         showPTTTextField = false
         pttPreviewText = ""
         pttTranscriptionError = nil
+        clearTranscriptPreview()
         showDebug = false
         activeSessionId = nil
         endLiveActivity()
@@ -1682,6 +1694,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     func startRecording(sessionId: String? = nil) {
         let sid = sessionId ?? activeSessionId
         guard let sid else { return }
+        if showTranscriptPreview { clearTranscriptPreview() }
         recordingSessionId = sid
 
         // Check permission status directly (avoid async request which is unreliable in background)
@@ -1757,19 +1770,27 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         }
     }
 
-    func stopRecording(discard: Bool = false) {
-        guard let recorder = audioRecorder, recorder.isRecording else { return }
+    /// Stops recording hardware and returns duration + session ID. Does NOT handle send/transcribe logic.
+    private func stopRecordingHardware() -> (duration: TimeInterval, sessionId: String?) {
+        guard let recorder = audioRecorder, recorder.isRecording else { return (0, nil) }
         recorder.stop()
         audioRecorder = nil
         isRecording = false
-        let recordingDuration = recordingStartedAt.map { Date().timeIntervalSince($0) } ?? 0
+        let duration = recordingStartedAt.map { Date().timeIntervalSince($0) } ?? 0
         recordingStartedAt = nil
         stopMetering()
         stopVAD()
         backgroundRecordingTimer?.invalidate()
         backgroundRecordingTimer = nil
+        let sid = recordingSessionId
+        return (duration, sid)
+    }
 
-        guard !discard, let sid = recordingSessionId else {
+    func stopRecording(discard: Bool = false) {
+        let (recordingDuration, sid) = stopRecordingHardware()
+        guard sid != nil || discard else { return }
+
+        guard !discard, let sid else {
             recordingSessionId = nil
             return
         }
@@ -1806,6 +1827,13 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         if let audioData = try? Data(contentsOf: recordingURL) {
             let b64 = audioData.base64EncodedString()
             sendJSON(["session_id": sid, "type": "audio", "data": b64])
+            // Fire parallel transcription for user feedback (both auto and PTT swipe-up)
+            if audioData.count > 1000 {
+                transcriptPreviewText = ""
+                isTranscribingPreview = true
+                showTranscriptPreview = true
+                transcribeForPreview(audioData)
+            }
         } else {
             statusText = "Error reading audio"
             isProcessing = false
@@ -1892,6 +1920,46 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         }.resume()
     }
 
+    /// Parallel transcription for inline preview display (used by both PTT release and auto-mode send).
+    private func transcribeForPreview(_ audioData: Data) {
+        guard let baseURL = httpBaseURL() else {
+            isTranscribingPreview = false
+            pttTranscriptionError = "Cannot connect to server"
+            return
+        }
+
+        let url = baseURL.appendingPathComponent("api/transcribe")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.httpBody = audioData
+        request.setValue("audio/wav", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 15
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
+            Task { @MainActor in
+                guard let self else { return }
+                self.isTranscribingPreview = false
+                if error != nil {
+                    self.pttTranscriptionError = "Transcription failed"
+                    return
+                }
+                guard let data,
+                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                    let text = json["text"] as? String, !text.isEmpty
+                else {
+                    self.pttTranscriptionError = "No speech detected"
+                    return
+                }
+                if let serverError = json["error"] as? String {
+                    self.pttTranscriptionError = "Transcription error: \(serverError)"
+                    return
+                }
+                self.transcriptPreviewText = text
+                self.pttTranscriptionError = nil
+            }
+        }.resume()
+    }
+
     func sendPreviewText() {
         let text = pttPreviewText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, let sid = activeSessionId else {
@@ -1908,10 +1976,16 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
 
     func dismissPTTTextField() {
         if isRecording { stopRecording(discard: true) }
-        pttPreviewText = ""
-        pttTranscriptionError = nil
         isTranscribing = false
         showPTTTextField = false
+        // If there's text, return to transcript preview instead of fully dismissing
+        let text = pttPreviewText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty {
+            transcriptPreviewText = text
+            showTranscriptPreview = true
+        }
+        pttPreviewText = ""
+        pttTranscriptionError = nil
     }
 
     // Mic button action: context-dependent (debounced to prevent double-taps)
@@ -1939,6 +2013,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     // MARK: - Push to Talk
 
     func pttPressed() {
+        if showTranscriptPreview { clearTranscriptPreview() }
         if isPlaying {
             interruptPlayback()
             pttInterrupted = true
@@ -1965,6 +2040,40 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         }
     }
 
+    /// Called on swipe-up: sends audio to hub immediately. Parallel transcription fires via stopRecording's normal path.
+    func pttSwipeUpSend() {
+        guard isRecording else { return }
+        pttInterrupted = false
+        stopRecording()  // normal path: sends audio to hub + fires parallel transcription
+    }
+
+    /// Called on normal release (no swipe): stops recording, transcribes for preview. Audio NOT sent to hub.
+    func pttReleasedForPreview() {
+        pttInterrupted = false
+        let (duration, _) = stopRecordingHardware()
+        guard duration > 0 else {
+            recordingSessionId = nil
+            return
+        }
+
+        if duration < 0.3 {
+            // Too short, just go back to idle
+            recordingSessionId = nil
+            return
+        }
+
+        if let audioData = try? Data(contentsOf: recordingURL), audioData.count > 1000 {
+            transcriptPreviewText = ""
+            isTranscribingPreview = true
+            showTranscriptPreview = true
+            pttTranscriptionError = nil
+            recordingSessionId = nil
+            transcribeForPreview(audioData)
+        } else {
+            recordingSessionId = nil
+        }
+    }
+
     /// Called when user swipes right on mic button in PTT mode.
     /// If recording is active, stops and transcribes. Otherwise shows empty text field for typing.
     func enterPTTTextMode() {
@@ -1974,6 +2083,33 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         if isRecording {
             stopRecording()  // triggers transcription via showPTTTextField branch
         }
+    }
+
+    /// Taps inline transcript preview to open keyboard for editing.
+    func tapTranscriptToEdit() {
+        showTranscriptPreview = false
+        pttPreviewText = transcriptPreviewText
+        showPTTTextField = true
+    }
+
+    /// Sends the inline transcript preview text directly.
+    func sendTranscriptPreview() {
+        let text = transcriptPreviewText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, let sid = activeSessionId else {
+            clearTranscriptPreview()
+            return
+        }
+        if hapticsSend { haptic(.medium) }
+        if let idx = sessionIndex(sid) { sessions[idx].pendingListen = false }
+        sendJSON(["session_id": sid, "type": "text", "text": text])
+        clearTranscriptPreview()
+    }
+
+    func clearTranscriptPreview() {
+        showTranscriptPreview = false
+        transcriptPreviewText = ""
+        isTranscribingPreview = false
+        pttTranscriptionError = nil
     }
 
     // MARK: - VAD (Voice Activity Detection)
