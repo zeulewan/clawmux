@@ -408,6 +408,18 @@ async def mcp_websocket(ws: WebSocket, session_id: str):
 
                 await ws.send_json({"type": "converse_result", "text": result})
 
+            elif msg_type == "set_project_status":
+                if session:
+                    session.project = data.get("project", "")
+                    session.project_area = data.get("area", "")
+                    log.info("[%s] Project status: %s / %s", session_id, session.project, session.project_area)
+                    await send_to_browser({
+                        "type": "project_status",
+                        "session_id": session_id,
+                        "project": session.project,
+                        "area": session.project_area,
+                    })
+
             elif msg_type == "status_check":
                 await ws.send_json({
                     "type": "status_result",
@@ -539,6 +551,19 @@ def _save_settings(settings: dict) -> None:
     settings_path = Path("data/settings.json")
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     settings_path.write_text(json.dumps(settings, indent=2))
+
+
+@app.get("/api/usage")
+async def get_usage():
+    """Return Claude usage stats from local cache."""
+    usage_path = Path.home() / ".claude" / "usage-cache.json"
+    if not usage_path.exists():
+        return JSONResponse({"error": "No usage data"}, status_code=404)
+    try:
+        data = json.loads(usage_path.read_text())
+        return JSONResponse(data)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 @app.get("/api/debug")

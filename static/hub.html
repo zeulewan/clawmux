@@ -140,6 +140,14 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.sidebar-card .sb-project {
+  font-size: 0.55rem;
+  color: var(--text-secondary, #888);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.7;
+}
 .sidebar-card .sb-status {
   font-size: 0.6rem;
   color: var(--text-tertiary);
@@ -808,6 +816,10 @@ body {
   <span id="active-voice" style="display:none; font-size:0.85rem; font-weight:600;"></span>
   <span id="session-elapsed" style="display:none; font-size:0.7rem; color:var(--text-tertiary); margin-left:6px;"></span>
   <div style="flex:1;"></div>
+  <div id="usage-bar" style="display:none;align-items:center;gap:8px;padding:4px 12px;background:rgba(128,128,128,0.08);border-radius:12px;font-size:0.7rem;color:var(--text-secondary);cursor:pointer;" onclick="toggleUsageDetail()" title="Claude usage">
+    <span id="usage-5h" style="white-space:nowrap;"></span>
+    <span id="usage-7d" style="white-space:nowrap;"></span>
+  </div>
   <div style="display:flex;align-items:center;gap:6px;padding:4px 12px;background:rgba(128,128,128,0.08);border-radius:12px;">
     <div id="dot" class="connecting"></div>
     <span id="conn-label">Connecting...</span>
@@ -1326,6 +1338,15 @@ function renderSidebar() {
     statusEl2.appendChild(label);
 
     info.appendChild(nameEl);
+
+    // Project context line
+    if (sessionForVoice && sessionForVoice.project) {
+      const projEl = document.createElement('div');
+      projEl.className = 'sb-project';
+      projEl.textContent = sessionForVoice.project + (sessionForVoice.project_area ? ' · ' + sessionForVoice.project_area : '');
+      info.appendChild(projEl);
+    }
+
     info.appendChild(statusEl2);
 
     card.appendChild(icon);
@@ -1967,6 +1988,15 @@ function handleMessage(data) {
         addMessage(data.session_id, 'system', 'Claude connected.');
         switchTab(data.session_id);
       }
+    }
+    renderVoiceGridIfActive();
+    return;
+  }
+  if (type === 'project_status') {
+    const s = sessions.get(data.session_id);
+    if (s) {
+      s.project = data.project || '';
+      s.project_area = data.area || '';
     }
     renderVoiceGridIfActive();
     return;
@@ -2709,10 +2739,68 @@ function restoreInputMode() {
   } catch(e) {}
 }
 
+// --- Claude Usage Stats ---
+let usageTimer = null;
+
+function usageColor(pct) {
+  if (pct >= 80) return 'var(--red)';
+  if (pct >= 60) return 'var(--orange)';
+  return 'var(--green)';
+}
+
+function formatReset(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  const now = new Date();
+  const diffMs = d - now;
+  if (diffMs <= 0) return 'now';
+  const hrs = Math.floor(diffMs / 3600000);
+  const mins = Math.floor((diffMs % 3600000) / 60000);
+  if (hrs > 24) return Math.floor(hrs / 24) + 'd';
+  if (hrs > 0) return hrs + 'h ' + mins + 'm';
+  return mins + 'm';
+}
+
+async function fetchUsage() {
+  try {
+    const resp = await fetch('/api/usage');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const bar = document.getElementById('usage-bar');
+    const el5h = document.getElementById('usage-5h');
+    const el7d = document.getElementById('usage-7d');
+
+    const pct5h = data.five_hour?.utilization ?? null;
+    const pct7d = data.seven_day?.utilization ?? null;
+
+    if (pct5h === null && pct7d === null) { bar.style.display = 'none'; return; }
+
+    if (pct5h !== null) {
+      el5h.innerHTML = '5h: <b style="color:' + usageColor(pct5h) + '">' + pct5h + '%</b>';
+      el5h.title = 'Resets in ' + formatReset(data.five_hour?.resets_at);
+    }
+    if (pct7d !== null) {
+      el7d.innerHTML = '7d: <b style="color:' + usageColor(pct7d) + '">' + pct7d + '%</b>';
+      el7d.title = 'Resets in ' + formatReset(data.seven_day?.resets_at);
+    }
+    bar.style.display = 'flex';
+  } catch(e) { /* ignore */ }
+}
+
+function toggleUsageDetail() {
+  fetchUsage(); // refresh on click
+}
+
+function startUsagePolling() {
+  fetchUsage();
+  usageTimer = setInterval(fetchUsage, 60000); // refresh every minute
+}
+
 // --- Init ---
 restoreInputMode();
 renderSidebar();
 connect();
+startUsagePolling();
 </script>
 </body>
 </html>
