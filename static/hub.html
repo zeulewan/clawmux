@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>Voice Hub</title>
+<title>Claw Hub</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%233a86ff'/><path d='M32 12a6 6 0 0 1 6 6v14a6 6 0 0 1-12 0V18a6 6 0 0 1 6-6z' fill='white'/><path d='M20 30a12 12 0 0 0 24 0' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/><line x1='32' y1='42' x2='32' y2='50' stroke='white' stroke-width='3' stroke-linecap='round'/><line x1='25' y1='50' x2='39' y2='50' stroke='white' stroke-width='3' stroke-linecap='round'/></svg>">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -338,7 +338,25 @@ body {
   animation: msgAppear 0.2s ease-out;
   overflow-wrap: break-word;
   word-break: break-word;
+  position: relative;
 }
+.msg .msg-copy {
+  position: absolute;
+  bottom: 4px;
+  right: 6px;
+  background: rgba(128,128,128,0.25);
+  border: none;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 0.6rem;
+  padding: 2px 6px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  line-height: 1;
+}
+.msg:hover .msg-copy { opacity: 1; }
+.msg .msg-copy:hover { background: rgba(128,128,128,0.4); }
 #chat-area { overflow-x: hidden; }
 @keyframes msgAppear {
   from { opacity: 0; transform: translateY(6px); }
@@ -527,6 +545,22 @@ body {
 }
 #text-send:hover { background: #3a80ef; transform: scale(1.05); }
 #text-send:disabled { opacity: 0.3; cursor: not-allowed; box-shadow: none; transform: none; }
+#text-paste {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+#text-paste:hover { background: var(--bg-card-hover); }
 
 /* Controls */
 #controls {
@@ -832,16 +866,26 @@ body {
   /* Header: declutter for mobile */
   #header { padding: 8px 12px; gap: 8px; }
   #header h1 { font-size: 1rem; }
-  #usage-bar { padding: 3px 8px !important; font-size: 0.6rem !important; gap: 6px !important; }
+  #usage-bar { padding: 3px 8px !important; font-size: 0.6rem !important; gap: 1px !important; flex-direction: column !important; align-items: flex-end !important; line-height: 1.3; }
   #debug-link { display: none; }
   #settings-link { font-size: 0; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; padding: 0; }
   #settings-link::before { content: '⚙'; font-size: 14px; }
   #conn-label { display: none; }
 
-  /* Sidebar: icon-only, fixed centering */
+  /* Sidebar: icon-only, absolutely positioned with smooth transition */
   #sidebar {
     width: 56px;
     min-width: 56px;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 50;
+    background: var(--bg-secondary);
+    overflow: hidden;
+  }
+  #main-content {
+    margin-left: 56px;
   }
   .sidebar-card .sb-info { display: none; }
   .sidebar-card .sb-unread {
@@ -859,40 +903,36 @@ body {
     user-select: none;
     -webkit-touch-callout: none;
   }
-  .sidebar-card .sb-icon {
-    margin: 0;
-    width: 34px;
-    height: 34px;
-    position: relative;
-    border: 2px solid transparent;
-    transition: border-color 0.2s;
+  /* Override selected style on mobile: no border box, use left accent dot */
+  .sidebar-card.selected {
+    background: transparent !important;
+    border: 1px solid transparent !important;
   }
-  /* Colored ring around icon to show state on mobile */
-  .sidebar-card.active .sb-icon { border-color: var(--green); }
-  .sidebar-card.starting .sb-icon { border-color: var(--yellow); }
-  .sidebar-card.thinking .sb-icon { border-color: var(--orange); }
-  .sidebar-card.speaking .sb-icon { border-color: var(--blue); }
-  .sidebar-card.listening .sb-icon { border-color: var(--red); }
-  /* Small status dot on the icon */
-  .sidebar-card.active .sb-icon::after,
-  .sidebar-card.starting .sb-icon::after,
-  .sidebar-card.thinking .sb-icon::after,
-  .sidebar-card.speaking .sb-icon::after,
-  .sidebar-card.listening .sb-icon::after {
+  .sidebar-card.selected::before {
     content: '';
     position: absolute;
-    bottom: -2px;
-    right: -2px;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    border: 2px solid var(--bg-secondary);
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 28px;
+    border-radius: 0 3px 3px 0;
+    background: var(--blue);
   }
-  .sidebar-card.active .sb-icon::after { background: var(--green); }
-  .sidebar-card.starting .sb-icon::after { background: var(--yellow); }
-  .sidebar-card.thinking .sb-icon::after { background: var(--orange); }
-  .sidebar-card.speaking .sb-icon::after { background: var(--blue); }
-  .sidebar-card.listening .sb-icon::after { background: var(--red); }
+  .sidebar-card .sb-icon {
+    margin: 0;
+    width: 36px;
+    height: 36px;
+    position: relative;
+    border: 2px solid transparent;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  /* Colored ring + glow around icon to show active state */
+  .sidebar-card.active .sb-icon { border-color: var(--green); box-shadow: 0 0 6px rgba(48,209,88,0.3); }
+  .sidebar-card.starting .sb-icon { border-color: var(--yellow); }
+  .sidebar-card.thinking .sb-icon { border-color: var(--orange); box-shadow: 0 0 6px rgba(255,159,10,0.3); }
+  .sidebar-card.speaking .sb-icon { border-color: var(--blue); box-shadow: 0 0 6px rgba(10,132,255,0.3); }
+  .sidebar-card.listening .sb-icon { border-color: var(--red); box-shadow: 0 0 6px rgba(255,69,58,0.3); }
 
   /* Chat messages: wider on mobile */
   .msg { max-width: 90%; }
@@ -920,20 +960,21 @@ body {
   #sidebar.expanded {
     width: 200px;
     min-width: 200px;
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    z-index: 50;
     box-shadow: 4px 0 24px rgba(0,0,0,0.4);
   }
-  #sidebar.expanded .sb-info { display: block !important; }
+  #sidebar.expanded .sb-info {
+    display: block !important;
+    animation: fadeSlideIn 0.2s ease-out 0.1s both;
+  }
   #sidebar.expanded .sidebar-card { justify-content: flex-start; padding: 8px 10px; }
   #sidebar.expanded .sidebar-card .sb-icon { margin: 0; }
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateX(-8px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
 
   /* Overlay behind expanded sidebar */
   #sidebar-overlay {
-    display: none;
     position: absolute;
     top: 0;
     left: 0;
@@ -941,18 +982,22 @@ body {
     bottom: 0;
     background: rgba(0,0,0,0.3);
     z-index: 49;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
   }
-  #sidebar-overlay.visible { display: block; }
+  #sidebar-overlay.visible { opacity: 1; pointer-events: auto; }
 }
 </style>
 </head>
 <body>
 
 <div id="header">
-  <h1 onclick="showWelcome()">Voice Hub</h1>
+  <h1 onclick="showWelcome()">Claw Hub</h1>
   <span id="active-voice" style="display:none; font-size:0.85rem; font-weight:600;"></span>
   <span id="session-elapsed" style="display:none; font-size:0.7rem; color:var(--text-tertiary); margin-left:6px;"></span>
   <div style="flex:1;"></div>
+  <span id="header-project-status" style="font-size:0.65rem; color:var(--text-tertiary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px;"></span>
   <div id="usage-bar" style="display:none;align-items:center;gap:8px;padding:4px 12px;background:rgba(128,128,128,0.08);border-radius:12px;font-size:0.7rem;color:var(--text-secondary);cursor:pointer;" onclick="toggleUsageDetail()" title="Claude usage">
     <span id="usage-5h" style="white-space:nowrap;"></span>
     <span id="usage-7d" style="white-space:nowrap;"></span>
@@ -1004,6 +1049,7 @@ body {
 
 <div id="text-input-bar">
   <!-- Home button removed — sidebar is always visible -->
+  <button id="text-paste" onclick="pasteFromClipboard()" title="Paste from clipboard">&#128203;</button>
   <textarea id="text-input" rows="1" placeholder="Type a message..."></textarea>
   <button id="text-send" onclick="sendTextMessage()" disabled>&#8593;</button>
   <div style="display:flex;flex-direction:column;gap:4px;">
@@ -1077,11 +1123,8 @@ body {
     <div id="settings-usage" style="padding:12px 0; font-size:0.85rem; color:var(--text-secondary);">Loading...</div>
   </div>
 
-  <div style="margin-top:1rem;">
-    <h2 style="font-size:1rem; cursor:pointer;" onclick="toggleSettingsDebug()">Debug <span id="settings-debug-arrow" style="font-size:0.7rem; color:var(--text-tertiary);">&#9654;</span></h2>
-    <div id="settings-debug-content" style="display:none; margin-top:8px;">
-      <button style="padding:8px 16px; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); font-size:0.85rem; cursor:pointer; font-family:inherit;" onclick="showDebugPanel()">Open Debug Panel</button>
-    </div>
+  <div style="margin-top:1.5rem;">
+    <button style="width:100%; padding:10px 16px; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text-secondary); font-size:0.85rem; cursor:pointer; font-family:inherit; transition: all 0.15s;" onmouseover="this.style.borderColor='var(--border-light)'" onmouseout="this.style.borderColor='var(--border)'" onclick="showDebugPanel()">Open Debug Panel</button>
   </div>
 </div>
 
@@ -1391,6 +1434,19 @@ function setStatus(text, sessionId) {
   renderVoiceGridIfActive();
 }
 
+function updateHeaderProjectStatus() {
+  const el = document.getElementById('header-project-status');
+  if (!el) return;
+  if (activeSessionId) {
+    const s = sessions.get(activeSessionId);
+    if (s && s.project) {
+      el.textContent = s.project + (s.project_area ? ' · ' + s.project_area : '');
+      return;
+    }
+  }
+  el.textContent = '';
+}
+
 function updateLayout() {
   renderSidebar(); // always keep sidebar up to date
   if (debugActive) return; // debug panel handles its own layout
@@ -1448,165 +1504,185 @@ function toggleSidebarExpand() {
 function collapseSidebar() {
   const sidebar = document.getElementById('sidebar');
   const overlay = document.getElementById('sidebar-overlay');
-  const chat = document.getElementById('chat-area');
-  const savedScroll = chat ? chat.scrollTop : 0;
   sidebar.classList.remove('expanded');
   overlay.classList.remove('visible');
-  // Synchronously restore scroll — no delay, no flash
-  if (chat) chat.scrollTop = savedScroll;
+  // Scroll chat to bottom after layout settles
+  const chat = document.getElementById('chat-area');
+  if (chat) {
+    chat.scrollTop = chat.scrollHeight;
+    requestAnimationFrame(() => { chat.scrollTop = chat.scrollHeight; });
+    setTimeout(() => { chat.scrollTop = chat.scrollHeight; }, 20);
+  }
+}
+
+function _sidebarState(voiceId) {
+  let session = null;
+  for (const [sid, s] of sessions) {
+    if (s.voice === voiceId) { session = s; break; }
+  }
+  const isSpawning = spawningVoices.has(voiceId);
+  let stateClass = '', statusLabel = 'Offline';
+  if (isSpawning) {
+    stateClass = 'starting'; statusLabel = 'Starting...';
+  } else if (session) {
+    if (session.status === 'starting') {
+      stateClass = 'starting'; statusLabel = 'Starting...';
+    } else if (session.isThinking) {
+      stateClass = 'thinking'; statusLabel = 'Thinking...';
+    } else if (session.statusText === 'Playing...' || session.statusText === 'Speaking...') {
+      stateClass = 'speaking'; statusLabel = 'Speaking...';
+    } else if (session.statusText === 'Recording...' || session.statusText === 'Tap Record') {
+      stateClass = 'listening'; statusLabel = 'Listening...';
+    } else if (session.pendingListen) {
+      stateClass = 'listening'; statusLabel = 'Waiting...';
+    } else {
+      stateClass = 'active'; statusLabel = 'Ready';
+    }
+  }
+  const isSelected = session && session.session_id === activeSessionId;
+  const projectText = session && session.project
+    ? session.project + (session.project_area ? ' · ' + session.project_area : '')
+    : '';
+  const hasUnread = session && session.hasUnread;
+  return { session, isSpawning, stateClass, statusLabel, isSelected, projectText, hasUnread };
+}
+
+function _updateSidebarCard(card, voiceId, state) {
+  const { session, isSpawning, stateClass, statusLabel, isSelected, projectText, hasUnread } = state;
+  // Update state class only if changed
+  const stateClasses = ['starting', 'thinking', 'speaking', 'listening', 'active'];
+  const curState = stateClasses.find(c => card.classList.contains(c)) || '';
+  if (curState !== stateClass) {
+    stateClasses.forEach(c => card.classList.remove(c));
+    if (stateClass) card.classList.add(stateClass);
+  }
+  card.classList.toggle('selected', !!isSelected);
+  // Update status label
+  const label = card.querySelector('.sb-status span:not(.sb-dot)');
+  if (label && label.textContent !== statusLabel) label.textContent = statusLabel;
+  // Update project line
+  let projEl = card.querySelector('.sb-project');
+  if (projectText) {
+    if (!projEl) {
+      projEl = document.createElement('div');
+      projEl.className = 'sb-project';
+      const info = card.querySelector('.sb-info');
+      const statusLine = card.querySelector('.sb-status');
+      info.insertBefore(projEl, statusLine);
+    }
+    if (projEl.textContent !== projectText) projEl.textContent = projectText;
+  } else if (projEl) {
+    projEl.remove();
+  }
+  // Update unread badge
+  let badge = card.querySelector('.sb-unread');
+  if (hasUnread && !badge) {
+    badge = document.createElement('span');
+    badge.className = 'sb-unread';
+    card.appendChild(badge);
+  } else if (!hasUnread && badge) {
+    badge.remove();
+  }
+  // Update closure refs
+  card._voiceSession = session;
+  card._voiceSpawning = isSpawning;
 }
 
 function renderSidebar() {
   const list = document.getElementById('sidebar-list');
-  list.innerHTML = '';
   const allVoices = Object.entries(VOICE_NAMES);
-
-  for (const [voiceId, name] of allVoices) {
-    let sessionForVoice = null;
-    for (const [sid, s] of sessions) {
-      if (s.voice === voiceId) { sessionForVoice = s; break; }
-    }
-
-    const isSpawning = spawningVoices.has(voiceId);
-    const card = document.createElement('div');
-    card.className = 'sidebar-card';
-
-    // State classes
-    if (isSpawning) {
-      card.classList.add('starting');
-    } else if (sessionForVoice) {
-      if (sessionForVoice.status === 'starting') {
-        card.classList.add('starting');
-      } else if (sessionForVoice.isThinking) {
-        card.classList.add('thinking');
-      } else if (sessionForVoice.statusText === 'Playing...' || sessionForVoice.statusText === 'Speaking...') {
-        card.classList.add('speaking');
-      } else if (sessionForVoice.statusText === 'Recording...' || sessionForVoice.statusText === 'Tap Record' || sessionForVoice.pendingListen) {
-        card.classList.add('listening');
-      } else {
-        card.classList.add('active');
-      }
-    }
-
-    // Highlight selected
-    if (sessionForVoice && sessionForVoice.session_id === activeSessionId) {
-      card.classList.add('selected');
-    }
-
-    // Icon
-    const icon = document.createElement('div');
-    icon.className = 'sb-icon';
-    const iconVal = voiceIcon(voiceId);
-    if (iconVal.startsWith('<')) {
-      icon.innerHTML = iconVal;
+  const currentVoiceIds = new Set(allVoices.map(([id]) => id));
+  // Remove stale cards
+  for (const card of [...list.children]) {
+    if (!currentVoiceIds.has(card.dataset.voiceId)) card.remove();
+  }
+  // Map existing cards
+  const existingCards = new Map();
+  for (const card of list.children) {
+    existingCards.set(card.dataset.voiceId, card);
+  }
+  for (let i = 0; i < allVoices.length; i++) {
+    const [voiceId, name] = allVoices[i];
+    const state = _sidebarState(voiceId);
+    let card = existingCards.get(voiceId);
+    if (card) {
+      _updateSidebarCard(card, voiceId, state);
+      if (list.children[i] !== card) list.insertBefore(card, list.children[i]);
     } else {
-      icon.textContent = iconVal;
-    }
-    const vc = voiceColor(voiceId);
-    icon.style.background = vc + '20';
-    icon.style.color = vc;
-
-    // Info
-    const info = document.createElement('div');
-    info.className = 'sb-info';
-
-    const nameEl = document.createElement('div');
-    nameEl.className = 'sb-name';
-    nameEl.textContent = name;
-    nameEl.style.color = voiceColor(voiceId);
-
-    const statusEl2 = document.createElement('div');
-    statusEl2.className = 'sb-status';
-    const dot2 = document.createElement('span');
-    dot2.className = 'sb-dot';
-    const label = document.createElement('span');
-    if (isSpawning) {
-      label.textContent = 'Starting...';
-    } else if (!sessionForVoice) {
-      label.textContent = 'Offline';
-    } else if (sessionForVoice.status === 'starting') {
-      label.textContent = 'Starting...';
-    } else if (sessionForVoice.isThinking) {
-      label.textContent = 'Thinking...';
-    } else if (sessionForVoice.statusText === 'Playing...' || sessionForVoice.statusText === 'Speaking...') {
-      label.textContent = 'Speaking...';
-    } else if (sessionForVoice.statusText === 'Recording...' || sessionForVoice.statusText === 'Tap Record') {
-      label.textContent = 'Listening...';
-    } else if (sessionForVoice.pendingListen) {
-      label.textContent = 'Waiting...';
-    } else {
-      label.textContent = 'Ready';
-    }
-    statusEl2.appendChild(dot2);
-    statusEl2.appendChild(label);
-
-    info.appendChild(nameEl);
-
-    // Project context line
-    if (sessionForVoice && sessionForVoice.project) {
-      const projEl = document.createElement('div');
-      projEl.className = 'sb-project';
-      projEl.textContent = sessionForVoice.project + (sessionForVoice.project_area ? ' · ' + sessionForVoice.project_area : '');
-      info.appendChild(projEl);
-    }
-
-    info.appendChild(statusEl2);
-
-    card.appendChild(icon);
-    card.appendChild(info);
-
-    // Unread badge
-    if (sessionForVoice && sessionForVoice.hasUnread) {
-      const badge = document.createElement('span');
-      badge.className = 'sb-unread';
-      card.appendChild(badge);
-    }
-
-    card.onclick = () => {
-      if (isSpawning) return;
-      if (sessionForVoice) {
-        switchTab(sessionForVoice.session_id);
-      } else {
-        spawnSession(voiceId);
+      card = document.createElement('div');
+      card.className = 'sidebar-card';
+      card.dataset.voiceId = voiceId;
+      const icon = document.createElement('div');
+      icon.className = 'sb-icon';
+      const iconVal = voiceIcon(voiceId);
+      if (iconVal.startsWith('<')) { icon.innerHTML = iconVal; } else { icon.textContent = iconVal; }
+      const vc = voiceColor(voiceId);
+      icon.style.background = vc + '20';
+      icon.style.color = vc;
+      const info = document.createElement('div');
+      info.className = 'sb-info';
+      const nameEl = document.createElement('div');
+      nameEl.className = 'sb-name';
+      nameEl.textContent = name;
+      nameEl.style.color = vc;
+      const statusEl2 = document.createElement('div');
+      statusEl2.className = 'sb-status';
+      const dot2 = document.createElement('span');
+      dot2.className = 'sb-dot';
+      const labelEl = document.createElement('span');
+      labelEl.textContent = state.statusLabel;
+      statusEl2.appendChild(dot2);
+      statusEl2.appendChild(labelEl);
+      info.appendChild(nameEl);
+      if (state.projectText) {
+        const projEl = document.createElement('div');
+        projEl.className = 'sb-project';
+        projEl.textContent = state.projectText;
+        info.appendChild(projEl);
       }
-    };
-
-    card.oncontextmenu = (e) => {
-      e.preventDefault();
-      if (sessionForVoice) {
-        showContextMenu(e, sessionForVoice.session_id, voiceId);
-      } else {
-        showContextMenu(e, null, voiceId);
+      info.appendChild(statusEl2);
+      card.appendChild(icon);
+      card.appendChild(info);
+      if (state.stateClass) card.classList.add(state.stateClass);
+      if (state.isSelected) card.classList.add('selected');
+      if (state.hasUnread) {
+        const badge = document.createElement('span');
+        badge.className = 'sb-unread';
+        card.appendChild(badge);
       }
-    };
-
-    // Long-press for mobile context menu
-    let lpTimer = null;
-    let lpFired = false;
-    card.addEventListener('touchstart', (e) => {
-      lpFired = false;
-      lpTimer = setTimeout(() => {
-        lpTimer = null;
-        lpFired = true;
-        card.classList.add('long-press-active');
-        const touch = e.touches[0];
-        const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: touch.clientX, clientY: touch.clientY };
-        if (sessionForVoice) {
-          showContextMenu(fakeEvent, sessionForVoice.session_id, voiceId);
-        } else {
-          showContextMenu(fakeEvent, null, voiceId);
-        }
-        setTimeout(() => card.classList.remove('long-press-active'), 200);
-      }, 500);
-    }, { passive: true });
-    card.addEventListener('touchend', (e) => {
-      if (lpTimer) clearTimeout(lpTimer);
-      lpTimer = null;
-      if (lpFired) { e.preventDefault(); lpFired = false; }
-    });
-    card.addEventListener('touchmove', () => { if (lpTimer) clearTimeout(lpTimer); lpTimer = null; });
-
-    list.appendChild(card);
+      card._voiceSession = state.session;
+      card._voiceSpawning = state.isSpawning;
+      card.onclick = () => {
+        if (card._voiceSpawning) return;
+        if (card._voiceSession) { switchTab(card._voiceSession.session_id); }
+        else { spawnSession(voiceId); }
+      };
+      card.oncontextmenu = (e) => {
+        e.preventDefault();
+        if (card._voiceSession) { showContextMenu(e, card._voiceSession.session_id, voiceId); }
+        else { showContextMenu(e, null, voiceId); }
+      };
+      let lpTimer = null, lpFired = false;
+      card.addEventListener('touchstart', (e) => {
+        lpFired = false;
+        lpTimer = setTimeout(() => {
+          lpTimer = null; lpFired = true;
+          card.classList.add('long-press-active');
+          const touch = e.touches[0];
+          const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: touch.clientX, clientY: touch.clientY };
+          if (card._voiceSession) { showContextMenu(fakeEvent, card._voiceSession.session_id, voiceId); }
+          else { showContextMenu(fakeEvent, null, voiceId); }
+          setTimeout(() => card.classList.remove('long-press-active'), 200);
+        }, 500);
+      }, { passive: true });
+      card.addEventListener('touchend', (e) => {
+        if (lpTimer) clearTimeout(lpTimer); lpTimer = null;
+        if (lpFired) { e.preventDefault(); lpFired = false; }
+      });
+      card.addEventListener('touchmove', () => { if (lpTimer) clearTimeout(lpTimer); lpTimer = null; });
+      if (i < list.children.length) { list.insertBefore(card, list.children[i]); }
+      else { list.appendChild(card); }
+    }
   }
 }
 
@@ -1666,6 +1742,7 @@ function switchTab(sessionId) {
   // Render chat messages
   renderChat();
   updateLayout();
+  updateHeaderProjectStatus();
   startElapsedTimer();
 
   // Scroll to bottom after layout is applied
@@ -1705,6 +1782,33 @@ function switchTab(sessionId) {
   }
 }
 
+function createMsgEl(role, text, voiceColorHex) {
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  div.textContent = text;
+  if (role === 'assistant' && voiceColorHex) div.style.background = hexToRgba(voiceColorHex, 0.12);
+  if (role !== 'system' && role !== 'thinking') {
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'msg-copy';
+    copyBtn.textContent = 'Copy';
+    copyBtn.onclick = (e) => {
+      e.stopPropagation();
+      navigator.clipboard.writeText(text).then(() => showCopyToast()).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;opacity:0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showCopyToast();
+      });
+    };
+    div.appendChild(copyBtn);
+  }
+  return div;
+}
+
 function renderChat() {
   chatArea.innerHTML = '';
   const s = sessions.get(activeSessionId);
@@ -1712,11 +1816,7 @@ function renderChat() {
   const vc = voiceColor(s.voice);
   const displayMessages = s.messages.slice(-50);
   for (const msg of displayMessages) {
-    const div = document.createElement('div');
-    div.className = `msg ${msg.role}`;
-    div.textContent = msg.text;
-    if (msg.role === 'assistant') div.style.background = hexToRgba(vc, 0.12);
-    chatArea.appendChild(div);
+    chatArea.appendChild(createMsgEl(msg.role, msg.text, vc));
   }
   // Re-show thinking indicator if session is thinking
   if (s.isThinking) {
@@ -1739,11 +1839,7 @@ function addMessage(sessionId, role, text) {
   s.messages.push({ role, text, ts: Date.now() / 1000 });
   if (sessionId === activeSessionId) updateElapsedTime();
   if (sessionId === activeSessionId) {
-    const div = document.createElement('div');
-    div.className = `msg ${role}`;
-    div.textContent = text;
-    if (role === 'assistant') div.style.background = hexToRgba(voiceColor(s.voice), 0.12);
-    chatArea.appendChild(div);
+    chatArea.appendChild(createMsgEl(role, text, voiceColor(s.voice)));
     chatArea.scrollTop = chatArea.scrollHeight;
   }
 }
@@ -2454,6 +2550,7 @@ function handleMessage(data) {
       s.project_area = data.area || '';
     }
     renderVoiceGridIfActive();
+    updateHeaderProjectStatus();
     return;
   }
   if (type === 'error') {
@@ -3136,6 +3233,21 @@ function sendTextMessage() {
   textSendBtn.disabled = true;
 }
 
+async function pasteFromClipboard() {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text) {
+      textInput.value = text;
+      textInput.style.height = 'auto';
+      textInput.style.height = Math.min(textInput.scrollHeight, 120) + 'px';
+      textSendBtn.disabled = !text.trim();
+      textInput.focus();
+    }
+  } catch(e) {
+    console.warn('Clipboard read failed:', e);
+  }
+}
+
 // --- Session elapsed time ---
 let elapsedTimer = null;
 const sessionElapsedEl = document.getElementById('session-elapsed');
@@ -3295,11 +3407,9 @@ async function fetchUsage() {
 
     if (pct5h !== null) {
       el5h.innerHTML = '5h: <b style="color:' + usageColor(pct5h) + '">' + pct5h + '%</b>';
-      el5h.title = 'Resets in ' + formatReset(data.five_hour?.resets_at);
     }
     if (pct7d !== null) {
       el7d.innerHTML = '7d: <b style="color:' + usageColor(pct7d) + '">' + pct7d + '%</b>';
-      el7d.title = 'Resets in ' + formatReset(data.seven_day?.resets_at);
     }
     bar.style.display = 'flex';
   } catch(e) { /* ignore */ }
@@ -3321,14 +3431,20 @@ async function loadUsageForSettings() {
     if (pct5h === null && pct7d === null) { el.textContent = 'No usage data available'; return; }
     let html = '';
     if (pct5h !== null) {
+      const reset5h = formatReset(data.five_hour?.resets_at);
       html += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">';
       html += '<span>5-hour window</span>';
-      html += '<span style="font-weight:600;color:' + usageColor(pct5h) + ';">' + pct5h + '%</span></div>';
+      html += '<div style="text-align:right;"><span style="font-weight:600;color:' + usageColor(pct5h) + ';">' + pct5h + '%</span>';
+      if (reset5h) html += '<div style="font-size:0.7rem;color:var(--text-tertiary);">resets in ' + reset5h + '</div>';
+      html += '</div></div>';
     }
     if (pct7d !== null) {
+      const reset7d = formatReset(data.seven_day?.resets_at);
       html += '<div style="display:flex;justify-content:space-between;padding:6px 0;">';
       html += '<span>7-day window</span>';
-      html += '<span style="font-weight:600;color:' + usageColor(pct7d) + ';">' + pct7d + '%</span></div>';
+      html += '<div style="text-align:right;"><span style="font-weight:600;color:' + usageColor(pct7d) + ';">' + pct7d + '%</span>';
+      if (reset7d) html += '<div style="font-size:0.7rem;color:var(--text-tertiary);">resets in ' + reset7d + '</div>';
+      html += '</div></div>';
     }
     el.innerHTML = html;
   } catch (e) { el.textContent = 'Error loading usage'; }
