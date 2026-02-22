@@ -37,32 +37,46 @@ struct ContentView: View {
     @State private var pttDragOffset: CGFloat = 0
     @State private var pttDragOffsetY: CGFloat = 0
     @State private var pttGestureCommitted = false
+    @State private var sidebarExpanded = false
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .leading) {
             Theme.bg.ignoresSafeArea()
 
-            // Home view always rendered underneath so swipe-back reveals it
-            VStack(spacing: 0) {
-                headerBar
-                if vm.showDebug {
-                    DebugView(vm: vm)
-                } else {
-                    voiceGrid
+            HStack(spacing: 0) {
+                // Sidebar
+                sidebarView
+                    .frame(width: sidebarExpanded ? 200 : 56)
+                    .animation(.spring(response: 0.25, dampingFraction: 0.9), value: sidebarExpanded)
+
+                // Main content
+                VStack(spacing: 0) {
+                    headerBar
+                    if vm.showDebug {
+                        DebugView(vm: vm)
+                    } else if vm.activeSessionId != nil {
+                        chatArea
+                        bottomControls
+                    } else {
+                        emptyStateView
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
-            if vm.activeSessionId != nil {
-                sessionView
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing),
-                        removal: .move(edge: .trailing)
-                    ))
-                    .zIndex(1)
+            // Overlay when sidebar expanded
+            if sidebarExpanded {
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
+                    .offset(x: sidebarExpanded ? 200 : 56)
+                    .onTapGesture { withAnimation { sidebarExpanded = false } }
+                    .transition(.opacity)
             }
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.92), value: vm.activeSessionId)
         .animation(.spring(response: 0.3, dampingFraction: 0.9), value: vm.showDebug)
+        .animation(.easeInOut(duration: 0.18), value: vm.typingMode)
+        .animation(.spring(response: 0.3, dampingFraction: 0.9), value: vm.showPTTTextField)
+        .animation(.spring(response: 0.3, dampingFraction: 0.9), value: vm.showTranscriptPreview)
         .sheet(isPresented: $vm.showSettings) {
             SettingsView(vm: vm)
         }
@@ -90,18 +104,164 @@ struct ContentView: View {
         }
     }
 
+    // MARK: - Sidebar
+
+    private var sidebarView: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 4) {
+                    ForEach(ALL_VOICES) { voice in
+                        sidebarIcon(voice)
+                    }
+                }
+                .padding(.vertical, 8)
+            }
+
+            Spacer()
+
+            // Expand / collapse button
+            Button {
+                withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) {
+                    sidebarExpanded.toggle()
+                }
+            } label: {
+                Image(systemName: sidebarExpanded ? "chevron.left" : "ellipsis")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Theme.textTertiary)
+                    .frame(width: 36, height: 36)
+                    .background(Theme.bgSecondary, in: Circle())
+            }
+            .padding(.bottom, 12)
+        }
+        .frame(maxHeight: .infinity)
+        .background(Theme.bgSecondary)
+        .clipped()
+    }
+
+    private func sidebarIcon(_ voice: VoiceInfo) -> some View {
+        let activeForVoice = vm.sessions.first { $0.voice == voice.id }
+        let isSpawning = vm.spawningVoiceIds.contains(voice.id)
+        let isSelected = vm.activeSession?.voice == voice.id
+        let color = voiceColor(voice.id)
+        let ringColor = sidebarRingColor(active: activeForVoice, spawning: isSpawning)
+
+        return HStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(color.opacity(activeForVoice != nil ? 0.2 : 0.1))
+                    .frame(width: 36, height: 36)
+                    .overlay(
+                        Circle()
+                            .strokeBorder(ringColor, lineWidth: activeForVoice != nil || isSpawning ? 2 : 0)
+                            .frame(width: 36, height: 36)
+                    )
+                    .shadow(color: activeForVoice != nil ? ringColor.opacity(0.3) : .clear, radius: 4)
+                Image(systemName: voiceIconName(voice.id))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(color)
+            }
+            .frame(width: 44, height: 44)
+            .overlay(alignment: .leading) {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Theme.blue)
+                        .frame(width: 3, height: 28)
+                        .offset(x: -4)
+                }
+            }
+
+            if sidebarExpanded {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(voice.name)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                        .lineLimit(1)
+                    Text(sidebarStatusLabel(active: activeForVoice, spawning: isSpawning))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(activeForVoice != nil ? ringColor : Theme.textTertiary)
+                        .lineLimit(1)
+                }
+                .transition(.opacity.combined(with: .move(edge: .leading)))
+                Spacer()
+            }
+        }
+        .padding(.horizontal, sidebarExpanded ? 8 : 6)
+        .padding(.vertical, 6)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if sidebarExpanded {
+                withAnimation { sidebarExpanded = false }
+            }
+            if let s = activeForVoice {
+                vm.switchToSession(s.id)
+            } else if !isSpawning {
+                vm.spawnSession(voiceId: voice.id)
+            }
+        }
+        .contextMenu {
+            if let s = activeForVoice {
+                Button(role: .destructive) {
+                    vm.terminateSession(s.id)
+                } label: {
+                    Label("End Session", systemImage: "xmark.circle")
+                }
+            }
+            Button(role: .destructive) {
+                resetVoiceId = voice.id
+                showResetConfirm = true
+            } label: {
+                Label("Reset History", systemImage: "trash")
+            }
+        }
+    }
+
+    private func sidebarRingColor(active: VoiceSession?, spawning: Bool) -> Color {
+        if spawning { return Theme.yellow }
+        guard let s = active else { return Theme.gray3 }
+        if s.status == .starting { return Theme.yellow }
+        if s.isThinking { return Theme.orange }
+        let st = s.statusText
+        if st == "Speaking..." || st == "Playing..." { return Theme.blue }
+        if st == "Recording..." || st == "Tap Record" || s.pendingListen { return Theme.red }
+        return Theme.green
+    }
+
+    private func sidebarStatusLabel(active: VoiceSession?, spawning: Bool) -> String {
+        if spawning { return "Starting..." }
+        guard let s = active else { return "Offline" }
+        if s.status == .starting { return "Starting..." }
+        if s.isThinking { return "Thinking..." }
+        let st = s.statusText
+        if st == "Speaking..." || st == "Playing..." { return "Speaking" }
+        if st == "Recording..." || st == "Tap Record" { return "Listening" }
+        if s.pendingListen { return "Waiting..." }
+        return "Ready"
+    }
+
+    // MARK: - Empty State (no session selected)
+
+    private var emptyStateView: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            Image(systemName: "bubble.left.and.bubble.right")
+                .font(.system(size: 40))
+                .foregroundStyle(Theme.textTertiary)
+            Text("Select a voice to start")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(Theme.textSecondary)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     // MARK: - Header
 
     private var headerBar: some View {
         HStack(spacing: 12) {
-            if vm.activeSession != nil || vm.showDebug {
+            if vm.showDebug {
                 Button {
-                    if vm.showDebug {
-                        vm.showDebug = false
-                        vm.stopDebugRefresh()
-                    } else {
-                        vm.goHome()
-                    }
+                    vm.showDebug = false
+                    vm.stopDebugRefresh()
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 16, weight: .semibold))
@@ -111,9 +271,18 @@ struct ContentView: View {
                 }
             }
 
-            Text(vm.showDebug ? "Debug" : vm.activeSession?.label ?? "Claw Hub")
-                .font(.system(size: 20, weight: .bold, design: .rounded))
-                .foregroundStyle(Theme.textPrimary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(vm.showDebug ? "Debug" : vm.activeSession?.label ?? "Claw Hub")
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(1)
+                if let proj = vm.activeSession?.project, !proj.isEmpty {
+                    Text(proj + (vm.activeSession?.projectArea.isEmpty == false ? " · " + (vm.activeSession?.projectArea ?? "") : ""))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Theme.textTertiary)
+                        .lineLimit(1)
+                }
+            }
 
             Spacer()
 
@@ -146,14 +315,23 @@ struct ContentView: View {
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
 
-            // Connection indicator
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(connectionDotColor)
-                    .frame(width: 7, height: 7)
+            // Mic mute (auto mode only)
+            if vm.activeSessionId != nil && vm.isAutoMode {
+                Button { vm.micMuted.toggle() } label: {
+                    Image(systemName: vm.micMuted ? "mic.slash.fill" : "mic.fill")
+                        .font(.system(size: 13))
+                        .foregroundStyle(vm.micMuted ? Theme.red : Theme.textSecondary)
+                        .frame(width: 32, height: 32)
+                        .background(.ultraThinMaterial, in: Circle())
+                }
             }
-            .padding(6)
-            .background(.ultraThinMaterial, in: Circle())
+
+            // Connection indicator
+            Circle()
+                .fill(connectionDotColor)
+                .frame(width: 7, height: 7)
+                .padding(6)
+                .background(.ultraThinMaterial, in: Circle())
 
             Button { vm.showSettings = true } label: {
                 Image(systemName: "gearshape")
@@ -163,132 +341,8 @@ struct ContentView: View {
                     .background(.ultraThinMaterial, in: Circle())
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-    }
-
-    // MARK: - Voice Grid (Landing)
-
-    private var voiceGrid: some View {
-        ScrollView {
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: 14),
-                    GridItem(.flexible(), spacing: 14),
-                ], spacing: 14
-            ) {
-                ForEach(ALL_VOICES) { voice in
-                    voiceCard(voice)
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
-            .padding(.bottom, 20)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func voiceCard(_ voice: VoiceInfo) -> some View {
-        let activeForVoice = vm.sessions.first { $0.voice == voice.id }
-        let isSpawning = vm.spawningVoiceIds.contains(voice.id)
-        let color = voiceColor(voice.id)
-        let isActive = activeForVoice != nil
-        let statusLabel = voiceCardLabel(active: activeForVoice, spawning: isSpawning)
-        let hasBadge =
-            activeForVoice.map { !$0.audioBuffer.isEmpty || $0.pendingListen } ?? false
-
-        return VStack(spacing: 10) {
-            ZStack(alignment: .topTrailing) {
-                ZStack {
-                    Circle()
-                        .fill(color.opacity(isActive ? 0.2 : 0.1))
-                        .frame(width: 44, height: 44)
-                    Image(systemName: voiceIconName(voice.id))
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(color)
-                }
-                if hasBadge {
-                    Circle()
-                        .fill(Theme.red)
-                        .frame(width: 10, height: 10)
-                        .overlay(Circle().strokeBorder(Theme.card, lineWidth: 1.5))
-                        .offset(x: 2, y: -2)
-                }
-            }
-
-            Text(voice.name)
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
-                .foregroundStyle(Theme.textPrimary)
-
-            if let proj = activeForVoice?.project, !proj.isEmpty {
-                Text(proj + (activeForVoice?.projectArea.isEmpty == false ? " · " + (activeForVoice?.projectArea ?? "") : ""))
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(Theme.textTertiary)
-                    .lineLimit(1)
-            }
-
-            HStack(spacing: 5) {
-                Circle()
-                    .fill(voiceCardDotColor(active: activeForVoice, spawning: isSpawning))
-                    .frame(width: 6, height: 6)
-                Text(statusLabel)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Theme.textSecondary)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 3)
-            .background(
-                isActive || isSpawning
-                    ? voiceCardDotColor(active: activeForVoice, spawning: isSpawning).opacity(0.1)
-                    : Color.clear
-            )
-            .clipShape(Capsule())
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-        .background {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Theme.card)
-                .shadow(color: Color(.label).opacity(0.06), radius: 8, y: 2)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(
-                            isActive || isSpawning
-                                ? voiceCardDotColor(active: activeForVoice, spawning: isSpawning)
-                                    .opacity(0.5)
-                                : Theme.cardBorder,
-                            lineWidth: 1
-                        )
-                }
-        }
-        .opacity(isSpawning ? 0.7 : 1.0)
-        .scaleEffect(isSpawning ? 0.97 : 1.0)
-        .animation(.spring(response: 0.3), value: isSpawning)
-        .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .onTapGesture {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.92)) {
-                if let s = activeForVoice {
-                    vm.switchToSession(s.id)
-                } else if !isSpawning {
-                    vm.spawnSession(voiceId: voice.id)
-                }
-            }
-        }
-        .contextMenu {
-            if let s = activeForVoice {
-                Button(role: .destructive) {
-                    vm.terminateSession(s.id)
-                } label: {
-                    Label("End Session", systemImage: "xmark.circle")
-                }
-            }
-            Button(role: .destructive) {
-                resetVoiceId = voice.id
-                showResetConfirm = true
-            } label: {
-                Label("Reset History", systemImage: "trash")
-            }
-        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
     }
 
     private func voiceIconName(_ voiceId: String) -> String {
@@ -304,35 +358,7 @@ struct ContentView: View {
         }
     }
 
-    private func voiceCardDotColor(active: VoiceSession?, spawning: Bool) -> Color {
-        if spawning { return Theme.yellow }
-        guard let s = active else { return Theme.gray3 }
-        if s.status == .starting { return Theme.yellow }
-        if s.isThinking { return Theme.orange }
-        let st = s.statusText
-        if st == "Speaking..." || st == "Playing..." { return Theme.blue }
-        if st == "Recording..." || st == "Tap Record" || s.pendingListen {
-            return Theme.red
-        }
-        return Theme.green
-    }
-
-    private func voiceCardLabel(active: VoiceSession?, spawning: Bool) -> String {
-        if spawning { return "Starting..." }
-        guard let s = active else { return "Offline" }
-        if s.status == .starting { return "Starting..." }
-        if s.isThinking { return "Thinking..." }
-        let st = s.statusText
-        if st == "Speaking..." || st == "Playing..." { return "Speaking..." }
-        if st == "Recording..." || st == "Tap Record" { return "Listening..." }
-        if s.pendingListen { return "Waiting..." }
-        return "Ready"
-    }
-
-    // MARK: - Session View
-
-    @State private var backSwipeOffset: CGFloat = 0
-    @State private var backSwipeActive = false
+    // MARK: - Bottom Controls
 
     @ViewBuilder
     private var bottomControls: some View {
@@ -346,105 +372,6 @@ struct ContentView: View {
             controlsOverlay
                 .transition(.opacity)
         }
-    }
-
-    private var sessionView: some View {
-        VStack(spacing: 0) {
-            sessionHeader
-            chatArea
-            bottomControls
-        }
-        .background(Theme.bg.ignoresSafeArea())
-        .offset(x: backSwipeOffset)
-        .animation(.interactiveSpring, value: backSwipeOffset)
-        .opacity(backSwipeOffset > 0 ? Double(1.0 - backSwipeOffset / 400.0) : 1.0)
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 15, coordinateSpace: .global)
-                .onChanged { value in
-                    let isFromEdge = value.startLocation.x < 30
-                    let isHorizontal = abs(value.translation.width) > abs(value.translation.height) * 1.5
-                    if isFromEdge && isHorizontal && value.translation.width > 0 {
-                        backSwipeActive = true
-                    }
-                    if backSwipeActive {
-                        backSwipeOffset = max(0, value.translation.width)
-                    }
-                }
-                .onEnded { value in
-                    guard backSwipeActive else { return }
-                    backSwipeActive = false
-                    let velocity = value.predictedEndTranslation.width - value.translation.width
-                    if backSwipeOffset > 120 || velocity > 200 {
-                        withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) {
-                            backSwipeOffset = 500
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                            vm.goHome()
-                            backSwipeOffset = 0
-                        }
-                    } else {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                            backSwipeOffset = 0
-                        }
-                    }
-                }
-        )
-        .animation(.easeInOut(duration: 0.18), value: vm.typingMode)
-        .animation(.spring(response: 0.3, dampingFraction: 0.9), value: vm.showPTTTextField)
-        .animation(.spring(response: 0.3, dampingFraction: 0.9), value: vm.showTranscriptPreview)
-    }
-
-    private var sessionHeader: some View {
-        let color = vm.activeSession.flatMap { voiceColor($0.voice) } ?? Theme.textPrimary
-
-        return HStack(spacing: 12) {
-            Button { vm.goHome() } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Theme.textSecondary)
-                    .frame(width: 36, height: 36)
-                    .background(.ultraThinMaterial, in: Circle())
-            }
-
-            Circle()
-                .fill(color)
-                .frame(width: 10, height: 10)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(vm.activeSession?.label ?? "Session")
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundStyle(Theme.textPrimary)
-
-                if let proj = vm.activeSession?.project, !proj.isEmpty {
-                    Text(proj + (vm.activeSession?.projectArea.isEmpty == false ? " · " + (vm.activeSession?.projectArea ?? "") : ""))
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Theme.textTertiary)
-                        .lineLimit(1)
-                }
-            }
-
-            Spacer()
-
-            if vm.isAutoMode {
-                Button { vm.micMuted.toggle() } label: {
-                    Image(systemName: vm.micMuted ? "mic.slash.fill" : "mic.fill")
-                        .font(.system(size: 13))
-                        .foregroundStyle(vm.micMuted ? Theme.red : Theme.textSecondary)
-                        .frame(width: 36, height: 36)
-                        .background(.ultraThinMaterial, in: Circle())
-                }
-            }
-
-            Button { vm.showSettings = true } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 14))
-                    .foregroundStyle(Theme.textSecondary)
-                    .frame(width: 36, height: 36)
-                    .background(.ultraThinMaterial, in: Circle())
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
     }
 
     private var statusColor: Color {
