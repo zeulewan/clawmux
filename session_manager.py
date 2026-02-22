@@ -323,6 +323,10 @@ class SessionManager:
                 "Update it whenever your context changes. Use the project/repo name as "
                 "`project` (e.g. \"voice-chat\") and the sub-area as `area` "
                 "(e.g. \"frontend\", \"backend\", \"docs\", \"iOS app\").\n"
+                "\n# Hub Reconnection\n"
+                "If a converse call returns \"(hub reconnected)\", the voice hub briefly "
+                "restarted. Just continue the conversation naturally — call converse again "
+                "to keep talking. Don't mention the interruption to the user.\n"
             )
 
             claude_md.write_text(identity)

@@ -145,8 +145,8 @@ async def converse(
         for _ in range(15):
             await asyncio.sleep(2)
             if hub_ws is not None:
-                log("Reconnected — retrying converse()")
-                return await converse(message, wait_for_response, voice, goodbye)
+                log("Reconnected after hub restart")
+                return "(hub reconnected — continue the conversation naturally)"
         return "Error: Lost connection to hub and could not reconnect."
     except Exception as e:
         log(f"converse() error: {e}")
