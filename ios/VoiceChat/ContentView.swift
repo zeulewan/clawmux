@@ -40,48 +40,41 @@ struct ContentView: View {
     @State private var sidebarExpanded = false
 
     var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                // Main content area, pushed right by collapsed sidebar width
-                VStack(spacing: 0) {
-                    headerBar
-                    if vm.showDebug {
-                        DebugView(vm: vm)
-                    } else if vm.activeSessionId != nil {
-                        chatArea
-                        bottomControls
-                    } else {
-                        emptyStateView
-                    }
+        ZStack(alignment: .leading) {
+            // Main content area
+            VStack(spacing: 0) {
+                headerBar
+                if vm.showDebug {
+                    DebugView(vm: vm)
+                } else if vm.activeSessionId != nil {
+                    chatArea
+                    bottomControls
+                } else {
+                    emptyStateView
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.leading, 56)
-                .background(Theme.bg)
-
-                // Scrim overlay (behind expanded sidebar content, above main)
-                if sidebarExpanded {
-                    Color.black.opacity(0.35)
-                        .ignoresSafeArea()
-                        .onTapGesture {
-                            withAnimation(.easeOut(duration: 0.2)) { sidebarExpanded = false }
-                        }
-                        .zIndex(5)
-                }
-
-                // Sidebar — always visible, expands as overlay
-                sidebarView
-                    .frame(width: sidebarExpanded ? 200 : 56)
-                    .frame(maxHeight: .infinity)
-                    .background(Theme.bgSecondary)
-                    .clipShape(UnevenRoundedRectangle(
-                        topLeadingRadius: 0, bottomLeadingRadius: 0,
-                        bottomTrailingRadius: sidebarExpanded ? 16 : 0,
-                        topTrailingRadius: sidebarExpanded ? 16 : 0
-                    ))
-                    .shadow(color: sidebarExpanded ? .black.opacity(0.25) : .clear, radius: 16, x: 4)
-                    .zIndex(10)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.leading, 56)
+
+            // Scrim overlay
+            if sidebarExpanded {
+                Color.black.opacity(0.35)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.easeOut(duration: 0.2)) { sidebarExpanded = false }
+                    }
+                    .zIndex(5)
+            }
+
+            // Sidebar
+            sidebarView
+                .frame(width: sidebarExpanded ? 200 : 56)
+                .frame(maxHeight: .infinity)
+                .background(Theme.bgSecondary.ignoresSafeArea())
+                .shadow(color: sidebarExpanded ? .black.opacity(0.2) : .clear, radius: 12, x: 4)
+                .zIndex(10)
         }
+        .background(Theme.bg.ignoresSafeArea())
         .animation(.spring(response: 0.25, dampingFraction: 0.88), value: sidebarExpanded)
         .animation(.spring(response: 0.3, dampingFraction: 0.9), value: vm.showDebug)
         .animation(.spring(response: 0.3, dampingFraction: 0.9), value: vm.activeSessionId)
