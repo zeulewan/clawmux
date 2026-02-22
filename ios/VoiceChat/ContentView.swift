@@ -176,51 +176,59 @@ struct ContentView: View {
         let ringColor = sidebarRingColor(active: activeForVoice, spawning: isSpawning)
         let isAlive = activeForVoice != nil || isSpawning
 
-        return HStack(spacing: 0) {
-            // Icon — fixed 56px column, always centered
-            ZStack {
+        // Icon column — always 56px, icon never moves
+        let iconView = ZStack {
+            Circle()
+                .fill(color.opacity(isAlive ? 0.18 : 0.08))
+                .frame(width: 36, height: 36)
+            if isAlive {
                 Circle()
-                    .fill(color.opacity(isAlive ? 0.18 : 0.08))
+                    .strokeBorder(ringColor, lineWidth: 2)
                     .frame(width: 36, height: 36)
-                if isAlive {
-                    Circle()
-                        .strokeBorder(ringColor, lineWidth: 2)
-                        .frame(width: 36, height: 36)
-                }
-                Image(systemName: voiceIconName(voice.id))
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(isAlive ? color : color.opacity(0.4))
             }
-            .frame(width: 56)
+            Image(systemName: voiceIconName(voice.id))
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(isAlive ? color : color.opacity(0.4))
+        }
 
-            // Expanded: name + status (appears to the right)
-            if sidebarExpanded {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(voice.name)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Theme.textPrimary)
-                        .lineLimit(1)
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(isAlive ? ringColor : Theme.gray3)
-                            .frame(width: 5, height: 5)
-                        Text(sidebarStatusLabel(active: activeForVoice, spawning: isSpawning))
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(isAlive ? ringColor : Theme.textTertiary)
-                    }
-                }
-                .padding(.trailing, 10)
-                .transition(.opacity)
-                Spacer(minLength: 0)
+        // Label column — only rendered when expanded
+        let labelView = VStack(alignment: .leading, spacing: 2) {
+            Text(voice.name)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.textPrimary)
+                .lineLimit(1)
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(isAlive ? ringColor : Theme.gray3)
+                    .frame(width: 5, height: 5)
+                Text(sidebarStatusLabel(active: activeForVoice, spawning: isSpawning))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(isAlive ? ringColor : Theme.textTertiary)
             }
         }
-        .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(isSelected ? Theme.blue.opacity(0.1) : .clear)
-                .padding(.horizontal, 4)
-        )
-        .overlay(alignment: .leading) {
+
+        return ZStack(alignment: .leading) {
+            // Selected highlight background
+            if isSelected {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Theme.blue.opacity(0.08))
+                    .padding(.horizontal, 4)
+            }
+
+            // Content
+            HStack(spacing: 0) {
+                iconView
+                    .frame(width: 56, height: 48)
+
+                if sidebarExpanded {
+                    labelView
+                        .padding(.trailing, 10)
+                        .opacity(sidebarExpanded ? 1 : 0)
+                    Spacer(minLength: 0)
+                }
+            }
+
+            // Selected accent pill — pinned to left edge
             if isSelected {
                 UnevenRoundedRectangle(
                     topLeadingRadius: 0, bottomLeadingRadius: 0,
@@ -230,6 +238,7 @@ struct ContentView: View {
                 .frame(width: 3, height: 28)
             }
         }
+        .frame(height: 48)
         .contentShape(Rectangle())
         .onTapGesture {
             if sidebarExpanded {
@@ -472,18 +481,18 @@ struct ContentView: View {
 
     private func chatBubble(_ msg: ChatMessage) -> some View {
         HStack {
-            if msg.role == "user" { Spacer(minLength: 40) }
+            if msg.role == "user" { Spacer(minLength: 30) }
             if msg.role == "system" { Spacer() }
 
             Text(msg.text)
-                .font(msg.role == "system" ? .caption : .subheadline)
+                .font(msg.role == "system" ? .caption : .system(size: 14))
                 .lineSpacing(2)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
                 .foregroundStyle(bubbleForeground(msg.role))
                 .background(bubbleBackground(msg.role), in: bubbleShape)
 
-            if msg.role == "assistant" { Spacer(minLength: 40) }
+            if msg.role == "assistant" { Spacer(minLength: 30) }
             if msg.role == "system" { Spacer() }
         }
     }
