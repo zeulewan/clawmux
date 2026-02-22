@@ -43,34 +43,37 @@ struct ContentView: View {
         ZStack(alignment: .leading) {
             Theme.bg.ignoresSafeArea()
 
-            HStack(spacing: 0) {
-                // Sidebar
-                sidebarView
-                    .frame(width: sidebarExpanded ? 200 : 56)
-                    .animation(.spring(response: 0.25, dampingFraction: 0.9), value: sidebarExpanded)
-
-                // Main content
-                VStack(spacing: 0) {
-                    headerBar
-                    if vm.showDebug {
-                        DebugView(vm: vm)
-                    } else if vm.activeSessionId != nil {
-                        chatArea
-                        bottomControls
-                    } else {
-                        emptyStateView
-                    }
+            // Main content offset by sidebar width
+            VStack(spacing: 0) {
+                headerBar
+                if vm.showDebug {
+                    DebugView(vm: vm)
+                } else if vm.activeSessionId != nil {
+                    chatArea
+                    bottomControls
+                } else {
+                    emptyStateView
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.leading, 56)
+
+            // Sidebar (always 56px, expands to overlay)
+            sidebarView
+                .frame(width: sidebarExpanded ? 200 : 56)
+                .background(Theme.bgSecondary)
+                .shadow(color: sidebarExpanded ? Color.black.opacity(0.3) : .clear, radius: 12, x: 4)
+                .animation(.spring(response: 0.25, dampingFraction: 0.9), value: sidebarExpanded)
+                .zIndex(10)
 
             // Overlay when sidebar expanded
             if sidebarExpanded {
                 Color.black.opacity(0.3)
                     .ignoresSafeArea()
-                    .offset(x: sidebarExpanded ? 200 : 56)
+                    .padding(.leading, 200)
                     .onTapGesture { withAnimation { sidebarExpanded = false } }
                     .transition(.opacity)
+                    .zIndex(5)
             }
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.9), value: vm.showDebug)
@@ -134,7 +137,6 @@ struct ContentView: View {
             .padding(.bottom, 12)
         }
         .frame(maxHeight: .infinity)
-        .background(Theme.bgSecondary)
         .clipped()
     }
 
