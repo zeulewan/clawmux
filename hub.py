@@ -264,9 +264,11 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
 
         break  # Got real audio
 
-    # Text override (typed input from client) or STT
+    # Text override (typed input from client or interjection) or STT
+    text_already_shown = False
     if audio_bytes == b"__text__" and session.text_override:
         text = session.text_override
+        text_already_shown = True  # interjection handler already sent user_text + history
         session.text_override = ""
         log.info("[%s] Text input: %s", session_id, text[:100])
     else:
@@ -276,7 +278,7 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
         log.info("[%s] STT: %s", session_id, text[:100])
 
     # Send user's transcribed text to browser for chat display
-    if text:
+    if text and not text_already_shown:
         await send_to_browser({"session_id": session_id, "type": "user_text", "text": text})
         history.append(session.voice, session.label, "user", text)
 
@@ -523,6 +525,24 @@ async def mcp_websocket(ws: WebSocket, session_id: str):
     finally:
         if session and session.mcp_ws is ws:
             session.mcp_ws = None
+
+
+# --- Debug log from browser ---
+_browser_debug_log: list[str] = []
+
+@app.post("/api/debug-log")
+async def debug_log(request: Request):
+    body = await request.json()
+    msg = body.get("msg", "")
+    if msg:
+        _browser_debug_log.append(msg)
+        if len(_browser_debug_log) > 100:
+            _browser_debug_log.pop(0)
+    return JSONResponse({"ok": True})
+
+@app.get("/api/debug-log")
+async def get_debug_log():
+    return JSONResponse({"lines": _browser_debug_log})
 
 
 # --- REST API ---

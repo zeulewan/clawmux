@@ -1777,11 +1777,12 @@ function renderChat() {
   chatArea.scrollTop = chatArea.scrollHeight;
 }
 
+function _debugBanner(msg) { /* no-op */ }
+
 function addMessage(sessionId, role, text) {
   const s = sessions.get(sessionId);
   if (!s) return;
   s.messages.push({ role, text, ts: Date.now() / 1000 });
-  if (sessionId === activeSessionId) updateElapsedTime();
   if (sessionId === activeSessionId) {
     chatArea.appendChild(createMsgEl(role, text, voiceColor(s.voice)));
     chatArea.scrollTop = chatArea.scrollHeight;
@@ -1918,19 +1919,24 @@ async function changeVoice(voice) {
 
 // --- Speed selector ---
 const speedSelect = document.getElementById('speed-select');
+// Restore saved speed
+const savedSpeed = localStorage.getItem('hub_speed');
+if (savedSpeed) speedSelect.value = String(parseFloat(savedSpeed).toFixed(1));
 
 async function changeSpeed(speed) {
-  if (!activeSessionId) return;
-  const s = sessions.get(activeSessionId);
-  if (s) s.speed = parseFloat(speed);
-  try {
-    await fetch(`/api/sessions/${activeSessionId}/speed`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ speed: parseFloat(speed) }),
-    });
-  } catch (e) {
-    console.error('Failed to set speed:', e);
+  const spd = parseFloat(speed);
+  localStorage.setItem('hub_speed', String(spd));
+  speedSelect.value = String(spd.toFixed(1));
+  // Apply to all active sessions
+  for (const [sid, s] of sessions) {
+    s.speed = spd;
+    try {
+      fetch(`/api/sessions/${sid}/speed`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ speed: spd }),
+      });
+    } catch (e) {}
   }
 }
 
@@ -1970,6 +1976,8 @@ async function loadSettings() {
     const r = await fetch('/api/settings');
     const s = await r.json();
     document.getElementById('setting-model').value = s.model || 'opus';
+    const spd = localStorage.getItem('hub_speed');
+    if (spd) speedSelect.value = String(parseFloat(spd).toFixed(1));
     setToggle('auto_record', s.auto_record || false);
     setToggle('auto_end', s.auto_end !== false); // default true
     setToggle('auto_interrupt', s.auto_interrupt || false);
@@ -2416,6 +2424,7 @@ function connect() {
       setToggle('auto_end', vadEnabled);
       setToggle('auto_interrupt', autoInterruptEnabled);
     }).catch(() => {});
+    startHistorySync();
   };
 
   ws.onclose = () => {
@@ -2428,8 +2437,51 @@ function connect() {
 
   ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
-    handleMessage(data);
+    if (_sessionsLoading) {
+      _messageBuffer.push(data);
+    } else {
+      handleMessage(data);
+    }
   };
+}
+
+let _sessionsLoading = false;
+const _messageBuffer = [];
+
+async function _refreshHistory(sessionId, voiceId) {
+  const s = sessions.get(sessionId);
+  if (!s) return;
+  try {
+    const resp = await fetch(`/api/history/${voiceId}`);
+    if (!resp.ok) return;
+    const hist = await resp.json();
+    const serverMessages = (hist.messages || []).map(m => ({ role: m.role, text: m.text }));
+    const localNonSystem = s.messages.filter(m => m.role !== 'system').length;
+    if (serverMessages.length > localNonSystem) {
+      s.messages = serverMessages;
+      if (sessionId === activeSessionId) {
+        renderChat();
+        requestAnimationFrame(() => { chatArea.scrollTop = chatArea.scrollHeight; });
+      }
+    }
+  } catch (e) { /* ignore */ }
+}
+
+// Periodic history sync — catches messages missed during WebSocket drops
+let _historySyncTimer = null;
+function startHistorySync() {
+  if (_historySyncTimer) return;
+  _historySyncTimer = setInterval(() => {
+    for (const [sid, s] of sessions) {
+      if (s.voice) _refreshHistory(sid, s.voice);
+    }
+  }, 5000);
+}
+
+function _flushMessageBuffer() {
+  while (_messageBuffer.length > 0) {
+    handleMessage(_messageBuffer.shift());
+  }
 }
 
 function handleMessage(data) {
@@ -2440,11 +2492,19 @@ function handleMessage(data) {
 
   // Hub-level messages (no session_id)
   if (type === 'session_list') {
+    _sessionsLoading = true;
     const promises = [];
     for (const s of data.sessions) {
-      if (!sessions.has(s.session_id)) promises.push(addSession(s, false));
+      if (!sessions.has(s.session_id)) {
+        promises.push(addSession(s, false));
+      } else {
+        // Session already exists — refresh history to catch missed messages
+        promises.push(_refreshHistory(s.session_id, s.voice));
+      }
     }
     Promise.all(promises).then(() => {
+      _sessionsLoading = false;
+      _flushMessageBuffer();
       renderVoiceGridIfActive();
       // Auto-restore previously active session on reconnect
       if (!activeSessionId) {
@@ -2457,6 +2517,11 @@ function handleMessage(data) {
                 break;
               }
             }
+          }
+          // Fallback: if still no active session and only one session, auto-select it
+          if (!activeSessionId && sessions.size === 1) {
+            const [sid] = sessions.keys();
+            switchTab(sid);
           }
         } catch(e) {}
       }
@@ -2512,6 +2577,11 @@ function handleMessage(data) {
     stopThinkingVAD();
     s.userSpokeThisCycle = false;
     s.awaitingInput = true;  // Converse cycle started — expect normal input flow
+    // Promote interjection messages to normal user messages (agent acknowledged them)
+    if (session_id === activeSessionId) {
+      chatArea.querySelectorAll('.msg.interjection').forEach(el => el.classList.remove('interjection'));
+    }
+    s.messages.forEach(m => { if (m.role === 'user interjection') m.role = 'user'; });
     addMessage(session_id, 'assistant', data.text);
     renderVoiceGridIfActive();
   } else if (type === 'user_text') {
