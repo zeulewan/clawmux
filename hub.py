@@ -431,14 +431,24 @@ async def mcp_websocket(ws: WebSocket, session_id: str):
         await ws.close(code=4004, reason="Session not found")
         return
 
+    was_already_ready = session.status == "ready" and session.mcp_ws is None
     session.mcp_ws = ws
 
-    # Notify browser
-    await send_to_browser({
-        "type": "session_status",
-        "session_id": session_id,
-        "status": "ready",
-    })
+    # Notify browser (skip noisy notification on reconnect after hub restart)
+    if not was_already_ready:
+        await send_to_browser({
+            "type": "session_status",
+            "session_id": session_id,
+            "status": "ready",
+        })
+    else:
+        # Silent reconnect — just update mcp_connected flag in browser
+        await send_to_browser({
+            "type": "session_status",
+            "session_id": session_id,
+            "status": "ready",
+            "silent": True,
+        })
 
     try:
         while True:

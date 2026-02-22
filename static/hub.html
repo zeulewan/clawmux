@@ -77,6 +77,7 @@ body {
   display: flex;
   flex: 1;
   overflow: hidden;
+  position: relative;
 }
 
 /* Sidebar */
@@ -327,7 +328,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  scroll-behavior: smooth;
 }
 .msg {
   max-width: 78%;
@@ -336,7 +336,10 @@ body {
   line-height: 1.55;
   font-size: 0.9rem;
   animation: msgAppear 0.2s ease-out;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
+#chat-area { overflow-x: hidden; }
 @keyframes msgAppear {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
@@ -346,6 +349,11 @@ body {
   background: var(--blue);
   color: #fff;
   border-bottom-right-radius: 6px;
+}
+.msg.interjection {
+  opacity: 0.75;
+  border: 1px dashed rgba(255,255,255,0.3);
+  font-style: italic;
 }
 .msg.assistant {
   align-self: flex-start;
@@ -821,16 +829,120 @@ body {
 
 /* Mobile optimizations */
 @media (max-width: 600px) {
+  /* Header: declutter for mobile */
+  #header { padding: 8px 12px; gap: 8px; }
+  #header h1 { font-size: 1rem; }
+  #usage-bar { padding: 3px 8px !important; font-size: 0.6rem !important; gap: 6px !important; }
+  #debug-link { display: none; }
+  #settings-link { font-size: 0; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; padding: 0; }
+  #settings-link::before { content: '⚙'; font-size: 14px; }
+  #conn-label { display: none; }
+
+  /* Sidebar: icon-only, fixed centering */
   #sidebar {
     width: 56px;
     min-width: 56px;
   }
   .sidebar-card .sb-info { display: none; }
-  .sidebar-card { justify-content: center; padding: 8px 4px; }
-  .sidebar-card .sb-icon { margin: 0; }
-  #header { padding: 8px 12px; }
-  #header h1 { font-size: 1rem; }
-  .msg { max-width: 88%; }
+  .sidebar-card .sb-unread {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 7px;
+    height: 7px;
+  }
+  .sidebar-card {
+    justify-content: center;
+    padding: 10px 4px;
+    position: relative;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+  .sidebar-card .sb-icon {
+    margin: 0;
+    width: 34px;
+    height: 34px;
+    position: relative;
+    border: 2px solid transparent;
+    transition: border-color 0.2s;
+  }
+  /* Colored ring around icon to show state on mobile */
+  .sidebar-card.active .sb-icon { border-color: var(--green); }
+  .sidebar-card.starting .sb-icon { border-color: var(--yellow); }
+  .sidebar-card.thinking .sb-icon { border-color: var(--orange); }
+  .sidebar-card.speaking .sb-icon { border-color: var(--blue); }
+  .sidebar-card.listening .sb-icon { border-color: var(--red); }
+  /* Small status dot on the icon */
+  .sidebar-card.active .sb-icon::after,
+  .sidebar-card.starting .sb-icon::after,
+  .sidebar-card.thinking .sb-icon::after,
+  .sidebar-card.speaking .sb-icon::after,
+  .sidebar-card.listening .sb-icon::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 2px solid var(--bg-secondary);
+  }
+  .sidebar-card.active .sb-icon::after { background: var(--green); }
+  .sidebar-card.starting .sb-icon::after { background: var(--yellow); }
+  .sidebar-card.thinking .sb-icon::after { background: var(--orange); }
+  .sidebar-card.speaking .sb-icon::after { background: var(--blue); }
+  .sidebar-card.listening .sb-icon::after { background: var(--red); }
+
+  /* Chat messages: wider on mobile */
+  .msg { max-width: 90%; }
+
+  /* Controls: better spacing and touch targets */
+  #controls { padding: 10px 12px; gap: 6px; }
+  #mic { width: 56px; height: 56px; }
+  #mic-row { gap: 16px; }
+  .btn-icon { width: 44px; height: 44px; }
+
+  /* Options menu: full width on mobile */
+  #options-menu {
+    left: 12px;
+    right: 12px;
+    bottom: 90px;
+    min-width: unset;
+  }
+
+  /* Sidebar expand toggle */
+  #sidebar-expand-btn {
+    display: flex !important;
+  }
+
+  /* Expanded sidebar on mobile */
+  #sidebar.expanded {
+    width: 200px;
+    min-width: 200px;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 50;
+    box-shadow: 4px 0 24px rgba(0,0,0,0.4);
+  }
+  #sidebar.expanded .sb-info { display: block !important; }
+  #sidebar.expanded .sidebar-card { justify-content: flex-start; padding: 8px 10px; }
+  #sidebar.expanded .sidebar-card .sb-icon { margin: 0; }
+
+  /* Overlay behind expanded sidebar */
+  #sidebar-overlay {
+    display: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.3);
+    z-index: 49;
+  }
+  #sidebar-overlay.visible { display: block; }
 }
 </style>
 </head>
@@ -857,7 +969,9 @@ body {
 
 <div id="sidebar">
   <div id="sidebar-list"></div>
+  <div id="sidebar-expand-btn" style="display:none; align-items:center; justify-content:center; padding:10px; cursor:pointer; border-top:1px solid var(--border); color:var(--text-tertiary); font-size:1.2rem;" onclick="toggleSidebarExpand()">&#8943;</div>
 </div>
+<div id="sidebar-overlay" onclick="collapseSidebar()"></div>
 
 <div id="main-content">
 
@@ -956,6 +1070,18 @@ body {
   <div class="settings-toggle" onclick="toggleSetting('audio_cues')">
     <span>Audio Cues</span>
     <div class="toggle-indicator on" id="toggle-audio_cues"></div>
+  </div>
+
+  <div style="margin-top:1.5rem;">
+    <h2 style="font-size:1rem;">Usage</h2>
+    <div id="settings-usage" style="padding:12px 0; font-size:0.85rem; color:var(--text-secondary);">Loading...</div>
+  </div>
+
+  <div style="margin-top:1rem;">
+    <h2 style="font-size:1rem; cursor:pointer;" onclick="toggleSettingsDebug()">Debug <span id="settings-debug-arrow" style="font-size:0.7rem; color:var(--text-tertiary);">&#9654;</span></h2>
+    <div id="settings-debug-content" style="display:none; margin-top:8px;">
+      <button style="padding:8px 16px; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); font-size:0.85rem; cursor:pointer; font-family:inherit;" onclick="showDebugPanel()">Open Debug Panel</button>
+    </div>
   </div>
 </div>
 
@@ -1304,6 +1430,32 @@ function showWelcome() {
 function showVoiceGrid() { showWelcome(); }
 
 // --- Sidebar rendering ---
+function toggleSidebarExpand() {
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  const chat = document.getElementById('chat-area');
+  const scrollPos = chat ? chat.scrollTop : 0;
+  if (sidebar.classList.contains('expanded')) {
+    collapseSidebar();
+  } else {
+    sidebar.classList.add('expanded');
+    overlay.classList.add('visible');
+    renderSidebar();
+  }
+  // Restore scroll position after layout change
+  requestAnimationFrame(() => { if (chat) chat.scrollTop = scrollPos; });
+}
+function collapseSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  const chat = document.getElementById('chat-area');
+  const savedScroll = chat ? chat.scrollTop : 0;
+  sidebar.classList.remove('expanded');
+  overlay.classList.remove('visible');
+  // Synchronously restore scroll — no delay, no flash
+  if (chat) chat.scrollTop = savedScroll;
+}
+
 function renderSidebar() {
   const list = document.getElementById('sidebar-list');
   list.innerHTML = '';
@@ -1427,6 +1579,32 @@ function renderSidebar() {
         showContextMenu(e, null, voiceId);
       }
     };
+
+    // Long-press for mobile context menu
+    let lpTimer = null;
+    let lpFired = false;
+    card.addEventListener('touchstart', (e) => {
+      lpFired = false;
+      lpTimer = setTimeout(() => {
+        lpTimer = null;
+        lpFired = true;
+        card.classList.add('long-press-active');
+        const touch = e.touches[0];
+        const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: touch.clientX, clientY: touch.clientY };
+        if (sessionForVoice) {
+          showContextMenu(fakeEvent, sessionForVoice.session_id, voiceId);
+        } else {
+          showContextMenu(fakeEvent, null, voiceId);
+        }
+        setTimeout(() => card.classList.remove('long-press-active'), 200);
+      }, 500);
+    }, { passive: true });
+    card.addEventListener('touchend', (e) => {
+      if (lpTimer) clearTimeout(lpTimer);
+      lpTimer = null;
+      if (lpFired) { e.preventDefault(); lpFired = false; }
+    });
+    card.addEventListener('touchmove', () => { if (lpTimer) clearTimeout(lpTimer); lpTimer = null; });
 
     list.appendChild(card);
   }
@@ -1597,7 +1775,7 @@ async function spawnSession(voiceId = '') {
     // Session will appear via WS session_spawned or session_status message
     // But also add it immediately from the REST response
     if (!sessions.has(data.session_id)) {
-      addSession(data, false);
+      await addSession(data, false);
     }
   } catch (e) {
     alert('Spawn error: ' + e.message);
@@ -1640,6 +1818,12 @@ async function addSession(data, autoSwitch = false) {
     }
   } else if (!isReady) {
     addMessage(data.session_id, 'system', 'Waiting for Claude...');
+  }
+
+  // Restore thinking indicator if session is processing
+  if (data.processing) {
+    showThinking(data.session_id);
+    startThinkingSound(data.session_id);
   }
 }
 
@@ -1710,7 +1894,20 @@ async function changeSpeed(speed) {
 }
 
 // --- Settings page ---
+let _preSettingsSessionId = null;
 function showSettingsPage() {
+  // Toggle: if settings is already visible, go back to previous chat or welcome
+  if (document.getElementById('settings-page').style.display === 'block') {
+    document.getElementById('settings-page').style.display = 'none';
+    if (_preSettingsSessionId && sessions.has(_preSettingsSessionId)) {
+      switchTab(_preSettingsSessionId);
+    } else {
+      showWelcome();
+    }
+    _preSettingsSessionId = null;
+    return;
+  }
+  _preSettingsSessionId = activeSessionId;
   document.getElementById('welcome-view').style.display = 'none';
   document.getElementById('chat-area').style.display = 'none';
   document.getElementById('controls').style.display = 'none';
@@ -1724,6 +1921,7 @@ function showSettingsPage() {
   debugActive = false;
   renderSidebar();
   loadSettings();
+  loadUsageForSettings();
 }
 
 async function loadSettings() {
@@ -2039,6 +2237,73 @@ function stopPlaybackVAD() {
   }
 }
 
+// --- Thinking VAD (auto-record interjections while agent is processing) ---
+let thinkingVadInterval = null;
+let thinkingVadCtx = null;
+let thinkingVadSessionId = null;
+
+function startThinkingVAD(sessionId) {
+  if (!autoMode || micMuted) return;
+  stopThinkingVAD();
+  thinkingVadSessionId = sessionId;
+
+  getMicStream().then(stream => {
+    thinkingVadCtx = new AudioContext();
+    const source = thinkingVadCtx.createMediaStreamSource(stream);
+    const analyser = thinkingVadCtx.createAnalyser();
+    analyser.fftSize = 512;
+    source.connect(analyser);
+
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    const SPEECH_THRESHOLD = 20;
+    const SPEECH_DURATION = 300; // ms of sustained speech before triggering
+    let speechStart = null;
+
+    thinkingVadInterval = setInterval(() => {
+      // Stop if session is no longer thinking, or we're already recording
+      const s = sessions.get(sessionId);
+      if (!s || s.awaitingInput || recording) {
+        stopThinkingVAD();
+        return;
+      }
+
+      analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) {
+        const v = (data[i] - 128) / 128;
+        sum += v * v;
+      }
+      const rms = Math.sqrt(sum / data.length) * 200;
+
+      if (rms >= SPEECH_THRESHOLD) {
+        if (!speechStart) speechStart = Date.now();
+        else if (Date.now() - speechStart >= SPEECH_DURATION) {
+          // Speech detected — start recording interjection
+          stopThinkingVAD();
+          interjectionMode = true;
+          startRecording(sessionId);
+        }
+      } else {
+        speechStart = null;
+      }
+    }, 50);
+  }).catch(err => {
+    console.warn('Thinking VAD mic error:', err);
+  });
+}
+
+function stopThinkingVAD() {
+  if (thinkingVadInterval) {
+    clearInterval(thinkingVadInterval);
+    thinkingVadInterval = null;
+  }
+  if (thinkingVadCtx) {
+    thinkingVadCtx.close().catch(() => {});
+    thinkingVadCtx = null;
+  }
+  thinkingVadSessionId = null;
+}
+
 // --- Thinking indicator ---
 function showThinking(sessionId) {
   const s = sessions.get(sessionId);
@@ -2173,7 +2438,7 @@ function handleMessage(data) {
     const s = sessions.get(data.session_id);
     if (s) {
       s.status = data.status;
-      if (data.status === 'ready') {
+      if (data.status === 'ready' && !data.silent) {
         cueSessionReady();
         addMessage(data.session_id, 'system', 'Claude connected.');
         // Don't auto-switch — let user stay where they are
@@ -2204,12 +2469,13 @@ function handleMessage(data) {
   if (type === 'assistant_text') {
     hideThinking(session_id);
     stopThinkingSound();
+    stopThinkingVAD();
     s.userSpokeThisCycle = false;
     s.awaitingInput = true;  // Converse cycle started — expect normal input flow
     addMessage(session_id, 'assistant', data.text);
     renderVoiceGridIfActive();
   } else if (type === 'user_text') {
-    addMessage(session_id, 'user', data.text);
+    addMessage(session_id, data.interjection ? 'user interjection' : 'user', data.text);
     showThinking(session_id);
     startThinkingSound(session_id);
     s.userSpokeThisCycle = true;
@@ -2278,11 +2544,15 @@ function handleMessage(data) {
     } else {
       renderVoiceGridIfActive();
     }
-    // If user sent a message this cycle, agent is now processing — re-show thinking
-    if (s.userSpokeThisCycle) {
+    // Show thinking if agent is still processing (wait_for_response=false or user spoke this cycle)
+    if (data.processing || s.userSpokeThisCycle) {
       s.userSpokeThisCycle = false;
       showThinking(session_id);
       startThinkingSound(session_id);
+      // Start listening for interjections via VAD
+      if (session_id === activeSessionId) {
+        startThinkingVAD(session_id);
+      }
     }
   } else if (type === 'session_ended') {
     // Agent said goodbye — auto-close after a short delay
@@ -2516,6 +2786,11 @@ function sendAudio(sessionId) {
         micBtn.classList.remove('processing');
         micBtn.disabled = false;
         updateMicUI();
+        // Restart thinking VAD to listen for more interjections
+        const s = sessions.get(sessionId);
+        if (s && !s.awaitingInput && sessionId === activeSessionId) {
+          startThinkingVAD(sessionId);
+        }
       }, 500);
     }
   };
@@ -3032,6 +3307,43 @@ async function fetchUsage() {
 
 function toggleUsageDetail() {
   fetchUsage(); // refresh on click
+}
+
+async function loadUsageForSettings() {
+  const el = document.getElementById('settings-usage');
+  if (!el) return;
+  try {
+    const resp = await fetch('/api/usage');
+    if (!resp.ok) { el.textContent = 'Unavailable'; return; }
+    const data = await resp.json();
+    const pct5h = data.five_hour?.utilization ?? null;
+    const pct7d = data.seven_day?.utilization ?? null;
+    if (pct5h === null && pct7d === null) { el.textContent = 'No usage data available'; return; }
+    let html = '';
+    if (pct5h !== null) {
+      html += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">';
+      html += '<span>5-hour window</span>';
+      html += '<span style="font-weight:600;color:' + usageColor(pct5h) + ';">' + pct5h + '%</span></div>';
+    }
+    if (pct7d !== null) {
+      html += '<div style="display:flex;justify-content:space-between;padding:6px 0;">';
+      html += '<span>7-day window</span>';
+      html += '<span style="font-weight:600;color:' + usageColor(pct7d) + ';">' + pct7d + '%</span></div>';
+    }
+    el.innerHTML = html;
+  } catch (e) { el.textContent = 'Error loading usage'; }
+}
+
+function toggleSettingsDebug() {
+  const content = document.getElementById('settings-debug-content');
+  const arrow = document.getElementById('settings-debug-arrow');
+  if (content.style.display === 'none') {
+    content.style.display = 'block';
+    arrow.innerHTML = '&#9660;';
+  } else {
+    content.style.display = 'none';
+    arrow.innerHTML = '&#9654;';
+  }
 }
 
 function startUsagePolling() {
