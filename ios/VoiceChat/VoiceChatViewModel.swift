@@ -456,8 +456,8 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     @Published var debugLastUpdated = ""
 
     // Usage stats
-    @Published var usage5hPct: Int? = 98
-    @Published var usage7dPct: Int? = 51
+    @Published var usage5hPct: Int?
+    @Published var usage7dPct: Int?
     @Published var usage5hReset: String?
     @Published var usage7dReset: String?
 
