@@ -504,7 +504,7 @@ body {
   display: none;
   padding: 10px 16px;
   padding-bottom: max(10px, env(safe-area-inset-bottom));
-  background: var(--bg-secondary);
+  background: transparent;
   border-top: 1px solid var(--border);
   gap: 8px;
   align-items: flex-end;
@@ -571,20 +571,9 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  background: var(--bg-secondary);
+  background: transparent;
   border-top: 1px solid var(--border);
   flex-shrink: 0;
-  position: relative;
-}
-#controls::before {
-  content: '';
-  position: absolute;
-  top: -24px;
-  left: 0;
-  right: 0;
-  height: 24px;
-  background: linear-gradient(to bottom, transparent, var(--bg));
-  pointer-events: none;
 }
 #status {
   font-size: 0.7rem;
