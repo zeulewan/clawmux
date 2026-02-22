@@ -206,10 +206,18 @@ struct ContentView: View {
                     .foregroundStyle(isAlive ? ringColor : Theme.textTertiary)
             }
             if let proj = activeForVoice?.project, !proj.isEmpty {
-                Text(proj + (activeForVoice?.projectArea.isEmpty == false ? " · " + (activeForVoice?.projectArea ?? "") : ""))
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(Theme.textTertiary)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(proj)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(Theme.textTertiary)
+                        .lineLimit(1)
+                    if let area = activeForVoice?.projectArea, !area.isEmpty {
+                        Text(area)
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(Theme.textTertiary.opacity(0.7))
+                            .lineLimit(1)
+                    }
+                }
             }
         }
 
@@ -340,10 +348,18 @@ struct ContentView: View {
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
                 if let proj = vm.activeSession?.project, !proj.isEmpty {
-                    Text(proj + (vm.activeSession?.projectArea.isEmpty == false ? " · " + (vm.activeSession?.projectArea ?? "") : ""))
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Theme.textTertiary)
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(proj)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(Theme.textTertiary)
+                            .lineLimit(1)
+                        if let area = vm.activeSession?.projectArea, !area.isEmpty {
+                            Text(area)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(Theme.textTertiary.opacity(0.7))
+                                .lineLimit(1)
+                        }
+                    }
                 }
             }
 
