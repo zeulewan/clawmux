@@ -113,18 +113,18 @@ struct ContentView: View {
     private var sidebarView: some View {
         VStack(spacing: 0) {
             // Top: connection dot
-            HStack {
-                Spacer()
+            HStack(spacing: 0) {
                 Circle()
                     .fill(connectionDotColor)
                     .frame(width: 8, height: 8)
+                    .frame(width: 56)
                 if sidebarExpanded {
                     Text(vm.isConnected ? "Connected" : vm.isConnecting ? "Connecting" : "Offline")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(connectionDotColor)
                         .transition(.opacity)
+                    Spacer()
                 }
-                Spacer()
             }
             .padding(.vertical, 10)
 
@@ -150,11 +150,11 @@ struct ContentView: View {
                     sidebarExpanded.toggle()
                 }
             } label: {
-                HStack(spacing: 8) {
+                HStack(spacing: 0) {
                     Image(systemName: sidebarExpanded ? "chevron.left" : "line.3.horizontal")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(Theme.textSecondary)
-                        .frame(width: 32, height: 32)
+                        .frame(width: 56, height: 36)
                     if sidebarExpanded {
                         Text("Collapse")
                             .font(.system(size: 12, weight: .medium))
@@ -163,8 +163,7 @@ struct ContentView: View {
                         Spacer()
                     }
                 }
-                .padding(.horizontal, sidebarExpanded ? 12 : 12)
-                .padding(.vertical, 10)
+                .padding(.vertical, 6)
             }
         }
     }
@@ -177,8 +176,8 @@ struct ContentView: View {
         let ringColor = sidebarRingColor(active: activeForVoice, spawning: isSpawning)
         let isAlive = activeForVoice != nil || isSpawning
 
-        return HStack(spacing: 10) {
-            // Icon with ring
+        return HStack(spacing: 0) {
+            // Icon — fixed 56px column, always centered
             ZStack {
                 Circle()
                     .fill(color.opacity(isAlive ? 0.18 : 0.08))
@@ -192,8 +191,9 @@ struct ContentView: View {
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(isAlive ? color : color.opacity(0.4))
             }
+            .frame(width: 56)
 
-            // Expanded: name + status
+            // Expanded: name + status (appears to the right)
             if sidebarExpanded {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(voice.name)
@@ -209,12 +209,12 @@ struct ContentView: View {
                             .foregroundStyle(isAlive ? ringColor : Theme.textTertiary)
                     }
                 }
-                .transition(.opacity.combined(with: .offset(x: -6)))
+                .padding(.trailing, 10)
+                .transition(.opacity)
                 Spacer(minLength: 0)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(isSelected ? Theme.blue.opacity(0.1) : .clear)
