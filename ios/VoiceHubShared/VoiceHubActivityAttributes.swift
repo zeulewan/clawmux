@@ -1,10 +1,10 @@
 import ActivityKit
 import Foundation
 
-struct VoiceChatActivityAttributes: ActivityAttributes {
+struct VoiceHubActivityAttributes: ActivityAttributes {
     struct ContentState: Codable, Hashable {
         var voiceName: String
-        var status: VoiceChatStatus
+        var status: VoiceHubStatus
         var lastMessage: String
         var inputMode: String  // "auto", "ptt", "typing"
     }
@@ -12,7 +12,7 @@ struct VoiceChatActivityAttributes: ActivityAttributes {
     var sessionId: String
 }
 
-enum VoiceChatStatus: String, Codable, Hashable {
+enum VoiceHubStatus: String, Codable, Hashable {
     case ready
     case thinking
     case speaking

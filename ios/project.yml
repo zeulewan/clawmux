@@ -1,38 +1,38 @@
-name: VoiceChat
+name: VoiceHub
 options:
   bundleIdPrefix: com.zeul
   deploymentTarget:
     iOS: "17.0"
   developmentLanguage: en
 targets:
-  VoiceChat:
+  VoiceHub:
     type: application
     platform: iOS
     sources:
-      - VoiceChat
-      - VoiceChatShared
+      - VoiceHub
+      - VoiceHubShared
     dependencies:
-      - target: VoiceChatWidgetExtension
+      - target: VoiceHubWidgetExtension
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.zeul.voicechat
+        PRODUCT_BUNDLE_IDENTIFIER: com.zeul.voicehub
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 25QMAKVCBN
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "6.0"
-        INFOPLIST_FILE: VoiceChat/Info.plist
+        INFOPLIST_FILE: VoiceHub/Info.plist
 
-  VoiceChatWidgetExtension:
+  VoiceHubWidgetExtension:
     type: app-extension
     platform: iOS
     sources:
-      - VoiceChatWidget
-      - VoiceChatShared
+      - VoiceHubWidget
+      - VoiceHubShared
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.zeul.voicechat.widget
+        PRODUCT_BUNDLE_IDENTIFIER: com.zeul.voicehub.widget
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 25QMAKVCBN
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "6.0"
-        INFOPLIST_FILE: VoiceChatWidget/Info.plist
+        INFOPLIST_FILE: VoiceHubWidget/Info.plist

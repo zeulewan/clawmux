@@ -30,7 +30,7 @@ private enum Theme {
 }
 
 struct ContentView: View {
-    @StateObject private var vm = VoiceChatViewModel()
+    @StateObject private var vm = VoiceHubViewModel()
     @State private var isPulsing = false
     @State private var resetVoiceId: String?
     @State private var showResetConfirm = false
@@ -313,7 +313,7 @@ struct ContentView: View {
                 .font(.system(size: 44))
                 .foregroundStyle(Theme.textTertiary.opacity(0.5))
             VStack(spacing: 6) {
-                Text("Claw Hub")
+                Text("Voice Hub")
                     .font(.system(size: 20, weight: .bold, design: .rounded))
                     .foregroundStyle(Theme.textPrimary)
                 Text("Tap a voice to start a session")
@@ -343,7 +343,7 @@ struct ContentView: View {
             }
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(vm.showDebug ? "Debug" : vm.activeSession?.label ?? "Claw Hub")
+                Text(vm.showDebug ? "Debug" : vm.activeSession?.label ?? "Voice Hub")
                     .font(.system(size: 17, weight: .bold, design: .rounded))
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
@@ -1028,7 +1028,7 @@ struct ContentView: View {
 // MARK: - Debug View
 
 struct DebugView: View {
-    @ObservedObject var vm: VoiceChatViewModel
+    @ObservedObject var vm: VoiceHubViewModel
 
     var body: some View {
         ScrollView {
@@ -1220,7 +1220,7 @@ struct DebugView: View {
 // MARK: - Settings Root
 
 struct SettingsView: View {
-    @ObservedObject var vm: VoiceChatViewModel
+    @ObservedObject var vm: VoiceHubViewModel
     @Environment(\.dismiss) var dismiss
     @State private var draftURL: String = ""
 
@@ -1382,7 +1382,7 @@ struct SettingsView: View {
 // MARK: - Auto Mode Settings
 
 struct AutoModeSettingsView: View {
-    @ObservedObject var vm: VoiceChatViewModel
+    @ObservedObject var vm: VoiceHubViewModel
 
     var body: some View {
         Form {
@@ -1456,7 +1456,7 @@ struct AutoModeSettingsView: View {
 // MARK: - PTT Mode Settings
 
 struct PTTModeSettingsView: View {
-    @ObservedObject var vm: VoiceChatViewModel
+    @ObservedObject var vm: VoiceHubViewModel
 
     var body: some View {
         Form {
@@ -1499,7 +1499,7 @@ struct PTTModeSettingsView: View {
 // MARK: - Typing Mode Settings
 
 struct TypingModeSettingsView: View {
-    @ObservedObject var vm: VoiceChatViewModel
+    @ObservedObject var vm: VoiceHubViewModel
 
     var body: some View {
         Form {

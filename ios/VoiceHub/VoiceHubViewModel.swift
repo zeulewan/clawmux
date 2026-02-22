@@ -260,7 +260,7 @@ struct DebugTmuxSession: Identifiable {
 // MARK: - ViewModel
 
 @MainActor
-final class VoiceChatViewModel: NSObject, ObservableObject {
+final class VoiceHubViewModel: NSObject, ObservableObject {
 
     // Connection
     @Published var isConnected = false
@@ -499,7 +499,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     private var debugRefreshTimer: Timer?
     private var pausedAudioSessionId: String?
     private var suppressNextAutoRecord = false
-    private var currentActivity: Activity<VoiceChatActivityAttributes>?
+    private var currentActivity: Activity<VoiceHubActivityAttributes>?
     private var silencePlayer: AVAudioPlayer?
     private var keepaliveEngine: AVAudioEngine?
     private var playbackVADEngine: AVAudioEngine?
@@ -1496,7 +1496,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     }
 
     func handleOpenURL(_ url: URL) {
-        guard url.scheme == "voicechat" else { return }
+        guard url.scheme == "voicehub" else { return }
         switch url.host {
         case "mic":
             // Tapped mic button in Live Activity - trigger mic action for current session
@@ -2411,10 +2411,10 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         guard let session = sessions.first(where: { $0.id == sessionId }) else { return }
 
-        let attributes = VoiceChatActivityAttributes(sessionId: sessionId)
-        let state = VoiceChatActivityAttributes.ContentState(
+        let attributes = VoiceHubActivityAttributes(sessionId: sessionId)
+        let state = VoiceHubActivityAttributes.ContentState(
             voiceName: session.label,
-            status: voiceChatStatus(for: session),
+            status: voiceHubStatus(for: session),
             lastMessage: session.messages.last(where: { $0.role == "assistant" })?
                 .text.prefix(80).description ?? "",
             inputMode: inputMode
@@ -2437,9 +2437,9 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
             let session = sessions.first(where: { $0.id == sessionId })
         else { return }
 
-        let state = VoiceChatActivityAttributes.ContentState(
+        let state = VoiceHubActivityAttributes.ContentState(
             voiceName: session.label,
-            status: voiceChatStatus(for: session),
+            status: voiceHubStatus(for: session),
             lastMessage: session.messages.last(where: { $0.role == "assistant" })?
                 .text.prefix(80).description ?? "",
             inputMode: inputMode
@@ -2459,13 +2459,13 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     private func endStaleLiveActivities() {
         // Clean up any activities left over from a previous launch (e.g. force-kill)
         Task {
-            for activity in Activity<VoiceChatActivityAttributes>.activities {
+            for activity in Activity<VoiceHubActivityAttributes>.activities {
                 await activity.end(nil, dismissalPolicy: .immediate)
             }
         }
     }
 
-    private func voiceChatStatus(for session: VoiceSession) -> VoiceChatStatus {
+    private func voiceHubStatus(for session: VoiceSession) -> VoiceHubStatus {
         if session.isThinking { return .thinking }
         let st = session.statusText
         if st == "Speaking..." || st == "Playing..." { return .speaking }
@@ -2486,7 +2486,7 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
 
 // MARK: - URLSessionWebSocketDelegate
 
-extension VoiceChatViewModel: URLSessionWebSocketDelegate {
+extension VoiceHubViewModel: URLSessionWebSocketDelegate {
     nonisolated func urlSession(
         _ session: URLSession,
         webSocketTask: URLSessionWebSocketTask,
@@ -2524,7 +2524,7 @@ extension VoiceChatViewModel: URLSessionWebSocketDelegate {
 
 // MARK: - AVAudioPlayerDelegate
 
-extension VoiceChatViewModel: AVAudioPlayerDelegate {
+extension VoiceHubViewModel: AVAudioPlayerDelegate {
     nonisolated func audioPlayerDidFinishPlaying(
         _ player: AVAudioPlayer, successfully flag: Bool
     ) {

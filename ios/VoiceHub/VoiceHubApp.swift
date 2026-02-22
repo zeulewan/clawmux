@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct VoiceChatApp: App {
+struct VoiceHubApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()

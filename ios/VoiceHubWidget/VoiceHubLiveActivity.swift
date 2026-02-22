@@ -2,11 +2,11 @@ import ActivityKit
 import SwiftUI
 import WidgetKit
 
-struct VoiceChatLiveActivity: Widget {
+struct VoiceHubLiveActivity: Widget {
     var body: some WidgetConfiguration {
-        ActivityConfiguration(for: VoiceChatActivityAttributes.self) { context in
+        ActivityConfiguration(for: VoiceHubActivityAttributes.self) { context in
             lockScreenView(context: context)
-                .widgetURL(URL(string: "voicechat://mic"))
+                .widgetURL(URL(string: "voicehub://mic"))
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
@@ -35,7 +35,7 @@ struct VoiceChatLiveActivity: Widget {
                         } else {
                             Spacer()
                         }
-                        Link(destination: URL(string: "voicechat://mic")!) {
+                        Link(destination: URL(string: "voicehub://mic")!) {
                             modeButton(inputMode: context.state.inputMode, status: context.state.status)
                         }
                     }
@@ -66,12 +66,12 @@ struct VoiceChatLiveActivity: Widget {
 
     @ViewBuilder
     private func lockScreenView(
-        context: ActivityViewContext<VoiceChatActivityAttributes>
+        context: ActivityViewContext<VoiceHubActivityAttributes>
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Claw Hub")
+                    Text("Voice Hub")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.secondary)
                     Text(context.state.voiceName)
@@ -94,7 +94,7 @@ struct VoiceChatLiveActivity: Widget {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
-            Link(destination: URL(string: "voicechat://mic")!) {
+            Link(destination: URL(string: "voicehub://mic")!) {
                 lockScreenButton(inputMode: context.state.inputMode, status: context.state.status)
             }
         }
@@ -105,7 +105,7 @@ struct VoiceChatLiveActivity: Widget {
     // MARK: - Mode Button (Dynamic Island)
 
     @ViewBuilder
-    private func modeButton(inputMode: String, status: VoiceChatStatus) -> some View {
+    private func modeButton(inputMode: String, status: VoiceHubStatus) -> some View {
         switch inputMode {
         case "ptt":
             HStack(spacing: 5) {
@@ -142,7 +142,7 @@ struct VoiceChatLiveActivity: Widget {
     // MARK: - Lock Screen Button
 
     @ViewBuilder
-    private func lockScreenButton(inputMode: String, status: VoiceChatStatus) -> some View {
+    private func lockScreenButton(inputMode: String, status: VoiceHubStatus) -> some View {
         HStack(spacing: 8) {
             Image(systemName: inputMode == "typing" ? "keyboard" : "mic.fill")
                 .font(.system(size: 14, weight: .semibold))
@@ -165,7 +165,7 @@ struct VoiceChatLiveActivity: Widget {
         }
     }
 
-    private func statusColor(_ status: VoiceChatStatus) -> Color {
+    private func statusColor(_ status: VoiceHubStatus) -> Color {
         let hex = status.dotColorHex
         return Color(
             red: Double((hex >> 16) & 0xFF) / 255,

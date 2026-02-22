@@ -21,17 +21,17 @@ Read these before writing any code:
 The app has two main source files:
 
 ```
-ios/VoiceChat/VoiceChatViewModel.swift   # All state: WebSocket, audio, recording, Live Activity
-ios/VoiceChat/ContentView.swift          # All UI: voice grid, session view, settings, debug
+ios/VoiceHub/VoiceHubViewModel.swift   # All state: WebSocket, audio, recording, Live Activity
+ios/VoiceHub/ContentView.swift          # All UI: voice grid, session view, settings, debug
 ```
 
 Supporting files:
 
 ```
 ios/project.yml                          # XcodeGen project definition
-ios/VoiceChat/Info.plist                 # Background modes, permissions, URL schemes
-ios/VoiceChatShared/VoiceChatActivityAttributes.swift  # ActivityKit (shared with widget)
-ios/VoiceChatWidget/VoiceChatLiveActivity.swift         # Dynamic Island + Lock Screen
+ios/VoiceHub/Info.plist                 # Background modes, permissions, URL schemes
+ios/VoiceHubShared/VoiceHubActivityAttributes.swift  # ActivityKit (shared with widget)
+ios/VoiceHubWidget/VoiceHubLiveActivity.swift         # Dynamic Island + Lock Screen
 ```
 
 ## Build & Deploy Workflow
@@ -40,22 +40,22 @@ The development cycle is: edit code, build, install, launch.
 
 ```bash
 # Build (from ios/ directory)
-xcodebuild -project VoiceChat.xcodeproj -scheme VoiceChat \
+xcodebuild -project VoiceHub.xcodeproj -scheme VoiceHub \
   -destination 'id=DEVICE_ID' 2>&1 | grep -E '(BUILD|error:)'
 
 # Install
 xcrun devicectl device install app --device DEVICE_ID \
-  ~/Library/Developer/Xcode/DerivedData/VoiceChat-*/Build/Products/Debug-iphoneos/VoiceChat.app
+  ~/Library/Developer/Xcode/DerivedData/VoiceHub-*/Build/Products/Debug-iphoneos/VoiceHub.app
 
 # Launch (phone must be unlocked)
-xcrun devicectl device process launch --device DEVICE_ID com.zeul.voicechat
+xcrun devicectl device process launch --device DEVICE_ID com.zeul.voicehub
 ```
 
 Find device ID with `xcrun xctrace list devices`.
 
 After editing `project.yml`, regenerate with `xcodegen generate` before building.
 
-**SourceKit diagnostics**: The Swift SourceKit language server reports false errors ("Cannot find type 'VoiceChatViewModel' in scope", etc.) due to stale indexing. Ignore these. Only trust `xcodebuild` output for real errors.
+**SourceKit diagnostics**: The Swift SourceKit language server reports false errors ("Cannot find type 'VoiceHubViewModel' in scope", etc.) due to stale indexing. Ignore these. Only trust `xcodebuild` output for real errors.
 
 ## Architecture
 
@@ -117,7 +117,7 @@ TTS audio arrives as base64 MP3 via WebSocket `audio` messages. Decoded and play
 
 ### Live Activity
 
-ActivityKit with `VoiceChatActivityAttributes`. Started/updated/ended from ViewModel at state transitions. Per-mode toggle (auto and PTT only).
+ActivityKit with `VoiceHubActivityAttributes`. Started/updated/ended from ViewModel at state transitions. Per-mode toggle (auto and PTT only).
 
 ## Connection Details
 

@@ -75,7 +75,7 @@ xcrun xctrace list devices
 
 ```bash
 cd ios/
-xcodebuild -project VoiceChat.xcodeproj -scheme VoiceChat \
+xcodebuild -project VoiceHub.xcodeproj -scheme VoiceHub \
   -destination 'id=DEVICE_ID' 2>&1 | grep -E '(BUILD|error:)'
 ```
 
@@ -86,7 +86,7 @@ Use `generic/platform=iOS` as the destination if you just want to verify compila
 ```bash
 xcrun devicectl device install app \
   --device DEVICE_ID \
-  ~/Library/Developer/Xcode/DerivedData/VoiceChat-*/Build/Products/Debug-iphoneos/VoiceChat.app
+  ~/Library/Developer/Xcode/DerivedData/VoiceHub-*/Build/Products/Debug-iphoneos/VoiceHub.app
 ```
 
 ### Launch
@@ -94,7 +94,7 @@ xcrun devicectl device install app \
 ```bash
 xcrun devicectl device process launch \
   --device DEVICE_ID \
-  com.zeul.voicechat
+  com.zeul.voicehub
 ```
 
 Phone must be unlocked for remote launch to work.
@@ -105,11 +105,11 @@ On first install, go to **Settings > General > VPN & Device Management** and tru
 
 ```bash
 cd ios/ && \
-xcodebuild -project VoiceChat.xcodeproj -scheme VoiceChat \
+xcodebuild -project VoiceHub.xcodeproj -scheme VoiceHub \
   -destination 'id=DEVICE_ID' 2>&1 | grep -E '(BUILD|error:)' && \
 xcrun devicectl device install app --device DEVICE_ID \
-  ~/Library/Developer/Xcode/DerivedData/VoiceChat-*/Build/Products/Debug-iphoneos/VoiceChat.app && \
-xcrun devicectl device process launch --device DEVICE_ID com.zeul.voicechat
+  ~/Library/Developer/Xcode/DerivedData/VoiceHub-*/Build/Products/Debug-iphoneos/VoiceHub.app && \
+xcrun devicectl device process launch --device DEVICE_ID com.zeul.voicehub
 ```
 
 ## Configuration
@@ -127,23 +127,23 @@ The app connects via WebSocket (`ws://` or `wss://` depending on scheme). Tailsc
 ```
 ios/
   project.yml                  # XcodeGen project definition
-  VoiceChat/
+  VoiceHub/
     Info.plist                 # Background modes, permissions, URL schemes
-    VoiceChatApp.swift         # SwiftUI app entry point
-    VoiceChatViewModel.swift   # WebSocket, audio, state, Live Activity, recording
+    VoiceHubApp.swift         # SwiftUI app entry point
+    VoiceHubViewModel.swift   # WebSocket, audio, state, Live Activity, recording
     ContentView.swift          # UI (voice grid, session view, settings, debug)
     Assets.xcassets/           # App icon, colors
-  VoiceChatShared/
-    VoiceChatActivityAttributes.swift  # ActivityKit attributes (shared with widget)
-  VoiceChatWidget/
+  VoiceHubShared/
+    VoiceHubActivityAttributes.swift  # ActivityKit attributes (shared with widget)
+  VoiceHubWidget/
     Info.plist                 # Widget extension Info.plist
-    VoiceChatWidgetBundle.swift  # Widget entry point
-    VoiceChatLiveActivity.swift  # Dynamic Island + Lock Screen UI
+    VoiceHubWidgetBundle.swift  # Widget entry point
+    VoiceHubLiveActivity.swift  # Dynamic Island + Lock Screen UI
 ```
 
 ### Key architecture
 
-- **VoiceChatViewModel** (~2400 lines) - All state management. WebSocket connection, audio session, recording (AVAudioRecorder), playback (AVAudioPlayer), Live Activity lifecycle, background keepalive, VAD, tone player, notifications.
+- **VoiceHubViewModel** (~2400 lines) - All state management. WebSocket connection, audio session, recording (AVAudioRecorder), playback (AVAudioPlayer), Live Activity lifecycle, background keepalive, VAD, tone player, notifications.
 - **ContentView** (~1350 lines) - All UI. Voice grid, session view with chat, three bottom control variants (auto/PTT controls, PTT text input, typing text input), settings (per-mode pages), debug panel.
 
 ## Settings Structure
