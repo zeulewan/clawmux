@@ -856,11 +856,15 @@ body {
 .debug-kv .k { color: var(--text-tertiary); min-width: 130px; font-size: 0.72rem; }
 .debug-kv .v { color: var(--text); font-size: 0.72rem; }
 
-/* Scrollbar styling */
-::-webkit-scrollbar { width: 6px; }
+/* Scrollbar styling — hidden by default, visible on hover */
+::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+::-webkit-scrollbar-thumb { background: transparent; border-radius: 2px; }
+*:hover::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.3); }
+*:hover::-webkit-scrollbar-thumb:hover { background: rgba(128,128,128,0.5); }
+/* Firefox */
+* { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+*:hover { scrollbar-color: rgba(128,128,128,0.3) transparent; }
 
 /* Mobile optimizations */
 @media (max-width: 600px) {
