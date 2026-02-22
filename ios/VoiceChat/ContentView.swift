@@ -975,7 +975,7 @@ struct ContentView: View {
         case "af_sarah": return Color(hex: 0xE63946)
         case "am_adam": return Color(hex: 0x2ECC71)
         case "am_echo": return Color(hex: 0x9B59B6)
-        case "am_onyx": return Color(hex: 0x1ABC9C)
+        case "am_onyx": return Color(hex: 0x7F8C8D)
         case "bm_fable": return Color(hex: 0xF1C40F)
         default: return Color(.systemGray3)
         }
