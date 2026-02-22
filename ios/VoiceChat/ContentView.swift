@@ -205,6 +205,12 @@ struct ContentView: View {
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(isAlive ? ringColor : Theme.textTertiary)
             }
+            if let proj = activeForVoice?.project, !proj.isEmpty {
+                Text(proj + (activeForVoice?.projectArea.isEmpty == false ? " · " + (activeForVoice?.projectArea ?? "") : ""))
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(Theme.textTertiary)
+                    .lineLimit(1)
+            }
         }
 
         return ZStack(alignment: .leading) {
