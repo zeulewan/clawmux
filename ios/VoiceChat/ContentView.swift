@@ -453,17 +453,14 @@ struct ContentView: View {
                         thinkingIndicator
                             .id("thinking")
                     }
-                    Color.clear.frame(height: 1)
+                    Color.clear.frame(height: 100)
                         .id("bottom")
                 }
                 .padding(.horizontal, 14)
                 .padding(.top, 8)
             }
             .defaultScrollAnchor(.bottom)
-            .id(vm.activeSessionId ?? "")
-            .onAppear {
-                scrollToBottom(proxy)
-            }
+            .id(vm.activeSessionId ?? "none")
             .onChange(of: vm.activeMessages.count) { _, _ in
                 scrollToBottom(proxy)
             }
