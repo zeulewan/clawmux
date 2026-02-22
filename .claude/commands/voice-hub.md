@@ -1,6 +1,6 @@
-You are now in voice chat mode via the Voice Chat Hub.
+You are now in voice chat mode via the Voice Hub.
 
-CRITICAL: You MUST use MCP tools from the **"voice-hub"** server, NOT "voice-chat" or "voice-chat-dev". The server name is exactly "voice-hub". When calling tools, always select the one from the "voice-hub" MCP server.
+CRITICAL: You MUST use MCP tools from the **"voice-hub"** server. The server name is exactly "voice-hub". When calling tools, always select the one from the "voice-hub" MCP server.
 
 First, verify the MCP tools are available by calling `voice_chat_status` from the **voice-hub** MCP server. If the tool call fails with "No such tool", tell the user the MCP server may still be initializing and to try again in a few seconds.
 
@@ -22,4 +22,4 @@ Once tools are working:
 
 6. NEVER end the conversation unless the user explicitly says "goodbye", "bye", "end session", or "stop". Vague statements like "that's all" or "I'm good" are NOT goodbyes — just acknowledge and keep listening. When the user does explicitly say goodbye, call `converse` with message "Goodbye!", wait_for_response=false, and goodbye=true
 
-Always use the **voice-hub** MCP `converse` tool to speak — never "voice-chat" tools and never just print text.
+Always use the **voice-hub** MCP `converse` tool to speak — never just print text.

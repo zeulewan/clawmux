@@ -1,4 +1,4 @@
-# Voice Chat Hub
+# Voice Hub
 
 The Hub is a standalone service that spawns and manages multiple Claude Code voice sessions from a single browser tab.
 
@@ -65,7 +65,7 @@ Claude is started from this directory, picks up the project-level config, and th
 
 ```bash
 # Start the hub
-cd ~/GIT/voice-chat-dev
+cd ~/GIT/voice-hub-dev
 source .venv/bin/activate
 python hub.py
 
@@ -91,7 +91,7 @@ Open `https://workstation.tailee9084.ts.net:3460` and click "New Session".
 
 ```bash
 # Hub logs
-tail -f /tmp/voice-chat-hub.log
+tail -f /tmp/voice-hub.log
 
 # MCP server logs (per-session)
 tail -f /tmp/voice-hub-mcp.log
@@ -121,8 +121,8 @@ Sessions auto-terminate after 30 minutes of inactivity (configurable via `VOICE_
 
 | Command | MCP Server | Use Case |
 |---------|-----------|----------|
-| `/voice-chat` | `voice-chat` | Direct voice chat (main branch, port 3456) |
-| `/voice-chat-dev` | `voice-chat-dev` | Direct voice chat (dev branch, port 3457) |
+| `/voice-hub` | `voice-hub` | Direct voice chat (main branch, port 3456) |
+| `/voice-hub-dev` | `voice-hub-dev` | Direct voice chat (dev branch, port 3457) |
 | `/voice-hub` | `voice-hub` | Hub-managed session (used by spawned sessions) |
 
 ## REST API

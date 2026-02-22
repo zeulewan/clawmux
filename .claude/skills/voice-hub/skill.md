@@ -1,10 +1,10 @@
-# Voice Chat Skill
+# Voice Hub Skill
 
-Voice Chat lets you talk to the user through their browser using speech. The MCP server handles TTS (Kokoro) and STT (Whisper) automatically.
+Voice Hub lets you talk to the user through their browser using speech. The MCP server handles TTS (Kokoro) and STT (Whisper) automatically.
 
 ## Available MCP Tools
 
-The `voice-chat` MCP server provides two tools:
+The `voice-hub` MCP server provides two tools:
 
 - **converse** — Speak a message via TTS and optionally listen for the user's spoken response via STT
   - Parameters: `message` (string), `wait_for_response` (bool, default true), `voice` (string, default "af_sky")
@@ -13,7 +13,7 @@ The `voice-chat` MCP server provides two tools:
 - **voice_chat_status** — Check if a browser is connected to the WebSocket
   - Returns: Connection status string
 
-## How to Start a Voice Chat Session
+## How to Start a Voice Hub Session
 
 1. Check browser connection with `voice_chat_status`
 2. If connected, greet: `converse("Hello! How can I help?")`
@@ -34,4 +34,4 @@ The user connects at: `https://workstation.tailee9084.ts.net:3456`
 
 ## Logs
 
-Server logs: `tail -f /tmp/voice-chat.log`
+Server logs: `tail -f /tmp/voice-hub-mcp.log`

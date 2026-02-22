@@ -1,15 +1,23 @@
 # v0.6.0 - Agent Orchestration
 
-MCP server overhaul and sub-agent orchestration. Rethink how agents communicate with the hub and each other, add real-time status reporting, and enable leaders to spawn and manage worker sub-agents.
+Dual-backend architecture supporting both OpenClaw and Claude Code (tmux), with agent orchestration, status reporting, and inter-agent communication.
 
 ## Sections
 
+- [Dual Backend](dual-backend.md) — OpenClaw as primary backend, Claude Code/tmux as legacy option
 - [Agent Status Reporting](status-reporting.md) — Working state, `report_status` tool, idle detection
 - [Message Queuing](message-queuing.md) — User messages while agent works, queue indicator, `check_inbox`
 - [Inter-Agent Communication](inter-agent-communication.md) — `list_agents`, `send_message`, message delivery via converse
 - [Sub-Agent Orchestration](sub-agent-orchestration.md) — Leader/worker hierarchy, spawn/kill/message workers, browser UI
 
 ## Checklist
+
+### Dual Backend
+- [ ] Abstract session backend interface (OpenClaw vs tmux)
+- [ ] OpenClaw Gateway integration (WebSocket client)
+- [ ] OpenClaw multi-agent routing for named voices
+- [ ] Keep tmux/Claude Code as fallback mode
+- [ ] Frontend modular enough to support both backends
 
 ### Status Reporting
 - [ ] "Working" state after converse returns

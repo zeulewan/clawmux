@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>Claw Hub</title>
+<title>Voice Hub</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%233a86ff'/><path d='M32 12a6 6 0 0 1 6 6v14a6 6 0 0 1-12 0V18a6 6 0 0 1 6-6z' fill='white'/><path d='M20 30a12 12 0 0 0 24 0' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/><line x1='32' y1='42' x2='32' y2='50' stroke='white' stroke-width='3' stroke-linecap='round'/><line x1='25' y1='50' x2='39' y2='50' stroke='white' stroke-width='3' stroke-linecap='round'/></svg>">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -935,7 +935,7 @@ body {
 <body>
 
 <div id="header">
-  <h1 onclick="showWelcome()">Claw Hub</h1>
+  <h1 onclick="showWelcome()">Voice Hub</h1>
   <span id="active-voice" style="display:none; font-size:0.85rem; font-weight:600;"></span>
   <div style="flex:1;"></div>
   <div id="header-project-status" style="font-size:0.65rem; color:var(--text-tertiary); text-align:right; max-width:200px; line-height:1.4;"></div>
@@ -1367,9 +1367,17 @@ function setStatus(text, sessionId) {
   const sid = sessionId || activeSessionId;
   if (sid) {
     const s = sessions.get(sid);
-    if (s) s.statusText = text;
+    if (s) {
+      s.statusText = text;
+      // Derive sidebar state from status text for the active session
+      if (text === 'Speaking...' || text === 'Playing...' || text === 'Playing buffered audio...') {
+        setSessionSidebarState(sid, 'speaking');
+      } else if (text === 'Recording...' || text === 'Tap Record' || text === 'Hold to Talk') {
+        setSessionSidebarState(sid, 'listening');
+      }
+    }
   }
-  renderVoiceGridIfActive();
+  renderSidebar();
 }
 
 function updateHeaderProjectStatus() {
@@ -1455,6 +1463,30 @@ function collapseSidebar() {
   }
 }
 
+// --- Centralized session state machine ---
+// Valid states: 'starting', 'thinking', 'speaking', 'listening', 'waiting', 'ready'
+function setSessionSidebarState(sessionId, newState) {
+  const s = sessions.get(sessionId);
+  if (!s) return;
+  const prev = s.sidebarState || 'ready';
+  if (prev === newState) return;
+  s.sidebarState = newState;
+  renderSidebar();
+}
+
+function markSessionUnread(sessionId) {
+  const s = sessions.get(sessionId);
+  if (!s || sessionId === activeSessionId) return;
+  s.unreadCount = (s.unreadCount || 0) + 1;
+  renderSidebar();
+}
+
+function clearSessionUnread(sessionId) {
+  const s = sessions.get(sessionId);
+  if (!s) return;
+  s.unreadCount = 0;
+}
+
 function _sidebarState(voiceId) {
   let session = null;
   for (const [sid, s] of sessions) {
@@ -1465,15 +1497,17 @@ function _sidebarState(voiceId) {
   if (isSpawning) {
     stateClass = 'starting'; statusLabel = 'Starting...';
   } else if (session) {
-    if (session.status === 'starting') {
+    // Use centralized sidebarState as primary source of truth
+    const st = session.sidebarState || 'ready';
+    if (st === 'starting') {
       stateClass = 'starting'; statusLabel = 'Starting...';
-    } else if (session.isThinking) {
+    } else if (st === 'thinking') {
       stateClass = 'thinking'; statusLabel = 'Thinking...';
-    } else if (session.statusText === 'Playing...' || session.statusText === 'Speaking...') {
+    } else if (st === 'speaking') {
       stateClass = 'speaking'; statusLabel = 'Speaking...';
-    } else if (session.statusText === 'Recording...' || session.statusText === 'Tap Record') {
+    } else if (st === 'listening') {
       stateClass = 'listening'; statusLabel = 'Listening...';
-    } else if (session.pendingListen) {
+    } else if (st === 'waiting') {
       stateClass = 'listening'; statusLabel = 'Waiting...';
     } else {
       stateClass = 'active'; statusLabel = 'Ready';
@@ -1484,7 +1518,7 @@ function _sidebarState(voiceId) {
     ? session.project
     : '';
   const projectArea = session && session.project_area ? session.project_area : '';
-  const hasUnread = session && session.hasUnread;
+  const hasUnread = session && (session.unreadCount || 0) > 0;
   return { session, isSpawning, stateClass, statusLabel, isSelected, projectText, projectArea, hasUnread };
 }
 
@@ -1672,7 +1706,7 @@ function switchTab(sessionId) {
   }
 
   const s = sessions.get(sessionId);
-  if (s) s.hasUnread = false;
+  if (s) clearSessionUnread(sessionId);
 
   // Show voice name in header + tint background
   const activeVoiceEl = document.getElementById('active-voice');
@@ -1848,7 +1882,8 @@ async function addSession(data, autoSwitch = false) {
     speed: data.speed || 1.0,
     messages: serverMessages,
     statusText: data.status_text || (isReady ? 'Ready' : 'Starting...'),
-    hasUnread: false,
+    sidebarState: isReady ? 'ready' : 'starting',
+    unreadCount: 0,
   });
   if (autoSwitch) switchTab(data.session_id);
   if (serverMessages.length === 0) {
@@ -1863,6 +1898,8 @@ async function addSession(data, autoSwitch = false) {
 
   // Restore thinking indicator if session is processing
   if (data.processing) {
+    const sess = sessions.get(data.session_id);
+    if (sess) sess.sidebarState = 'thinking';
     showThinking(data.session_id);
     startThinkingSound(data.session_id);
   }
@@ -2542,13 +2579,18 @@ function handleMessage(data) {
     const s = sessions.get(data.session_id);
     if (s) {
       s.status = data.status;
-      if (data.status === 'ready' && !data.silent) {
-        cueSessionReady();
-        addMessage(data.session_id, 'system', 'Claude connected.');
-        // Don't auto-switch — let user stay where they are
+      if (data.status === 'ready') {
+        setSessionSidebarState(data.session_id, 'ready');
+        if (!data.silent) {
+          cueSessionReady();
+          addMessage(data.session_id, 'system', 'Claude connected.');
+          // Don't auto-switch — let user stay where they are
+        }
+      } else if (data.status === 'starting') {
+        setSessionSidebarState(data.session_id, 'starting');
       }
     }
-    renderVoiceGridIfActive();
+    renderSidebar();
     return;
   }
   if (type === 'project_status') {
@@ -2577,21 +2619,23 @@ function handleMessage(data) {
     stopThinkingVAD();
     s.userSpokeThisCycle = false;
     s.awaitingInput = true;  // Converse cycle started — expect normal input flow
+    setSessionSidebarState(session_id, 'ready');
     // Promote interjection messages to normal user messages (agent acknowledged them)
     if (session_id === activeSessionId) {
       chatArea.querySelectorAll('.msg.interjection').forEach(el => el.classList.remove('interjection'));
     }
     s.messages.forEach(m => { if (m.role === 'user interjection') m.role = 'user'; });
     addMessage(session_id, 'assistant', data.text);
-    renderVoiceGridIfActive();
+    if (session_id !== activeSessionId) markSessionUnread(session_id);
   } else if (type === 'user_text') {
     addMessage(session_id, data.interjection ? 'user interjection' : 'user', data.text);
     showThinking(session_id);
     startThinkingSound(session_id);
     s.userSpokeThisCycle = true;
-    renderVoiceGridIfActive();
+    setSessionSidebarState(session_id, 'thinking');
   } else if (type === 'audio') {
     s.status = 'active';
+    setSessionSidebarState(session_id, 'speaking');
     if (session_id === activeSessionId) {
       playAudio(session_id, data.data);
       setStatus('Speaking...', session_id);
@@ -2600,14 +2644,15 @@ function handleMessage(data) {
       s.statusText = 'Speaking...';
       if (!s.audioBuffer) s.audioBuffer = [];
       s.audioBuffer.push(data.data);
-      s.hasUnread = true;
-      renderVoiceGridIfActive();
+      markSessionUnread(session_id);
     }
   } else if (type === 'listening') {
     s.awaitingInput = true;
+    hideThinking(session_id); // clear any leftover thinking state
+    stopThinkingSound();
     if (recording && recordingSessionId === session_id) {
       // Already recording for this session (e.g. voice interrupt started it)
-      // Just ignore the listening message
+      setSessionSidebarState(session_id, 'listening');
     } else if (pendingListenSessionId === session_id) {
       // Already waiting for manual mic click on this session — ignore re-sent listening
     } else if (inputMode === 'typing') {
@@ -2615,10 +2660,11 @@ function handleMessage(data) {
       if (session_id === activeSessionId) {
         setStatus('Type your message', session_id);
         textInput.focus();
+        setSessionSidebarState(session_id, 'listening');
       } else {
         s.pendingListen = true;
         s.statusText = 'Waiting...';
-        s.hasUnread = true;
+        setSessionSidebarState(session_id, 'waiting');
       }
     } else if (micMuted) {
       // Mic muted: send empty audio so hub doesn't hang
@@ -2626,42 +2672,47 @@ function handleMessage(data) {
     } else if (session_id === activeSessionId && autoMode && inputMode === 'auto') {
       cueListening();
       startRecording(session_id);
+      setSessionSidebarState(session_id, 'listening');
     } else if (session_id === activeSessionId && (inputMode === 'ptt' || !autoMode)) {
       // PTT or manual mode: show Record button and wait for user to press
       cueListening();
       pendingListenSessionId = session_id;
       updateMicUI();
       setStatus(inputMode === 'ptt' ? 'Hold to Talk' : 'Tap Record');
+      setSessionSidebarState(session_id, 'listening');
     } else {
       // Background tab — mark pending
       s.pendingListen = true;
       s.statusText = 'Waiting...';
-      s.hasUnread = true;
+      setSessionSidebarState(session_id, 'waiting');
     }
-    renderVoiceGridIfActive();
   } else if (type === 'thinking') {
     showThinking(session_id);
     startThinkingSound(session_id);
+    setSessionSidebarState(session_id, 'thinking');
   } else if (type === 'status') {
     s.statusText = data.text;
     if (session_id === activeSessionId) setStatus(data.text, session_id);
-    else renderVoiceGridIfActive();
+    else renderSidebar();
   } else if (type === 'done') {
     s.awaitingInput = false;
     s.statusText = 'Ready';
     s.status = 'ready';
+    // Always clear thinking state first
+    hideThinking(session_id);
+    stopThinkingSound();
+    setSessionSidebarState(session_id, 'ready');
     if (session_id === activeSessionId) {
       setStatus('Ready', session_id);
       micBtn.disabled = false;
       updateMicUI();
-    } else {
-      renderVoiceGridIfActive();
     }
-    // Show thinking if agent is still processing (wait_for_response=false or user spoke this cycle)
+    // Re-show thinking if agent is still processing (wait_for_response=false or user spoke this cycle)
     if (data.processing || s.userSpokeThisCycle) {
       s.userSpokeThisCycle = false;
       showThinking(session_id);
       startThinkingSound(session_id);
+      setSessionSidebarState(session_id, 'thinking');
       // Start listening for interjections via VAD
       if (session_id === activeSessionId) {
         startThinkingVAD(session_id);

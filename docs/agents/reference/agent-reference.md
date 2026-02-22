@@ -80,8 +80,8 @@ Or any OpenAI-compatible TTS server on port 8880.
 ## Installation
 
 ```bash
-git clone https://github.com/zeulewan/voice-chat.git
-cd voice-chat
+git clone https://github.com/zeulewan/voice-hub.git
+cd voice-hub
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -90,13 +90,13 @@ pip install -r requirements.txt
 ### Register MCP Server
 
 ```bash
-claude mcp add -s user voice-chat -- /path/to/voice-chat/.venv/bin/python /path/to/voice-chat/mcp_server.py
+claude mcp add -s user voice-hub -- /path/to/voice-hub/.venv/bin/python /path/to/voice-hub/mcp_server.py
 ```
 
 ### Install Slash Commands
 
 ```bash
-cp .claude/commands/voice-chat.md ~/.claude/commands/voice-chat.md
+cp .claude/commands/voice-hub.md ~/.claude/commands/voice-hub.md
 mkdir -p ~/.claude/commands
 cp .claude/commands/voice-hub.md ~/.claude/commands/voice-hub.md  # for hub mode
 ```
@@ -112,7 +112,7 @@ Then access at `https://<hostname>.ts.net:3460`.
 ### Start the Hub
 
 ```bash
-cd /path/to/voice-chat
+cd /path/to/voice-hub
 source .venv/bin/activate
 python hub.py
 ```
@@ -120,7 +120,7 @@ python hub.py
 ## File Map
 
 ```
-voice-chat/
+voice-hub/
 ├── hub.py                  # Main service — FastAPI, REST API, browser WS, MCP WS, TTS/STT
 ├── hub_config.py           # Constants — ports, timeouts, voice list, service URLs
 ├── hub_mcp_server.py       # Thin MCP server — runs inside each Claude session, proxies converse() to hub
@@ -151,8 +151,8 @@ voice-chat/
 │       └── v0.4.0.md       # Next release
 └── .claude/
     ├── commands/
-    │   └── voice-chat.md   # Slash command for direct voice mode
-    └── skills/voice-chat/skill.md
+    │   └── voice-hub.md   # Slash command for direct voice mode
+    └── skills/voice-hub/skill.md
 ```
 
 ## Core Flow
@@ -243,7 +243,7 @@ Each session has asyncio primitives for hub ↔ browser synchronization:
 
 ```bash
 # Hub logs (all sessions)
-tail -f /tmp/voice-chat-hub.log
+tail -f /tmp/voice-hub.log
 
 # MCP server logs (all sessions share one log)
 tail -f /tmp/voice-hub-mcp.log

@@ -2,9 +2,9 @@
 site_name = "Voice Hub Docs"
 site_description = "Multi-session voice interface for Claude Code with local Whisper STT and Kokoro TTS."
 site_author = "Zeul"
-site_url = "https://zeulewan.github.io/voice-chat/"
-repo_url = "https://github.com/zeulewan/voice-chat"
-repo_name = "zeulewan/voice-chat"
+site_url = "https://zeulewan.github.io/voice-hub/"
+repo_url = "https://github.com/zeulewan/voice-hub"
+repo_name = "zeulewan/voice-hub"
 copyright = "&copy; 2026 Zeul Mordasiewicz"
 
 
@@ -62,7 +62,7 @@ generator = false
 
 [[project.extra.social]]
 icon = "fontawesome/brands/github"
-link = "https://github.com/zeulewan/voice-chat"
+link = "https://github.com/zeulewan/voice-hub"
 
 [project.markdown_extensions.admonition]
 

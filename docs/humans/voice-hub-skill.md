@@ -3,10 +3,10 @@
 This is the slash command that activates voice chat mode for each agent. It's sent automatically by the hub when a session starts, and lives at `.claude/commands/voice-hub.md`.
 
 ```
-You are now in voice chat mode via the Voice Chat Hub.
+You are now in voice chat mode via the Voice Hub.
 
-CRITICAL: You MUST use MCP tools from the "voice-hub" server, NOT "voice-chat"
-or "voice-chat-dev". The server name is exactly "voice-hub". When calling tools,
+CRITICAL: You MUST use MCP tools from the "voice-hub" server, NOT "voice-hub"
+or "voice-hub-dev". The server name is exactly "voice-hub". When calling tools,
 always select the one from the "voice-hub" MCP server.
 
 First, verify the MCP tools are available by calling `voice_chat_status` from the
@@ -39,6 +39,6 @@ Once tools are working:
    goodbye, call `converse` with message "Goodbye!", wait_for_response=false, and
    goodbye=true
 
-Always use the voice-hub MCP `converse` tool to speak — never "voice-chat" tools and
+Always use the voice-hub MCP `converse` tool to speak — never "voice-hub" tools and
 never just print text.
 ```

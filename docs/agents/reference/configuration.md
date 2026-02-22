@@ -70,16 +70,16 @@ sudo tailscale serve --https=3456 off
 
 ## Logging
 
-Server logs are written to `/tmp/voice-chat.log` and stderr. Watch in real time:
+Server logs are written to `/tmp/voice-hub-mcp.log` and stderr. Watch in real time:
 
 ```bash
-tail -f /tmp/voice-chat.log
+tail -f /tmp/voice-hub-mcp.log
 ```
 
 ## Ports Summary
 
 | Port | Service | Protocol |
 |------|---------|----------|
-| 3456 | Voice Chat (MCP server) | HTTP + WebSocket (localhost) / HTTPS + WSS (Tailscale) |
+| 3456 | Voice Hub (MCP server) | HTTP + WebSocket (localhost) / HTTPS + WSS (Tailscale) |
 | 2022 | Whisper STT | HTTP (localhost only) |
 | 8880 | Kokoro TTS | HTTP (localhost only) |

@@ -36,6 +36,6 @@ Items not yet assigned to a release.
 ### Documentation
 
 - [ ] **Demo video** — Record and embed a demo video on the homepage showing a voice conversation in action.
-- [ ] **AI-optimized documentation** — Provide a machine-readable version of the docs (e.g. `llms.txt` or structured context file) alongside the human-readable site, so LLMs can install and configure voice-chat autonomously.
+- [ ] **AI-optimized documentation** — Provide a machine-readable version of the docs (e.g. `llms.txt` or structured context file) alongside the human-readable site, so LLMs can install and configure voice-hub autonomously.
 - [ ] **API reference** — Document all MCP tool signatures, WebSocket message types, and HTTP endpoints.
 - [ ] **Troubleshooting guide** — Expanded guide covering audio quality issues, latency, Tailscale connectivity, and common failure modes.

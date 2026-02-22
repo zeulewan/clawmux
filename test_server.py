@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test the voice-chat MCP server end-to-end.
+"""Test the voice-hub MCP server end-to-end.
 
 Tests:
   python test_server.py           # Basic: HTTP, WebSocket, services
@@ -191,7 +191,7 @@ async def test_full_flow():
 
 
 async def main():
-    print("Voice Chat MCP Server Tests")
+    print("Voice Hub MCP Server Tests")
     print("=" * 50)
 
     results = []

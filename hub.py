@@ -1,4 +1,4 @@
-"""Voice Chat Hub — session launcher, TTS/STT engine, and WebSocket multiplexer.
+"""Voice Hub — session launcher, TTS/STT engine, and WebSocket multiplexer.
 
 Standalone FastAPI service that:
   - Spawns Claude Code sessions in tmux
@@ -34,7 +34,7 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
     handlers=[
         logging.StreamHandler(sys.stderr),
-        logging.FileHandler("/tmp/voice-chat-hub.log", mode="a"),
+        logging.FileHandler("/tmp/voice-hub.log", mode="a"),
     ],
 )
 log = logging.getLogger("hub")
@@ -771,7 +771,7 @@ async def debug_info():
 
 @app.get("/api/debug/log")
 async def debug_log():
-    log_path = Path("/tmp/voice-chat-hub.log")
+    log_path = Path("/tmp/voice-hub.log")
     lines = []
     try:
         if log_path.exists():

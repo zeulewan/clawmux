@@ -74,7 +74,7 @@ No `session_id`:
 ```json
 {"type": "session_list", "sessions": [{...}, {...}]}
 {"type": "session_status", "session_id": "voice-1-abc123", "status": "ready"}
-{"type": "project_status", "session_id": "voice-1-abc123", "project": "voice-chat", "area": "frontend"}
+{"type": "project_status", "session_id": "voice-1-abc123", "project": "voice-hub", "area": "frontend"}
 {"type": "session_terminated", "session_id": "voice-1-abc123"}
 {"type": "ping"}
 ```
@@ -93,7 +93,7 @@ One connection per session. The `hub_mcp_server.py` instance connects here after
 
 ```json
 {"type": "converse", "message": "Hello!", "wait_for_response": true, "voice": "af_sky"}
-{"type": "set_project_status", "project": "voice-chat", "area": "frontend"}
+{"type": "set_project_status", "project": "voice-hub", "area": "frontend"}
 {"type": "status_check"}
 ```
 

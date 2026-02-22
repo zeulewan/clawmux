@@ -161,7 +161,7 @@ async def set_project_status(project: str, area: str = "") -> str:
     working on a different repo or switch between frontend/backend/docs work.
 
     Args:
-        project: The project or repo name (e.g. "voice-chat", "isaac-sim").
+        project: The project or repo name (e.g. "voice-hub", "isaac-sim").
         area: Optional sub-area (e.g. "frontend", "backend", "docs", "iOS app").
 
     Returns:
@@ -187,7 +187,7 @@ async def set_project_status(project: str, area: str = "") -> str:
 
 @mcp.tool
 async def voice_chat_status() -> str:
-    """Check if a browser is connected to the Voice Chat Hub.
+    """Check if a browser is connected to the Voice Hub.
 
     Returns:
         Connection status string.

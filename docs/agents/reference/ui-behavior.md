@@ -225,7 +225,7 @@ Shows hub internals with auto-refresh every 5 seconds:
 - **Services** — Whisper and Kokoro URLs and connectivity
 - **Hub Sessions** — ID, voice, status, MCP connected, idle time, age, work directory
 - **tmux Sessions** — All tmux sessions (voice and non-voice), window count, attached status
-- **Hub Log** — Last 50 lines of `/tmp/voice-chat-hub.log`
+- **Hub Log** — Last 50 lines of `/tmp/voice-hub.log`
 
 Switching to the Debug tab stops audio and recording from the current session (same cleanup as switching to any other view).
 

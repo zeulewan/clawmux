@@ -322,7 +322,7 @@ class SessionManager:
                 "set project to \"ready\". The sidebar should ALWAYS show a project status — "
                 "it must never be blank.\n\n"
                 "Update it whenever your context changes. Use the project/repo name as "
-                "`project` (e.g. \"voice-chat\") and the sub-area as `area` "
+                "`project` (e.g. \"voice-hub\") and the sub-area as `area` "
                 "(e.g. \"frontend\", \"backend\", \"docs\", \"iOS app\").\n"
                 "\n# Hub Reconnection\n"
                 "If a converse call returns \"(hub reconnected)\", the voice hub briefly "

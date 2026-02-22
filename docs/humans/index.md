@@ -54,7 +54,7 @@ That's it. Your agent handles the rest.
 
 The easiest way to install Voice Hub is to ask your Claude Code agent to do it:
 
-> "Clone https://github.com/zeulewan/voice-chat.git, read the agent reference docs, check if my system is compatible, and install it."
+> "Clone https://github.com/zeulewan/voice-hub.git, read the agent reference docs, check if my system is compatible, and install it."
 
 Claude will:
 
@@ -68,7 +68,7 @@ If anything is missing, Claude will walk you through it.
 
 ## Using It
 
-1. Start the hub: `python hub.py` (from the voice-chat directory)
+1. Start the hub: `python hub.py` (from the voice-hub directory)
 2. Open the URL in your browser
 3. Click a voice card to start a session
 4. Talk. Claude listens, works, and speaks back.

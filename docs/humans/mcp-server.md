@@ -23,7 +23,7 @@ Each agent runs independently — they have their own terminal, their own MCP co
 Agents currently have three tools:
 
 - **converse** — Speak a message to the user. Can optionally wait for a spoken reply. This is the main tool agents use for all voice interaction.
-- **set_project_status** — Update the sidebar to show what project and area the agent is working on (e.g. "voice-chat · frontend"). Agents call this on startup and whenever their context changes.
+- **set_project_status** — Update the sidebar to show what project and area the agent is working on (e.g. "voice-hub · frontend"). Agents call this on startup and whenever their context changes.
 - **voice_chat_status** — Check if a browser is connected. Agents call this on startup to make sure someone is listening.
 
 ## The /voice-hub Skill

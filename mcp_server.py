@@ -1,4 +1,4 @@
-"""Voice Chat MCP Server — browser audio bridge for Claude Code.
+"""Voice Hub MCP Server — browser audio bridge for Claude Code.
 
 Dual-transport server:
   - FastMCP stdio ↔ Claude Code (persistent session)
@@ -27,10 +27,10 @@ from fastmcp import FastMCP
 WHISPER_URL = "http://127.0.0.1:2022"
 KOKORO_URL = "http://127.0.0.1:8880"
 WS_PORT = int(os.environ.get("VOICE_CHAT_PORT", "3456"))
-LOG_FILE = "/tmp/voice-chat.log"
+LOG_FILE = "/tmp/voice-hub-mcp.log"
 
 # Set up logging to both stderr and file
-_logger = logging.getLogger("voice-chat")
+_logger = logging.getLogger("voice-hub")
 _logger.setLevel(logging.DEBUG)
 _fmt = logging.Formatter("%(asctime)s %(message)s", datefmt="%H:%M:%S")
 _stderr_handler = logging.StreamHandler(sys.stderr)
@@ -42,7 +42,7 @@ _logger.addHandler(_file_handler)
 
 
 def log(msg: str) -> None:
-    """Log to stderr and /tmp/voice-chat.log (stdout is reserved for MCP stdio)."""
+    """Log to stderr and /tmp/voice-hub-mcp.log (stdout is reserved for MCP stdio)."""
     _logger.info(msg)
 
 
@@ -168,7 +168,7 @@ async def lifespan(server: FastMCP) -> AsyncIterator[dict]:
 
 
 mcp = FastMCP(
-    name="voice-chat",
+    name="voice-hub",
     lifespan=lifespan,
 )
 
@@ -193,7 +193,7 @@ async def converse(
 
     if bridge.ws is None:
         log("converse() error: no browser connected")
-        return "Error: No browser connected. Open the Voice Chat page first."
+        return "Error: No browser connected. Open the Voice Hub page first."
 
     ws = bridge.ws
 
@@ -293,7 +293,7 @@ async def converse(
 
 @mcp.tool
 async def voice_chat_status() -> str:
-    """Check if a browser is connected to the Voice Chat WebSocket.
+    """Check if a browser is connected to the Voice Hub WebSocket.
 
     Returns:
         Connection status string.
