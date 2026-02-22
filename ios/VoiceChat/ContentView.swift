@@ -104,41 +104,49 @@ struct ContentView: View {
                 }
             }
 
-            Text(vm.activeSession?.label ?? "Voice Hub")
+            Text(vm.activeSession?.label ?? "Claw Hub")
                 .font(.system(size: 20, weight: .bold, design: .rounded))
                 .foregroundStyle(Theme.textPrimary)
 
             Spacer()
+
+            // Usage stats
+            if vm.usage5hPct != nil || vm.usage7dPct != nil {
+                VStack(alignment: .trailing, spacing: 1) {
+                    if let pct = vm.usage5hPct {
+                        HStack(spacing: 3) {
+                            Text("5h:")
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundStyle(Theme.textTertiary)
+                            Text("\(pct)%")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(usageColor(pct))
+                        }
+                    }
+                    if let pct = vm.usage7dPct {
+                        HStack(spacing: 3) {
+                            Text("7d:")
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundStyle(Theme.textTertiary)
+                            Text("\(pct)%")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(usageColor(pct))
+                        }
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
 
             // Connection indicator
             HStack(spacing: 6) {
                 Circle()
                     .fill(connectionDotColor)
                     .frame(width: 7, height: 7)
-                Text(connectionLabel)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Theme.textTertiary)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(.ultraThinMaterial, in: Capsule())
-
-            Button {
-                if vm.showDebug {
-                    vm.stopDebugRefresh()
-                    vm.goHome()
-                } else {
-                    vm.goHome()
-                    vm.showDebug = true
-                    vm.startDebugRefresh()
-                }
-            } label: {
-                Image(systemName: "ant")
-                    .font(.system(size: 14))
-                    .foregroundStyle(vm.showDebug ? Theme.blue : Theme.textTertiary)
-                    .frame(width: 32, height: 32)
-                    .background(.ultraThinMaterial, in: Circle())
-            }
+            .padding(6)
+            .background(.ultraThinMaterial, in: Circle())
 
             Button { vm.showSettings = true } label: {
                 Image(systemName: "gearshape")
@@ -204,6 +212,13 @@ struct ContentView: View {
             Text(voice.name)
                 .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .foregroundStyle(Theme.textPrimary)
+
+            if let proj = activeForVoice?.project, !proj.isEmpty {
+                Text(proj + (activeForVoice?.projectArea.isEmpty == false ? " · " + (activeForVoice?.projectArea ?? "") : ""))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Theme.textTertiary)
+                    .lineLimit(1)
+            }
 
             HStack(spacing: 5) {
                 Circle()
@@ -388,9 +403,18 @@ struct ContentView: View {
                 .fill(color)
                 .frame(width: 10, height: 10)
 
-            Text(vm.activeSession?.label ?? "Session")
-                .font(.system(size: 18, weight: .bold, design: .rounded))
-                .foregroundStyle(Theme.textPrimary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(vm.activeSession?.label ?? "Session")
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .foregroundStyle(Theme.textPrimary)
+
+                if let proj = vm.activeSession?.project, !proj.isEmpty {
+                    Text(proj + (vm.activeSession?.projectArea.isEmpty == false ? " · " + (vm.activeSession?.projectArea ?? "") : ""))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Theme.textTertiary)
+                        .lineLimit(1)
+                }
+            }
 
             Spacer()
 
@@ -1018,6 +1042,13 @@ struct ContentView: View {
         default: return Color(.systemGray3)
         }
     }
+
+    private func usageColor(_ pct: Int) -> Color {
+        if pct >= 80 { return Theme.red }
+        if pct >= 60 { return Theme.orange }
+        if pct >= 40 { return Theme.yellow }
+        return Theme.green
+    }
 }
 
 // MARK: - Debug View
@@ -1305,6 +1336,57 @@ struct SettingsView: View {
                             ? "Voice sessions stay alive when the app is backgrounded using a silent audio loop."
                             : "The WebSocket connection may drop when the app is backgrounded."
                     )
+                }
+
+                if vm.usage5hPct != nil || vm.usage7dPct != nil {
+                    Section("Usage") {
+                        if let pct = vm.usage5hPct {
+                            HStack {
+                                Text("5-hour window")
+                                Spacer()
+                                VStack(alignment: .trailing) {
+                                    Text("\(pct)%")
+                                        .font(.subheadline.bold())
+                                        .foregroundStyle(pct >= 80 ? Color(.systemRed) : pct >= 60 ? Color(.systemOrange) : Color(.systemGreen))
+                                    if let reset = vm.usage5hReset {
+                                        Text("resets in \(reset)")
+                                            .font(.caption2)
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                }
+                            }
+                        }
+                        if let pct = vm.usage7dPct {
+                            HStack {
+                                Text("7-day window")
+                                Spacer()
+                                VStack(alignment: .trailing) {
+                                    Text("\(pct)%")
+                                        .font(.subheadline.bold())
+                                        .foregroundStyle(pct >= 80 ? Color(.systemRed) : pct >= 60 ? Color(.systemOrange) : Color(.systemGreen))
+                                    if let reset = vm.usage7dReset {
+                                        Text("resets in \(reset)")
+                                            .font(.caption2)
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                }
+                            }
+                        }
+                        Button("Refresh") { vm.fetchUsage() }
+                    }
+                }
+
+                Section("Debug") {
+                    Button {
+                        dismiss()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            vm.goHome()
+                            vm.showDebug = true
+                            vm.startDebugRefresh()
+                        }
+                    } label: {
+                        Label("Open Debug Panel", systemImage: "ant")
+                    }
                 }
             }
             .navigationTitle("Settings")

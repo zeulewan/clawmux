@@ -28,6 +28,8 @@ struct VoiceSession: Identifiable {
     var pendingListen: Bool = false
     var statusText: String = ""
     var audioBuffer: [Data] = []
+    var project: String = ""
+    var projectArea: String = ""
 }
 
 struct VoiceInfo: Identifiable {
@@ -452,6 +454,12 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
     @Published var debugTmux: [DebugTmuxSession] = []
     @Published var debugLog: [String] = []
     @Published var debugLastUpdated = ""
+
+    // Usage stats
+    @Published var usage5hPct: Int?
+    @Published var usage7dPct: Int?
+    @Published var usage5hReset: String?
+    @Published var usage7dReset: String?
 
     // Computed
     var activeSession: VoiceSession? {
@@ -1272,6 +1280,12 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                 }
             }
 
+        case "project_status":
+            if let sid = sessionId, let idx = sessionIndex(sid) {
+                sessions[idx].project = json["project"] as? String ?? ""
+                sessions[idx].projectArea = json["area"] as? String ?? ""
+            }
+
         default:
             break
         }
@@ -1298,6 +1312,8 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         var session = VoiceSession(
             id: sid, label: sessionLabel, voice: sessionVoice, speed: sessionSpeed,
             status: isReady ? .ready : status, tmuxSession: tmux)
+        session.project = dict["project"] as? String ?? ""
+        session.projectArea = dict["project_area"] as? String ?? ""
 
         if isReady {
             session.messages.append(ChatMessage(role: "system", text: "Claude connected."))
@@ -1599,6 +1615,44 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
                 }
             }
         }.resume()
+    }
+
+    func fetchUsage() {
+        guard let baseURL = httpBaseURL() else { return }
+        let url = baseURL.appendingPathComponent("api/usage")
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+            guard let data,
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { return }
+            Task { @MainActor in
+                guard let self else { return }
+                if let fiveHour = json["five_hour"] as? [String: Any] {
+                    self.usage5hPct = fiveHour["utilization"] as? Int
+                    if let resetsAt = fiveHour["resets_at"] as? String {
+                        self.usage5hReset = self.formatResetTime(resetsAt)
+                    }
+                }
+                if let sevenDay = json["seven_day"] as? [String: Any] {
+                    self.usage7dPct = sevenDay["utilization"] as? Int
+                    if let resetsAt = sevenDay["resets_at"] as? String {
+                        self.usage7dReset = self.formatResetTime(resetsAt)
+                    }
+                }
+            }
+        }.resume()
+    }
+
+    private func formatResetTime(_ isoStr: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let date = formatter.date(from: isoStr) ?? ISO8601DateFormatter().date(from: isoStr) else { return "" }
+        let diff = date.timeIntervalSinceNow
+        if diff <= 0 { return "now" }
+        let hrs = Int(diff) / 3600
+        let mins = (Int(diff) % 3600) / 60
+        if hrs > 24 { return "\(hrs / 24)d" }
+        if hrs > 0 { return "\(hrs)h \(mins)m" }
+        return "\(mins)m"
     }
 
     func updateSetting(_ key: String, value: Any) {
@@ -2435,6 +2489,7 @@ extension VoiceChatViewModel: URLSessionWebSocketDelegate {
             self.startPingWatchdog()
             self.receiveMessage()
             self.fetchSettings()
+            self.fetchUsage()
         }
     }
 
