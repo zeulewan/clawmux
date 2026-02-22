@@ -534,25 +534,26 @@ struct ContentView: View {
     }
 
     private var thinkingIndicator: some View {
-        HStack {
-            HStack(spacing: 5) {
+        let color = vm.activeSession.flatMap { voiceColor($0.voice) } ?? Theme.textTertiary
+
+        return HStack {
+            HStack(spacing: 6) {
                 ForEach(0..<3, id: \.self) { i in
                     Circle()
-                        .fill(Theme.textTertiary)
-                        .frame(width: 8, height: 8)
-                        .opacity(isPulsing ? 1 : 0.2)
-                        .scaleEffect(isPulsing ? 1.15 : 0.7)
+                        .fill(color.opacity(0.6))
+                        .frame(width: 7, height: 7)
+                        .offset(y: isPulsing ? -4 : 4)
                         .animation(
-                            .easeInOut(duration: 0.6)
-                                .repeatForever()
+                            .easeInOut(duration: 0.5)
+                                .repeatForever(autoreverses: true)
                                 .delay(Double(i) * 0.15),
                             value: isPulsing
                         )
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(Theme.bgSecondary, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(color.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .onAppear { isPulsing = true }
             .onDisappear { isPulsing = false }
             Spacer(minLength: 40)
