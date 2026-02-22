@@ -1253,11 +1253,21 @@ final class VoiceChatViewModel: NSObject, ObservableObject {
         case "done":
             if let sid = sessionId, let idx = sessionIndex(sid) {
                 sessions[idx].status = .ready
-                sessions[idx].isThinking = false
-                stopThinkingSound()
-                // Don't override status if user still needs to respond
-                if !sessions[idx].pendingListen {
-                    updateStatusText("Ready", for: sid)
+                let stillProcessing = json["processing"] as? Bool ?? false
+                if stillProcessing {
+                    // Agent is still processing (e.g. wait_for_response=false)
+                    sessions[idx].isThinking = true
+                    updateStatusText("Thinking...", for: sid)
+                    if sid == activeSessionId {
+                        if !typingMode { startThinkingSound() }
+                    }
+                } else {
+                    sessions[idx].isThinking = false
+                    stopThinkingSound()
+                    // Don't override status if user still needs to respond
+                    if !sessions[idx].pendingListen {
+                        updateStatusText("Ready", for: sid)
+                    }
                 }
                 if sid == activeSessionId {
                     isProcessing = false

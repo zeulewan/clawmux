@@ -82,8 +82,8 @@ body {
 
 /* Sidebar */
 #sidebar {
-  width: 200px;
-  min-width: 200px;
+  width: 220px;
+  min-width: 220px;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border);
   display: flex;
@@ -92,41 +92,38 @@ body {
   flex-shrink: 0;
 }
 #sidebar-list {
-  padding: 8px;
+  padding: 10px 8px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   flex: 1;
 }
 .sidebar-card {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
-  border-radius: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background 0.15s;
   user-select: none;
   position: relative;
+  border: none;
 }
 .sidebar-card:hover {
-  background: var(--bg-card-hover);
+  background: rgba(255,255,255,0.05);
 }
 .sidebar-card.selected {
-  background: var(--bg-card);
-  border: 1px solid var(--border-light);
-}
-.sidebar-card:not(.selected) {
-  border: 1px solid transparent;
+  background: rgba(255,255,255,0.08);
 }
 .sidebar-card .sb-icon {
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   flex-shrink: 0;
 }
 .sidebar-card .sb-info {
@@ -140,40 +137,42 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.3;
 }
 .sidebar-card .sb-project {
-  font-size: 0.55rem;
-  color: var(--text-secondary, #888);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  opacity: 0.7;
+  font-size: 0.6rem;
+  color: var(--text-secondary);
+  opacity: 0.6;
+  margin-top: 1px;
+  line-height: 1.3;
 }
 .sidebar-card .sb-status {
   font-size: 0.6rem;
   color: var(--text-tertiary);
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
+  margin-top: 2px;
 }
 .sidebar-card .sb-dot {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--text-tertiary);
   flex-shrink: 0;
 }
-.sidebar-card.active .sb-dot { background: var(--green); }
+.sidebar-card.active .sb-dot { background: var(--green); box-shadow: 0 0 4px rgba(48,209,88,0.5); }
 .sidebar-card.starting .sb-dot { background: var(--yellow); animation: thinkingPulse 1.4s infinite ease-in-out; }
-.sidebar-card.thinking .sb-dot { background: var(--orange); animation: thinkingPulse 1.4s infinite ease-in-out; }
-.sidebar-card.speaking .sb-dot { background: var(--blue); }
-.sidebar-card.listening .sb-dot { background: var(--red); animation: pulse 1.5s infinite; }
+.sidebar-card.thinking .sb-dot { background: var(--orange); animation: thinkingPulse 1.4s infinite ease-in-out; box-shadow: 0 0 4px rgba(255,159,10,0.5); }
+.sidebar-card.speaking .sb-dot { background: var(--blue); box-shadow: 0 0 4px rgba(10,132,255,0.5); }
+.sidebar-card.listening .sb-dot { background: var(--red); animation: pulse 1.5s infinite; box-shadow: 0 0 4px rgba(255,69,58,0.5); }
 .sidebar-card .sb-unread {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--red);
   flex-shrink: 0;
+  box-shadow: 0 0 4px rgba(255,69,58,0.5);
 }
 
 /* Main content area */
@@ -560,16 +559,33 @@ body {
 
 /* Controls */
 #controls {
-  padding: 10px 16px;
-  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  padding: 12px 16px;
+  padding-bottom: max(14px, env(safe-area-inset-bottom));
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 0;
   background: transparent;
   border-top: 1px solid var(--border);
   flex-shrink: 0;
+  position: relative;
+}
+#controls-left, #controls-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+#controls-left { justify-content: flex-end; }
+#controls-right { justify-content: flex-start; }
+#mic-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  flex-shrink: 0;
+  position: relative;
 }
 #status {
   font-size: 0.7rem;
@@ -599,9 +615,6 @@ body {
 #mic.recording {
   background: var(--green);
   box-shadow: 0 4px 20px rgba(52,211,153,0.35);
-  width: auto;
-  padding: 0 1.5rem;
-  border-radius: 32px;
   animation: micPulse 1.5s infinite ease-in-out;
 }
 #mic.recording:hover { background: #2bc08a; box-shadow: 0 6px 28px rgba(52,211,153,0.45); }
@@ -612,18 +625,12 @@ body {
 #mic.interruptable {
   background: var(--orange);
   box-shadow: 0 4px 20px rgba(251,146,60,0.35);
-  width: auto;
-  padding: 0 1.5rem;
-  border-radius: 32px;
 }
 #mic.interruptable:hover { background: #ea8330; box-shadow: 0 6px 28px rgba(251,146,60,0.45); }
 #mic.processing {
   background: var(--text-tertiary);
   box-shadow: none;
   cursor: wait;
-  width: auto;
-  padding: 0 1.5rem;
-  border-radius: 32px;
 }
 #mic:disabled { opacity: 0.3; cursor: not-allowed; box-shadow: none; transform: none; }
 #transport-bar {
@@ -668,50 +675,9 @@ body {
   transition: all 0.15s;
 }
 .btn-icon:hover { border-color: var(--border-light); color: var(--text-secondary); background: var(--bg-card); }
-#mic-cancel { border-color: var(--red); color: var(--red); }
+#mic-cancel { border-color: var(--red); color: var(--red); position: absolute; top: -4px; right: -4px; width: 24px; height: 24px; font-size: 0.65rem; z-index: 1; }
 #mic-cancel:hover { background: var(--red-dim); color: #ff6b7f; }
 /* Options menu */
-#options-menu {
-  display: none;
-  position: absolute;
-  bottom: 80px;
-  right: 1rem;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 6px 0;
-  min-width: 220px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-  z-index: 100;
-  backdrop-filter: blur(16px);
-}
-#options-menu.visible { display: block; }
-.opt-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 16px;
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-  cursor: pointer;
-  user-select: none;
-  transition: all 0.1s;
-}
-.opt-item:hover { background: rgba(128,128,128,0.1); color: var(--text); }
-.opt-item .opt-check { color: var(--blue); font-size: 0.9rem; width: 1.2rem; text-align: center; }
-.opt-divider { height: 1px; background: var(--border); margin: 4px 0; }
-.opt-label { font-size: 0.6rem; font-weight: 600; color: var(--text-tertiary); padding: 8px 16px 4px; text-transform: uppercase; letter-spacing: 0.06em; }
-.opt-item select {
-  background: var(--bg);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 4px 8px;
-  font-size: 0.75rem;
-  font-family: inherit;
-  cursor: pointer;
-  outline: none;
-}
 /* Context menu */
 #context-menu {
   display: none;
@@ -888,10 +854,9 @@ body {
     user-select: none;
     -webkit-touch-callout: none;
   }
-  /* Override selected style on mobile: no border box, use left accent dot */
+  /* Override selected style on mobile: use left accent dot */
   .sidebar-card.selected {
     background: transparent !important;
-    border: 1px solid transparent !important;
   }
   .sidebar-card.selected::before {
     content: '';
@@ -923,17 +888,10 @@ body {
   .msg { max-width: 90%; }
 
   /* Controls: better spacing and touch targets */
-  #controls { padding: 10px 12px; gap: 8px; }
+  #controls { padding: 10px 12px; }
   #mic { width: 56px; height: 56px; }
+  #mic-wrapper { width: 68px; }
   .btn-icon { width: 44px; height: 44px; }
-
-  /* Options menu: full width on mobile */
-  #options-menu {
-    left: 12px;
-    right: 12px;
-    bottom: 90px;
-    min-width: unset;
-  }
 
   /* Sidebar expand toggle */
   #sidebar-expand-btn {
@@ -979,9 +937,8 @@ body {
 <div id="header">
   <h1 onclick="showWelcome()">Claw Hub</h1>
   <span id="active-voice" style="display:none; font-size:0.85rem; font-weight:600;"></span>
-  <span id="session-elapsed" style="display:none; font-size:0.7rem; color:var(--text-tertiary); margin-left:6px;"></span>
   <div style="flex:1;"></div>
-  <span id="header-project-status" style="font-size:0.65rem; color:var(--text-tertiary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px;"></span>
+  <div id="header-project-status" style="font-size:0.65rem; color:var(--text-tertiary); text-align:right; max-width:200px; line-height:1.4;"></div>
   <div id="usage-bar" style="display:none;align-items:center;gap:8px;padding:4px 12px;background:rgba(128,128,128,0.08);border-radius:12px;font-size:0.7rem;color:var(--text-secondary);cursor:pointer;" onclick="toggleUsageDetail()" title="Claude usage">
     <span id="usage-5h" style="white-space:nowrap;"></span>
     <span id="usage-7d" style="white-space:nowrap;"></span>
@@ -1013,17 +970,22 @@ body {
 <div id="chat-area" style="display:none;"></div>
 
 <div id="controls" style="display:none;">
-  <canvas id="waveform" width="200" height="30" style="display:none;"></canvas>
-  <button id="mode-toggle" onclick="cycleInputMode()">Auto</button>
-  <div id="status"></div>
-  <div id="transport-bar" style="display:none;">
-    <button class="btn-icon transport-btn" id="transport-prev" onclick="transportPrev()" title="Previous">&#9198;</button>
-    <button class="btn-icon transport-btn" id="transport-pause" onclick="transportPause()" title="Pause">&#9208;</button>
-    <button class="btn-icon transport-btn" id="transport-next" onclick="transportNext()" title="Next">&#9197;</button>
+  <div id="controls-left">
+    <canvas id="waveform" width="200" height="30" style="display:none;"></canvas>
+    <div id="transport-bar" style="display:none;">
+      <button class="btn-icon transport-btn" id="transport-prev" onclick="transportPrev()" title="Previous">&#9198;</button>
+      <button class="btn-icon transport-btn" id="transport-pause" onclick="transportPause()" title="Pause">&#9208;</button>
+      <button class="btn-icon transport-btn" id="transport-next" onclick="transportNext()" title="Next">&#9197;</button>
+    </div>
+    <button id="mode-toggle" onclick="cycleInputMode()">Auto</button>
+    <div id="status"></div>
   </div>
-  <button id="mic-cancel" class="btn-icon" style="display:none;" title="Cancel recording" onclick="cancelRecording()">&#10005;</button>
-  <button id="mic" disabled><svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg></button>
-  <button id="options-btn" class="btn-icon" onclick="toggleOptions(event)" title="Options">&#8943;</button>
+  <div id="mic-wrapper">
+    <button id="mic-cancel" class="btn-icon" style="display:none;" title="Cancel recording" onclick="cancelRecording()">&#10005;</button>
+    <button id="mic" disabled><svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg></button>
+  </div>
+  <div id="controls-right">
+  </div>
 </div>
 
 <div id="text-input-bar">
@@ -1036,35 +998,6 @@ body {
   </div>
 </div>
 
-<div id="options-menu">
-  <div class="opt-item" onclick="toggleMicMute()"><span>Mic Mute</span><span class="opt-check" id="opt-mute"></span></div>
-  <div class="opt-divider"></div>
-  <div class="opt-item" onclick="toggleAutoMode()"><span>Auto Record</span><span class="opt-check" id="opt-auto"></span></div>
-  <div class="opt-item" onclick="toggleVAD()"><span>Auto End</span><span class="opt-check" id="opt-vad">&#10003;</span></div>
-  <div class="opt-item" onclick="toggleAutoInterrupt()"><span>Auto Interrupt</span><span class="opt-check" id="opt-interrupt"></span></div>
-  <div class="opt-divider"></div>
-  <div class="opt-item" onclick="toggleThinkingSounds()"><span>Thinking Sounds</span><span class="opt-check" id="opt-thinking">&#10003;</span></div>
-  <div class="opt-item" onclick="toggleAudioCues()"><span>Audio Cues</span><span class="opt-check" id="opt-cues">&#10003;</span></div>
-  <div class="opt-divider"></div>
-  <div class="opt-label">Voice</div>
-  <div class="opt-item"><select id="voice-select" onchange="changeVoice(this.value)" style="width:100%;">
-    <option value="af_sky">Sky (F)</option>
-    <option value="af_alloy">Alloy (F)</option>
-    <option value="af_sarah">Sarah (F)</option>
-    <option value="am_adam">Adam (M)</option>
-    <option value="am_echo">Echo (M)</option>
-    <option value="am_onyx">Onyx (M)</option>
-    <option value="bm_fable">Fable</option>
-  </select></div>
-  <div class="opt-label">Speed</div>
-  <div class="opt-item"><select id="speed-select" onchange="changeSpeed(this.value)" style="width:100%;">
-    <option value="0.75">0.75x</option>
-    <option value="1.0" selected>1x</option>
-    <option value="1.25">1.25x</option>
-    <option value="1.5">1.5x</option>
-    <option value="2.0">2x</option>
-  </select></div>
-</div>
 
 <div id="settings-page">
   <h2>Settings</h2>
@@ -1075,6 +1008,32 @@ body {
       <option value="sonnet">Sonnet</option>
       <option value="haiku">Haiku</option>
     </select>
+  </div>
+  <div class="settings-group">
+    <label>TTS Voice</label>
+    <select id="voice-select" onchange="changeVoice(this.value)">
+      <option value="af_sky">Sky (F)</option>
+      <option value="af_alloy">Alloy (F)</option>
+      <option value="af_sarah">Sarah (F)</option>
+      <option value="am_adam">Adam (M)</option>
+      <option value="am_echo">Echo (M)</option>
+      <option value="am_onyx">Onyx (M)</option>
+      <option value="bm_fable">Fable</option>
+    </select>
+  </div>
+  <div class="settings-group">
+    <label>Playback Speed</label>
+    <select id="speed-select" onchange="changeSpeed(this.value)">
+      <option value="0.75">0.75x</option>
+      <option value="1.0" selected>1x</option>
+      <option value="1.25">1.25x</option>
+      <option value="1.5">1.5x</option>
+      <option value="2.0">2x</option>
+    </select>
+  </div>
+  <div class="settings-toggle" onclick="toggleMicMute()">
+    <span>Mic Mute</span>
+    <div class="toggle-indicator" id="toggle-mic_mute"></div>
   </div>
   <div class="settings-toggle" onclick="toggleSetting('auto_record')">
     <span>Auto Record</span>
@@ -1419,11 +1378,12 @@ function updateHeaderProjectStatus() {
   if (activeSessionId) {
     const s = sessions.get(activeSessionId);
     if (s && s.project) {
-      el.textContent = s.project + (s.project_area ? ' · ' + s.project_area : '');
+      el.innerHTML = '<div style="font-weight:600;color:var(--text-secondary);">' + s.project + '</div>' +
+        (s.project_area ? '<div style="opacity:0.7;">' + s.project_area + '</div>' : '');
       return;
     }
   }
-  el.textContent = '';
+  el.innerHTML = '';
 }
 
 function updateLayout() {
@@ -1521,14 +1481,15 @@ function _sidebarState(voiceId) {
   }
   const isSelected = session && session.session_id === activeSessionId;
   const projectText = session && session.project
-    ? session.project + (session.project_area ? ' · ' + session.project_area : '')
+    ? session.project
     : '';
+  const projectArea = session && session.project_area ? session.project_area : '';
   const hasUnread = session && session.hasUnread;
-  return { session, isSpawning, stateClass, statusLabel, isSelected, projectText, hasUnread };
+  return { session, isSpawning, stateClass, statusLabel, isSelected, projectText, projectArea, hasUnread };
 }
 
 function _updateSidebarCard(card, voiceId, state) {
-  const { session, isSpawning, stateClass, statusLabel, isSelected, projectText, hasUnread } = state;
+  const { session, isSpawning, stateClass, statusLabel, isSelected, projectText, projectArea, hasUnread } = state;
   // Update state class only if changed
   const stateClasses = ['starting', 'thinking', 'speaking', 'listening', 'active'];
   const curState = stateClasses.find(c => card.classList.contains(c)) || '';
@@ -1542,6 +1503,7 @@ function _updateSidebarCard(card, voiceId, state) {
   if (label && label.textContent !== statusLabel) label.textContent = statusLabel;
   // Update project line
   let projEl = card.querySelector('.sb-project');
+  const fullProject = projectText + (projectArea ? '\n' + projectArea : '');
   if (projectText) {
     if (!projEl) {
       projEl = document.createElement('div');
@@ -1550,7 +1512,8 @@ function _updateSidebarCard(card, voiceId, state) {
       const statusLine = card.querySelector('.sb-status');
       info.insertBefore(projEl, statusLine);
     }
-    if (projEl.textContent !== projectText) projEl.textContent = projectText;
+    const newHtml = projectText + (projectArea ? '<br><span style="opacity:0.6;">' + projectArea + '</span>' : '');
+    if (projEl.innerHTML !== newHtml) projEl.innerHTML = newHtml;
   } else if (projEl) {
     projEl.remove();
   }
@@ -1617,7 +1580,7 @@ function renderSidebar() {
       if (state.projectText) {
         const projEl = document.createElement('div');
         projEl.className = 'sb-project';
-        projEl.textContent = state.projectText;
+        projEl.innerHTML = state.projectText + (state.projectArea ? '<br><span style="opacity:0.6;">' + state.projectArea + '</span>' : '');
         info.appendChild(projEl);
       }
       info.appendChild(statusEl2);
@@ -1927,7 +1890,8 @@ function removeSession(sessionId) {
 // --- Mic mute ---
 function toggleMicMute() {
   micMuted = !micMuted;
-  document.getElementById('opt-mute').textContent = micMuted ? '\u2713' : '';
+  const el = document.getElementById('toggle-mic_mute');
+  if (el) el.classList.toggle('on', micMuted);
   if (persistentStream) {
     persistentStream.getAudioTracks().forEach(t => { t.enabled = !micMuted; });
   }
@@ -2017,11 +1981,11 @@ async function loadSettings() {
     autoInterruptEnabled = s.auto_interrupt || false;
     thinkingSoundsEnabled = s.thinking_sounds !== false;
     audioCuesEnabled = s.audio_cues !== false;
-    document.getElementById('opt-auto').textContent = autoMode ? '\u2713' : '';
-    document.getElementById('opt-vad').textContent = vadEnabled ? '\u2713' : '';
-    document.getElementById('opt-interrupt').textContent = autoInterruptEnabled ? '\u2713' : '';
-    document.getElementById('opt-thinking').textContent = thinkingSoundsEnabled ? '\u2713' : '';
-    document.getElementById('opt-cues').textContent = audioCuesEnabled ? '\u2713' : '';
+    setToggle('auto_record', autoMode);
+    setToggle('auto_end', vadEnabled);
+    setToggle('auto_interrupt', autoInterruptEnabled);
+    setToggle('thinking_sounds', thinkingSoundsEnabled);
+    setToggle('audio_cues', audioCuesEnabled);
   } catch (e) {
     console.error('Failed to load settings:', e);
   }
@@ -2037,11 +2001,11 @@ async function toggleSetting(key) {
   if (!el) return;
   const isOn = el.classList.toggle('on');
   // Apply locally
-  if (key === 'auto_record') { autoMode = isOn; document.getElementById('opt-auto').textContent = isOn ? '\u2713' : ''; updateMicUI(); }
-  if (key === 'auto_end') { vadEnabled = isOn; document.getElementById('opt-vad').textContent = isOn ? '\u2713' : ''; }
-  if (key === 'auto_interrupt') { autoInterruptEnabled = isOn; document.getElementById('opt-interrupt').textContent = isOn ? '\u2713' : ''; }
-  if (key === 'thinking_sounds') { thinkingSoundsEnabled = isOn; document.getElementById('opt-thinking').textContent = isOn ? '\u2713' : ''; if (!isOn) stopThinkingSound(); }
-  if (key === 'audio_cues') { audioCuesEnabled = isOn; document.getElementById('opt-cues').textContent = isOn ? '\u2713' : ''; }
+  if (key === 'auto_record') { autoMode = isOn; updateMicUI(); }
+  if (key === 'auto_end') { vadEnabled = isOn; }
+  if (key === 'auto_interrupt') { autoInterruptEnabled = isOn; }
+  if (key === 'thinking_sounds') { thinkingSoundsEnabled = isOn; if (!isOn) stopThinkingSound(); }
+  if (key === 'audio_cues') { audioCuesEnabled = isOn; }
   try {
     await fetch('/api/settings', {
       method: 'PUT',
@@ -2064,7 +2028,7 @@ async function updateSetting(key, value) {
 // --- Auto mode ---
 function toggleAutoMode() {
   autoMode = !autoMode;
-  document.getElementById('opt-auto').textContent = autoMode ? '\u2713' : '';
+  setToggle('auto_record', autoMode);
   updateMicUI();
   fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ auto_record: autoMode }) }).catch(() => {});
 }
@@ -2072,7 +2036,7 @@ function toggleAutoMode() {
 // --- VAD (voice activity detection) ---
 function toggleVAD() {
   vadEnabled = !vadEnabled;
-  document.getElementById('opt-vad').textContent = vadEnabled ? '\u2713' : '';
+  setToggle('auto_end', vadEnabled);
   fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ auto_end: vadEnabled }) }).catch(() => {});
 }
 
@@ -2127,13 +2091,12 @@ function startVAD(stream) {
 // --- Auto Interrupt (voice-based interrupt during playback) ---
 function toggleAutoInterrupt() {
   autoInterruptEnabled = !autoInterruptEnabled;
-  document.getElementById('opt-interrupt').textContent = autoInterruptEnabled ? '\u2713' : '';
+  setToggle('auto_interrupt', autoInterruptEnabled);
   fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ auto_interrupt: autoInterruptEnabled }) }).catch(() => {});
 }
 
 function toggleThinkingSounds() {
   thinkingSoundsEnabled = !thinkingSoundsEnabled;
-  document.getElementById('opt-thinking').textContent = thinkingSoundsEnabled ? '\u2713' : '';
   setToggle('thinking_sounds', thinkingSoundsEnabled);
   if (!thinkingSoundsEnabled) stopThinkingSound();
   fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ thinking_sounds: thinkingSoundsEnabled }) }).catch(() => {});
@@ -2141,7 +2104,6 @@ function toggleThinkingSounds() {
 
 function toggleAudioCues() {
   audioCuesEnabled = !audioCuesEnabled;
-  document.getElementById('opt-cues').textContent = audioCuesEnabled ? '\u2713' : '';
   setToggle('audio_cues', audioCuesEnabled);
   fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ audio_cues: audioCuesEnabled }) }).catch(() => {});
 }
@@ -2450,9 +2412,9 @@ function connect() {
       autoMode = s.auto_record || false;
       vadEnabled = s.auto_end !== false;
       autoInterruptEnabled = s.auto_interrupt || false;
-      document.getElementById('opt-auto').textContent = autoMode ? '\u2713' : '';
-      document.getElementById('opt-vad').textContent = vadEnabled ? '\u2713' : '';
-      document.getElementById('opt-interrupt').textContent = autoInterruptEnabled ? '\u2713' : '';
+      setToggle('auto_record', autoMode);
+      setToggle('auto_end', vadEnabled);
+      setToggle('auto_interrupt', autoInterruptEnabled);
     }).catch(() => {});
   };
 
@@ -2607,6 +2569,9 @@ function handleMessage(data) {
       s.hasUnread = true;
     }
     renderVoiceGridIfActive();
+  } else if (type === 'thinking') {
+    showThinking(session_id);
+    startThinkingSound(session_id);
   } else if (type === 'status') {
     s.statusText = data.text;
     if (session_id === activeSessionId) setStatus(data.text, session_id);
@@ -2738,8 +2703,8 @@ function playBufferedAudio(sessionId, chunks) {
 // --- Mic UI state management ---
 // --- SVG icons for mic button states ---
 const MIC_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>';
-const MIC_SEND_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 16V8m0 0l-3 3m3-3l3 3"/></svg>';
-const MIC_INTERRUPT_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/><path d="M9.29 16.29L12 13.59l2.71 2.7 1.29-1.29-2.7-2.71 2.7-2.71-1.29-1.29L12 11l-2.71-2.71L8 9.59l2.71 2.7-2.71 2.71z"/></svg>';
+const MIC_SEND_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M3.4 20.4l17.45-7.48a1 1 0 000-1.84L3.4 3.6a.993.993 0 00-1.39.91L2 9.12c0 .5.37.93.87.99L17 12 2.87 13.88c-.5.07-.87.5-.87 1l.01 4.61c0 .71.73 1.2 1.39.91z"/></svg>';
+const MIC_INTERRUPT_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>';
 
 function updateMicUI() {
   const isPlaying = !!(currentAudio || currentBufferedPlayer);
@@ -3079,12 +3044,6 @@ async function refreshDebug() {
 }
 
 // --- Options menu ---
-function toggleOptions(e) {
-  e.stopPropagation();
-  const menu = document.getElementById('options-menu');
-  menu.classList.toggle('visible');
-}
-
 // --- Context menu ---
 let contextMenuSessionId = null;
 let contextMenuVoiceId = null;
@@ -3139,17 +3098,11 @@ document.getElementById('ctx-reset').addEventListener('click', async () => {
 
 // --- Close menus on outside click / Escape ---
 document.addEventListener('click', (e) => {
-  const optMenu = document.getElementById('options-menu');
-  const optBtn = document.getElementById('options-btn');
-  if (optMenu.classList.contains('visible') && !optMenu.contains(e.target) && e.target !== optBtn) {
-    optMenu.classList.remove('visible');
-  }
   hideContextMenu();
 });
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    document.getElementById('options-menu').classList.remove('visible');
     hideContextMenu();
   }
 });
@@ -3229,51 +3182,9 @@ async function pasteFromClipboard() {
   }
 }
 
-// --- Session elapsed time ---
-let elapsedTimer = null;
-const sessionElapsedEl = document.getElementById('session-elapsed');
-
-function updateElapsedTime() {
-  if (!activeSessionId) {
-    sessionElapsedEl.style.display = 'none';
-    return;
-  }
-  const s = sessions.get(activeSessionId);
-  if (!s || !s.messages || s.messages.length === 0) {
-    sessionElapsedEl.style.display = 'none';
-    return;
-  }
-  // Find the last message with a timestamp (from server history) or use session start
-  let lastTs = null;
-  for (let i = s.messages.length - 1; i >= 0; i--) {
-    if (s.messages[i].ts) { lastTs = s.messages[i].ts * 1000; break; }
-  }
-  if (!lastTs) {
-    // Use current time for messages added client-side (no ts)
-    sessionElapsedEl.style.display = 'none';
-    return;
-  }
-  const elapsed = Date.now() - lastTs;
-  const secs = Math.floor(elapsed / 1000);
-  let text;
-  if (secs < 60) text = 'just now';
-  else if (secs < 3600) text = Math.floor(secs / 60) + 'm ago';
-  else if (secs < 86400) text = Math.floor(secs / 3600) + 'h ago';
-  else text = Math.floor(secs / 86400) + 'd ago';
-  sessionElapsedEl.textContent = text;
-  sessionElapsedEl.style.display = 'inline';
-}
-
-function startElapsedTimer() {
-  stopElapsedTimer();
-  updateElapsedTime();
-  elapsedTimer = setInterval(updateElapsedTime, 30000);
-}
-
-function stopElapsedTimer() {
-  if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null; }
-  sessionElapsedEl.style.display = 'none';
-}
+// --- Session elapsed time (disabled) ---
+function startElapsedTimer() {}
+function stopElapsedTimer() {}
 
 // --- Copy on long-press ---
 let longPressTimer = null;
