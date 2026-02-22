@@ -1319,7 +1319,13 @@ struct SettingsView: View {
                                 }
                             }
                         }
-                        Button("Refresh") { vm.fetchUsage() }
+                        Button {
+                            let gen = UIImpactFeedbackGenerator(style: .light)
+                            gen.impactOccurred()
+                            vm.fetchUsage()
+                        } label: {
+                            Label("Refresh", systemImage: "arrow.clockwise")
+                        }
                     }
                 }
 
