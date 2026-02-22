@@ -2553,15 +2553,15 @@ function handleMessage(data) {
     } else if (micMuted) {
       // Mic muted: send empty audio so hub doesn't hang
       sendSilentAudio(session_id);
-    } else if (session_id === activeSessionId && autoMode) {
+    } else if (session_id === activeSessionId && autoMode && inputMode === 'auto') {
       cueListening();
       startRecording(session_id);
-    } else if (session_id === activeSessionId && !autoMode) {
-      // Manual mode: show Record button and wait for user to click
+    } else if (session_id === activeSessionId && (inputMode === 'ptt' || !autoMode)) {
+      // PTT or manual mode: show Record button and wait for user to press
       cueListening();
       pendingListenSessionId = session_id;
       updateMicUI();
-      setStatus('Tap Record');
+      setStatus(inputMode === 'ptt' ? 'Hold to Talk' : 'Tap Record');
     } else {
       // Background tab — mark pending
       s.pendingListen = true;
@@ -2876,7 +2876,11 @@ function interruptPlayback(sessionId) {
 }
 
 // --- Mic button ---
-micBtn.addEventListener('click', () => {
+let pttActive = false; // true while PTT button is held down
+
+micBtn.addEventListener('click', (e) => {
+  // In PTT mode, click is handled by mousedown/mouseup — ignore click events
+  if (inputMode === 'ptt') return;
   if (micBtn.disabled) return;
 
   // Interrupt: tap during playback → stop audio, hub sends listening next
@@ -2908,6 +2912,49 @@ micBtn.addEventListener('click', () => {
     startRecording(activeSessionId);
   }
 });
+
+// --- Push-to-Talk: hold to record, release to send ---
+function pttStart(e) {
+  if (inputMode !== 'ptt' || micBtn.disabled) return;
+  e.preventDefault();
+  pttActive = true;
+
+  // Interrupt playback if playing
+  if (currentAudio || currentBufferedPlayer) {
+    const sid = (currentAudio && currentAudio.sessionId) ||
+                (currentBufferedPlayer && currentBufferedPlayer.sessionId) ||
+                activeSessionId;
+    interruptPlayback(sid);
+    return;
+  }
+
+  const sid = pendingListenSessionId || activeSessionId;
+  if (!sid) return;
+  if (pendingListenSessionId) pendingListenSessionId = null;
+
+  // Check if agent is NOT awaiting input — record as interjection
+  const s = sessions.get(sid);
+  if (s && !s.awaitingInput) {
+    interjectionMode = true;
+  }
+  startRecording(sid);
+}
+
+function pttEnd(e) {
+  if (inputMode !== 'ptt' || !pttActive) return;
+  e.preventDefault();
+  pttActive = false;
+  if (recording) {
+    stopRecording();
+  }
+}
+
+micBtn.addEventListener('mousedown', pttStart);
+micBtn.addEventListener('mouseup', pttEnd);
+micBtn.addEventListener('mouseleave', pttEnd);
+micBtn.addEventListener('touchstart', pttStart, { passive: false });
+micBtn.addEventListener('touchend', pttEnd, { passive: false });
+micBtn.addEventListener('touchcancel', pttEnd);
 
 // --- Debug panel ---
 let debugActive = false;
@@ -3116,7 +3163,9 @@ const textInput = document.getElementById('text-input');
 const textSendBtn = document.getElementById('text-send');
 
 function cycleInputMode() {
-  inputMode = inputMode === 'auto' ? 'typing' : 'auto';
+  if (inputMode === 'auto') inputMode = 'ptt';
+  else if (inputMode === 'ptt') inputMode = 'typing';
+  else inputMode = 'auto';
   applyInputMode();
   saveInputMode();
   // Tell hub about mode change
@@ -3126,7 +3175,7 @@ function cycleInputMode() {
 }
 
 function applyInputMode() {
-  modeToggle.textContent = inputMode === 'auto' ? 'Auto' : 'Typing';
+  modeToggle.textContent = inputMode === 'auto' ? 'Auto' : inputMode === 'ptt' ? 'PTT' : 'Typing';
   if (inputMode === 'typing') {
     controls.style.display = 'none';
     textInputBar.classList.add('active');
@@ -3254,7 +3303,7 @@ function saveInputMode() {
 function restoreInputMode() {
   try {
     const saved = localStorage.getItem('hub_input_mode');
-    if (saved === 'auto' || saved === 'typing') {
+    if (saved === 'auto' || saved === 'ptt' || saved === 'typing') {
       inputMode = saved;
       applyInputMode();
     }
