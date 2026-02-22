@@ -94,8 +94,15 @@ struct ContentView: View {
 
     private var headerBar: some View {
         HStack(spacing: 12) {
-            if vm.activeSession != nil {
-                Button { vm.goHome() } label: {
+            if vm.activeSession != nil || vm.showDebug {
+                Button {
+                    if vm.showDebug {
+                        vm.showDebug = false
+                        vm.stopDebugRefresh()
+                    } else {
+                        vm.goHome()
+                    }
+                } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(Theme.textSecondary)
@@ -104,7 +111,7 @@ struct ContentView: View {
                 }
             }
 
-            Text(vm.activeSession?.label ?? "Claw Hub")
+            Text(vm.showDebug ? "Debug" : vm.activeSession?.label ?? "Claw Hub")
                 .font(.system(size: 20, weight: .bold, design: .rounded))
                 .foregroundStyle(Theme.textPrimary)
 
