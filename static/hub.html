@@ -183,6 +183,7 @@ body {
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
+  transition: background-color 0.4s ease;
 }
 
 /* Welcome state (no chat selected) */
@@ -1478,6 +1479,7 @@ function showWelcome() {
   activeSessionId = null;
   hideDebugPanel();
   document.getElementById('active-voice').style.display = 'none';
+  document.getElementById('main-content').style.backgroundColor = '';
   textInputBar.classList.remove('active');
   updateLayout();
 }
@@ -1730,12 +1732,13 @@ function switchTab(sessionId) {
   const s = sessions.get(sessionId);
   if (s) s.hasUnread = false;
 
-  // Show voice name in header
+  // Show voice name in header + tint background
   const activeVoiceEl = document.getElementById('active-voice');
   if (s) {
     activeVoiceEl.textContent = voiceDisplayName(s.voice);
     activeVoiceEl.style.color = voiceColor(s.voice);
     activeVoiceEl.style.display = 'inline';
+    document.getElementById('main-content').style.backgroundColor = hexToRgba(voiceColor(s.voice), 0.04);
   }
 
   // Render chat messages
