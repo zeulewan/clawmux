@@ -442,37 +442,44 @@ struct ContentView: View {
     // MARK: - Chat Area
 
     private var chatArea: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 10) {
-                    ForEach(vm.activeMessages) { msg in
-                        chatBubble(msg)
-                            .id(msg.id)
+        GeometryReader { geo in
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 10) {
+                        // Push content to bottom when there are few messages
+                        Spacer(minLength: 0)
+                            .frame(maxHeight: .infinity)
+
+                        ForEach(vm.activeMessages) { msg in
+                            chatBubble(msg)
+                                .id(msg.id)
+                        }
+                        if vm.activeSession?.isThinking == true {
+                            thinkingIndicator
+                                .id("thinking")
+                        }
                     }
-                    if vm.activeSession?.isThinking == true {
-                        thinkingIndicator
-                            .id("thinking")
-                    }
-                    Color.clear.frame(height: 100)
-                        .id("bottom")
+                    .padding(.horizontal, 14)
+                    .padding(.top, 8)
+                    .padding(.bottom, 8)
+                    .frame(minHeight: geo.size.height)
+                    .id("content")
                 }
-                .padding(.horizontal, 14)
-                .padding(.top, 8)
-            }
-            .defaultScrollAnchor(.bottom)
-            .id(vm.activeSessionId ?? "none")
-            .onChange(of: vm.activeMessages.count) { _, _ in
-                scrollToBottom(proxy)
-            }
-            .onChange(of: vm.activeSession?.isThinking) { _, _ in
-                scrollToBottom(proxy)
+                .defaultScrollAnchor(.bottom)
+                .id(vm.activeSessionId ?? "none")
+                .onChange(of: vm.activeMessages.count) { _, _ in
+                    scrollToBottom(proxy, to: "content")
+                }
+                .onChange(of: vm.activeSession?.isThinking) { _, _ in
+                    scrollToBottom(proxy, to: "content")
+                }
             }
         }
     }
 
-    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+    private func scrollToBottom(_ proxy: ScrollViewProxy, to id: String = "content") {
         withAnimation(.easeOut(duration: 0.2)) {
-            proxy.scrollTo("bottom", anchor: .bottom)
+            proxy.scrollTo(id, anchor: .bottom)
         }
     }
 
