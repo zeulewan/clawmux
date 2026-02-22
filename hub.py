@@ -115,9 +115,17 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
     speed = session.speed
 
     session.processing = False  # Agent is now in a converse cycle
+    session.in_converse = True
 
+    try:
+        return await _do_converse(session_id, session, message, wait_for_response, voice, speed, goodbye)
+    finally:
+        session.in_converse = False
+
+
+async def _do_converse(session_id, session, message, wait_for_response, voice, speed, goodbye):
     # Check for interjections BEFORE speaking — let agent see them first
-    if session.interjections and wait_for_response:
+    if session.interjections:
         text = " ... ".join(session.interjections)
         session.interjections.clear()
         history.clear_interjections(session.voice)
@@ -126,7 +134,8 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
         await send_to_browser({"session_id": session_id, "type": "assistant_text", "text": message})
         history.append(session.voice, session.label, "assistant", message)
         session.status_text = ""
-        await send_to_browser({"session_id": session_id, "type": "done"})
+        session.processing = True  # Agent will process the interjection
+        await send_to_browser({"session_id": session_id, "type": "done", "processing": True})
         session.touch()
         return text
 
@@ -194,7 +203,8 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
         history.clear_interjections(session.voice)
         log.info("[%s] Returning %d interjection(s): %s", session_id, text.count("...")+1, text[:100])
         session.status_text = ""
-        await send_to_browser({"session_id": session_id, "type": "done"})
+        session.processing = True  # Agent will process the interjection
+        await send_to_browser({"session_id": session_id, "type": "done", "processing": True})
         session.touch()
         return text
 
@@ -410,6 +420,15 @@ async def handle_browser_message(data: dict) -> None:
             history.save_interjections(session.voice, session.interjections)
             await send_to_browser({"session_id": session_id, "type": "user_text", "text": text, "interjection": True})
             history.append(session.voice, session.label, "user", text)
+
+            # If agent is in an active converse call waiting for audio, inject
+            # the interjection as audio queue input so it gets picked up immediately
+            if session.in_converse:
+                log.info("[%s] Agent in converse, injecting interjection via audio queue", session_id)
+                session.text_override = " ... ".join(session.interjections)
+                session.interjections.clear()
+                history.clear_interjections(session.voice)
+                await session.audio_queue.put(b"__text__")
 
     elif msg_type == "set_mode":
         mode = data.get("mode", "voice")

@@ -63,3 +63,20 @@ class HistoryStore:
         data = self._load_data(voice_id)
         data["claude_session_id"] = session_id
         self._save_data(voice_id, data)
+
+    def save_interjections(self, voice_id: str, interjections: list[str]) -> None:
+        """Persist pending interjections so they survive hub restarts."""
+        data = self._load_data(voice_id)
+        data["pending_interjections"] = interjections
+        self._save_data(voice_id, data)
+
+    def load_interjections(self, voice_id: str) -> list[str]:
+        """Load pending interjections from previous hub run."""
+        return self._load_data(voice_id).get("pending_interjections", [])
+
+    def clear_interjections(self, voice_id: str) -> None:
+        """Clear pending interjections after they've been consumed."""
+        data = self._load_data(voice_id)
+        if "pending_interjections" in data:
+            del data["pending_interjections"]
+            self._save_data(voice_id, data)

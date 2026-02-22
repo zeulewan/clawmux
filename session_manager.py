@@ -45,6 +45,7 @@ class Session:
     text_mode: bool = False  # when True, skip TTS and just send text
     interjections: list[str] = field(default_factory=list)  # queued user messages sent while agent was busy
     processing: bool = False  # True when agent is busy between converse calls
+    in_converse: bool = False  # True while handle_converse is running
     # Per-session bridge state (set by hub after creation)
     audio_queue: asyncio.Queue | None = field(default=None, repr=False)
     playback_done: asyncio.Event | None = field(default=None, repr=False)
