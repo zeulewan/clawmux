@@ -114,6 +114,22 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
     voice = session.voice
     speed = session.speed
 
+    session.processing = False  # Agent is now in a converse cycle
+
+    # Check for interjections BEFORE speaking — let agent see them first
+    if session.interjections and wait_for_response:
+        text = " ... ".join(session.interjections)
+        session.interjections.clear()
+        history.clear_interjections(session.voice)
+        log.info("[%s] Pre-speech interjection(s), skipping TTS: %s", session_id, text[:100])
+        # Still show the assistant message in browser (but don't speak it)
+        await send_to_browser({"session_id": session_id, "type": "assistant_text", "text": message})
+        history.append(session.voice, session.label, "assistant", message)
+        session.status_text = ""
+        await send_to_browser({"session_id": session_id, "type": "done"})
+        session.touch()
+        return text
+
     # Signal that Claude is about to speak (lets client show thinking indicator)
     await send_to_browser({"session_id": session_id, "type": "thinking"})
 
@@ -126,7 +142,8 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
         log.info("[%s] Text mode, skipping TTS: %s", session_id, message[:80])
         if not wait_for_response:
             session.status_text = ""
-            await send_to_browser({"session_id": session_id, "type": "done"})
+            session.processing = not goodbye
+            await send_to_browser({"session_id": session_id, "type": "done", "processing": not goodbye})
             if goodbye:
                 await send_to_browser({"session_id": session_id, "type": "session_ended"})
             return "Message delivered."
@@ -151,7 +168,8 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
 
         if not wait_for_response:
             session.status_text = ""
-            await send_to_browser({"session_id": session_id, "type": "done"})
+            session.processing = not goodbye
+            await send_to_browser({"session_id": session_id, "type": "done", "processing": not goodbye})
             if goodbye:
                 await send_to_browser({"session_id": session_id, "type": "session_ended"})
             return "Message delivered."
@@ -173,6 +191,7 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
     if session.interjections:
         text = " ... ".join(session.interjections)
         session.interjections.clear()
+        history.clear_interjections(session.voice)
         log.info("[%s] Returning %d interjection(s): %s", session_id, text.count("...")+1, text[:100])
         session.status_text = ""
         await send_to_browser({"session_id": session_id, "type": "done"})
@@ -252,7 +271,8 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
         history.append(session.voice, session.label, "user", text)
 
     session.status_text = ""
-    await send_to_browser({"session_id": session_id, "type": "done"})
+    session.processing = bool(text)  # Agent will process the user's response
+    await send_to_browser({"session_id": session_id, "type": "done", "processing": bool(text)})
 
     session.touch()
     return text if text else "(no speech detected)"
@@ -387,7 +407,8 @@ async def handle_browser_message(data: dict) -> None:
             log.info("[%s] Interjection STT: %s", session_id, text[:100] if text else "(empty)")
         if text:
             session.interjections.append(text)
-            await send_to_browser({"session_id": session_id, "type": "user_text", "text": text})
+            history.save_interjections(session.voice, session.interjections)
+            await send_to_browser({"session_id": session_id, "type": "user_text", "text": text, "interjection": True})
             history.append(session.voice, session.label, "user", text)
 
     elif msg_type == "set_mode":
@@ -451,6 +472,14 @@ async def mcp_websocket(ws: WebSocket, session_id: str):
                         "project": session.project,
                         "area": session.project_area,
                     })
+                    # Persist to disk so it survives hub restarts
+                    if session.work_dir:
+                        try:
+                            Path(session.work_dir, ".project_status.json").write_text(
+                                json.dumps({"project": session.project, "area": session.project_area})
+                            )
+                        except Exception as e:
+                            log.warning("[%s] Failed to persist project status: %s", session_id, e)
 
             elif msg_type == "status_check":
                 await ws.send_json({
@@ -569,7 +598,7 @@ async def update_settings(request: Request):
 
 def _load_settings() -> dict:
     settings_path = Path("data/settings.json")
-    defaults = {"model": "opus", "auto_record": False, "auto_end": True, "auto_interrupt": False}
+    defaults = {"model": "opus", "auto_record": False, "auto_end": True, "auto_interrupt": False, "thinking_sounds": True, "audio_cues": True}
     if settings_path.exists():
         try:
             stored = json.loads(settings_path.read_text())

@@ -44,6 +44,7 @@ class Session:
     text_override: str = ""  # set by browser "text" message, consumed by handle_converse
     text_mode: bool = False  # when True, skip TTS and just send text
     interjections: list[str] = field(default_factory=list)  # queued user messages sent while agent was busy
+    processing: bool = False  # True when agent is busy between converse calls
     # Per-session bridge state (set by hub after creation)
     audio_queue: asyncio.Queue | None = field(default=None, repr=False)
     playback_done: asyncio.Event | None = field(default=None, repr=False)
@@ -63,6 +64,7 @@ class Session:
             "status_text": self.status_text,
             "project": self.project,
             "project_area": self.project_area,
+            "processing": self.processing,
         }
 
     def touch(self) -> None:
@@ -149,6 +151,24 @@ class SessionManager:
                 voice=voice_id,
             )
             session.init_bridge()
+            # Restore project status from disk
+            proj_file = work_dir / ".project_status.json"
+            if proj_file.exists():
+                try:
+                    proj_data = json.loads(proj_file.read_text())
+                    session.project = proj_data.get("project", "")
+                    session.project_area = proj_data.get("area", "")
+                    log.info("Restored project status for %s: %s / %s",
+                             voice_id, session.project, session.project_area)
+                except Exception:
+                    pass
+            # Restore pending interjections from disk
+            if self.history_store:
+                saved = self.history_store.load_interjections(voice_id)
+                if saved:
+                    session.interjections = saved
+                    session.processing = True
+                    log.info("Restored %d interjection(s) for %s", len(saved), voice_id)
             self.sessions[old_session_id] = session
             self._counter += 1
             adopted += 1
