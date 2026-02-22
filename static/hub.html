@@ -1738,7 +1738,7 @@ function switchTab(sessionId) {
     activeVoiceEl.textContent = voiceDisplayName(s.voice);
     activeVoiceEl.style.color = voiceColor(s.voice);
     activeVoiceEl.style.display = 'inline';
-    document.getElementById('main-content').style.backgroundColor = hexToRgba(voiceColor(s.voice), 0.04);
+    document.getElementById('main-content').style.backgroundColor = hexToRgba(voiceColor(s.voice), 0.10);
   }
 
   // Render chat messages
