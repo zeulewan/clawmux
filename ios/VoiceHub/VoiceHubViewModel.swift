@@ -279,6 +279,7 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
     }
     @Published var spawningVoiceIds: Set<String> = []
     @Published var errorMessage: String?
+    @Published var ttsPlayingMessageId: UUID?
 
     // Active session UI state
     @Published var statusText = ""
@@ -503,6 +504,7 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
     private var suppressNextAutoRecord = false
     private var currentActivity: Activity<VoiceHubActivityAttributes>?
     private var silencePlayer: AVAudioPlayer?
+    private var ttsPlayer: AVAudioPlayer?
     private var keepaliveEngine: AVAudioEngine?
     private var playbackVADEngine: AVAudioEngine?
     private var playbackVADProcessor: PlaybackVADProcessor?
@@ -1506,6 +1508,47 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         URLSession.shared.dataTask(with: request) { _, _, _ in }.resume()
+    }
+
+    func playMessageTTS(messageId: UUID, text: String, voice: String?) {
+        // Toggle off if already playing this message
+        if ttsPlayingMessageId == messageId {
+            stopMessageTTS()
+            return
+        }
+        stopMessageTTS()
+        ttsPlayingMessageId = messageId
+        guard let baseURL = httpBaseURL() else { ttsPlayingMessageId = nil; return }
+        let url = baseURL.appendingPathComponent("api/tts")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = ["text": text, "voice": voice ?? "af_sky"]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        URLSession.shared.dataTask(with: request) { [weak self] data, resp, error in
+            DispatchQueue.main.async {
+                guard let self, self.ttsPlayingMessageId == messageId else { return }
+                guard let data, error == nil,
+                      let httpResp = resp as? HTTPURLResponse, httpResp.statusCode == 200 else {
+                    self.ttsPlayingMessageId = nil
+                    return
+                }
+                do {
+                    let player = try AVAudioPlayer(data: data)
+                    self.ttsPlayer = player
+                    player.delegate = self
+                    player.play()
+                } catch {
+                    self.ttsPlayingMessageId = nil
+                }
+            }
+        }.resume()
+    }
+
+    func stopMessageTTS() {
+        ttsPlayer?.stop()
+        ttsPlayer = nil
+        ttsPlayingMessageId = nil
     }
 
     private func removeSession(_ id: String) {
@@ -2567,6 +2610,13 @@ extension VoiceHubViewModel: AVAudioPlayerDelegate {
         _ player: AVAudioPlayer, successfully flag: Bool
     ) {
         Task { @MainActor in
+            // Handle TTS message playback finishing
+            if player === self.ttsPlayer {
+                self.ttsPlayer = nil
+                self.ttsPlayingMessageId = nil
+                return
+            }
+
             let sid = self.playingSessionId ?? ""
 
             // Check for more buffered audio to play

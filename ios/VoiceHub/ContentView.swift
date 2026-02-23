@@ -525,13 +525,27 @@ struct ContentView: View {
             if msg.role == "user" { Spacer(minLength: 30) }
             if msg.role == "system" { Spacer() }
 
-            Text(msg.text)
-                .font(msg.role == "system" ? .caption : .system(size: 14))
-                .lineSpacing(2)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .foregroundStyle(bubbleForeground(msg.role))
-                .background(bubbleBackground(msg.role), in: bubbleShape)
+            VStack(alignment: msg.role == "user" ? .trailing : .leading, spacing: 4) {
+                Text(msg.text)
+                    .font(msg.role == "system" ? .caption : .system(size: 14))
+                    .lineSpacing(2)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .foregroundStyle(bubbleForeground(msg.role))
+                    .background(bubbleBackground(msg.role), in: bubbleShape)
+
+                if msg.role != "system" {
+                    let isPlaying = vm.ttsPlayingMessageId == msg.id
+                    Button {
+                        vm.playMessageTTS(messageId: msg.id, text: msg.text, voice: vm.activeSession?.voice)
+                    } label: {
+                        Image(systemName: isPlaying ? "stop.fill" : "play.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(isPlaying ? Theme.green : Theme.textTertiary)
+                    }
+                    .padding(.horizontal, 12)
+                }
+            }
 
             if msg.role == "assistant" { Spacer(minLength: 30) }
             if msg.role == "system" { Spacer() }

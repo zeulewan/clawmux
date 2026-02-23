@@ -658,6 +658,24 @@ async def transcribe_audio(request: Request):
     return JSONResponse({"text": text})
 
 
+@app.post("/api/tts")
+async def text_to_speech(request: Request):
+    """Generate TTS audio for arbitrary text. Returns MP3 bytes."""
+    data = await request.json()
+    text = data.get("text", "").strip()
+    voice = data.get("voice", "af_sky")
+    speed = data.get("speed", 1.0)
+    if not text:
+        return JSONResponse({"error": "no text"}, status_code=400)
+    try:
+        audio = await tts(text, voice=voice, speed=speed)
+    except Exception as e:
+        log.error("TTS failed: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+    from starlette.responses import Response as RawResponse
+    return RawResponse(content=audio, media_type="audio/mpeg")
+
+
 @app.get("/api/settings")
 async def get_settings():
     return JSONResponse(_load_settings())

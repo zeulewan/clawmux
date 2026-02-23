@@ -340,10 +340,17 @@ body {
   word-break: break-word;
   position: relative;
 }
-.msg .msg-copy {
+.msg .msg-actions {
   position: absolute;
   bottom: 4px;
   right: 6px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.msg:hover .msg-actions { opacity: 1; }
+.msg .msg-action-btn {
   background: rgba(128,128,128,0.25);
   border: none;
   border-radius: 6px;
@@ -351,12 +358,10 @@ body {
   font-size: 0.6rem;
   padding: 2px 6px;
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s;
   line-height: 1;
 }
-.msg:hover .msg-copy { opacity: 1; }
-.msg .msg-copy:hover { background: rgba(128,128,128,0.4); }
+.msg .msg-action-btn:hover { background: rgba(128,128,128,0.4); }
+.msg .msg-action-btn.playing { color: var(--green); }
 #chat-area { overflow-x: hidden; }
 @keyframes msgAppear {
   from { opacity: 0; transform: translateY(6px); }
@@ -1775,14 +1780,64 @@ function switchTab(sessionId) {
   }
 }
 
-function createMsgEl(role, text, voiceColorHex) {
+// --- TTS playback for messages ---
+let _ttsAudio = null;
+let _ttsPlayingBtn = null;
+function stopTTSPlayback() {
+  if (_ttsAudio) { _ttsAudio.pause(); _ttsAudio = null; }
+  if (_ttsPlayingBtn) { _ttsPlayingBtn.textContent = '▶'; _ttsPlayingBtn.classList.remove('playing'); _ttsPlayingBtn = null; }
+}
+async function playMessageTTS(btn, text, voiceId) {
+  // If already playing this button, stop it
+  if (_ttsPlayingBtn === btn) { stopTTSPlayback(); return; }
+  stopTTSPlayback();
+  btn.textContent = '…';
+  btn.classList.add('playing');
+  _ttsPlayingBtn = btn;
+  try {
+    const resp = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, voice: voiceId || 'af_sky' }),
+    });
+    if (!resp.ok) throw new Error('TTS failed');
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    _ttsAudio = audio;
+    btn.textContent = '■';
+    audio.onended = () => { stopTTSPlayback(); URL.revokeObjectURL(url); };
+    audio.onerror = () => { stopTTSPlayback(); URL.revokeObjectURL(url); };
+    audio.play();
+  } catch (e) {
+    console.error('TTS playback error:', e);
+    stopTTSPlayback();
+  }
+}
+
+function createMsgEl(role, text, voiceColorHex, voiceId) {
   const div = document.createElement('div');
   div.className = `msg ${role}`;
   div.textContent = text;
   if (role === 'assistant' && voiceColorHex) div.style.background = hexToRgba(voiceColorHex, 0.20);
   if (role !== 'system' && role !== 'thinking') {
+    const actions = document.createElement('div');
+    actions.className = 'msg-actions';
+
+    // Play button
+    const playBtn = document.createElement('button');
+    playBtn.className = 'msg-action-btn';
+    playBtn.textContent = '▶';
+    playBtn.title = 'Play';
+    playBtn.onclick = (e) => {
+      e.stopPropagation();
+      playMessageTTS(playBtn, text, voiceId);
+    };
+    actions.appendChild(playBtn);
+
+    // Copy button
     const copyBtn = document.createElement('button');
-    copyBtn.className = 'msg-copy';
+    copyBtn.className = 'msg-action-btn';
     copyBtn.textContent = 'Copy';
     copyBtn.onclick = (e) => {
       e.stopPropagation();
@@ -1797,7 +1852,9 @@ function createMsgEl(role, text, voiceColorHex) {
         showCopyToast();
       });
     };
-    div.appendChild(copyBtn);
+    actions.appendChild(copyBtn);
+
+    div.appendChild(actions);
   }
   return div;
 }
@@ -1809,7 +1866,7 @@ function renderChat() {
   const vc = voiceColor(s.voice);
   const displayMessages = s.messages.slice(-50);
   for (const msg of displayMessages) {
-    chatArea.appendChild(createMsgEl(msg.role, msg.text, vc));
+    chatArea.appendChild(createMsgEl(msg.role, msg.text, vc, s.voice));
   }
   // Re-show thinking indicator if session is thinking
   if (s.isThinking) {
@@ -1833,7 +1890,7 @@ function addMessage(sessionId, role, text) {
   if (!s) return;
   s.messages.push({ role, text, ts: Date.now() / 1000 });
   if (sessionId === activeSessionId) {
-    chatArea.appendChild(createMsgEl(role, text, voiceColor(s.voice)));
+    chatArea.appendChild(createMsgEl(role, text, voiceColor(s.voice), s.voice));
     chatArea.scrollTop = chatArea.scrollHeight;
   }
 }
