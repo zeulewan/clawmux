@@ -9,6 +9,7 @@ Dual-backend architecture supporting both OpenClaw and Claude Code (tmux), with 
 - [Message Queuing](message-queuing.md) — User messages while agent works, queue indicator, `check_inbox`
 - [Inter-Agent Communication](inter-agent-communication.md) — `list_agents`, `send_message`, message delivery via converse
 - [Sub-Agent Orchestration](sub-agent-orchestration.md) — Leader/worker hierarchy, spawn/kill/message workers, browser UI
+- [Public API](api.md) — REST + WebSocket protocol, auth, versioning, integration guide
 
 ## Checklist
 
@@ -45,3 +46,9 @@ Dual-backend architecture supporting both OpenClaw and Claude Code (tmux), with 
 - [ ] Browser UI: worker chat view
 - [ ] Browser UI: leader orchestration panel
 - [ ] Auto-cleanup and resource limits
+
+### Public API
+- [ ] Token-based authentication
+- [ ] `/v1/` REST endpoint versioning
+- [ ] Agent management endpoints (`/v1/agents`)
+- [ ] New WebSocket events (worker lifecycle, agent status)

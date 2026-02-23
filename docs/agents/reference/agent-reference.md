@@ -143,7 +143,8 @@ voice-hub/
 │   │       ├── agent-reference.md  # This file
 │   │       ├── protocol.md        # WebSocket protocol reference
 │   │       ├── ui-behavior.md     # UI behavior reference
-│   │       └── hub.md             # Hub architecture
+│   │       ├── hub.md             # Hub architecture
+│   │       └── orchestration.md   # Sub-agent orchestration details
 │   ├── humans/
 │   │   └── index.md        # Human-friendly guide
 │   └── roadmap/
