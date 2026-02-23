@@ -924,6 +924,7 @@ struct ContentView: View {
                 .font(.system(size: 22, weight: .semibold))
                 .foregroundStyle(.white)
         }
+        .frame(width: 92, height: 92) // Fixed size to prevent layout shift
     }
 
     private var micIcon: String {
