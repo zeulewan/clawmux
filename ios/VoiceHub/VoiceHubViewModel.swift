@@ -31,6 +31,7 @@ struct VoiceSession: Identifiable {
     var project: String = ""
     var projectArea: String = ""
     var unreadCount: Int = 0
+    var awaitingInput: Bool = false
 }
 
 struct VoiceInfo: Identifiable {
@@ -1108,6 +1109,7 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
             // Hub is about to speak - show thinking indicator
             if let sid = sessionId, let idx = sessionIndex(sid) {
                 sessions[idx].isThinking = true
+                sessions[idx].awaitingInput = false
                 updateStatusText("Thinking...", for: sid)
                 if sid == activeSessionId {
                     if !typingMode { startThinkingSound() }
@@ -1120,6 +1122,7 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
             if let sid = sessionId, let t = json["text"] as? String {
                 if let idx = sessionIndex(sid) {
                     sessions[idx].isThinking = false
+                    sessions[idx].awaitingInput = true
                     // In voice modes, audio will follow and set "Speaking..."
                     // In typing mode, go straight to ready-ish state
                     if typingMode {
@@ -1192,6 +1195,7 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
 
         case "listening":
             if let sid = sessionId {
+                if let idx = sessionIndex(sid) { sessions[idx].awaitingInput = true }
                 // Skip if already recording for this session
                 if isRecording, recordingSessionId == sid { break }
 
@@ -1908,7 +1912,14 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
 
         if let audioData = try? Data(contentsOf: recordingURL) {
             let b64 = audioData.base64EncodedString()
-            sendJSON(["session_id": sid, "type": "audio", "data": b64])
+            // Check if agent is awaiting input or busy
+            let isAwaiting = sessionIndex(sid).flatMap { sessions[$0].awaitingInput } ?? false
+            if isAwaiting {
+                sendJSON(["session_id": sid, "type": "audio", "data": b64])
+            } else {
+                // Agent is busy — send as audio interjection
+                sendJSON(["session_id": sid, "type": "interjection", "data": b64])
+            }
             // Fire parallel transcription for user feedback (both auto and PTT swipe-up)
             if audioData.count > 1000 {
                 transcriptPreviewText = ""
@@ -1940,12 +1951,16 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
         guard !text.isEmpty, let sid = activeSessionId else { return }
         if hapticsSend && typingMode { haptic(.medium) }
         typingText = ""
-        // Clear pending listen since we're responding with text
-        if let idx = sessionIndex(sid) {
-            sessions[idx].pendingListen = false
+        // Check if agent is awaiting input or busy
+        let isAwaiting = sessionIndex(sid).flatMap { sessions[$0].awaitingInput } ?? false
+        if isAwaiting {
+            // Normal text input
+            if let idx = sessionIndex(sid) { sessions[idx].pendingListen = false }
+            sendJSON(["session_id": sid, "type": "text", "text": text])
+        } else {
+            // Agent is busy — send as interjection
+            sendJSON(["session_id": sid, "type": "interjection", "text": text])
         }
-        // Send text message to hub (hub will echo back user_text + start thinking)
-        sendJSON(["session_id": sid, "type": "text", "text": text])
     }
 
     // MARK: - PTT Preview (swipe right to type/transcribe)
@@ -2049,8 +2064,13 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
             return
         }
         if hapticsSend { haptic(.medium) }
-        if let idx = sessionIndex(sid) { sessions[idx].pendingListen = false }
-        sendJSON(["session_id": sid, "type": "text", "text": text])
+        let isAwaiting = sessionIndex(sid).flatMap { sessions[$0].awaitingInput } ?? false
+        if isAwaiting {
+            if let idx = sessionIndex(sid) { sessions[idx].pendingListen = false }
+            sendJSON(["session_id": sid, "type": "text", "text": text])
+        } else {
+            sendJSON(["session_id": sid, "type": "interjection", "text": text])
+        }
         pttPreviewText = ""
         pttTranscriptionError = nil
         showPTTTextField = false
