@@ -30,6 +30,7 @@ struct VoiceSession: Identifiable {
     var audioBuffer: [Data] = []
     var project: String = ""
     var projectArea: String = ""
+    var unreadCount: Int = 0
 }
 
 struct VoiceInfo: Identifiable {
@@ -1130,6 +1131,8 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
                 if sid == activeSessionId {
                     isProcessing = false
                     updateLiveActivity()
+                } else if let idx = sessionIndex(sid) {
+                    sessions[idx].unreadCount += 1
                 }
                 // Notify in background, gated by per-mode toggle
                 if appInBackground {
@@ -1324,6 +1327,7 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
             status: isReady ? .ready : status, tmuxSession: tmux)
         session.project = dict["project"] as? String ?? ""
         session.projectArea = dict["project_area"] as? String ?? ""
+        session.unreadCount = dict["unread_count"] as? Int ?? 0
 
         if isReady {
             session.messages.append(ChatMessage(role: "system", text: "Claude connected."))
@@ -1357,6 +1361,12 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
         }
         activeSessionId = id
         showDebug = false
+
+        // Clear unread and tell server we're viewing this session
+        if let idx = sessionIndex(id), sessions[idx].unreadCount > 0 {
+            sessions[idx].unreadCount = 0
+        }
+        markSessionViewing(id)
 
         endLiveActivity()
         if !typingMode {
@@ -1484,6 +1494,14 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
         URLSession.shared.dataTask(with: request) { _, _, _ in }.resume()
         if activeSessionId == id { endLiveActivity() }
         removeSession(id)
+    }
+
+    private func markSessionViewing(_ id: String) {
+        guard let baseURL = httpBaseURL() else { return }
+        let url = baseURL.appendingPathComponent("api/sessions/\(id)/viewing")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        URLSession.shared.dataTask(with: request) { _, _, _ in }.resume()
     }
 
     private func removeSession(_ id: String) {

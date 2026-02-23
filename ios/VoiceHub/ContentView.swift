@@ -176,19 +176,29 @@ struct ContentView: View {
         let ringColor = sidebarRingColor(active: activeForVoice, spawning: isSpawning)
         let isAlive = activeForVoice != nil || isSpawning
 
+        let hasUnread = (activeForVoice?.unreadCount ?? 0) > 0
+
         // Icon column — always 56px, icon never moves
-        let iconView = ZStack {
-            Circle()
-                .fill(color.opacity(isAlive ? 0.18 : 0.08))
-                .frame(width: 36, height: 36)
-            if isAlive {
+        let iconView = ZStack(alignment: .topTrailing) {
+            ZStack {
                 Circle()
-                    .strokeBorder(ringColor, lineWidth: 2)
+                    .fill(color.opacity(isAlive ? 0.18 : 0.08))
                     .frame(width: 36, height: 36)
+                if isAlive {
+                    Circle()
+                        .strokeBorder(ringColor, lineWidth: 2)
+                        .frame(width: 36, height: 36)
+                }
+                Image(systemName: voiceIconName(voice.id))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(isAlive ? color : color.opacity(0.4))
             }
-            Image(systemName: voiceIconName(voice.id))
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(isAlive ? color : color.opacity(0.4))
+            if hasUnread {
+                Circle()
+                    .fill(Theme.blue)
+                    .frame(width: 10, height: 10)
+                    .offset(x: 2, y: -2)
+            }
         }
 
         // Label column — only rendered when expanded
@@ -287,8 +297,7 @@ struct ContentView: View {
         if s.status == .starting { return Theme.yellow }
         if s.isThinking { return Theme.orange }
         let st = s.statusText
-        if st == "Speaking..." || st == "Playing..." { return Theme.blue }
-        if st == "Recording..." || st == "Tap Record" || s.pendingListen { return Theme.red }
+        if st == "Speaking..." || st == "Playing..." || s.unreadCount > 0 { return Theme.blue }
         return Theme.green
     }
 
@@ -298,10 +307,10 @@ struct ContentView: View {
         if s.status == .starting { return "Starting..." }
         if s.isThinking { return "Thinking..." }
         let st = s.statusText
+        if s.unreadCount > 1 { return "\(s.unreadCount) New Messages" }
+        if s.unreadCount == 1 { return "1 New Message" }
         if st == "Speaking..." || st == "Playing..." { return "Speaking" }
-        if st == "Recording..." || st == "Tap Record" { return "Listening" }
-        if s.pendingListen { return "Waiting..." }
-        return "Ready"
+        return "Idle"
     }
 
     // MARK: - Empty State
