@@ -195,7 +195,7 @@ struct ContentView: View {
             }
             if hasUnread {
                 Circle()
-                    .fill(Theme.blue)
+                    .fill(Theme.red)
                     .frame(width: 10, height: 10)
                     .offset(x: 2, y: -2)
             }
