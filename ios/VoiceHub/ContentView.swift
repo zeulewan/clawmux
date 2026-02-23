@@ -55,6 +55,9 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.leading, 56)
+            .background(
+                vm.activeSession.flatMap { voiceColor($0.voice).opacity(0.10) } ?? Color.clear
+            )
 
             // Scrim overlay
             if sidebarExpanded {
@@ -476,9 +479,7 @@ struct ContentView: View {
     // MARK: - Chat Area
 
     private var chatArea: some View {
-        let bgTint: Color = vm.activeSession.flatMap { voiceColor($0.voice).opacity(0.10) } ?? .clear
-
-        return GeometryReader { geo in
+        GeometryReader { geo in
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 10) {
@@ -511,7 +512,6 @@ struct ContentView: View {
                 }
             }
         }
-        .background(bgTint)
     }
 
     private func scrollToBottom(_ proxy: ScrollViewProxy, to id: String = "content") {
@@ -776,7 +776,6 @@ struct ContentView: View {
                     .padding(.top, 12)
             }
             .padding(.bottom, 4)
-            .background(Theme.bg)
         }
         .padding(.horizontal, 8)
     }
@@ -825,7 +824,6 @@ struct ContentView: View {
                 .padding(.horizontal, 14)
                 .padding(.bottom, 8)
             }
-            .background(Theme.bg)
         }
         .padding(.horizontal, 8)
     }
@@ -913,7 +911,6 @@ struct ContentView: View {
                 .padding(.horizontal, 14)
                 .padding(.bottom, 8)
             }
-            .background(Theme.bg)
         }
         .padding(.horizontal, 8)
         .onAppear { pttTextFieldFocused = true }
