@@ -295,9 +295,10 @@ struct ContentView: View {
         if spawning { return Theme.yellow }
         guard let s = active else { return Theme.gray3 }
         if s.status == .starting { return Theme.yellow }
+        if s.unreadCount > 0 { return Theme.red }
         if s.isThinking { return Theme.orange }
         let st = s.statusText
-        if st == "Speaking..." || st == "Playing..." || s.unreadCount > 0 { return Theme.blue }
+        if st == "Speaking..." || st == "Playing..." { return Theme.blue }
         return Theme.green
     }
 

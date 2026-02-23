@@ -165,6 +165,7 @@ body {
 .sidebar-card.starting .sb-dot { background: var(--yellow); animation: thinkingPulse 1.4s infinite ease-in-out; }
 .sidebar-card.thinking .sb-dot { background: var(--orange); animation: thinkingPulse 1.4s infinite ease-in-out; box-shadow: 0 0 4px rgba(255,159,10,0.5); }
 .sidebar-card.speaking .sb-dot { background: var(--blue); box-shadow: 0 0 4px rgba(10,132,255,0.5); }
+.sidebar-card.unread .sb-dot { background: var(--red); box-shadow: 0 0 4px rgba(255,69,58,0.5); }
 .sidebar-card .sb-unread {
   width: 8px;
   height: 8px;
@@ -414,6 +415,7 @@ body {
 .voice-card.starting { border-color: var(--yellow); }
 .voice-card.thinking { border-color: var(--orange); }
 .voice-card.speaking { border-color: var(--blue); }
+.voice-card.unread { border-color: var(--red); }
 .voice-card .voice-icon {
   width: 36px;
   height: 36px;
@@ -452,6 +454,7 @@ body {
 .voice-card.starting .voice-dot { background: var(--yellow); animation: thinkingPulse 1.4s infinite ease-in-out; }
 .voice-card.thinking .voice-dot { background: var(--orange); animation: thinkingPulse 1.4s infinite ease-in-out; }
 .voice-card.speaking .voice-dot { background: var(--blue); }
+.voice-card.unread .voice-dot { background: var(--red); }
 .voice-card .unread-badge {
   position: absolute;
   top: 8px;
@@ -879,6 +882,7 @@ body {
   .sidebar-card.starting .sb-icon { border-color: var(--yellow); }
   .sidebar-card.thinking .sb-icon { border-color: var(--orange); box-shadow: 0 0 6px rgba(255,159,10,0.3); }
   .sidebar-card.speaking .sb-icon { border-color: var(--blue); box-shadow: 0 0 6px rgba(10,132,255,0.3); }
+  .sidebar-card.unread .sb-icon { border-color: var(--red); box-shadow: 0 0 6px rgba(255,69,58,0.3); }
 
   /* Chat messages: wider on mobile */
   .msg { max-width: 90%; }
@@ -1512,8 +1516,13 @@ function _sidebarState(voiceId) {
       stateClass = 'thinking'; statusLabel = 'Thinking...';
     } else if (st === 'speaking') {
       const unreadN = session ? (session.unreadCount || 0) : 0;
-      stateClass = 'speaking';
-      statusLabel = unreadN > 1 ? `${unreadN} New Messages` : (unreadN === 1 ? '1 New Message' : 'Speaking...');
+      if (unreadN > 0) {
+        stateClass = 'unread';
+        statusLabel = unreadN > 1 ? `${unreadN} New Messages` : '1 New Message';
+      } else {
+        stateClass = 'speaking';
+        statusLabel = 'Speaking...';
+      }
     } else {
       stateClass = 'active'; statusLabel = 'Idle';
     }
@@ -1529,7 +1538,7 @@ function _sidebarState(voiceId) {
 function _updateSidebarCard(card, voiceId, state) {
   const { session, isSpawning, stateClass, statusLabel, isSelected, projectText, projectArea, hasUnread } = state;
   // Update state class only if changed
-  const stateClasses = ['starting', 'thinking', 'speaking', 'active'];
+  const stateClasses = ['starting', 'thinking', 'speaking', 'unread', 'active'];
   const curState = stateClasses.find(c => card.classList.contains(c)) || '';
   if (curState !== stateClass) {
     stateClasses.forEach(c => card.classList.remove(c));
