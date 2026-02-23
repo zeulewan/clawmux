@@ -2611,7 +2611,7 @@ extension VoiceHubViewModel: AVAudioPlayerDelegate {
     ) {
         Task { @MainActor in
             // Handle TTS message playback finishing
-            if player === self.ttsPlayer {
+            if self.ttsPlayer != nil && self.playingSessionId == nil {
                 self.ttsPlayer = nil
                 self.ttsPlayingMessageId = nil
                 return
