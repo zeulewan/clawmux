@@ -1342,6 +1342,11 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
                 ChatMessage(role: "system", text: "Session started. Waiting for Claude..."))
         }
 
+        // Restore thinking state from server
+        if dict["processing"] as? Bool == true {
+            session.isThinking = true
+        }
+
         sessions.append(session)
 
         // Fetch message history from server
