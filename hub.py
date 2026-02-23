@@ -407,6 +407,8 @@ async def handle_browser_message(data: dict) -> None:
         text = data.get("text", "").strip()
         if text:
             log.info("[%s] Text from browser: %s", session_id, text[:100])
+            await send_to_browser({"session_id": session_id, "type": "user_text", "text": text})
+            history.append(session.voice, session.label, "user", text)
             session.text_override = text
             await session.audio_queue.put(b"__text__")
 

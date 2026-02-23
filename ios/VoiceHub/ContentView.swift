@@ -595,17 +595,6 @@ struct ContentView: View {
 
     private var controlsOverlay: some View {
         VStack(spacing: 0) {
-            LinearGradient(
-                stops: [
-                    .init(color: Theme.bg.opacity(0), location: 0),
-                    .init(color: Theme.bg, location: 1),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 28)
-            .allowsHitTesting(false)
-
             VStack(spacing: 0) {
                 if vm.isRecording {
                     waveformView
@@ -784,17 +773,6 @@ struct ContentView: View {
 
     private var textInputBar: some View {
         VStack(spacing: 0) {
-            LinearGradient(
-                stops: [
-                    .init(color: Theme.bg.opacity(0), location: 0),
-                    .init(color: Theme.bg, location: 1),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 28)
-            .allowsHitTesting(false)
-
             VStack(spacing: 6) {
                 bottomStatusBar
 
@@ -834,17 +812,6 @@ struct ContentView: View {
 
     private var pttTextInputBar: some View {
         VStack(spacing: 0) {
-            LinearGradient(
-                stops: [
-                    .init(color: Theme.bg.opacity(0), location: 0),
-                    .init(color: Theme.bg, location: 1),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 28)
-            .allowsHitTesting(false)
-
             VStack(spacing: 6) {
                 bottomStatusBar
 
