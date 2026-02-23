@@ -297,8 +297,9 @@ struct ContentView: View {
         if s.status == .starting { return Theme.yellow }
         if s.unreadCount > 0 { return Theme.red }
         if s.isThinking { return Theme.orange }
+        let isActive = s.id == vm.activeSessionId
         let st = s.statusText
-        if st == "Speaking..." || st == "Playing..." { return Theme.blue }
+        if isActive && (st == "Speaking..." || st == "Playing...") { return Theme.blue }
         return Theme.green
     }
 
@@ -307,10 +308,11 @@ struct ContentView: View {
         guard let s = active else { return "Offline" }
         if s.status == .starting { return "Starting..." }
         if s.isThinking { return "Thinking..." }
-        let st = s.statusText
         if s.unreadCount > 1 { return "\(s.unreadCount) New Messages" }
         if s.unreadCount == 1 { return "1 New Message" }
-        if st == "Speaking..." || st == "Playing..." { return "Speaking" }
+        let isActive = s.id == vm.activeSessionId
+        let st = s.statusText
+        if isActive && (st == "Speaking..." || st == "Playing...") { return "Speaking" }
         return "Idle"
     }
 
@@ -474,7 +476,9 @@ struct ContentView: View {
     // MARK: - Chat Area
 
     private var chatArea: some View {
-        GeometryReader { geo in
+        let bgTint: Color = vm.activeSession.flatMap { voiceColor($0.voice).opacity(0.10) } ?? .clear
+
+        return GeometryReader { geo in
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 10) {
@@ -507,6 +511,7 @@ struct ContentView: View {
                 }
             }
         }
+        .background(bgTint)
     }
 
     private func scrollToBottom(_ proxy: ScrollViewProxy, to id: String = "content") {
@@ -543,7 +548,7 @@ struct ContentView: View {
             return AnyShapeStyle(Theme.blue)
         case "assistant":
             if let voice = vm.activeSession?.voice {
-                return AnyShapeStyle(voiceColor(voice).opacity(0.12))
+                return AnyShapeStyle(voiceColor(voice).opacity(0.20))
             }
             return AnyShapeStyle(Theme.bgSecondary)
         default:
