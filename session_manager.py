@@ -46,6 +46,7 @@ class Session:
     interjections: list[str] = field(default_factory=list)  # queued user messages sent while agent was busy
     processing: bool = False  # True when agent is busy between converse calls
     in_converse: bool = False  # True while handle_converse is running
+    unread_count: int = 0  # server-tracked unread message count
     # Per-session bridge state (set by hub after creation)
     audio_queue: asyncio.Queue | None = field(default=None, repr=False)
     playback_done: asyncio.Event | None = field(default=None, repr=False)
@@ -66,6 +67,7 @@ class Session:
             "project": self.project,
             "project_area": self.project_area,
             "processing": self.processing,
+            "unread_count": self.unread_count,
         }
 
     def touch(self) -> None:

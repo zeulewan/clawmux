@@ -45,6 +45,9 @@ session_mgr = SessionManager(history_store=history)
 # Browser WebSocket clients (multiple connections supported)
 browser_clients: set[WebSocket] = set()
 
+# Currently viewed session (browser tells us which tab is active)
+_browser_viewed_session: str | None = None
+
 
 async def send_to_browser(data: dict) -> bool:
     """Broadcast a message to all connected browser/app clients.
@@ -131,6 +134,8 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
         history.clear_interjections(session.voice)
         log.info("[%s] Pre-speech interjection(s), skipping TTS: %s", session_id, text[:100])
         # Still show the assistant message in browser (but don't speak it)
+        if session_id != _browser_viewed_session:
+            session.unread_count += 1
         await send_to_browser({"session_id": session_id, "type": "assistant_text", "text": message})
         history.append(session.voice, session.label, "assistant", message)
         session.status_text = ""
@@ -143,6 +148,8 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
     await send_to_browser({"session_id": session_id, "type": "thinking"})
 
     # Send assistant text to browser for chat display
+    if session_id != _browser_viewed_session:
+        session.unread_count += 1
     await send_to_browser({"session_id": session_id, "type": "assistant_text", "text": message})
     history.append(session.voice, session.label, "assistant", message)
 
@@ -610,6 +617,29 @@ async def get_history(voice_id: str):
 async def clear_history(voice_id: str):
     history.clear(voice_id)
     return JSONResponse({"status": "cleared", "voice_id": voice_id})
+
+
+@app.post("/api/sessions/{session_id}/mark-read")
+async def mark_session_read(session_id: str):
+    """Mark a session's unread count as zero."""
+    session = session_mgr.sessions.get(session_id)
+    if not session:
+        return JSONResponse({"error": "session not found"}, status_code=404)
+    session.unread_count = 0
+    return JSONResponse({"session_id": session_id, "unread_count": 0})
+
+
+@app.post("/api/sessions/{session_id}/viewing")
+async def set_viewing_session(session_id: str):
+    """Tell the server which session the browser is currently viewing.
+    The server won't increment unread for the viewed session."""
+    global _browser_viewed_session
+    _browser_viewed_session = session_id
+    # Also clear unread for this session since the user is looking at it
+    session = session_mgr.sessions.get(session_id)
+    if session:
+        session.unread_count = 0
+    return JSONResponse({"viewing": session_id})
 
 
 @app.post("/api/transcribe")
