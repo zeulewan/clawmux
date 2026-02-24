@@ -1773,12 +1773,12 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
             Task { @MainActor in
                 guard let self, let sid = self.activeSessionId,
                     let ctx = json[sid] as? [String: Any],
-                    let pct = ctx["percent"] as? Int
+                    let pctVal = ctx["percent"] as? Double ?? (ctx["percent"] as? Int).map(Double.init)
                 else {
                     await MainActor.run { self?.contextPct = nil }
                     return
                 }
-                self.contextPct = pct
+                self.contextPct = Int(pctVal.rounded())
             }
         }.resume()
     }

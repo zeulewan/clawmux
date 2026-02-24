@@ -460,10 +460,10 @@ struct ContentView: View {
                         Image(systemName: "chevron.up.chevron.down")
                             .font(.system(size: 8, weight: .bold))
                     }
-                    .foregroundStyle(.white.opacity(0.85))
+                    .foregroundStyle(.primary.opacity(0.85))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .background(.white.opacity(0.12), in: Capsule())
+                    .background(.ultraThinMaterial, in: Capsule())
                 }
             }
 
