@@ -145,6 +145,22 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
 
 
 async def _do_converse(session_id, session, message, wait_for_response, voice, speed, goodbye):
+    # Check for pending model restart — trigger before doing anything else
+    if session.pending_model_restart:
+        log.info("[%s] Pending model restart detected in converse, triggering", session_id)
+        # Show the assistant message first so user sees the response
+        if session_id != _browser_viewed_session:
+            session.unread_count += 1
+        await send_to_browser({"session_id": session_id, "type": "assistant_text", "text": message})
+        history.append(session.voice, session.label, "assistant", message)
+        session.status_text = ""
+        session.processing = False
+        await send_to_browser({"session_id": session_id, "type": "done", "processing": False})
+        # Trigger restart in background (will kill this Claude process)
+        asyncio.create_task(session_mgr.restart_claude_with_model(session_id))
+        session.touch()
+        return "(model switching — session will restart)"
+
     # Check for interjections BEFORE speaking — let agent see them first
     if session.interjections:
         text = " ... ".join(session.interjections)
