@@ -1794,11 +1794,14 @@ async function playMessageTTS(btn, text, voiceId) {
   btn.textContent = '…';
   btn.classList.add('playing');
   _ttsPlayingBtn = btn;
+  // Get session speed for playback
+  const s = activeSessionId ? sessions.get(activeSessionId) : null;
+  const speed = s ? (s.speed || 1.0) : 1.0;
   try {
     const resp = await fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, voice: voiceId || 'af_sky' }),
+      body: JSON.stringify({ text, voice: voiceId || 'af_sky', speed }),
     });
     if (!resp.ok) throw new Error('TTS failed');
     const blob = await resp.blob();
@@ -2614,14 +2617,36 @@ function handleMessage(data) {
       if (!sessions.has(s.session_id)) {
         promises.push(addSession(s, false));
       } else {
-        // Session already exists — refresh history to catch missed messages
+        // Session already exists — refresh history and restore state
         promises.push(_refreshHistory(s.session_id, s.voice));
+        const existing = sessions.get(s.session_id);
+        if (existing) {
+          existing.speed = s.speed || existing.speed;
+          existing.unreadCount = s.unread_count || 0;
+          // Restore processing/thinking state
+          if (s.processing && !existing.isThinking) {
+            existing.isThinking = true;
+            existing.sidebarState = 'thinking';
+            showThinking(s.session_id);
+            startThinkingSound(s.session_id);
+          } else if (!s.processing && existing.isThinking) {
+            existing.isThinking = false;
+            hideThinking(s.session_id);
+            stopThinkingSound(s.session_id);
+          }
+          // Restore awaiting input
+          const isReady = s.status === 'ready' || s.mcp_connected;
+          if (isReady && !s.processing && !s.in_converse) {
+            existing.awaitingInput = true;
+          }
+        }
       }
     }
     Promise.all(promises).then(() => {
       _sessionsLoading = false;
       _flushMessageBuffer();
       renderVoiceGridIfActive();
+      renderSidebar();
       // Auto-restore previously active session on reconnect
       if (!activeSessionId) {
         try {

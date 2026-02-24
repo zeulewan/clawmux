@@ -1538,7 +1538,8 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body: [String: Any] = ["text": text, "voice": voice ?? "af_sky"]
+        let sessionSpeed = activeSessionId.flatMap { sessionIndex($0) }.map { sessions[$0].speed } ?? 1.0
+        let body: [String: Any] = ["text": text, "voice": voice ?? "af_sky", "speed": sessionSpeed]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         URLSession.shared.dataTask(with: request) { [weak self] data, resp, error in
             DispatchQueue.main.async {
