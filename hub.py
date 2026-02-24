@@ -313,6 +313,11 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
     session.processing = bool(text)  # Agent will process the user's response
     await send_to_browser({"session_id": session_id, "type": "done", "processing": bool(text)})
 
+    # Check for deferred model restart when turn is complete
+    if not session.processing and session.pending_model_restart:
+        log.info("[%s] Turn complete, triggering deferred model restart", session_id)
+        asyncio.create_task(session_mgr.restart_claude_with_model(session_id))
+
     session.touch()
     return text if text else "(no speech detected)"
 
@@ -469,8 +474,18 @@ async def handle_browser_message(data: dict) -> None:
     elif msg_type == "set_model":
         model = data.get("model", "")
         if model in ("opus", "sonnet", "haiku", ""):
+            old_model = session.model
             session.model = model
             log.info("[%s] Model set to %s", session_id, model or "(global default)")
+            if model != old_model and session.status in ("ready", "active"):
+                if not session.processing and not session.in_converse:
+                    # Session is idle, restart immediately
+                    log.info("[%s] Session idle, restarting now for model change", session_id)
+                    asyncio.create_task(session_mgr.restart_claude_with_model(session_id))
+                else:
+                    # Session is busy, defer restart to after current turn
+                    session.pending_model_restart = True
+                    log.info("[%s] Model change queued, will restart after current turn", session_id)
 
 
 # --- MCP Server WebSocket (one per session) ---

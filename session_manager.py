@@ -45,6 +45,7 @@ class Session:
     text_mode: bool = False  # when True, skip TTS and just send text
     interjections: list[str] = field(default_factory=list)  # queued user messages sent while agent was busy
     model: str = ""  # per-session Claude model override (opus/sonnet/haiku); empty = use global default
+    pending_model_restart: bool = False  # True when model was changed and needs restart after current turn
     processing: bool = False  # True when agent is busy between converse calls
     in_converse: bool = False  # True while handle_converse is running
     unread_count: int = 0  # server-tracked unread message count
@@ -499,6 +500,81 @@ class SessionManager:
         await self._cleanup_tmux(session.tmux_session)
         self._cleanup_workdir(session)
         del self.sessions[session_id]
+
+    async def restart_claude_with_model(self, session_id: str) -> None:
+        """Kill and respawn Claude in existing tmux with new model, resuming conversation."""
+        session = self.sessions.get(session_id)
+        if not session:
+            return
+        tmux_name = session.tmux_session
+        import hub_config
+        session_model = session.model or hub_config.CLAUDE_MODEL
+        model_flag = f" --model {session_model}" if session_model != "opus" else ""
+        claude_session_id = session.claude_session_id
+
+        log.info("[%s] Restarting Claude with model %s", session_id, session_model)
+        session.pending_model_restart = False
+        session.status = "starting"
+
+        # Send Ctrl+C to kill current Claude process
+        await self._run(f"tmux send-keys -t {tmux_name} C-c")
+        await asyncio.sleep(2)
+        # Send another Ctrl+C in case first didn't take
+        await self._run(f"tmux send-keys -t {tmux_name} C-c")
+        await asyncio.sleep(1)
+
+        # Close existing MCP connection
+        if session.mcp_ws:
+            try:
+                await session.mcp_ws.close(code=1001, reason="Model restart")
+            except Exception:
+                pass
+            session.mcp_ws = None
+
+        # Send marker for detecting Claude readiness
+        marker = f"__CLAUDE_RESTART_{session_id[-8:]}__"
+        await self._run(f'tmux send-keys -t {tmux_name} "echo {marker}" Enter')
+
+        # Start Claude with --resume and new model
+        claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag} --resume {claude_session_id}"
+        await self._run(f'tmux send-keys -t {tmux_name} "{claude_cmd}" Enter')
+
+        # Wait for Claude to initialize
+        start = time.time()
+        init_deadline = start + 30
+        while time.time() < init_deadline:
+            try:
+                result = await self._run(f"tmux capture-pane -t {tmux_name} -p")
+                if result and marker in result:
+                    after_marker = result.split(marker, 1)[1]
+                    if ">" in after_marker or "❯" in after_marker:
+                        log.info("[%s] Claude restarted (%.1fs)", session_id, time.time() - start)
+                        break
+            except Exception:
+                pass
+            await asyncio.sleep(1)
+        else:
+            log.warning("[%s] Claude restart poll timed out", session_id)
+
+        # Wait for MCP server to reconnect
+        deadline = time.time() + 45
+        while time.time() < deadline:
+            if session.mcp_ws is not None:
+                break
+            await asyncio.sleep(1)
+        else:
+            log.error("[%s] MCP server did not reconnect after model restart", session_id)
+            return
+
+        # Send /voice-hub skill command
+        log.info("[%s] MCP reconnected after restart, sending /voice-hub", session_id)
+        await self._run(f'tmux send-keys -t {tmux_name} "/voice-hub" Enter')
+        await asyncio.sleep(0.5)
+        await self._run(f'tmux send-keys -t {tmux_name} Enter')
+
+        session.status = "ready"
+        session.touch()
+        log.info("[%s] Model restart complete", session_id)
 
     async def check_health(self, session: Session) -> bool:
         proc = await asyncio.create_subprocess_exec(
