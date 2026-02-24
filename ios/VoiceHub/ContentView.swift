@@ -619,7 +619,7 @@ struct ContentView: View {
                     .foregroundStyle(bubbleForeground(msg.role))
                     .background(bubbleBackground(msg.role), in: bubbleShape)
 
-                if msg.role != "system" {
+                if msg.role != "system" && vm.voiceResponses {
                     let isPlaying = vm.ttsPlayingMessageId == msg.id
                     Button {
                         vm.playMessageTTS(messageId: msg.id, text: msg.text, voice: vm.activeSession?.voice)
@@ -1067,18 +1067,11 @@ struct ContentView: View {
     }
 
     private var modeLabel: String {
-        switch vm.inputMode {
-        case "auto": return "Auto"
-        case "ptt": return "PTT"
-        default: return "Typing"
-        }
+        vm.typingMode ? "Typing Mode" : "Voice Mode"
     }
 
     private func cycleInputMode() {
-        let modes = ["auto", "ptt", "typing"]
-        if let idx = modes.firstIndex(of: vm.inputMode) {
-            vm.inputMode = modes[(idx + 1) % modes.count]
-        }
+        vm.inputMode = vm.typingMode ? "auto" : "typing"
     }
 
     // MARK: - Voice Colors
@@ -1374,22 +1367,11 @@ struct SettingsView: View {
                         }
                 }
 
-                Section("Mode Settings") {
-                    NavigationLink {
-                        AutoModeSettingsView(vm: vm)
-                    } label: {
-                        Label("Auto", systemImage: "waveform")
-                    }
-                    NavigationLink {
-                        PTTModeSettingsView(vm: vm)
-                    } label: {
-                        Label("Push to Talk", systemImage: "hand.tap")
-                    }
-                    NavigationLink {
-                        TypingModeSettingsView(vm: vm)
-                    } label: {
-                        Label("Typing", systemImage: "keyboard")
-                    }
+                Section("Voice") {
+                    Toggle("Auto Record", isOn: $vm.autoRecordAuto)
+                    Toggle("Auto End (silence)", isOn: $vm.autoEndAuto)
+                    Toggle("Thinking Sounds", isOn: $vm.soundThinkingAuto)
+                    Toggle("Listening Cue", isOn: $vm.soundListeningAuto)
                 }
 
                 Section {
