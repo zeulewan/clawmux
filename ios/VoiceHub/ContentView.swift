@@ -422,12 +422,16 @@ struct ContentView: View {
                         Label("Haiku", systemImage: (vm.activeSession?.model ?? "") == "haiku" ? "checkmark" : "")
                     }
                 } label: {
-                    Text(modelDisplayName(vm.activeSession?.model ?? ""))
-                        .font(.system(size: 9, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Theme.textSecondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    HStack(spacing: 4) {
+                        Text(modelDisplayName(vm.activeSession?.model ?? ""))
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 8, weight: .bold))
+                    }
+                    .foregroundStyle(.white.opacity(0.85))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.white.opacity(0.12), in: Capsule())
                 }
             }
 
