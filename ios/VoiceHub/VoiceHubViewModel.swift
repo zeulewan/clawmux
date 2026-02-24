@@ -927,7 +927,7 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
 
     func startThinkingSound() {
         stopThinkingSound()
-        guard (isAutoMode && soundThinkingAuto) || (pushToTalk && soundThinkingPTT) else { return }
+        guard globalSounds, (isAutoMode && soundThinkingAuto) || (pushToTalk && soundThinkingPTT) else { return }
         thinkingSoundTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: true) {
             [weak self] _ in
             Task { @MainActor in
@@ -1120,7 +1120,7 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
                     addMessage(sid, role: "system", text: "Claude connected.")
                     // Show thinking indicator while waiting for agent's first message
                     sessions[idx].isThinking = true
-                    if (isAutoMode && soundReadyAuto) || (pushToTalk && soundReadyPTT) {
+                    if globalSounds, (isAutoMode && soundReadyAuto) || (pushToTalk && soundReadyPTT) {
                         tonePlayer.cueSessionReady()
                     }
                     if (isAutoMode && hapticsSessionAuto) || (pushToTalk && hapticsSessionPTT)
@@ -1265,7 +1265,7 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
                                 sessions[idx].pendingListen = true
                             }
                         } else {
-                            if soundListeningAuto { tonePlayer.cueListening() }
+                            if globalSounds && soundListeningAuto { tonePlayer.cueListening() }
                             startRecording(sessionId: sid)
                         }
                     } else {
@@ -1459,7 +1459,7 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
                         sendJSON(["session_id": id, "type": "audio", "data": ""])
                         statusText = "Muted"
                     } else if effectiveAutoRecord {
-                        if soundListeningAuto { tonePlayer.cueListening() }
+                        if globalSounds && soundListeningAuto { tonePlayer.cueListening() }
                         startRecording(sessionId: id)
                     } else {
                         statusText = pushToTalk ? "Hold to Talk" : "Tap Record"
@@ -1995,7 +1995,7 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
         if (isAutoMode && hapticsRecordingAuto) || (pushToTalk && hapticsRecordingPTT) {
             haptic(.light)
         }
-        if soundProcessingAuto && isAutoMode { tonePlayer.cueProcessing() }
+        if globalSounds && soundProcessingAuto && isAutoMode { tonePlayer.cueProcessing() }
         isProcessing = true
         updateStatusText("Processing...", for: sid)
         updateLiveActivity()
@@ -2604,10 +2604,12 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
     // MARK: - Haptics
 
     private func haptic(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
+        guard globalHaptics else { return }
         UIImpactFeedbackGenerator(style: style).impactOccurred()
     }
 
     private func haptic(_ type: UINotificationFeedbackGenerator.FeedbackType) {
+        guard globalHaptics else { return }
         UINotificationFeedbackGenerator().notificationOccurred(type)
     }
 }
@@ -2691,7 +2693,7 @@ extension VoiceHubViewModel: AVAudioPlayerDelegate {
                 let bgAutoRecord = isBackground && self.backgroundMode && self.isAutoMode
                 if !self.micMuted && (self.effectiveAutoRecord || bgAutoRecord) {
                     self.sessions[idx].pendingListen = false
-                    if self.soundListeningAuto { self.tonePlayer.cueListening() }
+                    if self.globalSounds && self.soundListeningAuto { self.tonePlayer.cueListening() }
                     self.startRecording(sessionId: sid)
                 }
             }
@@ -2712,7 +2714,7 @@ extension VoiceHubViewModel: AVAudioPlayerDelegate {
                     else { return }
                     self.sessions[idx].pendingListen = false
                     self.suppressNextAutoRecord = false
-                    if self.soundListeningAuto { self.tonePlayer.cueListening() }
+                    if self.globalSounds && self.soundListeningAuto { self.tonePlayer.cueListening() }
                     self.startRecording(sessionId: capturedSid)
                 }
             }

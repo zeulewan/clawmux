@@ -1297,11 +1297,6 @@ struct SettingsView: View {
 
                 if vm.activeSessionId != nil {
                     Section("Active Session") {
-                        Picker("Voice", selection: Binding(
-                            get: { vm.activeVoice }, set: { vm.activeVoice = $0 }
-                        )) {
-                            ForEach(ALL_VOICES) { v in Text(v.name).tag(v.id) }
-                        }
                         Picker("Speed", selection: Binding(
                             get: { vm.activeSpeed }, set: { vm.activeSpeed = $0 }
                         )) {
