@@ -1368,8 +1368,7 @@ struct SettingsView: View {
                 }
 
                 Section("Voice") {
-                    Toggle("Auto Record", isOn: $vm.autoRecordAuto)
-                    Toggle("Auto End (silence)", isOn: $vm.autoEndAuto)
+                    Toggle("Auto Record", isOn: $vm.autoRecord)
                     Toggle("Thinking Sounds", isOn: $vm.soundThinkingAuto)
                     Toggle("Listening Cue", isOn: $vm.soundListeningAuto)
                 }
