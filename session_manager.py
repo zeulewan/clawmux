@@ -67,6 +67,7 @@ class Session:
             "project": self.project,
             "project_area": self.project_area,
             "processing": self.processing,
+            "in_converse": self.in_converse,
             "unread_count": self.unread_count,
         }
 

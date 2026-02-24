@@ -1975,6 +1975,13 @@ async function addSession(data, autoSwitch = false) {
     showThinking(data.session_id);
     startThinkingSound(data.session_id);
   }
+
+  // Restore awaiting input state if session is idle (not processing, not in converse)
+  const isReady = data.status === 'ready' || data.mcp_connected;
+  if (isReady && !data.processing && !data.in_converse) {
+    const sess = sessions.get(data.session_id);
+    if (sess) sess.awaitingInput = true;
+  }
 }
 
 async function terminateSession(sessionId) {

@@ -997,6 +997,7 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
         isConnected = false
         isConnecting = false
         if isRecording { stopRecording(discard: true) }
+        recordingSessionId = nil
         if isPlaying {
             audioPlayer?.stop()
             audioPlayer = nil
@@ -1007,6 +1008,7 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
         suppressNextAutoRecord = false
         clearTranscriptPreview()
         stopPlaybackVAD()
+        stopMessageTTS()
         statusText = "Disconnected"
         pingWatchdogTimer?.invalidate()
         pingWatchdogTimer = nil
@@ -1345,6 +1347,14 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
         // Restore thinking state from server
         if dict["processing"] as? Bool == true {
             session.isThinking = true
+        }
+
+        // Restore awaiting input state: if session is ready but not processing,
+        // the agent is waiting for user input
+        let inConverse = dict["in_converse"] as? Bool ?? false
+        if isReady && !inConverse && !(dict["processing"] as? Bool ?? false) {
+            session.awaitingInput = true
+            session.pendingListen = true
         }
 
         sessions.append(session)
@@ -2582,6 +2592,7 @@ extension VoiceHubViewModel: URLSessionWebSocketDelegate {
             self.isConnected = true
             self.isConnecting = false
             self.statusText = "Connected"
+            self.setupAudioSession()
             self.startPingWatchdog()
             self.receiveMessage()
             self.fetchSettings()

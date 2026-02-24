@@ -81,26 +81,44 @@ async def heartbeat_loop() -> None:
 # --- TTS / STT ---
 
 async def tts(text: str, voice: str = "af_sky", speed: float = 1.0) -> bytes:
-    """Text → MP3 bytes via Kokoro."""
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            f"{KOKORO_URL}/v1/audio/speech",
-            json={"model": "tts-1", "input": text, "voice": voice, "response_format": "mp3", "speed": speed},
-        )
-        resp.raise_for_status()
-    return resp.content
+    """Text → MP3 bytes via Kokoro. Retries up to 3 times on failure."""
+    last_err = None
+    for attempt in range(3):
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post(
+                    f"{KOKORO_URL}/v1/audio/speech",
+                    json={"model": "tts-1", "input": text, "voice": voice, "response_format": "mp3", "speed": speed},
+                )
+                resp.raise_for_status()
+            return resp.content
+        except Exception as e:
+            last_err = e
+            if attempt < 2:
+                log.warning("TTS attempt %d failed: %s, retrying...", attempt + 1, e)
+                await asyncio.sleep(1 * (attempt + 1))
+    raise last_err
 
 
 async def stt(audio_bytes: bytes) -> str:
-    """Audio bytes → text via Whisper."""
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            f"{WHISPER_URL}/v1/audio/transcriptions",
-            files={"file": ("recording.webm", audio_bytes, "audio/webm")},
-            data={"model": "whisper-1", "response_format": "json"},
-        )
-        resp.raise_for_status()
-    return resp.json().get("text", "").strip()
+    """Audio bytes → text via Whisper. Retries up to 3 times on failure."""
+    last_err = None
+    for attempt in range(3):
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post(
+                    f"{WHISPER_URL}/v1/audio/transcriptions",
+                    files={"file": ("recording.webm", audio_bytes, "audio/webm")},
+                    data={"model": "whisper-1", "response_format": "json"},
+                )
+                resp.raise_for_status()
+            return resp.json().get("text", "").strip()
+        except Exception as e:
+            last_err = e
+            if attempt < 2:
+                log.warning("STT attempt %d failed: %s, retrying...", attempt + 1, e)
+                await asyncio.sleep(1 * (attempt + 1))
+    raise last_err
 
 
 # --- Converse logic (called by MCP sessions via WS) ---
