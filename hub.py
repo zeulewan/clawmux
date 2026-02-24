@@ -145,22 +145,6 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
 
 
 async def _do_converse(session_id, session, message, wait_for_response, voice, speed, goodbye):
-    # Check for pending model restart — trigger before doing anything else
-    if session.pending_model_restart:
-        log.info("[%s] Pending model restart detected in converse, triggering", session_id)
-        # Show the assistant message first so user sees the response
-        if session_id != _browser_viewed_session:
-            session.unread_count += 1
-        await send_to_browser({"session_id": session_id, "type": "assistant_text", "text": message})
-        history.append(session.voice, session.label, "assistant", message)
-        session.status_text = ""
-        session.processing = False
-        await send_to_browser({"session_id": session_id, "type": "done", "processing": False})
-        # Trigger restart in background (will kill this Claude process)
-        asyncio.create_task(session_mgr.restart_claude_with_model(session_id))
-        session.touch()
-        return "(model switching — session will restart)"
-
     # Check for interjections BEFORE speaking — let agent see them first
     if session.interjections:
         text = " ... ".join(session.interjections)
@@ -329,11 +313,6 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
     session.processing = bool(text)  # Agent will process the user's response
     await send_to_browser({"session_id": session_id, "type": "done", "processing": bool(text)})
 
-    # Check for deferred model restart when turn is complete
-    if not session.processing and session.pending_model_restart:
-        log.info("[%s] Turn complete, triggering deferred model restart", session_id)
-        asyncio.create_task(session_mgr.restart_claude_with_model(session_id))
-
     session.touch()
     return text if text else "(no speech detected)"
 
@@ -490,18 +469,16 @@ async def handle_browser_message(data: dict) -> None:
     elif msg_type == "set_model":
         model = data.get("model", "")
         if model in ("opus", "sonnet", "haiku", ""):
-            old_model = session.model
             session.model = model
             log.info("[%s] Model set to %s", session_id, model or "(global default)")
-            if model != old_model and session.status in ("ready", "active"):
-                if not session.processing and not session.in_converse:
-                    # Session is idle, restart immediately
-                    log.info("[%s] Session idle, restarting now for model change", session_id)
-                    asyncio.create_task(session_mgr.restart_claude_with_model(session_id))
-                else:
-                    # Session is busy, defer restart to after current turn
-                    session.pending_model_restart = True
-                    log.info("[%s] Model change queued, will restart after current turn", session_id)
+
+    elif msg_type == "restart_model":
+        # User confirmed model restart from UI
+        model = data.get("model", "")
+        if model in ("opus", "sonnet", "haiku", ""):
+            session.model = model
+            log.info("[%s] Model restart requested: %s", session_id, model)
+            asyncio.create_task(session_mgr.restart_claude_with_model(session_id))
 
 
 # --- MCP Server WebSocket (one per session) ---

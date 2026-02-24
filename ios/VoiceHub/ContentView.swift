@@ -38,6 +38,8 @@ struct ContentView: View {
     @State private var pttDragOffsetY: CGFloat = 0
     @State private var pttGestureCommitted = false
     @State private var sidebarExpanded = false
+    @State private var showModelRestartConfirm = false
+    @State private var pendingModelSwitch: String = ""
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -108,6 +110,14 @@ struct ContentView: View {
         } message: {
             let name = ALL_VOICES.first { $0.id == resetVoiceId }?.name ?? "this voice"
             Text("Clear all history for \(name)? This also ends the active session.")
+        }
+        .alert("Switch Model", isPresented: $showModelRestartConfirm) {
+            Button("Restart", role: .destructive) {
+                vm.restartWithModel(pendingModelSwitch)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will restart the session with \(pendingModelSwitch.capitalized). The conversation will be preserved.")
         }
     }
 
@@ -424,7 +434,10 @@ struct ContentView: View {
                 let currentModel = vm.activeSession?.model ?? ""
                 Menu {
                     Button {
-                        vm.setSessionModel("opus")
+                        if currentModel != "opus" && !currentModel.isEmpty {
+                            pendingModelSwitch = "opus"
+                            showModelRestartConfirm = true
+                        }
                     } label: {
                         HStack {
                             Text("Opus")
@@ -434,7 +447,10 @@ struct ContentView: View {
                         }
                     }
                     Button {
-                        vm.setSessionModel("sonnet")
+                        if currentModel != "sonnet" {
+                            pendingModelSwitch = "sonnet"
+                            showModelRestartConfirm = true
+                        }
                     } label: {
                         HStack {
                             Text("Sonnet")
@@ -444,7 +460,10 @@ struct ContentView: View {
                         }
                     }
                     Button {
-                        vm.setSessionModel("haiku")
+                        if currentModel != "haiku" {
+                            pendingModelSwitch = "haiku"
+                            showModelRestartConfirm = true
+                        }
                     } label: {
                         HStack {
                             Text("Haiku")

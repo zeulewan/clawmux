@@ -1013,31 +1013,11 @@ body {
 
 <div id="settings-page">
   <h2>Settings</h2>
-  <div class="settings-group">
-    <label>TTS Voice</label>
-    <select id="voice-select" onchange="changeVoice(this.value)">
-      <option value="af_sky">Sky (F)</option>
-      <option value="af_alloy">Alloy (F)</option>
-      <option value="af_sarah">Sarah (F)</option>
-      <option value="am_adam">Adam (M)</option>
-      <option value="am_echo">Echo (M)</option>
-      <option value="am_onyx">Onyx (M)</option>
-      <option value="bm_fable">Fable</option>
-    </select>
-  </div>
-  <div class="settings-group">
-    <label>Playback Speed</label>
-    <select id="speed-select" onchange="changeSpeed(this.value)">
-      <option value="0.75">0.75x</option>
-      <option value="1.0" selected>1x</option>
-      <option value="1.25">1.25x</option>
-      <option value="1.5">1.5x</option>
-      <option value="2.0">2x</option>
-    </select>
-  </div>
-  <div class="settings-toggle" onclick="toggleMicMute()">
-    <span>Mic Mute</span>
-    <div class="toggle-indicator" id="toggle-mic_mute"></div>
+
+  <h3 style="font-size:0.8rem; color:var(--text-tertiary); text-transform:uppercase; letter-spacing:0.08em; margin:1rem 0 0.5rem;">Voice</h3>
+  <div class="settings-toggle" onclick="toggleSetting('voice_responses')">
+    <span>Voice Responses</span>
+    <div class="toggle-indicator on" id="toggle-voice_responses"></div>
   </div>
   <div class="settings-toggle" onclick="toggleSetting('auto_record')">
     <span>Auto Record</span>
@@ -1051,6 +1031,22 @@ body {
     <span>Auto Interrupt</span>
     <div class="toggle-indicator" id="toggle-auto_interrupt"></div>
   </div>
+  <div class="settings-toggle" onclick="toggleMicMute()">
+    <span>Mic Mute</span>
+    <div class="toggle-indicator" id="toggle-mic_mute"></div>
+  </div>
+  <div class="settings-group">
+    <label>Playback Speed</label>
+    <select id="speed-select" onchange="changeSpeed(this.value)">
+      <option value="0.75">0.75x</option>
+      <option value="1.0" selected>1x</option>
+      <option value="1.25">1.25x</option>
+      <option value="1.5">1.5x</option>
+      <option value="2.0">2x</option>
+    </select>
+  </div>
+
+  <h3 style="font-size:0.8rem; color:var(--text-tertiary); text-transform:uppercase; letter-spacing:0.08em; margin:1.5rem 0 0.5rem;">Sounds</h3>
   <div class="settings-toggle" onclick="toggleSetting('thinking_sounds')">
     <span>Thinking Sounds</span>
     <div class="toggle-indicator on" id="toggle-thinking_sounds"></div>
@@ -1059,15 +1055,9 @@ body {
     <span>Audio Cues</span>
     <div class="toggle-indicator on" id="toggle-audio_cues"></div>
   </div>
-  <div class="settings-toggle" onclick="toggleSetting('voice_responses')">
-    <span>Voice Responses</span>
-    <div class="toggle-indicator on" id="toggle-voice_responses"></div>
-  </div>
 
-  <div style="margin-top:1.5rem;">
-    <h2 style="font-size:1rem;">Usage</h2>
-    <div id="settings-usage" style="padding:12px 0; font-size:0.85rem; color:var(--text-secondary);">Loading...</div>
-  </div>
+  <h3 style="font-size:0.8rem; color:var(--text-tertiary); text-transform:uppercase; letter-spacing:0.08em; margin:1.5rem 0 0.5rem;">Usage</h3>
+  <div id="settings-usage" style="padding:12px 0; font-size:0.85rem; color:var(--text-secondary);">Loading...</div>
 
   <div style="margin-top:1.5rem;">
     <button style="width:100%; padding:10px 16px; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text-secondary); font-size:0.85rem; cursor:pointer; font-family:inherit; transition: all 0.15s;" onmouseover="this.style.borderColor='var(--border-light)'" onmouseout="this.style.borderColor='var(--border)'" onclick="showDebugPanel()">Open Debug Panel</button>
@@ -1762,10 +1752,13 @@ function switchTab(sessionId) {
   if (s) {
     setStatus(s.statusText || 'Ready');
     micBtn.disabled = s.status !== 'ready' && s.status !== 'active';
-    voiceSelect.value = s.voice || 'af_sky';
+    if (voiceSelect) voiceSelect.value = s.voice || 'af_sky';
     speedSelect.value = String(parseFloat(s.speed || 1.0).toFixed(1));
-    document.getElementById('session-model').value = s.model || 'opus';
-    document.getElementById('session-model').style.display = 'inline-block';
+    const sessionModelEl = document.getElementById('session-model');
+    if (sessionModelEl) {
+      sessionModelEl.value = s.model || 'opus';
+      sessionModelEl.style.display = 'inline-block';
+    }
 
     // Resume thinking sound if this session is thinking
     if (s.isThinking) startThinkingSound(sessionId);
@@ -2213,8 +2206,15 @@ async function updateSetting(key, value) {
 // --- Per-session model ---
 function setSessionModel(model) {
   if (!activeSessionId || !ws || ws.readyState !== WebSocket.OPEN) return;
-  ws.send(JSON.stringify({ session_id: activeSessionId, type: 'set_model', model }));
   const s = sessions.get(activeSessionId);
+  const currentModel = s?.model || 'opus';
+  if (model === currentModel) return;
+  if (!confirm(`Switch to ${model.charAt(0).toUpperCase() + model.slice(1)}? This will restart the session. The conversation will be preserved.`)) {
+    // Reset the select to current value
+    document.getElementById('session-model').value = currentModel;
+    return;
+  }
+  ws.send(JSON.stringify({ session_id: activeSessionId, type: 'restart_model', model }));
   if (s) s.model = model;
 }
 
@@ -2975,8 +2975,13 @@ function playAudio(sessionId, b64data) {
       return; // Don't send playback_done yet — more audio to play
     }
     _audioPlaying = false;
-    // Transition sidebar from speaking to ready now that playback ended
-    setSessionSidebarState(sessionId, 'ready');
+    // Transition sidebar from speaking to ready (unless agent is thinking)
+    const sess = sessions.get(sessionId);
+    if (sess && sess.isThinking) {
+      setSessionSidebarState(sessionId, 'thinking');
+    } else {
+      setSessionSidebarState(sessionId, 'ready');
+    }
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ session_id: sessionId, type: 'playback_done' }));
     }

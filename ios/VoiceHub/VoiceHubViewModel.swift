@@ -1054,6 +1054,15 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
         }
     }
 
+    func restartWithModel(_ model: String) {
+        guard let sid = activeSessionId else { return }
+        sendJSON(["session_id": sid, "type": "restart_model", "model": model])
+        if let idx = sessionIndex(sid) {
+            sessions[idx].model = model
+            sessions[idx].status = .starting
+        }
+    }
+
     // MARK: - Hub Protocol
 
     private func handleMessage(_ message: URLSessionWebSocketTask.Message) {
