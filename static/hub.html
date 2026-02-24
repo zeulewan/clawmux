@@ -1980,7 +1980,6 @@ async function addSession(data, autoSwitch = false) {
   }
 
   // Restore awaiting input state if session is idle (not processing, not in converse)
-  const isReady = data.status === 'ready' || data.mcp_connected;
   if (isReady && !data.processing && !data.in_converse) {
     const sess = sessions.get(data.session_id);
     if (sess) sess.awaitingInput = true;
