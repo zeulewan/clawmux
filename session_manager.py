@@ -524,21 +524,20 @@ class SessionManager:
                 pass
             session.mcp_ws = None
 
-        # Send Ctrl+C to interrupt Claude Code
-        await self._run(f"tmux send-keys -t {tmux_name} C-c")
-        await asyncio.sleep(1)
-
-        # Send /exit to properly quit Claude Code
-        await self._run(f'tmux send-keys -t {tmux_name} "/exit" Enter')
-        await asyncio.sleep(2)
-
-        # Check if we're back at a shell prompt, send another Ctrl+C + /exit if needed
-        result = await self._run(f"tmux capture-pane -t {tmux_name} -p")
-        if result and ("❯" not in result.split("\\n")[-1] or "claude" in result.lower()):
-            await self._run(f"tmux send-keys -t {tmux_name} C-c")
-            await asyncio.sleep(1)
-            await self._run(f'tmux send-keys -t {tmux_name} "/exit" Enter')
-            await asyncio.sleep(2)
+        # Kill all processes in the tmux session by finding the shell PID and killing its children
+        try:
+            pane_pid = await self._run(
+                f"tmux display-message -t {tmux_name} -p '#{{pane_pid}}'"
+            )
+            if pane_pid and pane_pid.strip():
+                # Kill all descendant processes of the shell
+                await self._run(f"pkill -TERM -P {pane_pid.strip()}")
+                await asyncio.sleep(2)
+                # Force kill any remaining
+                await self._run(f"pkill -9 -P {pane_pid.strip()}")
+                await asyncio.sleep(1)
+        except Exception as e:
+            log.warning("[%s] Error killing processes: %s", session_id, e)
 
         # Send marker for detecting Claude readiness
         marker = f"__CLAUDE_RESTART_{session_id[-8:]}__"
