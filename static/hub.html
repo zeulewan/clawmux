@@ -897,10 +897,14 @@ body {
   .msg { max-width: 90%; }
 
   /* Controls: better spacing and touch targets */
-  #controls { padding: 10px 12px; }
+  #controls { padding: 10px 8px; }
   #mic { width: 56px; height: 56px; }
   #mic-cancel { width: 32px; height: 32px; }
   .btn-icon { width: 44px; height: 44px; }
+  #transport-bar { gap: 8px; }
+  .transport-btn { width: 30px; height: 30px; font-size: 0.9rem; }
+  #mic-wrapper { margin: 0 6px; }
+  #controls-left { gap: 4px; }
 
   /* Sidebar expand toggle */
   #sidebar-expand-btn {
@@ -992,7 +996,7 @@ body {
       <button class="btn-icon transport-btn" id="transport-pause" onclick="transportPause()" title="Pause">&#9208;</button>
       <button class="btn-icon transport-btn" id="transport-next" onclick="transportNext()" title="Next">&#9197;</button>
     </div>
-    <button id="mode-toggle" onclick="cycleInputMode()"><span class="mode-label">Mode</span><span class="mode-value">Voice</span></button>
+    <button id="mode-toggle" onclick="cycleInputMode()"><span class="mode-value">Voice</span><span class="mode-label">Mode</span></button>
     <div id="status"></div>
   </div>
   <div id="mic-wrapper">
@@ -1004,7 +1008,7 @@ body {
 </div>
 
 <div id="text-input-bar">
-  <button id="mode-toggle-text" onclick="cycleInputMode()" title="Switch mode" style="font-size:0.65rem;font-weight:600;color:var(--text-secondary);background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:4px 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;line-height:1.2;flex-shrink:0;"><span class="mode-label" style="font-size:0.55rem;text-transform:uppercase;letter-spacing:0.05em;opacity:0.7;">Mode</span><span class="mode-value" style="text-transform:uppercase;letter-spacing:0.05em;">Typing</span></button>
+  <button id="mode-toggle-text" onclick="cycleInputMode()" title="Switch mode" style="font-size:0.65rem;font-weight:600;color:var(--text-secondary);background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:4px 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;line-height:1.2;flex-shrink:0;"><span class="mode-value" style="text-transform:uppercase;letter-spacing:0.05em;">Typing</span><span class="mode-label" style="font-size:0.55rem;text-transform:uppercase;letter-spacing:0.05em;opacity:0.7;">Mode</span></button>
   <button id="text-paste" onclick="pasteFromClipboard()" title="Paste from clipboard">&#128203;</button>
   <textarea id="text-input" rows="1" placeholder="Type a message..."></textarea>
   <button id="text-send" onclick="sendTextMessage()" disabled>&#8593;</button>
@@ -1130,6 +1134,7 @@ body {
 <script>
 // --- State ---
 const sessions = new Map(); // session_id -> { label, status, messages[], el }
+const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || ('ontouchstart' in window && window.innerWidth < 768);
 let activeSessionId = null;
 let recordingSessionId = null;
 let ws = null;
@@ -2206,6 +2211,8 @@ async function updateSetting(key, value) {
 // --- Per-session model ---
 function setSessionModel(model) {
   if (!activeSessionId || !ws || ws.readyState !== WebSocket.OPEN) return;
+  // Blur the select so spacebar doesn't re-open it
+  document.getElementById('session-model').blur();
   const s = sessions.get(activeSessionId);
   const currentModel = s?.model || 'opus';
   if (model === currentModel) return;
@@ -2868,7 +2875,7 @@ function handleMessage(data) {
       cueListening();
       pendingListenSessionId = session_id;
       updateMicUI();
-      setStatus('Tap or Hold Space');
+      setStatus(isMobile ? 'Tap to Record' : 'Tap or Hold Space');
       setSessionSidebarState(session_id, 'ready');
     } else {
       // Background tab — mark pending
@@ -3316,12 +3323,8 @@ function pttEnd(e) {
   }
 }
 
-micBtn.addEventListener('mousedown', pttStart);
-micBtn.addEventListener('mouseup', pttEnd);
-micBtn.addEventListener('mouseleave', pttEnd);
-micBtn.addEventListener('touchstart', pttStart, { passive: false });
-micBtn.addEventListener('touchend', pttEnd, { passive: false });
-micBtn.addEventListener('touchcancel', pttEnd);
+// PTT on mic button removed — mic button is click-to-toggle only.
+// PTT is spacebar-only (see keydown/keyup handlers below).
 
 // Spacebar PTT: hold Space to record, release to send (works in voice mode)
 document.addEventListener('keydown', (e) => {
@@ -3545,6 +3548,10 @@ document.addEventListener('keydown', (e) => {
 let inputMode = 'voice'; // 'voice' or 'typing'
 const modeToggle = document.getElementById('mode-toggle');
 const modeToggleText = document.getElementById('mode-toggle-text');
+// On mobile, move mode toggle to the right side of controls
+if (isMobile) {
+  document.getElementById('controls-right').appendChild(modeToggle);
+}
 const textInputBar = document.getElementById('text-input-bar');
 const textInput = document.getElementById('text-input');
 const textSendBtn = document.getElementById('text-send');
@@ -3561,7 +3568,7 @@ function cycleInputMode() {
 
 function applyInputMode() {
   const modeText = inputMode === 'voice' ? 'Voice' : 'Typing';
-  modeToggle.innerHTML = '<span class="mode-label">Mode</span><span class="mode-value">' + modeText + '</span>';
+  modeToggle.innerHTML = '<span class="mode-value">' + modeText + '</span><span class="mode-label">Mode</span>';
   // Also update text-input-bar mode toggle
   if (modeToggleText) modeToggleText.querySelector('.mode-value').textContent = modeText;
   if (inputMode === 'typing') {
