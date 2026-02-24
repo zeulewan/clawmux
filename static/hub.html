@@ -830,6 +830,7 @@ body {
   #settings-link { font-size: 0; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; padding: 0; }
   #settings-link::before { content: '⚙'; font-size: 14px; }
   #conn-label { display: none; }
+  #session-model { font-size: 0.55rem !important; padding: 1px 3px !important; }
 
   /* Sidebar: icon-only, absolutely positioned with smooth transition */
   #sidebar {
@@ -1003,26 +1004,15 @@ body {
 </div>
 
 <div id="text-input-bar">
-  <!-- Home button removed — sidebar is always visible -->
+  <button id="mode-toggle-text" onclick="cycleInputMode()" title="Switch mode" style="font-size:0.65rem;font-weight:600;color:var(--text-secondary);background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:4px 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;line-height:1.2;flex-shrink:0;"><span class="mode-label" style="font-size:0.55rem;text-transform:uppercase;letter-spacing:0.05em;opacity:0.7;">Mode</span><span class="mode-value" style="text-transform:uppercase;letter-spacing:0.05em;">Typing</span></button>
   <button id="text-paste" onclick="pasteFromClipboard()" title="Paste from clipboard">&#128203;</button>
   <textarea id="text-input" rows="1" placeholder="Type a message..."></textarea>
   <button id="text-send" onclick="sendTextMessage()" disabled>&#8593;</button>
-  <div style="display:flex;flex-direction:column;gap:4px;">
-    <button id="mode-toggle-text" onclick="cycleInputMode()" title="Switch mode" style="font-size:0.65rem;font-weight:600;color:var(--text-secondary);background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:4px 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;line-height:1.2;"><span class="mode-label" style="font-size:0.55rem;text-transform:uppercase;letter-spacing:0.05em;opacity:0.7;">Mode</span><span class="mode-value" style="text-transform:uppercase;letter-spacing:0.05em;">Typing</span></button>
-  </div>
 </div>
 
 
 <div id="settings-page">
   <h2>Settings</h2>
-  <div class="settings-group">
-    <label>Claude Model (applies to new sessions)</label>
-    <select id="setting-model" onchange="updateSetting('model', this.value)">
-      <option value="opus">Opus</option>
-      <option value="sonnet">Sonnet</option>
-      <option value="haiku">Haiku</option>
-    </select>
-  </div>
   <div class="settings-group">
     <label>TTS Voice</label>
     <select id="voice-select" onchange="changeVoice(this.value)">
@@ -2160,7 +2150,6 @@ async function loadSettings() {
   try {
     const r = await fetch('/api/settings');
     const s = await r.json();
-    document.getElementById('setting-model').value = s.model || 'opus';
     const spd = localStorage.getItem('hub_speed');
     if (spd) speedSelect.value = String(parseFloat(spd).toFixed(1));
     setToggle('auto_record', s.auto_record || false);
@@ -2879,7 +2868,7 @@ function handleMessage(data) {
       cueListening();
       pendingListenSessionId = session_id;
       updateMicUI();
-      setStatus(inputMode === 'ptt' ? 'Hold to Talk' : 'Tap Record');
+      setStatus(inputMode === 'ptt' ? 'Hold Space to Talk' : 'Tap Record');
       setSessionSidebarState(session_id, 'ready');
     } else {
       // Background tab — mark pending
@@ -3560,6 +3549,7 @@ function applyInputMode() {
     if (activeSessionId && sessions.has(activeSessionId)) {
       controls.style.display = 'flex';
     }
+    if (inputMode === 'ptt') setStatus('Hold Space to Talk');
   }
 }
 
