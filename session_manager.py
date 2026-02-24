@@ -46,6 +46,7 @@ class Session:
     interjections: list[str] = field(default_factory=list)  # queued user messages sent while agent was busy
     model: str = ""  # per-session Claude model override (opus/sonnet/haiku); empty = use global default
     pending_model_restart: bool = False  # True when model was changed and needs restart after current turn
+    restarting: bool = False  # True while model restart is in progress (skip health checks)
     processing: bool = False  # True when agent is busy between converse calls
     in_converse: bool = False  # True while handle_converse is running
     unread_count: int = 0  # server-tracked unread message count
@@ -514,6 +515,7 @@ class SessionManager:
 
         log.info("[%s] Restarting Claude with model %s", session_id, session_model)
         session.pending_model_restart = False
+        session.restarting = True
         session.status = "starting"
 
         # Close existing MCP connection
@@ -571,6 +573,7 @@ class SessionManager:
             await asyncio.sleep(1)
         else:
             log.error("[%s] MCP server did not reconnect after model restart", session_id)
+            session.restarting = False
             return
 
         # Send /voice-hub skill command
@@ -579,6 +582,7 @@ class SessionManager:
         await asyncio.sleep(0.5)
         await self._run(f'tmux send-keys -t {tmux_name} Enter')
 
+        session.restarting = False
         session.status = "ready"
         session.touch()
         log.info("[%s] Model restart complete", session_id)
@@ -603,6 +607,8 @@ class SessionManager:
                 if not session:
                     continue
 
+                if session.restarting:
+                    continue  # Skip health check during model restart
                 alive = await self.check_health(session)
                 if not alive:
                     log.warning("Session %s tmux died, cleaning up", session_id)
