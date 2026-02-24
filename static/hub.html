@@ -483,7 +483,9 @@ body {
 /* Mode toggle */
 /* mode-bar removed — controls are now a single horizontal row */
 #mode-toggle {
-  font-size: 0.65rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   font-weight: 600;
   color: var(--text-secondary);
   background: var(--bg-card);
@@ -493,9 +495,10 @@ body {
   cursor: pointer;
   user-select: none;
   transition: all 0.15s;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  line-height: 1.2;
 }
+#mode-toggle .mode-label { font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.7; }
+#mode-toggle .mode-value { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.05em; }
 #mode-toggle:hover { color: var(--text); background: var(--bg-card-hover); border-color: var(--border-light); }
 
 /* Text input bar */
@@ -588,9 +591,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 80px;
+  gap: 6px;
   flex-shrink: 0;
-  position: relative;
+  margin: 0 12px;
 }
 #status {
   font-size: 0.7rem;
@@ -680,7 +683,7 @@ body {
   transition: all 0.15s;
 }
 .btn-icon:hover { border-color: var(--border-light); color: var(--text-secondary); background: var(--bg-card); }
-#mic-cancel { border-color: var(--red); color: var(--red); position: absolute; top: -4px; right: -4px; width: 24px; height: 24px; font-size: 0.65rem; z-index: 1; }
+#mic-cancel { border-color: var(--red); color: var(--red); width: 36px; height: 36px; font-size: 0.75rem; flex-shrink: 0; }
 #mic-cancel:hover { background: var(--red-dim); color: #ff6b7f; }
 /* Options menu */
 /* Context menu */
@@ -895,7 +898,7 @@ body {
   /* Controls: better spacing and touch targets */
   #controls { padding: 10px 12px; }
   #mic { width: 56px; height: 56px; }
-  #mic-wrapper { width: 68px; }
+  #mic-cancel { width: 32px; height: 32px; }
   .btn-icon { width: 44px; height: 44px; }
 
   /* Sidebar expand toggle */
@@ -942,9 +945,15 @@ body {
 <div id="header">
   <h1 onclick="showWelcome()">Voice Hub</h1>
   <span id="active-voice" style="display:none; font-size:0.85rem; font-weight:600;"></span>
+  <select id="session-model" style="display:none; font-size:0.65rem; padding:2px 4px; border-radius:6px; border:1px solid var(--border); background:var(--bg-card); color:var(--text-secondary); cursor:pointer;" onchange="setSessionModel(this.value)">
+    <option value="opus">Opus</option>
+    <option value="sonnet">Sonnet</option>
+    <option value="haiku">Haiku</option>
+  </select>
   <div style="flex:1;"></div>
   <div id="header-project-status" style="font-size:0.65rem; color:var(--text-tertiary); text-align:right; max-width:200px; line-height:1.4;"></div>
   <div id="usage-bar" style="display:none;align-items:center;gap:8px;padding:4px 12px;background:rgba(128,128,128,0.08);border-radius:12px;font-size:0.7rem;color:var(--text-secondary);cursor:pointer;" onclick="toggleUsageDetail()" title="Claude usage">
+    <span id="usage-ctx" style="white-space:nowrap;"></span>
     <span id="usage-5h" style="white-space:nowrap;"></span>
     <span id="usage-7d" style="white-space:nowrap;"></span>
   </div>
@@ -982,7 +991,7 @@ body {
       <button class="btn-icon transport-btn" id="transport-pause" onclick="transportPause()" title="Pause">&#9208;</button>
       <button class="btn-icon transport-btn" id="transport-next" onclick="transportNext()" title="Next">&#9197;</button>
     </div>
-    <button id="mode-toggle" onclick="cycleInputMode()">Auto</button>
+    <button id="mode-toggle" onclick="cycleInputMode()"><span class="mode-label">Mode</span><span class="mode-value">Auto</span></button>
     <div id="status"></div>
   </div>
   <div id="mic-wrapper">
@@ -999,7 +1008,7 @@ body {
   <textarea id="text-input" rows="1" placeholder="Type a message..."></textarea>
   <button id="text-send" onclick="sendTextMessage()" disabled>&#8593;</button>
   <div style="display:flex;flex-direction:column;gap:4px;">
-    <button id="mode-toggle-text" class="btn-icon" style="font-size:0.6rem;width:36px;height:36px;" onclick="cycleInputMode()" title="Switch mode">&#127908;</button>
+    <button id="mode-toggle-text" onclick="cycleInputMode()" title="Switch mode" style="font-size:0.65rem;font-weight:600;color:var(--text-secondary);background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:4px 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;line-height:1.2;"><span class="mode-label" style="font-size:0.55rem;text-transform:uppercase;letter-spacing:0.05em;opacity:0.7;">Mode</span><span class="mode-value" style="text-transform:uppercase;letter-spacing:0.05em;">Typing</span></button>
   </div>
 </div>
 
@@ -1162,6 +1171,7 @@ let playbackVadCtx = null; // AudioContext for playback VAD
 const spawningVoices = new Set(); // voice IDs currently being spawned
 let thinkingSoundsEnabled = true; // thinking tick sounds
 let audioCuesEnabled = true; // listening/processing/ready cues
+let voiceResponsesEnabled = true; // show play buttons and voice features
 let playbackPaused = false; // transport: is playback paused?
 let pausedBuffer = null; // transport: decoded AudioBuffer for resume
 let pauseOffset = 0; // transport: seconds into buffer when paused
@@ -1433,6 +1443,7 @@ function showWelcome() {
   activeSessionId = null;
   hideDebugPanel();
   document.getElementById('active-voice').style.display = 'none';
+  document.getElementById('session-model').style.display = 'none';
   document.getElementById('main-content').style.backgroundColor = '';
   textInputBar.classList.remove('active');
   updateLayout();
@@ -1710,6 +1721,8 @@ function stopActiveAudio() {
   pausedBuffer = null;
   pauseOffset = 0;
   pausedSessionId = null;
+  // Clean up TTS play button state
+  stopTTSPlayback();
   updateMicUI();
 }
 
@@ -1734,6 +1747,7 @@ function switchTab(sessionId) {
   if (s) clearSessionUnread(sessionId);
   // Tell server which session we're viewing so it doesn't increment unread for it
   fetch(`/api/sessions/${sessionId}/viewing`, { method: 'POST' }).catch(() => {});
+  fetchUsage(); // refresh context usage for new active session
 
   // Show voice name in header + tint background
   const activeVoiceEl = document.getElementById('active-voice');
@@ -1760,6 +1774,8 @@ function switchTab(sessionId) {
     micBtn.disabled = s.status !== 'ready' && s.status !== 'active';
     voiceSelect.value = s.voice || 'af_sky';
     speedSelect.value = String(parseFloat(s.speed || 1.0).toFixed(1));
+    document.getElementById('session-model').value = s.model || 'opus';
+    document.getElementById('session-model').style.display = 'inline-block';
 
     // Resume thinking sound if this session is thinking
     if (s.isThinking) startThinkingSound(sessionId);
@@ -1788,19 +1804,29 @@ function switchTab(sessionId) {
 }
 
 // --- TTS playback for messages ---
-let _ttsAudio = null;
 let _ttsPlayingBtn = null;
+let _ttsPlaybackId = null; // tracks which playback the button belongs to
 function stopTTSPlayback() {
-  if (_ttsAudio) { _ttsAudio.pause(); _ttsAudio = null; }
   if (_ttsPlayingBtn) { _ttsPlayingBtn.textContent = '▶'; _ttsPlayingBtn.classList.remove('playing'); _ttsPlayingBtn = null; }
+  _ttsPlaybackId = null;
 }
 async function playMessageTTS(btn, text, voiceId) {
   // If already playing this button, stop it
-  if (_ttsPlayingBtn === btn) { stopTTSPlayback(); return; }
+  if (_ttsPlayingBtn === btn) {
+    stopActiveAudio();
+    stopTTSPlayback();
+    updateTransportBar();
+    return;
+  }
+  // Stop any existing playback
+  stopActiveAudio();
   stopTTSPlayback();
+  updateTransportBar();
+
   btn.textContent = '…';
   btn.classList.add('playing');
   _ttsPlayingBtn = btn;
+
   // Get session speed for playback
   const s = activeSessionId ? sessions.get(activeSessionId) : null;
   const speed = s ? (s.speed || 1.0) : 1.0;
@@ -1811,17 +1837,37 @@ async function playMessageTTS(btn, text, voiceId) {
       body: JSON.stringify({ text, voice: voiceId || 'af_sky', speed }),
     });
     if (!resp.ok) throw new Error('TTS failed');
-    const blob = await resp.blob();
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    _ttsAudio = audio;
+    const arrayBuf = await resp.arrayBuffer();
+
+    // Decode and play via AudioContext (integrates with transport bar)
+    const ready = audioCtx.state === 'suspended' ? audioCtx.resume() : Promise.resolve();
+    await ready;
+    const decoded = await audioCtx.decodeAudioData(arrayBuf);
+    const playbackId = Symbol();
+    _ttsPlaybackId = playbackId;
+    const source = audioCtx.createBufferSource();
+    source.buffer = decoded;
+    source.connect(audioCtx.destination);
+    currentAudio = { source, sessionId: activeSessionId || '__tts__', decodedBuffer: decoded, playbackId };
+    playbackStartTime = audioCtx.currentTime;
+    playbackPaused = false;
+
     btn.textContent = '■';
-    audio.onended = () => { stopTTSPlayback(); URL.revokeObjectURL(url); };
-    audio.onerror = () => { stopTTSPlayback(); URL.revokeObjectURL(url); };
-    audio.play();
+
+    source.onended = () => {
+      if (!playbackPaused) {
+        currentAudio = null;
+        if (_ttsPlaybackId === playbackId) stopTTSPlayback();
+        updateTransportBar();
+        updateMicUI();
+      }
+    };
+    source.start(0);
+    updateTransportBar();
   } catch (e) {
     console.error('TTS playback error:', e);
     stopTTSPlayback();
+    updateTransportBar();
   }
 }
 
@@ -1834,16 +1880,18 @@ function createMsgEl(role, text, voiceColorHex, voiceId) {
     const actions = document.createElement('div');
     actions.className = 'msg-actions';
 
-    // Play button
-    const playBtn = document.createElement('button');
-    playBtn.className = 'msg-action-btn';
-    playBtn.textContent = '▶';
-    playBtn.title = 'Play';
-    playBtn.onclick = (e) => {
-      e.stopPropagation();
-      playMessageTTS(playBtn, text, voiceId);
-    };
-    actions.appendChild(playBtn);
+    // Play button (only when voice responses enabled)
+    if (voiceResponsesEnabled) {
+      const playBtn = document.createElement('button');
+      playBtn.className = 'msg-action-btn';
+      playBtn.textContent = '▶';
+      playBtn.title = 'Play';
+      playBtn.onclick = (e) => {
+        e.stopPropagation();
+        playMessageTTS(playBtn, text, voiceId);
+      };
+      actions.appendChild(playBtn);
+    }
 
     // Copy button
     const copyBtn = document.createElement('button');
@@ -1952,6 +2000,17 @@ async function addSession(data, autoSwitch = false) {
     if (resp.ok) {
       const hist = await resp.json();
       serverMessages = (hist.messages || []).map(m => ({ role: m.role, text: m.text }));
+      // Mark trailing user messages as interjections if model hasn't seen them
+      const pendingCount = hist.pending_interjections || 0;
+      if (pendingCount > 0) {
+        let marked = 0;
+        for (let i = serverMessages.length - 1; i >= 0 && marked < pendingCount; i--) {
+          if (serverMessages[i].role === 'user') {
+            serverMessages[i].role = 'user interjection';
+            marked++;
+          }
+        }
+      }
     }
   } catch (e) {
     console.warn('Failed to fetch history:', e);
@@ -2088,6 +2147,7 @@ function showSettingsPage() {
   if (dbg) dbg.style.display = 'none';
   document.getElementById('settings-page').style.display = 'block';
   document.getElementById('active-voice').style.display = 'none';
+  document.getElementById('session-model').style.display = 'none';
   textInputBar.classList.remove('active');
   activeSessionId = null;
   debugActive = false;
@@ -2119,7 +2179,8 @@ async function loadSettings() {
     setToggle('auto_interrupt', autoInterruptEnabled);
     setToggle('thinking_sounds', thinkingSoundsEnabled);
     setToggle('audio_cues', audioCuesEnabled);
-    setToggle('voice_responses', s.voice_responses !== false);
+    voiceResponsesEnabled = s.voice_responses !== false;
+    setToggle('voice_responses', voiceResponsesEnabled);
   } catch (e) {
     console.error('Failed to load settings:', e);
   }
@@ -2140,6 +2201,7 @@ async function toggleSetting(key) {
   if (key === 'auto_interrupt') { autoInterruptEnabled = isOn; }
   if (key === 'thinking_sounds') { thinkingSoundsEnabled = isOn; if (!isOn) stopThinkingSound(); }
   if (key === 'audio_cues') { audioCuesEnabled = isOn; }
+  if (key === 'voice_responses') { voiceResponsesEnabled = isOn; renderChat(); }
   try {
     await fetch('/api/settings', {
       method: 'PUT',
@@ -2157,6 +2219,14 @@ async function updateSetting(key, value) {
       body: JSON.stringify({ [key]: value }),
     });
   } catch (e) { console.error('Failed to save setting:', e); }
+}
+
+// --- Per-session model ---
+function setSessionModel(model) {
+  if (!activeSessionId || !ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ session_id: activeSessionId, type: 'set_model', model }));
+  const s = sessions.get(activeSessionId);
+  if (s) s.model = model;
 }
 
 // --- Auto mode ---
@@ -2549,7 +2619,8 @@ function connect() {
       setToggle('auto_record', autoMode);
       setToggle('auto_end', vadEnabled);
       setToggle('auto_interrupt', autoInterruptEnabled);
-      setToggle('voice_responses', s.voice_responses !== false);
+      voiceResponsesEnabled = s.voice_responses !== false;
+      setToggle('voice_responses', voiceResponsesEnabled);
     }).catch(() => {});
     startHistorySync();
   };
@@ -2583,6 +2654,17 @@ async function _refreshHistory(sessionId, voiceId) {
     if (!resp.ok) return;
     const hist = await resp.json();
     const serverMessages = (hist.messages || []).map(m => ({ role: m.role, text: m.text }));
+    // Mark trailing user messages as interjections if they haven't been seen by the model
+    const pendingCount = hist.pending_interjections || 0;
+    if (pendingCount > 0) {
+      let marked = 0;
+      for (let i = serverMessages.length - 1; i >= 0 && marked < pendingCount; i--) {
+        if (serverMessages[i].role === 'user') {
+          serverMessages[i].role = 'user interjection';
+          marked++;
+        }
+      }
+    }
     const localNonSystem = s.messages.filter(m => m.role !== 'system').length;
     if (serverMessages.length > localNonSystem) {
       s.messages = serverMessages;
@@ -3260,6 +3342,7 @@ function showDebugPanel() {
   activeSessionId = null;
   debugActive = true;
   document.getElementById('active-voice').style.display = 'none';
+  document.getElementById('session-model').style.display = 'none';
 
   // Show debug, hide everything else
   document.getElementById('welcome-view').style.display = 'none';
@@ -3464,7 +3547,10 @@ function cycleInputMode() {
 }
 
 function applyInputMode() {
-  modeToggle.textContent = inputMode === 'auto' ? 'Auto' : inputMode === 'ptt' ? 'PTT' : 'Typing';
+  const modeText = inputMode === 'auto' ? 'Auto' : inputMode === 'ptt' ? 'PTT' : 'Typing';
+  modeToggle.innerHTML = '<span class="mode-label">Mode</span><span class="mode-value">' + modeText + '</span>';
+  // Also update text-input-bar mode toggle
+  if (modeToggleText) modeToggleText.querySelector('.mode-value').textContent = modeText;
   if (inputMode === 'typing') {
     controls.style.display = 'none';
     textInputBar.classList.add('active');
@@ -3623,25 +3709,49 @@ function formatReset(isoStr) {
 
 async function fetchUsage() {
   try {
-    const resp = await fetch('/api/usage');
-    if (!resp.ok) return;
-    const data = await resp.json();
+    const [resp, ctxResp] = await Promise.all([
+      fetch('/api/usage'),
+      fetch('/api/context')
+    ]);
     const bar = document.getElementById('usage-bar');
+    const elCtx = document.getElementById('usage-ctx');
     const el5h = document.getElementById('usage-5h');
     const el7d = document.getElementById('usage-7d');
 
-    const pct5h = data.five_hour?.utilization ?? null;
-    const pct7d = data.seven_day?.utilization ?? null;
+    let hasData = false;
 
-    if (pct5h === null && pct7d === null) { bar.style.display = 'none'; return; }
+    // Context usage for active session
+    if (ctxResp.ok) {
+      const ctxData = await ctxResp.json();
+      const sid = activeSessionId;
+      const ctx = sid ? ctxData[sid] : null;
+      if (ctx) {
+        const pct = ctx.percent;
+        elCtx.innerHTML = 'ctx: <b style="color:' + usageColor(pct) + '">' + pct + '%</b>';
+        elCtx.title = Math.round(ctx.total_context_tokens / 1000) + 'K / ' + Math.round(ctx.context_limit / 1000) + 'K tokens';
+        elCtx.style.display = '';
+        hasData = true;
+      } else {
+        elCtx.style.display = 'none';
+      }
+    }
 
-    if (pct5h !== null) {
-      el5h.innerHTML = '5h: <b style="color:' + usageColor(pct5h) + '">' + pct5h + '%</b>';
+    if (resp.ok) {
+      const data = await resp.json();
+      const pct5h = data.five_hour?.utilization ?? null;
+      const pct7d = data.seven_day?.utilization ?? null;
+
+      if (pct5h !== null) {
+        el5h.innerHTML = '5h: <b style="color:' + usageColor(pct5h) + '">' + pct5h + '%</b>';
+        hasData = true;
+      }
+      if (pct7d !== null) {
+        el7d.innerHTML = '7d: <b style="color:' + usageColor(pct7d) + '">' + pct7d + '%</b>';
+        hasData = true;
+      }
     }
-    if (pct7d !== null) {
-      el7d.innerHTML = '7d: <b style="color:' + usageColor(pct7d) + '">' + pct7d + '%</b>';
-    }
-    bar.style.display = 'flex';
+
+    bar.style.display = hasData ? 'flex' : 'none';
   } catch(e) { /* ignore */ }
 }
 
@@ -3653,30 +3763,51 @@ async function loadUsageForSettings() {
   const el = document.getElementById('settings-usage');
   if (!el) return;
   try {
-    const resp = await fetch('/api/usage');
-    if (!resp.ok) { el.textContent = 'Unavailable'; return; }
-    const data = await resp.json();
-    const pct5h = data.five_hour?.utilization ?? null;
-    const pct7d = data.seven_day?.utilization ?? null;
-    if (pct5h === null && pct7d === null) { el.textContent = 'No usage data available'; return; }
+    const [resp, ctxResp] = await Promise.all([
+      fetch('/api/usage'),
+      fetch('/api/context')
+    ]);
     let html = '';
-    if (pct5h !== null) {
-      const reset5h = formatReset(data.five_hour?.resets_at);
-      html += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">';
-      html += '<span>5-hour window</span>';
-      html += '<div style="text-align:right;"><span style="font-weight:600;color:' + usageColor(pct5h) + ';">' + pct5h + '%</span>';
-      if (reset5h) html += '<div style="font-size:0.7rem;color:var(--text-tertiary);">resets in ' + reset5h + '</div>';
-      html += '</div></div>';
+
+    // Context window usage for active session
+    if (ctxResp.ok) {
+      const ctxData = await ctxResp.json();
+      const sid = activeSessionId;
+      const ctx = sid ? ctxData[sid] : null;
+      if (ctx) {
+        const tokensK = Math.round(ctx.total_context_tokens / 1000);
+        const limitK = Math.round(ctx.context_limit / 1000);
+        html += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">';
+        html += '<span>Context window</span>';
+        html += '<div style="text-align:right;"><span style="font-weight:600;color:' + usageColor(ctx.percent) + ';">' + ctx.percent + '%</span>';
+        html += '<div style="font-size:0.7rem;color:var(--text-tertiary);">' + tokensK + 'K / ' + limitK + 'K tokens</div>';
+        html += '</div></div>';
+      }
     }
-    if (pct7d !== null) {
-      const reset7d = formatReset(data.seven_day?.resets_at);
-      html += '<div style="display:flex;justify-content:space-between;padding:6px 0;">';
-      html += '<span>7-day window</span>';
-      html += '<div style="text-align:right;"><span style="font-weight:600;color:' + usageColor(pct7d) + ';">' + pct7d + '%</span>';
-      if (reset7d) html += '<div style="font-size:0.7rem;color:var(--text-tertiary);">resets in ' + reset7d + '</div>';
-      html += '</div></div>';
+
+    if (resp.ok) {
+      const data = await resp.json();
+      const pct5h = data.five_hour?.utilization ?? null;
+      const pct7d = data.seven_day?.utilization ?? null;
+      if (pct5h !== null) {
+        const reset5h = formatReset(data.five_hour?.resets_at);
+        html += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">';
+        html += '<span>5-hour window</span>';
+        html += '<div style="text-align:right;"><span style="font-weight:600;color:' + usageColor(pct5h) + ';">' + pct5h + '%</span>';
+        if (reset5h) html += '<div style="font-size:0.7rem;color:var(--text-tertiary);">resets in ' + reset5h + '</div>';
+        html += '</div></div>';
+      }
+      if (pct7d !== null) {
+        const reset7d = formatReset(data.seven_day?.resets_at);
+        html += '<div style="display:flex;justify-content:space-between;padding:6px 0;">';
+        html += '<span>7-day window</span>';
+        html += '<div style="text-align:right;"><span style="font-weight:600;color:' + usageColor(pct7d) + ';">' + pct7d + '%</span>';
+        if (reset7d) html += '<div style="font-size:0.7rem;color:var(--text-tertiary);">resets in ' + reset7d + '</div>';
+        html += '</div></div>';
+      }
     }
-    el.innerHTML = html;
+
+    el.innerHTML = html || 'No usage data available';
   } catch (e) { el.textContent = 'Error loading usage'; }
 }
 

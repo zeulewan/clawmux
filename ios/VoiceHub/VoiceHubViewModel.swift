@@ -30,6 +30,7 @@ struct VoiceSession: Identifiable {
     var audioBuffer: [Data] = []
     var project: String = ""
     var projectArea: String = ""
+    var model: String = ""  // per-session model (opus/sonnet/haiku); empty = global default
     var unreadCount: Int = 0
     var awaitingInput: Bool = false
 }
@@ -1027,6 +1028,14 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
         }
     }
 
+    func setSessionModel(_ model: String) {
+        guard let sid = activeSessionId else { return }
+        sendJSON(["session_id": sid, "type": "set_model", "model": model])
+        if let idx = sessionIndex(sid) {
+            sessions[idx].model = model
+        }
+    }
+
     // MARK: - Hub Protocol
 
     private func handleMessage(_ message: URLSessionWebSocketTask.Message) {
@@ -1336,6 +1345,7 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
             status: isReady ? .ready : status, tmuxSession: tmux)
         session.project = dict["project"] as? String ?? ""
         session.projectArea = dict["project_area"] as? String ?? ""
+        session.model = dict["model"] as? String ?? ""
         session.unreadCount = dict["unread_count"] as? Int ?? 0
 
         if isReady {

@@ -44,12 +44,14 @@ class Session:
     text_override: str = ""  # set by browser "text" message, consumed by handle_converse
     text_mode: bool = False  # when True, skip TTS and just send text
     interjections: list[str] = field(default_factory=list)  # queued user messages sent while agent was busy
+    model: str = ""  # per-session Claude model override (opus/sonnet/haiku); empty = use global default
     processing: bool = False  # True when agent is busy between converse calls
     in_converse: bool = False  # True while handle_converse is running
     unread_count: int = 0  # server-tracked unread message count
     # Per-session bridge state (set by hub after creation)
     audio_queue: asyncio.Queue | None = field(default=None, repr=False)
     playback_done: asyncio.Event | None = field(default=None, repr=False)
+    claude_session_id: str = ""  # Claude Code conversation UUID (for JSONL lookup)
     mcp_ws: object | None = field(default=None, repr=False)
 
     def to_dict(self) -> dict:
@@ -66,6 +68,7 @@ class Session:
             "status_text": self.status_text,
             "project": self.project,
             "project_area": self.project_area,
+            "model": self.model,
             "processing": self.processing,
             "in_converse": self.in_converse,
             "unread_count": self.unread_count,
@@ -155,6 +158,11 @@ class SessionManager:
                 voice=voice_id,
             )
             session.init_bridge()
+            # Restore Claude session ID for context tracking
+            if self.history_store:
+                stored_id = self.history_store.get_claude_session_id(voice_id)
+                if stored_id:
+                    session.claude_session_id = stored_id
             # Restore project status from disk
             proj_file = work_dir / ".project_status.json"
             if proj_file.exists():
@@ -200,6 +208,66 @@ class SessionManager:
 
     def list_sessions(self) -> list[dict]:
         return [s.to_dict() for s in self.sessions.values()]
+
+    def get_context_usage(self, session_id: str) -> dict | None:
+        """Read the latest token usage from the session's JSONL transcript."""
+        session = self.sessions.get(session_id)
+        if not session or not session.claude_session_id:
+            return None
+        # Find the JSONL file in ~/.claude/projects/
+        claude_projects = Path.home() / ".claude" / "projects"
+        jsonl_path = None
+        if claude_projects.exists():
+            for p in claude_projects.iterdir():
+                candidate = p / f"{session.claude_session_id}.jsonl"
+                if candidate.exists():
+                    jsonl_path = candidate
+                    break
+        if not jsonl_path:
+            return None
+        try:
+            # Read last few lines to find the most recent assistant message with usage
+            import subprocess
+            result = subprocess.run(
+                ["tail", "-50", str(jsonl_path)],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode != 0:
+                return None
+            last_usage = None
+            for line in result.stdout.strip().split("\n"):
+                if not line:
+                    continue
+                try:
+                    d = json.loads(line)
+                    usage = None
+                    if d.get("type") == "assistant" and "message" in d:
+                        msg = d["message"] if isinstance(d["message"], dict) else {}
+                        usage = msg.get("usage") or d.get("usage")
+                    elif d.get("type") == "assistant" and "usage" in d:
+                        usage = d["usage"]
+                    if usage:
+                        last_usage = usage
+                except (json.JSONDecodeError, KeyError):
+                    continue
+            if not last_usage:
+                return None
+            input_tokens = last_usage.get("input_tokens", 0)
+            cache_creation = last_usage.get("cache_creation_input_tokens", 0)
+            cache_read = last_usage.get("cache_read_input_tokens", 0)
+            output_tokens = last_usage.get("output_tokens", 0)
+            total_context = input_tokens + cache_creation + cache_read
+            # Claude context window is 200K tokens
+            context_limit = 200000
+            return {
+                "total_context_tokens": total_context,
+                "output_tokens": output_tokens,
+                "context_limit": context_limit,
+                "percent": round(total_context / context_limit * 100, 1),
+            }
+        except Exception as e:
+            log.warning("Error reading context usage for %s: %s", session_id, e)
+            return None
 
     def _next_voice(self) -> tuple[str, str]:
         """Return the next unused (voice_id, display_name) from the rotation."""
@@ -298,6 +366,8 @@ class SessionManager:
                 if self.history_store:
                     self.history_store.set_claude_session_id(voice_id, claude_session_id)
 
+            session.claude_session_id = claude_session_id
+
             # Write CLAUDE.md with agent identity
             claude_md = work_dir / "CLAUDE.md"
             if resuming:
@@ -353,7 +423,8 @@ class SessionManager:
 
             # Start Claude with session ID (resume or fresh)
             import hub_config
-            model_flag = f" --model {hub_config.CLAUDE_MODEL}" if hub_config.CLAUDE_MODEL != "opus" else ""
+            session_model = session.model or hub_config.CLAUDE_MODEL
+            model_flag = f" --model {session_model}" if session_model != "opus" else ""
             if resuming:
                 claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag} --resume {claude_session_id}"
             else:

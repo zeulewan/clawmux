@@ -409,6 +409,28 @@ struct ContentView: View {
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             }
 
+            // Per-session model picker
+            if vm.activeSessionId != nil {
+                Menu {
+                    Button { vm.setSessionModel("opus") } label: {
+                        Label("Opus", systemImage: (vm.activeSession?.model ?? "") == "opus" || (vm.activeSession?.model ?? "").isEmpty ? "checkmark" : "")
+                    }
+                    Button { vm.setSessionModel("sonnet") } label: {
+                        Label("Sonnet", systemImage: (vm.activeSession?.model ?? "") == "sonnet" ? "checkmark" : "")
+                    }
+                    Button { vm.setSessionModel("haiku") } label: {
+                        Label("Haiku", systemImage: (vm.activeSession?.model ?? "") == "haiku" ? "checkmark" : "")
+                    }
+                } label: {
+                    Text(modelDisplayName(vm.activeSession?.model ?? ""))
+                        .font(.system(size: 9, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Theme.textSecondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
+            }
+
             // Mic mute (auto mode, in session)
             if vm.activeSessionId != nil && vm.isAutoMode {
                 Button { vm.micMuted.toggle() } label: {
@@ -431,6 +453,14 @@ struct ContentView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    private func modelDisplayName(_ model: String) -> String {
+        switch model {
+        case "sonnet": return "Sonnet"
+        case "haiku": return "Haiku"
+        default: return "Opus"
+        }
     }
 
     private func voiceIconName(_ voiceId: String) -> String {

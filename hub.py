@@ -466,6 +466,12 @@ async def handle_browser_message(data: dict) -> None:
         session.text_mode = (mode == "text")
         log.info("[%s] Mode set to %s", session_id, mode)
 
+    elif msg_type == "set_model":
+        model = data.get("model", "")
+        if model in ("opus", "sonnet", "haiku", ""):
+            session.model = model
+            log.info("[%s] Model set to %s", session_id, model or "(global default)")
+
 
 # --- MCP Server WebSocket (one per session) ---
 
@@ -632,7 +638,13 @@ async def set_session_speed(session_id: str, request: Request):
 @app.get("/api/history/{voice_id}")
 async def get_history(voice_id: str):
     messages = history.load(voice_id)
-    return JSONResponse({"voice_id": voice_id, "messages": messages})
+    # Include count of pending interjections so browser can style unseen messages
+    pending_count = 0
+    for s in session_mgr.sessions.values():
+        if s.voice == voice_id and s.interjections:
+            pending_count = len(s.interjections)
+            break
+    return JSONResponse({"voice_id": voice_id, "messages": messages, "pending_interjections": pending_count})
 
 
 @app.delete("/api/history/{voice_id}")
@@ -744,6 +756,17 @@ async def get_usage():
         return JSONResponse(data)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/context")
+async def get_context():
+    """Return context window usage for all active sessions."""
+    result = {}
+    for sid in session_mgr.sessions:
+        usage = session_mgr.get_context_usage(sid)
+        if usage:
+            result[sid] = usage
+    return JSONResponse(result)
 
 
 @app.get("/api/debug")
