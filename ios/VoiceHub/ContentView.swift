@@ -381,8 +381,18 @@ struct ContentView: View {
             Spacer()
 
             // Usage stats (compact)
-            if vm.usage5hPct != nil || vm.usage7dPct != nil {
+            if vm.usage5hPct != nil || vm.usage7dPct != nil || vm.contextPct != nil {
                 VStack(alignment: .trailing, spacing: 1) {
+                    if let pct = vm.contextPct {
+                        HStack(spacing: 3) {
+                            Text("ctx")
+                                .font(.system(size: 8, weight: .medium))
+                                .foregroundStyle(Theme.textTertiary)
+                            Text("\(pct)%")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundStyle(usageColor(pct))
+                        }
+                    }
                     if let pct = vm.usage5hPct {
                         HStack(spacing: 3) {
                             Text("5h")
@@ -411,15 +421,37 @@ struct ContentView: View {
 
             // Per-session model picker
             if vm.activeSessionId != nil {
+                let currentModel = vm.activeSession?.model ?? ""
                 Menu {
-                    Button { vm.setSessionModel("opus") } label: {
-                        Label("Opus", systemImage: (vm.activeSession?.model ?? "") == "opus" || (vm.activeSession?.model ?? "").isEmpty ? "checkmark" : "")
+                    Button {
+                        vm.setSessionModel("opus")
+                    } label: {
+                        HStack {
+                            Text("Opus")
+                            if currentModel == "opus" || currentModel.isEmpty {
+                                Image(systemName: "checkmark")
+                            }
+                        }
                     }
-                    Button { vm.setSessionModel("sonnet") } label: {
-                        Label("Sonnet", systemImage: (vm.activeSession?.model ?? "") == "sonnet" ? "checkmark" : "")
+                    Button {
+                        vm.setSessionModel("sonnet")
+                    } label: {
+                        HStack {
+                            Text("Sonnet")
+                            if currentModel == "sonnet" {
+                                Image(systemName: "checkmark")
+                            }
+                        }
                     }
-                    Button { vm.setSessionModel("haiku") } label: {
-                        Label("Haiku", systemImage: (vm.activeSession?.model ?? "") == "haiku" ? "checkmark" : "")
+                    Button {
+                        vm.setSessionModel("haiku")
+                    } label: {
+                        HStack {
+                            Text("Haiku")
+                            if currentModel == "haiku" {
+                                Image(systemName: "checkmark")
+                            }
+                        }
                     }
                 } label: {
                     HStack(spacing: 4) {
@@ -1283,17 +1315,6 @@ struct SettingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 .onAppear { draftURL = vm.serverURL }
-
-                Section("Model") {
-                    Picker("Claude Model", selection: $vm.selectedModel) {
-                        Text("Opus").tag("opus")
-                        Text("Sonnet").tag("sonnet")
-                        Text("Haiku").tag("haiku")
-                    }
-                    .onChange(of: vm.selectedModel) { _, v in vm.updateSetting("model", value: v) }
-                    Text("Applies to newly spawned sessions only.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
 
                 if vm.activeSessionId != nil {
                     Section("Active Session") {

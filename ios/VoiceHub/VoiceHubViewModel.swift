@@ -476,6 +476,7 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
     @Published var usage7dPct: Int?
     @Published var usage5hReset: String?
     @Published var usage7dReset: String?
+    @Published var contextPct: Int?
 
     // Computed
     var activeSession: VoiceSession? {
@@ -1760,6 +1761,24 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
                         self.usage7dReset = self.formatResetTime(resetsAt)
                     }
                 }
+            }
+        }.resume()
+
+        // Fetch context usage for active session
+        let ctxUrl = baseURL.appendingPathComponent("api/context")
+        URLSession.shared.dataTask(with: ctxUrl) { [weak self] data, _, _ in
+            guard let data,
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { return }
+            Task { @MainActor in
+                guard let self, let sid = self.activeSessionId,
+                    let ctx = json[sid] as? [String: Any],
+                    let pct = ctx["percent"] as? Int
+                else {
+                    await MainActor.run { self?.contextPct = nil }
+                    return
+                }
+                self.contextPct = pct
             }
         }.resume()
     }
