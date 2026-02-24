@@ -516,7 +516,7 @@ class SessionManager:
         session.pending_model_restart = False
         session.status = "starting"
 
-        # Close existing MCP connection first
+        # Close existing MCP connection
         if session.mcp_ws:
             try:
                 await session.mcp_ws.close(code=1001, reason="Model restart")
@@ -524,20 +524,18 @@ class SessionManager:
                 pass
             session.mcp_ws = None
 
-        # Kill all processes in the tmux session by finding the shell PID and killing its children
-        try:
-            pane_pid = await self._run(
-                f"tmux display-message -t {tmux_name} -p '#{{pane_pid}}'"
-            )
-            if pane_pid and pane_pid.strip():
-                # Kill all descendant processes of the shell
-                await self._run(f"pkill -TERM -P {pane_pid.strip()}")
-                await asyncio.sleep(2)
-                # Force kill any remaining
-                await self._run(f"pkill -9 -P {pane_pid.strip()}")
-                await asyncio.sleep(1)
-        except Exception as e:
-            log.warning("[%s] Error killing processes: %s", session_id, e)
+        # Kill the entire tmux session (cleanly kills all processes inside)
+        await self._cleanup_tmux(tmux_name)
+        await asyncio.sleep(1)
+
+        # Recreate the tmux session in the same work dir
+        work_dir = session.work_dir
+        await self._run(
+            f"tmux new-session -d -s {tmux_name} -x 200 -y 50 -c {work_dir}"
+        )
+        await self._run(
+            f'tmux send-keys -t {tmux_name} "unset CLAUDECODE" Enter'
+        )
 
         # Send marker for detecting Claude readiness
         marker = f"__CLAUDE_RESTART_{session_id[-8:]}__"
