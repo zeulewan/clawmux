@@ -1295,6 +1295,13 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Toggle("Voice Responses", isOn: $vm.voiceResponses)
+                        .onChange(of: vm.voiceResponses) { _, v in vm.updateSetting("voice_responses", value: v) }
+                } footer: {
+                    Text("When off, the agent responds with text only — no speech.")
+                }
+
+                Section {
                     Toggle("Background Mode", isOn: $vm.backgroundMode)
                 } header: {
                     Text("Background")

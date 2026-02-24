@@ -1060,6 +1060,10 @@ body {
     <span>Audio Cues</span>
     <div class="toggle-indicator on" id="toggle-audio_cues"></div>
   </div>
+  <div class="settings-toggle" onclick="toggleSetting('voice_responses')">
+    <span>Voice Responses</span>
+    <div class="toggle-indicator on" id="toggle-voice_responses"></div>
+  </div>
 
   <div style="margin-top:1.5rem;">
     <h2 style="font-size:1rem;">Usage</h2>
@@ -2115,6 +2119,7 @@ async function loadSettings() {
     setToggle('auto_interrupt', autoInterruptEnabled);
     setToggle('thinking_sounds', thinkingSoundsEnabled);
     setToggle('audio_cues', audioCuesEnabled);
+    setToggle('voice_responses', s.voice_responses !== false);
   } catch (e) {
     console.error('Failed to load settings:', e);
   }
@@ -2544,6 +2549,7 @@ function connect() {
       setToggle('auto_record', autoMode);
       setToggle('auto_end', vadEnabled);
       setToggle('auto_interrupt', autoInterruptEnabled);
+      setToggle('voice_responses', s.voice_responses !== false);
     }).catch(() => {});
     startHistorySync();
   };

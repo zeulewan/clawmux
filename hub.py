@@ -171,7 +171,9 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
     await send_to_browser({"session_id": session_id, "type": "assistant_text", "text": message})
     history.append(session.voice, session.label, "assistant", message)
 
-    if session.text_mode:
+    # Skip TTS if in text mode or voice responses disabled
+    skip_tts = session.text_mode or not _load_settings().get("voice_responses", True)
+    if skip_tts:
         # Text mode: skip TTS entirely, go straight to listen phase
         log.info("[%s] Text mode, skipping TTS: %s", session_id, message[:80])
         if not wait_for_response:
@@ -715,7 +717,7 @@ async def update_settings(request: Request):
 
 def _load_settings() -> dict:
     settings_path = Path("data/settings.json")
-    defaults = {"model": "opus", "auto_record": False, "auto_end": True, "auto_interrupt": False, "thinking_sounds": True, "audio_cues": True}
+    defaults = {"model": "opus", "auto_record": False, "auto_end": True, "auto_interrupt": False, "thinking_sounds": True, "audio_cues": True, "voice_responses": True}
     if settings_path.exists():
         try:
             stored = json.loads(settings_path.read_text())

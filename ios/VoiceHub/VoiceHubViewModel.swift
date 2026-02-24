@@ -361,6 +361,7 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
     @Published var backgroundMode: Bool {
         didSet { UserDefaults.standard.set(backgroundMode, forKey: "backgroundMode") }
     }
+    @Published var voiceResponses: Bool = true
 
     // Sound toggles — per mode
     @Published var soundThinkingAuto: Bool {
@@ -1703,6 +1704,9 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
                 }
                 if let autoInterrupt = json["auto_interrupt"] as? Bool {
                     self.autoInterrupt = autoInterrupt
+                }
+                if let voiceResp = json["voice_responses"] as? Bool {
+                    self.voiceResponses = voiceResp
                 }
             }
         }.resume()
