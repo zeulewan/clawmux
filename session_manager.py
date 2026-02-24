@@ -516,14 +516,7 @@ class SessionManager:
         session.pending_model_restart = False
         session.status = "starting"
 
-        # Send Ctrl+C to kill current Claude process
-        await self._run(f"tmux send-keys -t {tmux_name} C-c")
-        await asyncio.sleep(2)
-        # Send another Ctrl+C in case first didn't take
-        await self._run(f"tmux send-keys -t {tmux_name} C-c")
-        await asyncio.sleep(1)
-
-        # Close existing MCP connection
+        # Close existing MCP connection first
         if session.mcp_ws:
             try:
                 await session.mcp_ws.close(code=1001, reason="Model restart")
@@ -531,9 +524,26 @@ class SessionManager:
                 pass
             session.mcp_ws = None
 
+        # Send Ctrl+C to interrupt Claude Code
+        await self._run(f"tmux send-keys -t {tmux_name} C-c")
+        await asyncio.sleep(1)
+
+        # Send /exit to properly quit Claude Code
+        await self._run(f'tmux send-keys -t {tmux_name} "/exit" Enter')
+        await asyncio.sleep(2)
+
+        # Check if we're back at a shell prompt, send another Ctrl+C + /exit if needed
+        result = await self._run(f"tmux capture-pane -t {tmux_name} -p")
+        if result and ("❯" not in result.split("\\n")[-1] or "claude" in result.lower()):
+            await self._run(f"tmux send-keys -t {tmux_name} C-c")
+            await asyncio.sleep(1)
+            await self._run(f'tmux send-keys -t {tmux_name} "/exit" Enter')
+            await asyncio.sleep(2)
+
         # Send marker for detecting Claude readiness
         marker = f"__CLAUDE_RESTART_{session_id[-8:]}__"
         await self._run(f'tmux send-keys -t {tmux_name} "echo {marker}" Enter')
+        await asyncio.sleep(0.5)
 
         # Start Claude with --resume and new model
         claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag} --resume {claude_session_id}"
