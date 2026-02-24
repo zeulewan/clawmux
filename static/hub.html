@@ -1698,6 +1698,9 @@ function stopActiveAudio() {
     currentBufferedPlayer.stop();
     currentBufferedPlayer = null;
   }
+  // Clear audio playback queue
+  _audioPlayQueue.clear();
+  _audioPlaying = false;
   // Clear paused state
   playbackPaused = false;
   pausedBuffer = null;
@@ -2749,7 +2752,7 @@ function handleMessage(data) {
     s.status = 'active';
     setSessionSidebarState(session_id, 'speaking');
     if (session_id === activeSessionId) {
-      playAudio(session_id, data.data);
+      enqueueAudio(session_id, data.data);
       setStatus('Speaking...', session_id);
     } else {
       // Buffer audio for background session — don't play or ack
@@ -2843,6 +2846,35 @@ function handleMessage(data) {
 }
 
 // --- Audio playback (Web Audio API for Safari autoplay compatibility) ---
+// Per-session playback queue: if audio is already playing, queue the next chunk
+const _audioPlayQueue = new Map(); // sessionId -> [b64data, ...]
+let _audioPlaying = false; // true while a playAudio decode+play is active
+
+function enqueueAudio(sessionId, b64data) {
+  if (!_audioPlaying && !currentAudio) {
+    // Nothing playing — play immediately
+    _audioPlaying = true;
+    playAudio(sessionId, b64data);
+  } else {
+    // Something is playing — queue it
+    if (!_audioPlayQueue.has(sessionId)) _audioPlayQueue.set(sessionId, []);
+    _audioPlayQueue.get(sessionId).push(b64data);
+  }
+}
+
+function _playNextQueued(sessionId) {
+  const queue = _audioPlayQueue.get(sessionId);
+  if (queue && queue.length > 0) {
+    const next = queue.shift();
+    if (queue.length === 0) _audioPlayQueue.delete(sessionId);
+    _audioPlaying = true;
+    playAudio(sessionId, next);
+  } else {
+    _audioPlaying = false;
+    _audioPlayQueue.delete(sessionId);
+  }
+}
+
 function playAudio(sessionId, b64data) {
   const bytes = Uint8Array.from(atob(b64data), c => c.charCodeAt(0));
   const buffer = bytes.buffer;
@@ -2859,6 +2891,13 @@ function playAudio(sessionId, b64data) {
 
   const sendDone = () => {
     cleanup();
+    // Check if there's more queued audio to play before sending playback_done
+    const queue = _audioPlayQueue.get(sessionId);
+    if (queue && queue.length > 0) {
+      _playNextQueued(sessionId);
+      return; // Don't send playback_done yet — more audio to play
+    }
+    _audioPlaying = false;
     // Transition sidebar from speaking to ready now that playback ended
     setSessionSidebarState(sessionId, 'ready');
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -3107,6 +3146,9 @@ function interruptPlayback(sessionId) {
     currentBufferedPlayer.stop();
     currentBufferedPlayer = null;
   }
+  // Clear audio queue on interrupt
+  _audioPlayQueue.delete(sessionId);
+  _audioPlaying = false;
   updateMicUI();
   setStatus('Ready', sessionId);
 
