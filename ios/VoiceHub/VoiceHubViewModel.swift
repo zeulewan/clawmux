@@ -364,6 +364,17 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
     }
     @Published var voiceResponses: Bool = true
 
+    // Global master toggles
+    @Published var globalHaptics: Bool {
+        didSet { UserDefaults.standard.set(globalHaptics, forKey: "globalHaptics") }
+    }
+    @Published var globalSounds: Bool {
+        didSet { UserDefaults.standard.set(globalSounds, forKey: "globalSounds") }
+    }
+    @Published var globalNotifications: Bool {
+        didSet { UserDefaults.standard.set(globalNotifications, forKey: "globalNotifications") }
+    }
+
     // Sound toggles — per mode
     @Published var soundThinkingAuto: Bool {
         didSet { UserDefaults.standard.set(soundThinkingAuto, forKey: "soundThinkingAuto") }
@@ -533,6 +544,12 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
         self.inputMode = UserDefaults.standard.string(forKey: "inputMode") ?? "auto"
         self.backgroundMode =
             UserDefaults.standard.object(forKey: "backgroundMode") as? Bool ?? true
+        self.globalHaptics =
+            UserDefaults.standard.object(forKey: "globalHaptics") as? Bool ?? true
+        self.globalSounds =
+            UserDefaults.standard.object(forKey: "globalSounds") as? Bool ?? true
+        self.globalNotifications =
+            UserDefaults.standard.object(forKey: "globalNotifications") as? Bool ?? true
         self.soundThinkingAuto =
             UserDefaults.standard.object(forKey: "soundThinkingAuto") as? Bool ?? true
         self.soundThinkingPTT =

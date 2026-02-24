@@ -71,7 +71,7 @@ struct VoiceHubLiveActivity: Widget {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Voice Hub")
+                    Text("Claw Hub")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.secondary)
                     Text(context.state.voiceName)

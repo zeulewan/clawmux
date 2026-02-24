@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>Voice Hub</title>
+<title>Claw Hub</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%233a86ff'/><path d='M32 12a6 6 0 0 1 6 6v14a6 6 0 0 1-12 0V18a6 6 0 0 1 6-6z' fill='white'/><path d='M20 30a12 12 0 0 0 24 0' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/><line x1='32' y1='42' x2='32' y2='50' stroke='white' stroke-width='3' stroke-linecap='round'/><line x1='25' y1='50' x2='39' y2='50' stroke='white' stroke-width='3' stroke-linecap='round'/></svg>">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -944,7 +944,7 @@ body {
 <body>
 
 <div id="header">
-  <h1 onclick="showWelcome()">Voice Hub</h1>
+  <h1 onclick="showWelcome()">Claw Hub</h1>
   <span id="active-voice" style="display:none; font-size:0.85rem; font-weight:600;"></span>
   <select id="session-model" style="display:none; font-size:0.65rem; padding:2px 4px; border-radius:6px; border:1px solid var(--border); background:var(--bg-card); color:var(--text-secondary); cursor:pointer;" onchange="setSessionModel(this.value)">
     <option value="opus">Opus</option>
@@ -992,7 +992,7 @@ body {
       <button class="btn-icon transport-btn" id="transport-pause" onclick="transportPause()" title="Pause">&#9208;</button>
       <button class="btn-icon transport-btn" id="transport-next" onclick="transportNext()" title="Next">&#9197;</button>
     </div>
-    <button id="mode-toggle" onclick="cycleInputMode()"><span class="mode-label">Mode</span><span class="mode-value">Auto</span></button>
+    <button id="mode-toggle" onclick="cycleInputMode()"><span class="mode-label">Mode</span><span class="mode-value">Voice</span></button>
     <div id="status"></div>
   </div>
   <div id="mic-wrapper">
@@ -2859,16 +2859,16 @@ function handleMessage(data) {
     } else if (micMuted) {
       // Mic muted: send empty audio so hub doesn't hang
       sendSilentAudio(session_id);
-    } else if (session_id === activeSessionId && autoMode && inputMode === 'auto') {
+    } else if (session_id === activeSessionId && autoMode && inputMode === 'voice') {
       cueListening();
       startRecording(session_id);
       setSessionSidebarState(session_id, 'ready');
-    } else if (session_id === activeSessionId && (inputMode === 'ptt' || !autoMode)) {
-      // PTT or manual mode: show Record button and wait for user to press
+    } else if (session_id === activeSessionId && inputMode === 'voice' && !autoMode) {
+      // Manual voice mode: show Record button and wait for tap or Space
       cueListening();
       pendingListenSessionId = session_id;
       updateMicUI();
-      setStatus(inputMode === 'ptt' ? 'Hold Space to Talk' : 'Tap Record');
+      setStatus('Tap or Hold Space');
       setSessionSidebarState(session_id, 'ready');
     } else {
       // Background tab — mark pending
@@ -3239,8 +3239,8 @@ function interruptPlayback(sessionId) {
 let pttActive = false; // true while PTT button is held down
 
 micBtn.addEventListener('click', (e) => {
-  // In PTT mode, click is handled by mousedown/mouseup — ignore click events
-  if (inputMode === 'ptt') return;
+  // If PTT is active (spacebar held), ignore click events
+  if (pttActive) return;
   if (micBtn.disabled) return;
 
   // Interrupt: tap during playback → stop audio, hub sends listening next
@@ -3275,8 +3275,10 @@ micBtn.addEventListener('click', (e) => {
 
 // --- Push-to-Talk: hold to record, release to send ---
 function pttStart(e) {
-  if (inputMode !== 'ptt' || micBtn.disabled) return;
+  if (inputMode !== 'voice' || micBtn.disabled) return;
   e.preventDefault();
+  // Stop auto-recording if active so PTT takes over cleanly
+  if (recording && !pttActive) stopRecording(true);
   pttActive = true;
 
   // Interrupt playback if playing
@@ -3301,7 +3303,7 @@ function pttStart(e) {
 }
 
 function pttEnd(e) {
-  if (inputMode !== 'ptt' || !pttActive) return;
+  if (inputMode !== 'voice' || !pttActive) return;
   e.preventDefault();
   pttActive = false;
   if (recording) {
@@ -3315,6 +3317,25 @@ micBtn.addEventListener('mouseleave', pttEnd);
 micBtn.addEventListener('touchstart', pttStart, { passive: false });
 micBtn.addEventListener('touchend', pttEnd, { passive: false });
 micBtn.addEventListener('touchcancel', pttEnd);
+
+// Spacebar PTT: hold Space to record, release to send (works in voice mode)
+document.addEventListener('keydown', (e) => {
+  if (e.code !== 'Space' || e.repeat) return;
+  if (inputMode !== 'voice') return;
+  // Don't capture Space if user is typing in text input or any input/textarea
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+  e.preventDefault();
+  // If auto-recording, stop it first so PTT takes over
+  if (recording && !pttActive) { stopRecording(true); }
+  pttStart(e);
+});
+document.addEventListener('keyup', (e) => {
+  if (e.code !== 'Space') return;
+  if (inputMode !== 'voice') return;
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+  e.preventDefault();
+  pttEnd(e);
+});
 
 // --- Debug panel ---
 let debugActive = false;
@@ -3516,7 +3537,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 // --- Input mode (Auto / Typing) ---
-let inputMode = 'auto'; // 'auto' or 'typing'
+let inputMode = 'voice'; // 'voice' or 'typing'
 const modeToggle = document.getElementById('mode-toggle');
 const modeToggleText = document.getElementById('mode-toggle-text');
 const textInputBar = document.getElementById('text-input-bar');
@@ -3524,9 +3545,7 @@ const textInput = document.getElementById('text-input');
 const textSendBtn = document.getElementById('text-send');
 
 function cycleInputMode() {
-  if (inputMode === 'auto') inputMode = 'ptt';
-  else if (inputMode === 'ptt') inputMode = 'typing';
-  else inputMode = 'auto';
+  inputMode = inputMode === 'voice' ? 'typing' : 'voice';
   applyInputMode();
   saveInputMode();
   // Tell hub about mode change
@@ -3536,7 +3555,7 @@ function cycleInputMode() {
 }
 
 function applyInputMode() {
-  const modeText = inputMode === 'auto' ? 'Auto' : inputMode === 'ptt' ? 'PTT' : 'Typing';
+  const modeText = inputMode === 'voice' ? 'Voice' : 'Typing';
   modeToggle.innerHTML = '<span class="mode-label">Mode</span><span class="mode-value">' + modeText + '</span>';
   // Also update text-input-bar mode toggle
   if (modeToggleText) modeToggleText.querySelector('.mode-value').textContent = modeText;
@@ -3549,7 +3568,6 @@ function applyInputMode() {
     if (activeSessionId && sessions.has(activeSessionId)) {
       controls.style.display = 'flex';
     }
-    if (inputMode === 'ptt') setStatus('Hold Space to Talk');
   }
 }
 
@@ -3668,9 +3686,14 @@ function saveInputMode() {
 function restoreInputMode() {
   try {
     const saved = localStorage.getItem('hub_input_mode');
-    if (saved === 'auto' || saved === 'ptt' || saved === 'typing') {
+    if (saved === 'voice' || saved === 'typing') {
       inputMode = saved;
       applyInputMode();
+    } else if (saved === 'auto' || saved === 'ptt') {
+      // Migrate old mode names
+      inputMode = 'voice';
+      applyInputMode();
+      saveInputMode();
     }
   } catch(e) {}
 }

@@ -328,7 +328,7 @@ struct ContentView: View {
                 .font(.system(size: 44))
                 .foregroundStyle(Theme.textTertiary.opacity(0.5))
             VStack(spacing: 6) {
-                Text("Voice Hub")
+                Text("Claw Hub")
                     .font(.system(size: 20, weight: .bold, design: .rounded))
                     .foregroundStyle(Theme.textPrimary)
                 Text("Tap a voice to start a session")
@@ -358,7 +358,7 @@ struct ContentView: View {
             }
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(vm.showDebug ? "Debug" : vm.activeSession?.label ?? "Voice Hub")
+                Text(vm.showDebug ? "Debug" : vm.activeSession?.label ?? "Claw Hub")
                     .font(.system(size: 17, weight: .bold, design: .rounded))
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
@@ -1304,6 +1304,35 @@ struct SettingsView: View {
                             ForEach(SPEED_OPTIONS, id: \.value) { Text($0.label).tag($0.value) }
                         }
                     }
+                }
+
+                Section("Global") {
+                    Toggle("Haptics", isOn: $vm.globalHaptics)
+                        .onChange(of: vm.globalHaptics) { _, on in
+                            vm.hapticsRecordingAuto = on
+                            vm.hapticsPlaybackAuto = on
+                            vm.hapticsSessionAuto = on
+                            vm.hapticsRecordingPTT = on
+                            vm.hapticsPlaybackPTT = on
+                            vm.hapticsSessionPTT = on
+                            vm.hapticsSend = on
+                            vm.hapticsSessionTyping = on
+                        }
+                    Toggle("Sounds", isOn: $vm.globalSounds)
+                        .onChange(of: vm.globalSounds) { _, on in
+                            vm.soundThinkingAuto = on
+                            vm.soundListeningAuto = on
+                            vm.soundProcessingAuto = on
+                            vm.soundReadyAuto = on
+                            vm.soundThinkingPTT = on
+                            vm.soundReadyPTT = on
+                        }
+                    Toggle("Notifications", isOn: $vm.globalNotifications)
+                        .onChange(of: vm.globalNotifications) { _, on in
+                            vm.notifyAuto = on
+                            vm.notifyPTT = on
+                            vm.notifyTyping = on
+                        }
                 }
 
                 Section("Mode Settings") {
