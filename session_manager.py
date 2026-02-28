@@ -636,13 +636,17 @@ class SessionManager:
                     pass
 
     def _accept_workspace_trust(self, work_dir: str) -> None:
-        """Pre-accept Claude Code workspace trust for the session work dir."""
-        settings_path = Path.home() / ".claude" / "settings.json"
+        """Pre-accept Claude Code workspace trust for the session work dir.
+
+        Claude Code stores trust state in ~/.claude.json (not ~/.claude/settings.json).
+        """
+        claude_json_path = Path.home() / ".claude.json"
         try:
-            settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
+            settings = json.loads(claude_json_path.read_text()) if claude_json_path.exists() else {}
             projects = settings.setdefault("projects", {})
-            projects.setdefault(work_dir, {})["hasTrustDialogAccepted"] = True
-            settings_path.write_text(json.dumps(settings, indent=2))
+            proj = projects.setdefault(work_dir, {})
+            proj["hasTrustDialogAccepted"] = True
+            claude_json_path.write_text(json.dumps(settings, indent=2))
             log.info("Workspace trust pre-accepted for %s", work_dir)
         except Exception as e:
             log.warning("Could not pre-accept workspace trust: %s", e)
