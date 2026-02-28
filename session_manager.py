@@ -407,6 +407,9 @@ class SessionManager:
 
             claude_md.write_text(identity)
 
+            # Pre-accept workspace trust so Claude Code doesn't prompt on first launch
+            self._accept_workspace_trust(str(work_dir))
+
             # Create tmux session starting in the work dir
             await self._run(
                 f"tmux new-session -d -s {tmux_name} -x 200 -y 50 -c {work_dir}"
@@ -631,6 +634,18 @@ class SessionManager:
                     mcp_json.unlink()
                 except Exception:
                     pass
+
+    def _accept_workspace_trust(self, work_dir: str) -> None:
+        """Pre-accept Claude Code workspace trust for the session work dir."""
+        settings_path = Path.home() / ".claude" / "settings.json"
+        try:
+            settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
+            projects = settings.setdefault("projects", {})
+            projects.setdefault(work_dir, {})["hasTrustDialogAccepted"] = True
+            settings_path.write_text(json.dumps(settings, indent=2))
+            log.info("Workspace trust pre-accepted for %s", work_dir)
+        except Exception as e:
+            log.warning("Could not pre-accept workspace trust: %s", e)
 
     async def _cleanup_tmux(self, tmux_name: str) -> None:
         try:
