@@ -7,7 +7,7 @@ from pathlib import Path
 
 log = logging.getLogger("hub.history")
 
-HISTORY_DIR = Path(__file__).parent / "data" / "history"
+HISTORY_DIR = Path(__file__).parent.parent / "data" / "history"
 MAX_MESSAGES = 200
 CLAUDE_CONTEXT_MESSAGES = 100
 
