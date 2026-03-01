@@ -392,8 +392,11 @@ body {
   border-bottom-left-radius: 6px;
   /* Voice color background applied via JS */
 }
-.karaoke-word { transition: color 0.05s, font-weight 0.05s; }
-.karaoke-word.active { font-weight: 700; color: #fff; }
+.karaoke-word.active {
+  background: var(--voice-color-bg, transparent);
+  border-radius: 3px;
+  text-shadow: 0 0 0.6px currentColor, 0 0 0.6px currentColor;
+}
 .msg.system {
   align-self: center;
   background: none;
@@ -1787,6 +1790,10 @@ function stopActiveAudio({ stashForResume = false } = {}) {
       if (remaining.length > 0) {
         sess.audioBuffer = [...remaining, ...(sess.audioBuffer || [])];
       }
+      // Save karaoke words (strip DOM refs — they'll be stale after renderChat)
+      if (_karaokeWords && _karaokeWords.length > 0) {
+        sess.karaokeWords = _karaokeWords.map(w => ({ word: w.word, start_time: w.start_time, end_time: w.end_time }));
+      }
     }
   }
 
@@ -1804,6 +1811,7 @@ function stopActiveAudio({ stashForResume = false } = {}) {
   pausedBuffer = null;
   pauseOffset = 0;
   pausedSessionId = null;
+  _pausedKaraokeWords = null;
   stopTTSPlayback();
   karaokeStop();
   // Update sidebar state — but not if stashing for resume (session will still be 'speaking')
@@ -1845,9 +1853,12 @@ function switchTab(sessionId) {
   const activeVoiceEl = document.getElementById('active-voice');
   if (s) {
     activeVoiceEl.textContent = voiceDisplayName(s.voice);
-    activeVoiceEl.style.color = voiceColor(s.voice);
+    const vc = voiceColor(s.voice);
+    activeVoiceEl.style.color = vc;
     activeVoiceEl.style.display = 'inline';
-    document.getElementById('main-content').style.backgroundColor = hexToRgba(voiceColor(s.voice), 0.10);
+    document.getElementById('main-content').style.backgroundColor = hexToRgba(vc, 0.10);
+    document.documentElement.style.setProperty('--voice-color', vc);
+    document.documentElement.style.setProperty('--voice-color-bg', hexToRgba(vc, 0.18));
   }
 
   // Render chat messages
@@ -1878,6 +1889,15 @@ function switchTab(sessionId) {
     // Play buffered audio if any accumulated while tab was inactive
     if (s.audioBuffer && s.audioBuffer.length > 0) {
       setStatus('Playing buffered audio...');
+      // Restore karaoke words — re-apply spans after renderChat rebuilt the DOM.
+      // Check both s.karaokeWords (mid-playback stash) and _pendingKaraokeWords (pre-playback, from non-active tab).
+      const kWords = s.karaokeWords || (_pendingKaraokeWords.has(sessionId) ? _pendingKaraokeWords.get(sessionId) : null);
+      if (kWords && kWords.length > 0) {
+        const msgs = chatArea.querySelectorAll('.msg.assistant');
+        if (msgs.length) _applyKaraokeSpans(msgs[msgs.length - 1], kWords);
+        _pendingKaraokeWords.set(sessionId, kWords);
+        s.karaokeWords = null;
+      }
       playBufferedAudio(sessionId, s.audioBuffer);
       s.audioBuffer = [];
     } else if (s.pendingListen) {
@@ -1924,31 +1944,41 @@ async function playMessageTTS(btn, text, voiceId) {
   const s = activeSessionId ? sessions.get(activeSessionId) : null;
   const speed = s ? (s.speed || 1.0) : 1.0;
   try {
-    const resp = await fetch('/api/tts', {
+    const resp = await fetch('/api/tts-captioned', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, voice: voiceId || 'af_sky', speed }),
     });
     if (!resp.ok) throw new Error('TTS failed');
-    const arrayBuf = await resp.arrayBuffer();
+    const { audio_b64, words } = await resp.json();
+    const bytes = Uint8Array.from(atob(audio_b64), c => c.charCodeAt(0));
+
+    // Set up karaoke on the message element (btn's ancestor .msg)
+    const msgEl = btn.closest('.msg');
+    const realWords = words ? words.filter(w => /\w/.test(w.word)) : [];
+    if (msgEl && realWords.length) _applyKaraokeSpans(msgEl, realWords);
 
     // Decode and play via AudioContext (integrates with transport bar)
     const ready = audioCtx.state === 'suspended' ? audioCtx.resume() : Promise.resolve();
     await ready;
-    const decoded = await audioCtx.decodeAudioData(arrayBuf);
+    const decoded = await audioCtx.decodeAudioData(bytes.buffer);
     const playbackId = Symbol();
     _ttsPlaybackId = playbackId;
     const source = audioCtx.createBufferSource();
     source.buffer = decoded;
     source.connect(audioCtx.destination);
-    currentAudio = { source, sessionId: activeSessionId || '__tts__', decodedBuffer: decoded, playbackId };
-    playbackStartTime = audioCtx.currentTime;
+    const startT = audioCtx.currentTime;
+    currentAudio = { source, sessionId: activeSessionId || '__tts__', decodedBuffer: decoded, playbackId, b64data: audio_b64, _startTime: startT };
+    playbackStartTime = startT;
     playbackPaused = false;
+
+    if (realWords.length) karaokeStart(currentAudio, realWords);
 
     btn.textContent = '■';
 
     source.onended = () => {
       if (!playbackPaused) {
+        karaokeStop();
         currentAudio = null;
         if (_ttsPlaybackId === playbackId) stopTTSPlayback();
         updateTransportBar();
@@ -2452,9 +2482,10 @@ function transportPause() {
     const source = audioCtx.createBufferSource();
     source.buffer = pausedBuffer;
     source.connect(audioCtx.destination);
-    currentAudio = { source, sessionId: pausedSessionId, decodedBuffer: pausedBuffer };
+    currentAudio = { source, sessionId: pausedSessionId, decodedBuffer: pausedBuffer, _startTime: audioCtx.currentTime - pauseOffset };
     playbackStartTime = audioCtx.currentTime - pauseOffset;
     playbackPaused = false;
+    if (_pausedKaraokeWords) { karaokeStart(currentAudio, _pausedKaraokeWords); _pausedKaraokeWords = null; }
     source.onended = () => {
       if (!playbackPaused) {
         currentAudio = null;
@@ -2482,6 +2513,7 @@ function transportPause() {
     pauseOffset = audioCtx.currentTime - playbackStartTime;
     pausedBuffer = currentAudio.decodedBuffer || null;
     pausedSessionId = currentAudio.sessionId;
+    _pausedKaraokeWords = _karaokeWords ? [..._karaokeWords] : null;
     playbackPaused = true;
     try { currentAudio.source.onended = null; currentAudio.source.stop(); } catch(e) {}
     currentAudio = null;
@@ -3152,6 +3184,7 @@ function playAudio(sessionId, b64data, startOffset = 0) {
 let _karaokeRaf = null;
 let _karaokeWords = null;   // [{word, start_time, end_time, el}] for real words with span refs
 let _karaokeAudioRef = null; // reference to currentAudio at karaoke start
+let _pausedKaraokeWords = null; // saved karaoke words across transport pause/resume
 let _karaokeActiveIdx = -1;
 
 // Per-session pending words (waiting for audio to start)
@@ -3218,19 +3251,18 @@ function _karaokeFrame() {
   if (startTime == null) { _karaokeRaf = requestAnimationFrame(_karaokeFrame); return; }
   const elapsed = audioCtx.currentTime - startTime;
 
-  // Find active word
+  // Find active word — keep previous active until a new one starts (no gap flash)
   let newIdx = -1;
   for (let i = 0; i < _karaokeWords.length; i++) {
     const w = _karaokeWords[i];
     if (elapsed >= w.start_time && elapsed < w.end_time) { newIdx = i; break; }
   }
-  if (newIdx !== _karaokeActiveIdx) {
+  // Only update when we have a new positive match (don't clear on gap between words)
+  if (newIdx >= 0 && newIdx !== _karaokeActiveIdx) {
     if (_karaokeActiveIdx >= 0 && _karaokeWords[_karaokeActiveIdx].el) {
       _karaokeWords[_karaokeActiveIdx].el.classList.remove('active');
     }
-    if (newIdx >= 0 && _karaokeWords[newIdx].el) {
-      _karaokeWords[newIdx].el.classList.add('active');
-    }
+    _karaokeWords[newIdx].el.classList.add('active');
     _karaokeActiveIdx = newIdx;
   }
   _karaokeRaf = requestAnimationFrame(_karaokeFrame);
@@ -3302,6 +3334,9 @@ function playBufferedAudio(sessionId, chunks) {
         currentAudio = { source, sessionId, decodedBuffer: decoded, b64data, _startTime: audioCtx.currentTime - offset };
         playbackStartTime = audioCtx.currentTime;
         playbackPaused = false;
+        // Start karaoke if pending words exist (e.g. restored after tab switch)
+        const pendingWords = _pendingKaraokeWords.get(sessionId);
+        if (pendingWords) { _pendingKaraokeWords.delete(sessionId); karaokeStart(currentAudio, pendingWords); }
         source.onended = () => { if (!playbackPaused) { currentAudio = null; playNext(); } };
         source.start(0, offset > 0 ? offset : 0);
         updateTransportBar();
@@ -3788,6 +3823,13 @@ document.addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     hideContextMenu();
+    // Cancel any active recording (PTT or manual)
+    if (recording) {
+      if (pttActive) {
+        pttActive = false;
+      }
+      stopRecording(true); // discard audio
+    }
   }
 });
 
