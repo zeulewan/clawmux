@@ -4,19 +4,7 @@
 
 Voice Hub is an MCP server that bridges browser audio with a persistent Claude Code session. Claude calls a `converse()` tool to speak and listen — audio flows between the browser and server over WebSocket, with local Whisper STT and Kokoro TTS handling speech processing. All audio stays on your network.
 
-```mermaid
-flowchart LR
-    Browser["Browser\n(Mac/iPhone)"]
-    MCP["MCP Server\n(mcp_server.py)"]
-    CC["Claude Code\n(persistent session)"]
-    Whisper["Whisper STT\n(GPU, port 2022)"]
-    Kokoro["Kokoro TTS\n(GPU, port 8880)"]
-
-    CC <-->|"stdio\n(MCP protocol)"| MCP
-    Browser <-->|"WebSocket\n(JSON + base64)"| MCP
-    MCP -->|"POST audio"| Whisper
-    MCP -->|"POST text"| Kokoro
-```
+Claude Code communicates with the MCP server over stdio (MCP protocol). The browser connects to the MCP server via WebSocket (JSON + base64 audio). The MCP server sends audio to Whisper for transcription and text to Kokoro for synthesis, both running on the GPU.
 
 ## How It Works
 
@@ -91,21 +79,4 @@ Single HTML page with vanilla JavaScript. Connects via WebSocket and handles:
 
 All traffic between the browser and server flows over Tailscale's WireGuard tunnel. The server communicates with local services on `127.0.0.1`. No ports are exposed to the public internet.
 
-```mermaid
-flowchart TB
-    subgraph tailnet["Tailscale Network"]
-        Mac["Mac/iPhone Browser"]
-        subgraph workstation["Workstation"]
-            TS["tailscale serve\n(:3456 HTTPS → WSS)"]
-            MCP["MCP Server\n(:3456)"]
-            W["Whisper\n(:2022)"]
-            K["Kokoro\n(:8880)"]
-            CC["Claude Code"]
-        end
-    end
-    Mac -->|"WireGuard"| TS
-    TS -->|"localhost"| MCP
-    MCP -->|"localhost"| W
-    MCP -->|"localhost"| K
-    CC <-->|"stdio"| MCP
-```
+Browser traffic from your Mac or iPhone travels over the Tailscale WireGuard tunnel to `tailscale serve` on the workstation, which proxies it to the MCP server on localhost. The MCP server talks to Whisper (port 2022) and Kokoro (port 8880) locally, and communicates with Claude Code over stdio. No ports are exposed to the public internet.

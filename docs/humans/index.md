@@ -11,33 +11,6 @@ Voice Hub lets you talk to Claude Code with your voice. Run multiple voice agent
 
 ## How It Works
 
-```mermaid
-flowchart LR
-    You["🎤 You"]
-    Browser["Browser"]
-    Hub["Voice Hub"]
-    Whisper["Whisper STT"]
-    Kokoro["Kokoro TTS"]
-    A["🤖 Sky"]
-    B["🤖 Adam"]
-    C["🤖 Fable"]
-
-    You -->|speak| Browser
-    Browser -->|audio| Hub
-    Hub -->|transcribe| Whisper
-    Whisper -->|text| Hub
-    Hub -->|request| A
-    Hub -->|request| B
-    Hub -->|request| C
-    A -->|response| Hub
-    B -->|response| Hub
-    C -->|response| Hub
-    Hub -->|synthesize| Kokoro
-    Kokoro -->|audio| Hub
-    Hub -->|play| Browser
-    Browser -->|hear| You
-```
-
 You speak into your browser. The hub sends your audio to Whisper (running on your GPU) to turn it into text, then forwards it to the right Claude agent. Claude does the work — edits files, runs commands, whatever you asked — and responds. The hub sends that response to Kokoro (also on your GPU) to turn it into speech, and you hear it back. All local, all private.
 
 ## Prerequisites

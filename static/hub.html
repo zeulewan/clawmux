@@ -576,15 +576,17 @@ body {
 /* Controls — grid: top row = waveform/transport, bottom = mode | mic | status */
 #controls {
   display: grid;
-  grid-template-columns: auto auto auto;
+  grid-template-columns: 1fr auto 1fr;
   grid-template-rows: auto auto;
   align-items: center;
-  justify-content: center;
   padding: 8px 16px;
   padding-bottom: max(10px, env(safe-area-inset-bottom));
-  gap: 2px 24px;
+  gap: 2px 0;
   background: transparent;
   border-top: 1px solid var(--border);
+  max-width: 360px;
+  margin-left: auto;
+  margin-right: auto;
   flex-shrink: 0;
   position: relative;
 }
@@ -703,8 +705,13 @@ body {
   transition: all 0.15s;
 }
 .btn-icon:hover { border-color: var(--border-light); color: var(--text-secondary); background: var(--bg-card); }
-#mic-cancel { border-color: var(--red); color: var(--red); width: 36px; height: 36px; font-size: 0.75rem; flex-shrink: 0; }
+#mic-cancel, #mic-mute { width: 36px; height: 36px; font-size: 0.75rem; flex-shrink: 0; }
+#mic-cancel { border-color: var(--red); color: var(--red); }
 #mic-cancel:hover { background: var(--red-dim); color: #ff6b7f; }
+#mic-mute { color: var(--text-tertiary); }
+#mic-mute:hover { color: var(--text-secondary); }
+#mic-mute.muted { color: var(--red); border-color: var(--red); }
+#mic-mute.muted:hover { background: var(--red-dim); color: #ff6b7f; }
 /* Options menu */
 /* Context menu */
 #context-menu {
@@ -924,7 +931,7 @@ body {
   /* Controls: mobile size overrides */
   #controls { padding: 6px 12px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
   #mic { width: 52px; height: 52px; }
-  #mic-cancel { width: 30px; height: 30px; }
+  #mic-cancel, #mic-mute { width: 30px; height: 30px; }
   .btn-icon { width: 38px; height: 38px; }
   .transport-btn { width: 28px; height: 28px; font-size: 0.85rem; }
   #waveform { height: 12px !important; }
@@ -983,7 +990,7 @@ body {
 
 <div id="header">
   <h1 onclick="showWelcome()">Claw Hub</h1>
-  <span id="active-voice" style="display:none; font-size:0.85rem; font-weight:600;"></span>
+  <span id="active-voice" style="display:none; font-size:1.1rem; font-weight:700;"></span>
   <select id="session-model" style="display:none; font-size:0.65rem; padding:2px 4px; border-radius:6px; border:1px solid var(--border); background:var(--bg-card); color:var(--text-secondary); cursor:pointer;" onchange="setSessionModel(this.value)">
     <option value="opus">Opus</option>
     <option value="sonnet">Sonnet</option>
@@ -1035,6 +1042,7 @@ body {
   </div>
   <div id="mic-wrapper">
     <button id="mic-cancel" class="btn-icon" style="display:none;" title="Cancel recording" onclick="cancelRecording()">&#10005;</button>
+    <button id="mic-mute" class="btn-icon" title="Mute microphone" onclick="toggleMicMute()"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg></button>
     <button id="mic" disabled><svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg></button>
   </div>
   <div id="controls-right">
@@ -1215,6 +1223,7 @@ const controls = document.getElementById('controls');
 const statusEl = document.getElementById('status');
 const micBtn = document.getElementById('mic');
 const micCancelBtn = document.getElementById('mic-cancel');
+const micMuteBtn = document.getElementById('mic-mute');
 const dot = document.getElementById('dot');
 const connLabel = document.getElementById('conn-label');
 
@@ -1741,6 +1750,8 @@ function renderVoiceGridIfActive() { renderSidebar(); }
 
 function stopActiveAudio() {
   // Stop currently playing audio (Web Audio sources can't be paused/resumed)
+  const stoppedSessionId = (currentAudio && currentAudio.sessionId) ||
+                           (currentBufferedPlayer && currentBufferedPlayer.sessionId) || null;
   if (currentAudio) {
     if (currentAudio.source) { try { currentAudio.source.onended = null; currentAudio.source.stop(); } catch(e) {} }
     currentAudio = null;
@@ -1760,6 +1771,15 @@ function stopActiveAudio() {
   pausedSessionId = null;
   // Clean up TTS play button state
   stopTTSPlayback();
+  // Fix the session sidebar state — it was left as 'speaking'
+  if (stoppedSessionId) {
+    const sess = sessions.get(stoppedSessionId);
+    if (sess && sess.isThinking) {
+      setSessionSidebarState(stoppedSessionId, 'thinking');
+    } else {
+      setSessionSidebarState(stoppedSessionId, 'ready');
+    }
+  }
   updateMicUI();
 }
 
@@ -1826,18 +1846,16 @@ function switchTab(sessionId) {
       playBufferedAudio(sessionId, s.audioBuffer);
       s.audioBuffer = [];
     } else if (s.pendingListen) {
-      // Session was waiting for mic input
+      // Session was waiting for mic input — don't play cue on tab switch
       s.pendingListen = false;
       if (micMuted) {
         sendSilentAudio(sessionId);
       } else if (autoMode) {
-        cueListening();
         startRecording(sessionId);
       } else {
-        cueListening();
         pendingListenSessionId = sessionId;
         updateMicUI();
-        setStatus('Tap Record');
+        setStatus(isMobile ? 'Tap to Record' : 'Tap or Hold Space');
       }
     }
   }
@@ -2120,6 +2138,14 @@ function toggleMicMute() {
   if (persistentStream) {
     persistentStream.getAudioTracks().forEach(t => { t.enabled = !micMuted; });
   }
+  updateMuteUI();
+}
+const MIC_MUTE_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>';
+const MIC_MUTED_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/></svg>';
+function updateMuteUI() {
+  micMuteBtn.classList.toggle('muted', micMuted);
+  micMuteBtn.innerHTML = micMuted ? MIC_MUTED_SVG : MIC_MUTE_SVG;
+  micMuteBtn.title = micMuted ? 'Unmute microphone' : 'Mute microphone';
 }
 
 // --- Voice selector ---
@@ -2958,31 +2984,35 @@ function handleMessage(data) {
     s.awaitingInput = false;
     s.statusText = 'Ready';
     s.status = 'ready';
-    // Always clear thinking state first
-    hideThinking(session_id);
-    stopThinkingSound();
-    // Keep speaking state if audio is still playing or session has unread messages
-    const isPlaying = (currentAudio && currentAudio.sessionId === session_id) ||
-                      (currentBufferedPlayer && currentBufferedPlayer.sessionId === session_id);
-    if (isPlaying || (s.unreadCount || 0) > 0) {
-      // Leave sidebar as 'speaking' — will transition to ready when playback ends or tab switches
-    } else {
-      setSessionSidebarState(session_id, 'ready');
-    }
     if (session_id === activeSessionId) {
-      setStatus('Ready', session_id);
       micBtn.disabled = false;
       updateMicUI();
     }
-    // Re-show thinking if agent is still processing (wait_for_response=false or user spoke this cycle)
+    // Decide next state cleanly (no hide-then-show flash)
     if (data.processing || s.userSpokeThisCycle) {
+      // Agent still processing — stay in or transition to thinking
       s.userSpokeThisCycle = false;
       showThinking(session_id);
       startThinkingSound(session_id);
       setSessionSidebarState(session_id, 'thinking');
-      // Start listening for interjections via VAD
       if (session_id === activeSessionId) {
+        setStatus('Thinking...', session_id);
         startThinkingVAD(session_id);
+      }
+    } else {
+      // Agent done — clear thinking state
+      hideThinking(session_id);
+      stopThinkingSound();
+      const isPlaying = (currentAudio && currentAudio.sessionId === session_id) ||
+                        (currentBufferedPlayer && currentBufferedPlayer.sessionId === session_id) ||
+                        (s.audioBuffer && s.audioBuffer.length > 0);
+      if (isPlaying || (s.unreadCount || 0) > 0) {
+        // Leave sidebar as 'speaking' — will transition to ready when playback ends or tab switches
+      } else {
+        setSessionSidebarState(session_id, 'ready');
+      }
+      if (session_id === activeSessionId) {
+        setStatus('Ready', session_id);
       }
     }
   } else if (type === 'session_ended') {
@@ -3102,7 +3132,13 @@ function playBufferedAudio(sessionId, chunks) {
       playbackPaused = false;
       updateMicUI();
       updateTransportBar();
-      setSessionSidebarState(sessionId, 'ready');
+      // Transition sidebar: thinking if agent still processing, else ready
+      const sess = sessions.get(sessionId);
+      if (sess && sess.isThinking) {
+        setSessionSidebarState(sessionId, 'thinking');
+      } else {
+        setSessionSidebarState(sessionId, 'ready');
+      }
       if (!stopped && ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ session_id: sessionId, type: 'playback_done' }));
       }
@@ -3145,26 +3181,30 @@ function updateMicUI() {
   micBtn.classList.remove('recording', 'interruptable', 'processing');
 
   if (isPlaying) {
-    // During playback: show interrupt button
+    // During playback: show interrupt button + mute
     micBtn.style.display = 'flex';
     micBtn.disabled = false;
     micBtn.classList.add('interruptable');
     micBtn.innerHTML = MIC_INTERRUPT_SVG;
     micCancelBtn.style.display = 'none';
+    micMuteBtn.style.display = 'flex';
   } else if (recording) {
-    // Recording: show Send + Cancel
+    // Recording: show Send + Cancel, hide mute
     micBtn.style.display = 'flex';
     micBtn.classList.add('recording');
     micBtn.innerHTML = MIC_SEND_SVG;
     micBtn.disabled = false;
     micCancelBtn.style.display = 'flex';
+    micMuteBtn.style.display = 'none';
   } else {
-    // Idle: always show Record button so user can initiate
+    // Idle: show Record + mute
     micCancelBtn.style.display = 'none';
+    micMuteBtn.style.display = 'flex';
     micBtn.style.display = 'flex';
     micBtn.innerHTML = MIC_SVG;
     micBtn.disabled = false;
   }
+  updateMuteUI();
 }
 
 // --- Persistent mic stream ---
@@ -3618,8 +3658,10 @@ const modeToggleText = document.getElementById('mode-toggle-text');
   const controlsRight = document.getElementById('controls-right');
   // Move status to the right side
   controlsRight.appendChild(document.getElementById('status'));
-  // Move mode toggle to left side
+  // Move mode toggle and cancel button to left side
   controlsLeft.appendChild(modeToggle);
+  controlsLeft.appendChild(document.getElementById('mic-cancel'));
+  controlsLeft.appendChild(document.getElementById('mic-mute'));
   // Create a top row for waveform and transport bar
   const topRow = document.createElement('div');
   topRow.id = 'controls-top';
@@ -3931,12 +3973,56 @@ function startUsagePolling() {
   usageTimer = setInterval(fetchUsage, 60000); // refresh every minute
 }
 
+// --- Periodic state sync (self-healing for missed WebSocket messages) ---
+let _stateSyncTimer = null;
+function startStateSync() {
+  if (_stateSyncTimer) return;
+  _stateSyncTimer = setInterval(syncProcessingState, 5000);
+}
+function stopStateSync() {
+  if (_stateSyncTimer) { clearInterval(_stateSyncTimer); _stateSyncTimer = null; }
+}
+async function syncProcessingState() {
+  try {
+    const resp = await fetch('/api/sessions');
+    if (!resp.ok) return;
+    const serverSessions = await resp.json();
+    for (const srv of serverSessions) {
+      const s = sessions.get(srv.session_id);
+      if (!s) continue;
+      // Fix drift: server says processing but browser doesn't show thinking
+      if (srv.processing && !s.isThinking && !s.awaitingInput) {
+        console.log('[state-sync] Restoring thinking state for', srv.session_id);
+        showThinking(srv.session_id);
+        startThinkingSound(srv.session_id);
+        setSessionSidebarState(srv.session_id, 'thinking');
+        if (srv.session_id === activeSessionId) {
+          setStatus('Thinking...', srv.session_id);
+          startThinkingVAD(srv.session_id);
+        }
+      }
+      // Fix drift: server says NOT processing but browser stuck in thinking
+      if (!srv.processing && !srv.in_converse && s.isThinking && !s.awaitingInput) {
+        console.log('[state-sync] Clearing stale thinking state for', srv.session_id);
+        hideThinking(srv.session_id);
+        stopThinkingSound();
+        setSessionSidebarState(srv.session_id, 'ready');
+        if (srv.session_id === activeSessionId) {
+          setStatus('Ready', srv.session_id);
+        }
+      }
+    }
+  } catch (e) { /* network error — ignore */ }
+}
+
 // --- Init ---
 restoreInputMode();
 renderSidebar();
 connect();
 loadSettings();
 startUsagePolling();
+startStateSync();
+updateMuteUI();
 </script>
 </body>
 </html>

@@ -87,6 +87,37 @@ Then open `https://<your-machine>.ts.net:3456` from any device on your tailnet.
 5. Claude processes your request using its full tool set, then speaks the response
 6. Continue the conversation until you say goodbye
 
+## Managing the Hub
+
+Use the included script to start the hub — it kills any existing instances first to prevent duplicates:
+
+```bash
+cd ~/GIT/voice-chat
+./start-hub.sh
+```
+
+To keep it running after your terminal closes, use tmux:
+
+```bash
+tmux new-session -d -s voice-hub 'cd ~/GIT/voice-chat && ./start-hub.sh'
+```
+
+Stop it:
+
+```bash
+tmux kill-session -t voice-hub
+```
+
+Or kill the process directly:
+
+```bash
+pkill -f hub.py
+```
+
+!!! warning "Don't use `python hub.py` directly"
+
+    Running `.venv/bin/python hub.py` directly will spawn a new instance without stopping any existing ones. Over time this causes orphaned processes to accumulate (one per session). Always use `./start-hub.sh` instead.
+
 ## Troubleshooting
 
 **MCP tools not found:** Wait 10 seconds after starting Claude Code for the MCP server to initialize, then try again.
