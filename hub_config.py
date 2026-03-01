@@ -5,7 +5,7 @@ import time
 
 HUB_PORT = int(os.environ.get("VOICE_CHAT_HUB_PORT", "3460"))
 HUB_START_TIME = time.time()
-SESSION_TIMEOUT_MINUTES = int(os.environ.get("VOICE_CHAT_TIMEOUT", "120"))
+SESSION_TIMEOUT_MINUTES = int(os.environ.get("VOICE_CHAT_TIMEOUT", "0"))  # 0 = never timeout
 HEALTH_CHECK_INTERVAL_SECONDS = 15
 CLAUDE_BASE_COMMAND = "claude --dangerously-skip-permissions"
 CLAUDE_MODEL = os.environ.get("VOICE_CHAT_MODEL", "opus")  # opus, sonnet, haiku

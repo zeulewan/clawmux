@@ -602,6 +602,9 @@ async def spawn_session(request: Request):
         label = body.get("label", "")
         voice = body.get("voice", "")
         session = await session_mgr.spawn_session(label, voice)
+        # Show thinking indicator while agent prepares its opening greeting
+        session.processing = True
+        await send_to_browser({"session_id": session.session_id, "type": "thinking"})
         return JSONResponse(session.to_dict())
     except RuntimeError as e:
         return JSONResponse({"error": str(e)}, status_code=503)

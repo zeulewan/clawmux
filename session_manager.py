@@ -619,10 +619,11 @@ class SessionManager:
                     del self.sessions[session_id]
                     continue
 
-                idle = now - session.last_activity
-                if idle > timeout:
-                    log.info("Session %s timed out (%.0fs idle)", session_id, idle)
-                    await self.terminate_session(session_id)
+                if timeout > 0:
+                    idle = now - session.last_activity
+                    if idle > timeout:
+                        log.info("Session %s timed out (%.0fs idle)", session_id, idle)
+                        await self.terminate_session(session_id)
 
     def _cleanup_workdir(self, session: Session) -> None:
         # Don't delete voice work dirs — they persist for --resume
