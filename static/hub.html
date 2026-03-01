@@ -263,10 +263,7 @@ body {
   font-size: 1.1rem;
   font-weight: 700;
   letter-spacing: -0.02em;
-  cursor: pointer;
-  transition: color 0.2s;
 }
-#header h1:hover { color: var(--blue); }
 #dot {
   width: 8px;
   height: 8px;
@@ -1042,7 +1039,7 @@ body {
 <body>
 
 <div id="header">
-  <h1 onclick="showWelcome()">ClawMux</h1>
+  <h1>ClawMux</h1>
   <span id="active-voice" style="display:none; font-size:1.1rem; font-weight:700;"></span>
   <select id="session-model" style="display:none; font-size:0.65rem; padding:2px 4px; border-radius:6px; border:1px solid var(--border); background:var(--bg-card); color:var(--text-secondary); cursor:pointer;" onchange="setSessionModel(this.value)">
     <option value="opus">Opus</option>
@@ -1069,7 +1066,7 @@ body {
 <div id="sidebar">
   <div id="sidebar-list"></div>
   <div class="sidebar-focus-card" id="focus-card" onclick="switchToFocus()">
-    <div class="sidebar-focus-icon">&#x1F3AF;</div>
+    <div class="sidebar-focus-icon"><svg viewBox="0 0 24 24" fill="currentColor" style="width:1em;height:1em"><path fill-rule="evenodd" d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm0 3a7 7 0 1 1 0 14A7 7 0 0 1 12 5zm0 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/></svg></div>
     <span>Focus</span>
   </div>
   <div id="sidebar-expand-btn" style="display:none; align-items:center; justify-content:center; padding:8px; cursor:pointer; border-top:1px solid var(--border); color:var(--text-tertiary); font-size:0.7rem;" onclick="toggleSidebarExpand()">&#9776;</div>
