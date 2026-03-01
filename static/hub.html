@@ -1800,7 +1800,7 @@ function renderSidebar() {
       card._voiceSpawning = state.isSpawning;
       card.onclick = () => {
         if (card._voiceSpawning) return;
-        if (card._voiceSession) { switchTab(card._voiceSession.session_id); }
+        if (card._voiceSession) { switchTab(card._voiceSession.session_id, true); }
         else { spawnSession(voiceId); }
       };
       card.oncontextmenu = (e) => {
@@ -1911,9 +1911,9 @@ function stopActiveAudio({ stashForResume = false } = {}) {
   updateMicUI();
 }
 
-function switchTab(sessionId) {
-  // Don't auto-switch into agent tabs if focus mode is active
-  if (focusMode) return;
+function switchTab(sessionId, manual = false) {
+  // Block auto-switches in focus mode; allow manual clicks to exit focus
+  if (focusMode && !manual) return;
   hideDebugPanel();
   exitFocusMode();
   // Stop audio and recording from the tab we're leaving
@@ -2350,7 +2350,7 @@ function showSettingsPage() {
   if (document.getElementById('settings-page').style.display === 'block') {
     document.getElementById('settings-page').style.display = 'none';
     if (_preSettingsSessionId && sessions.has(_preSettingsSessionId)) {
-      switchTab(_preSettingsSessionId);
+      switchTab(_preSettingsSessionId, true);
     } else {
       showWelcome();
     }
