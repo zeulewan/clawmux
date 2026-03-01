@@ -120,37 +120,47 @@ async def converse(
     if hub_ws is None:
         return "Error: Not connected to hub."
 
-    try:
-        await hub_ws.send(json.dumps({
-            "type": "converse",
-            "message": message,
-            "wait_for_response": wait_for_response,
-            "voice": voice,
-            "goodbye": goodbye,
-        }))
+    payload = json.dumps({
+        "type": "converse",
+        "message": message,
+        "wait_for_response": wait_for_response,
+        "voice": voice,
+        "goodbye": goodbye,
+    })
 
-        # Wait for result from hub
-        while True:
-            raw = await hub_ws.recv()
-            data = json.loads(raw)
-            if data["type"] == "converse_result":
-                text = data["text"]
-                log(f"converse() result: {text!r:.100}")
-                return text
+    for attempt in range(2):
+        try:
+            await hub_ws.send(payload)
 
-    except ConnectionClosed:
-        log("Hub connection lost during converse(), waiting for reconnect...")
-        hub_ws = None
-        # Wait for reconnection (up to 30s)
-        for _ in range(15):
-            await asyncio.sleep(2)
-            if hub_ws is not None:
-                log("Reconnected after hub restart")
-                return "(hub reconnected)"
-        return "Error: Lost connection to hub and could not reconnect."
-    except Exception as e:
-        log(f"converse() error: {e}")
-        return f"Error: {e}"
+            # Wait for result from hub
+            while True:
+                raw = await hub_ws.recv()
+                data = json.loads(raw)
+                if data["type"] == "converse_result":
+                    text = data["text"]
+                    log(f"converse() result: {text!r:.100}")
+                    return text
+
+        except ConnectionClosed:
+            log("Hub connection lost during converse(), waiting for reconnect...")
+            hub_ws = None
+            if attempt == 0:
+                # Wait up to 30s for reconnection, then re-try the converse
+                for _ in range(15):
+                    await asyncio.sleep(2)
+                    if hub_ws is not None:
+                        log("Reconnected after hub restart, re-sending converse...")
+                        break
+                else:
+                    return "Error: Lost connection to hub and could not reconnect."
+                continue  # retry with the new hub_ws
+            return "(hub reconnected)"  # second failure — give up and signal
+
+        except Exception as e:
+            log(f"converse() error: {e}")
+            return f"Error: {e}"
+
+    return "(hub reconnected)"
 
 
 @mcp.tool
