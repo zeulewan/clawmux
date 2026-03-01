@@ -41,7 +41,7 @@ If anything is missing, Claude will walk you through it.
 
 ## Using It
 
-1. Start the hub: `python hub.py` (from the voice-hub directory)
+1. Start the hub: `./start-hub.sh` (from the voice-hub directory)
 2. Open the URL in your browser
 3. Click a voice card to start a session
 4. Talk. Claude listens, works, and speaks back.

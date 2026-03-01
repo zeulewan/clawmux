@@ -1,5 +1,5 @@
 [project]
-docs_dir = "zensical"
+
 site_name = "Voice Hub Docs"
 site_description = "Multi-session voice interface for Claude Code with local Whisper STT and Kokoro TTS."
 site_author = "Zeul"
@@ -10,6 +10,7 @@ copyright = "&copy; 2026 Zeul Mordasiewicz"
 
 
 [project.theme]
+favicon = "assets/images/favicon.svg"
 language = "en"
 features = [
     "content.code.copy",

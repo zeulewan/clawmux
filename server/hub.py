@@ -100,6 +100,27 @@ async def tts(text: str, voice: str = "af_sky", speed: float = 1.0) -> bytes:
     raise last_err
 
 
+async def tts_captioned(text: str, voice: str = "af_sky", speed: float = 1.0) -> tuple[str, list]:
+    """Text → (audio_b64, word_timestamps) via Kokoro captioned speech endpoint."""
+    last_err = None
+    for attempt in range(3):
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post(
+                    f"{KOKORO_URL}/dev/captioned_speech",
+                    json={"input": text, "voice": voice, "speed": speed, "stream": False, "return_timestamps": True},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                return data["audio"], data.get("timestamps", [])
+        except Exception as e:
+            last_err = e
+            if attempt < 2:
+                log.warning("TTS captioned attempt %d failed: %s, retrying...", attempt + 1, e)
+                await asyncio.sleep(1 * (attempt + 1))
+    raise last_err
+
+
 async def stt(audio_bytes: bytes) -> str:
     """Audio bytes → text via Whisper. Retries up to 3 times on failure."""
     last_err = None
@@ -162,17 +183,21 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
         session.touch()
         return text
 
-    # Signal that Claude is about to speak (lets client show thinking indicator)
-    await send_to_browser({"session_id": session_id, "type": "thinking"})
+    # Empty message = silent listen (skip TTS and chat display entirely)
+    silent = not message
 
-    # Send assistant text to browser for chat display
-    if session_id != _browser_viewed_session:
-        session.unread_count += 1
-    await send_to_browser({"session_id": session_id, "type": "assistant_text", "text": message})
-    history.append(session.voice, session.label, "assistant", message)
+    if not silent:
+        # Signal that Claude is about to speak (lets client show thinking indicator)
+        await send_to_browser({"session_id": session_id, "type": "thinking"})
 
-    # Skip TTS if in text mode or voice responses disabled
-    skip_tts = session.text_mode or not _load_settings().get("voice_responses", True)
+        # Send assistant text to browser for chat display
+        if session_id != _browser_viewed_session:
+            session.unread_count += 1
+        await send_to_browser({"session_id": session_id, "type": "assistant_text", "text": message})
+        history.append(session.voice, session.label, "assistant", message)
+
+    # Skip TTS if silent, in text mode, or voice responses disabled
+    skip_tts = silent or session.text_mode or not _load_settings().get("voice_responses", True)
     if skip_tts:
         # Text mode: skip TTS entirely, go straight to listen phase
         log.info("[%s] Text mode, skipping TTS: %s", session_id, message[:80])
@@ -190,12 +215,20 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
 
         # TTS
         log.info("[%s] TTS: %s", session_id, message[:80])
-        mp3 = await tts(message, voice, speed)
-        audio_b64 = base64.b64encode(mp3).decode()
+        try:
+            audio_b64, word_timestamps = await tts_captioned(message, voice, speed)
+        except Exception as e:
+            log.warning("[%s] Captioned TTS failed (%s), falling back to plain TTS", session_id, e)
+            mp3 = await tts(message, voice, speed)
+            audio_b64 = base64.b64encode(mp3).decode()
+            word_timestamps = []
 
         # Send audio to browser
         session.playback_done.clear()
-        has_clients = await send_to_browser({"session_id": session_id, "type": "audio", "data": audio_b64})
+        audio_msg = {"session_id": session_id, "type": "audio", "data": audio_b64}
+        if word_timestamps:
+            audio_msg["words"] = word_timestamps
+        has_clients = await send_to_browser(audio_msg)
 
         if not has_clients:
             # No clients received the audio — no one will send playback_done
@@ -717,6 +750,23 @@ async def text_to_speech(request: Request):
         return JSONResponse({"error": str(e)}, status_code=500)
     from starlette.responses import Response as RawResponse
     return RawResponse(content=audio, media_type="audio/mpeg")
+
+
+@app.post("/api/tts-captioned")
+async def text_to_speech_captioned(request: Request):
+    """Generate TTS with word timestamps. Returns JSON {audio_b64, words}."""
+    data = await request.json()
+    text = data.get("text", "").strip()
+    voice = data.get("voice", "af_sky")
+    speed = data.get("speed", 1.0)
+    if not text:
+        return JSONResponse({"error": "no text"}, status_code=400)
+    try:
+        audio_b64, words = await tts_captioned(text, voice=voice, speed=speed)
+        return JSONResponse({"audio_b64": audio_b64, "words": words})
+    except Exception as e:
+        log.error("TTS captioned failed: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 @app.get("/api/settings")

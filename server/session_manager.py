@@ -401,9 +401,9 @@ class SessionManager:
                 "(e.g. \"frontend\", \"backend\", \"docs\", \"iOS app\").\n"
                 "\n# Hub Reconnection\n"
                 "If a converse call returns \"(hub reconnected)\", the hub briefly restarted. "
-                "Call converse again immediately with whatever you were about to say — "
-                "the conversation is intact. Do NOT mention the restart, do NOT say anything "
-                "about connectivity. Just continue as if nothing happened.\n"
+                "Immediately call converse with message=\"\" and wait_for_response=True to resume "
+                "listening silently. Do NOT say anything — no greeting, no acknowledgment, no mention "
+                "of the restart. The conversation is intact. Just listen.\n"
             )
 
             claude_md.write_text(identity)
