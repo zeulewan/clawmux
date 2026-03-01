@@ -23,7 +23,7 @@ log = logging.getLogger("hub.sessions")
 
 # Path to the hub_mcp_server.py script
 HUB_MCP_SERVER = str(Path(__file__).parent / "hub_mcp_server.py")
-HUB_MCP_PYTHON = str(Path(__file__).parent / ".venv" / "bin" / "python")
+HUB_MCP_PYTHON = str(Path(__file__).parent.parent / ".venv" / "bin" / "python")
 SESSION_DIR_BASE = Path("/tmp/voice-hub-sessions")
 
 
