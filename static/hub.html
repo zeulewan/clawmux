@@ -1770,7 +1770,7 @@ function stopActiveAudio({ stashForResume = false } = {}) {
         // For the current chunk, note how far in we are so resume can seek
         if (currentAudio && currentAudio.b64data && currentAudio._startTime != null) {
           const elapsed = audioCtx.currentTime - currentAudio._startTime;
-          remaining.push({ b64data: currentAudio.b64data, offset: elapsed * (currentAudio.playbackRate || 1.0) });
+          remaining.push({ b64data: currentAudio.b64data, offset: elapsed });
         } else if (idx < chunks.length) {
           remaining.push(chunks[idx]);
         }
@@ -1779,7 +1779,7 @@ function stopActiveAudio({ stashForResume = false } = {}) {
         // Single chunk playback: stash with seek offset
         if (currentAudio._startTime != null) {
           const elapsed = audioCtx.currentTime - currentAudio._startTime;
-          remaining.push({ b64data: currentAudio.b64data, offset: elapsed * (currentAudio.playbackRate || 1.0) });
+          remaining.push({ b64data: currentAudio.b64data, offset: elapsed });
         } else {
           remaining.push(currentAudio.b64data);
         }
@@ -1947,7 +1947,7 @@ async function playMessageTTS(btn, text, voiceId) {
     const resp = await fetch('/api/tts-captioned', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, voice: voiceId || 'af_sky' }),
+      body: JSON.stringify({ text, voice: voiceId || 'af_sky', speed }),
     });
     if (!resp.ok) throw new Error('TTS failed');
     const { audio_b64, words } = await resp.json();
@@ -1967,9 +1967,8 @@ async function playMessageTTS(btn, text, voiceId) {
     const source = audioCtx.createBufferSource();
     source.buffer = decoded;
     source.connect(audioCtx.destination);
-    source.playbackRate.value = speed;
     const startT = audioCtx.currentTime;
-    currentAudio = { source, sessionId: activeSessionId || '__tts__', decodedBuffer: decoded, playbackId, b64data: audio_b64, _startTime: startT, playbackRate: speed };
+    currentAudio = { source, sessionId: activeSessionId || '__tts__', decodedBuffer: decoded, playbackId, b64data: audio_b64, _startTime: startT };
     playbackStartTime = startT;
     playbackPaused = false;
 
@@ -2254,11 +2253,6 @@ async function changeSpeed(speed) {
       });
     } catch (e) {}
   }
-  // Update live playback rate if audio is currently playing
-  if (currentAudio && currentAudio.source) {
-    currentAudio.source.playbackRate.value = spd;
-    currentAudio.playbackRate = spd;
-  }
 }
 
 // --- Settings page ---
@@ -2490,8 +2484,7 @@ function transportPause() {
     source.connect(audioCtx.destination);
     const resumeSess = sessions.get(pausedSessionId);
     const resumeRate = resumeSess ? (resumeSess.speed || 1.0) : 1.0;
-    source.playbackRate.value = resumeRate;
-    currentAudio = { source, sessionId: pausedSessionId, decodedBuffer: pausedBuffer, _startTime: audioCtx.currentTime - pauseOffset, playbackRate: resumeRate };
+    currentAudio = { source, sessionId: pausedSessionId, decodedBuffer: pausedBuffer, _startTime: audioCtx.currentTime - pauseOffset };
     playbackStartTime = audioCtx.currentTime - pauseOffset;
     playbackPaused = false;
     if (_pausedKaraokeWords) { karaokeStart(currentAudio, _pausedKaraokeWords); _pausedKaraokeWords = null; }
@@ -2901,6 +2894,21 @@ function handleMessage(data) {
       _flushMessageBuffer();
       renderVoiceGridIfActive();
       renderSidebar();
+      // Push saved speed from localStorage to server for all sessions
+      const savedSpd = localStorage.getItem('hub_speed');
+      if (savedSpd) {
+        const spd = parseFloat(savedSpd);
+        for (const [sid, s] of sessions) {
+          if ((s.speed || 1.0) !== spd) {
+            s.speed = spd;
+            fetch(`/api/sessions/${sid}/speed`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ speed: spd }),
+            }).catch(() => {});
+          }
+        }
+      }
       // Auto-restore previously active session on reconnect
       if (!activeSessionId) {
         try {
@@ -3175,10 +3183,7 @@ function playAudio(sessionId, b64data, startOffset = 0) {
       const source = audioCtx.createBufferSource();
       source.buffer = decoded;
       source.connect(audioCtx.destination);
-      const sess = sessions.get(sessionId);
-      const playbackRate = sess ? (sess.speed || 1.0) : 1.0;
-      source.playbackRate.value = playbackRate;
-      if (currentAudio) { currentAudio.source = source; currentAudio.decodedBuffer = decoded; currentAudio._startTime = audioCtx.currentTime - startOffset; currentAudio.playbackRate = playbackRate; }
+      if (currentAudio) { currentAudio.source = source; currentAudio.decodedBuffer = decoded; currentAudio._startTime = audioCtx.currentTime - startOffset; }
       playbackStartTime = audioCtx.currentTime;
       playbackPaused = false;
       // Start karaoke if we have pending words for this session
@@ -3261,8 +3266,7 @@ function _karaokeFrame() {
   if (currentAudio !== _karaokeAudioRef && currentBufferedPlayer === null) { karaokeStop(); return; }
   const startTime = _karaokeAudioRef._startTime;
   if (startTime == null) { _karaokeRaf = requestAnimationFrame(_karaokeFrame); return; }
-  const playbackRate = _karaokeAudioRef.playbackRate || 1.0;
-  const elapsed = (audioCtx.currentTime - startTime) * playbackRate;
+  const elapsed = audioCtx.currentTime - startTime;
 
   // Find active word — keep previous active until a new one starts (no gap flash)
   let newIdx = -1;
@@ -3344,10 +3348,7 @@ function playBufferedAudio(sessionId, chunks) {
         const source = audioCtx.createBufferSource();
         source.buffer = decoded;
         source.connect(audioCtx.destination);
-        const bpSess = sessions.get(sessionId);
-        const bpRate = bpSess ? (bpSess.speed || 1.0) : 1.0;
-        source.playbackRate.value = bpRate;
-        currentAudio = { source, sessionId, decodedBuffer: decoded, b64data, _startTime: audioCtx.currentTime - offset, playbackRate: bpRate };
+        currentAudio = { source, sessionId, decodedBuffer: decoded, b64data, _startTime: audioCtx.currentTime - offset };
         playbackStartTime = audioCtx.currentTime;
         playbackPaused = false;
         // Start karaoke if pending words exist (e.g. restored after tab switch)
