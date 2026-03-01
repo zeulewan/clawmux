@@ -187,7 +187,7 @@ async def set_project_status(project: str, area: str = "") -> str:
 
 @mcp.tool
 async def voice_chat_status() -> str:
-    """Check if a browser is connected to the Voice Hub.
+    """Check if a browser is connected to the ClawMux.
 
     Returns:
         Connection status string.

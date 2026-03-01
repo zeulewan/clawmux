@@ -1,6 +1,6 @@
 # For Agents
 
-Reference for AI agents installing, maintaining, or extending Voice Hub. If you're a human, see the [human guide](../../humans/index.md).
+Reference for AI agents installing, maintaining, or extending ClawMux. If you're a human, see the [human guide](../../humans/index.md).
 
 ## System Requirements & Compatibility Check
 

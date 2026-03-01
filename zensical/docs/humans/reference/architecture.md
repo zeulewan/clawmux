@@ -2,7 +2,7 @@
 
 ## What's an MCP Server?
 
-MCP (Model Context Protocol) is how Claude Code gets extra capabilities beyond reading and writing files. An MCP server gives Claude new tools it can call — in our case, the ability to speak and listen through the Voice Hub.
+MCP (Model Context Protocol) is how Claude Code gets extra capabilities beyond reading and writing files. An MCP server gives Claude new tools it can call — in our case, the ability to speak and listen through the ClawMux.
 
 Each agent in the sidebar has its own MCP server running in the background. It's a thin bridge between Claude and the hub — Claude calls a tool like `converse("Hello!")`, the MCP server forwards it to the hub, and the hub handles all the audio (TTS, playback, recording, STT).
 

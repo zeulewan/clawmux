@@ -1,6 +1,6 @@
 # Web Development
 
-You are building features for the Voice Hub browser UI (`static/hub.html`).
+You are building features for the ClawMux browser UI (`static/hub.html`).
 
 ## Docs You Must Keep Updated
 

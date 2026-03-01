@@ -1,7 +1,7 @@
 [project]
 
-site_name = "Voice Hub Docs"
-site_description = "Multi-session voice interface for Claude Code with local Whisper STT and Kokoro TTS."
+site_name = "ClawMux Docs"
+site_description = "Multi-agent voice interface for Claude Code. Talk to your agents."
 site_author = "Zeul"
 site_url = "https://zeulewan.github.io/voice-hub/"
 repo_url = "https://github.com/zeulewan/voice-hub"

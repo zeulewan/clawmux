@@ -1,6 +1,6 @@
 # UI Behavior Reference
 
-Detailed reference for every state, button, toggle, and audio behavior in the Voice Hub browser UI.
+Detailed reference for every state, button, toggle, and audio behavior in the ClawMux browser UI.
 
 ## Pages
 

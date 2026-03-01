@@ -2,7 +2,7 @@
 
 ## Overview
 
-Voice Hub is an MCP server that bridges browser audio with a persistent Claude Code session. Claude calls a `converse()` tool to speak and listen — audio flows between the browser and server over WebSocket, with local Whisper STT and Kokoro TTS handling speech processing. All audio stays on your network.
+ClawMux is an MCP server that bridges browser audio with a persistent Claude Code session. Claude calls a `converse()` tool to speak and listen — audio flows between the browser and server over WebSocket, with local Whisper STT and Kokoro TTS handling speech processing. All audio stays on your network.
 
 Claude Code communicates with the MCP server over stdio (MCP protocol). The browser connects to the MCP server via WebSocket (JSON + base64 audio). The MCP server sends audio to Whisper for transcription and text to Kokoro for synthesis, both running on the GPU.
 

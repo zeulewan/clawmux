@@ -1,6 +1,6 @@
 # For Humans
 
-Voice Hub lets you talk to Claude Code with your voice. Run multiple voice agents from a single browser tab, each with their own voice and personality. Everything runs locally on your machine — no cloud audio processing.
+ClawMux lets you talk to Claude Code with your voice. Run multiple voice agents from a single browser tab, each with their own voice and personality. Everything runs locally on your machine — no cloud audio processing.
 
 ## What You Get
 
@@ -25,7 +25,7 @@ That's it. Your agent handles the rest.
 
 ## Install
 
-The easiest way to install Voice Hub is to ask your Claude Code agent to do it:
+The easiest way to install ClawMux is to ask your Claude Code agent to do it:
 
 > "Clone https://github.com/zeulewan/voice-hub.git, read the agent reference docs, check if my system is compatible, and install it."
 

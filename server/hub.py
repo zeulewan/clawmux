@@ -1,4 +1,4 @@
-"""Voice Hub — session launcher, TTS/STT engine, and WebSocket multiplexer.
+"""ClawMux — session launcher, TTS/STT engine, and WebSocket multiplexer.
 
 Standalone FastAPI service that:
   - Spawns Claude Code sessions in tmux

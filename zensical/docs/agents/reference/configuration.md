@@ -80,6 +80,6 @@ tail -f /tmp/voice-hub-mcp.log
 
 | Port | Service | Protocol |
 |------|---------|----------|
-| 3456 | Voice Hub (MCP server) | HTTP + WebSocket (localhost) / HTTPS + WSS (Tailscale) |
+| 3456 | ClawMux (MCP server) | HTTP + WebSocket (localhost) / HTTPS + WSS (Tailscale) |
 | 2022 | Whisper STT | HTTP (localhost only) |
 | 8880 | Kokoro TTS | HTTP (localhost only) |

@@ -191,7 +191,7 @@ async def test_full_flow():
 
 
 async def main():
-    print("Voice Hub MCP Server Tests")
+    print("ClawMux MCP Server Tests")
     print("=" * 50)
 
     results = []

@@ -20,7 +20,7 @@ Replace with a debug link in the header bar (small text, like the web client's h
 
 ### Show Active Voice Name in Header
 
-When viewing a session, display the voice name (e.g. "Sky") in the header bar next to "Voice Hub". Hide it when on the voice grid.
+When viewing a session, display the voice name (e.g. "Sky") in the header bar next to "ClawMux". Hide it when on the voice grid.
 
 ### Fetch Message History from Server
 

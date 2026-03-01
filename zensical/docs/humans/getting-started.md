@@ -14,7 +14,7 @@ That's it. Your agent handles the actual installation.
 
 Ask your Claude Code agent:
 
-> "Install Voice Hub. Read the agent reference at `zensical/agents/reference/agent-reference.md` and set everything up."
+> "Install ClawMux. Read the agent reference at `zensical/agents/reference/agent-reference.md` and set everything up."
 
 Claude will check your system, install dependencies, clone the repo, register the MCP server, and set up Tailscale if needed.
 

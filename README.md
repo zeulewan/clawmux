@@ -1,5 +1,5 @@
-# Voice Hub
+# ClawMux
 
-Multi-session voice interface for Claude Code. Talk to multiple Claude agents from a single browser tab, each with their own voice and personality. All speech processing runs locally on your GPU.
+Multi-agent voice interface. Talk to multiple Claude Code agents from a browser — each with their own voice and personality. All speech processing runs locally on your GPU.
 
 See the [docs](https://zeulewan.github.io/voice-hub/) for setup and usage.

@@ -45,7 +45,7 @@ If a converse call returns "(hub reconnected)", the hub briefly restarted. Call 
 The `/voice-hub` skill is a Claude Code slash command that activates voice chat mode for each agent. It's sent automatically by the hub when a session starts, and lives at `.claude/commands/voice-hub.md`.
 
 ```
-You are now in voice chat mode via the Voice Hub.
+You are now in voice chat mode via the ClawMux.
 
 CRITICAL: You MUST use MCP tools from the "voice-hub" server, NOT "voice-hub"
 or "voice-hub-dev". The server name is exactly "voice-hub". When calling tools,

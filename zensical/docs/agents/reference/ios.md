@@ -1,6 +1,6 @@
 # iOS App
 
-Native iPhone companion app for Voice Hub. Connects to the hub over WebSocket and provides a multi-session voice interface with three input modes.
+Native iPhone companion app for ClawMux. Connects to the hub over WebSocket and provides a multi-session voice interface with three input modes.
 
 **Status:** Beta (v0.5.0)
 

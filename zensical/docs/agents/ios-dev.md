@@ -1,6 +1,6 @@
 # iOS Development
 
-You are building a native iOS app that connects to the Voice Hub as a client, replacing the browser UI.
+You are building a native iOS app that connects to the ClawMux as a client, replacing the browser UI.
 
 ## How It Works
 

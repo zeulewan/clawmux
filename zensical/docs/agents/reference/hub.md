@@ -1,4 +1,4 @@
-# Voice Hub
+# ClawMux
 
 The Hub is a standalone service that spawns and manages multiple Claude Code voice sessions from a single browser tab.
 

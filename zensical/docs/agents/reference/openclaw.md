@@ -1,6 +1,6 @@
 # OpenClaw Reference
 
-OpenClaw is a self-hosted AI agent platform that could serve as the backend for Voice Hub instead of the current Claude Code + tmux approach. This doc covers what it is, how it works, and what integration would look like.
+OpenClaw is a self-hosted AI agent platform that could serve as the backend for ClawMux instead of the current Claude Code + tmux approach. This doc covers what it is, how it works, and what integration would look like.
 
 ## What It Is
 
@@ -60,7 +60,7 @@ Multiple isolated agents run within a single Gateway, each with:
 - Separate tool policies (e.g., read-only agent vs. exec-enabled agent)
 - Separate routing rules (map channels/accounts to agents)
 
-Leaders can spawn sub-agents via the `agent` tool. This maps naturally to Voice Hub's leader/worker model.
+Leaders can spawn sub-agents via the `agent` tool. This maps naturally to ClawMux's leader/worker model.
 
 ## Protocol: ACP
 
@@ -82,11 +82,11 @@ OpenClaw is installed on the workstation (`openclaw` CLI at `~/.npm-global/bin/o
 
 The primary Gateway runs on the Raspberry Pi (`openclaw` hostname, Tailscale 100.81.195.18:18789). That Pi's Tailscale ACL is locked to only the Mac (100.117.222.41) and iPhone — the workstation can't reach it.
 
-To use OpenClaw as a Voice Hub backend on the workstation, we'd need to run the Gateway locally: `openclaw gateway`.
+To use OpenClaw as a ClawMux backend on the workstation, we'd need to run the Gateway locally: `openclaw gateway`.
 
-## Integration Approach for Voice Hub
+## Integration Approach for ClawMux
 
-Instead of spawning Claude Code in tmux, Voice Hub would:
+Instead of spawning Claude Code in tmux, ClawMux would:
 
 1. Start/connect to a local OpenClaw Gateway
 2. Create one OpenClaw agent per voice (Sky, Alloy, Adam, etc.) with isolated workspaces
@@ -116,4 +116,4 @@ OpenClaw went viral in early 2026 and ~21,000 instances were exposed publicly, l
 
 Mitigations: bind Gateway to localhost only, use Tailscale for remote access, restrict per-agent tool policies, sandbox exec in Docker, vet any third-party skills before installing.
 
-For Voice Hub: run Gateway as a local service, not exposed externally. Only Voice Hub's backend talks to it.
+For ClawMux: run Gateway as a local service, not exposed externally. Only ClawMux's backend talks to it.

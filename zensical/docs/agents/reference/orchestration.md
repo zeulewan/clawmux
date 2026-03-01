@@ -69,7 +69,7 @@ User says to Sky: "Refactor auth to JWT, update docs, and run tests."
 
 ## Claude Code Teams Comparison
 
-| Claude Code | Voice Hub |
+| Claude Code | ClawMux |
 |---|---|
 | Hub-and-spoke messaging | Same — leaders route |
 | File-based coordination (JSONL) | WebSocket message broker |

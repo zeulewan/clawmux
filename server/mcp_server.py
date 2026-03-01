@@ -1,4 +1,4 @@
-"""Voice Hub MCP Server — browser audio bridge for Claude Code.
+"""ClawMux MCP Server — browser audio bridge for Claude Code.
 
 Dual-transport server:
   - FastMCP stdio ↔ Claude Code (persistent session)
@@ -193,7 +193,7 @@ async def converse(
 
     if bridge.ws is None:
         log("converse() error: no browser connected")
-        return "Error: No browser connected. Open the Voice Hub page first."
+        return "Error: No browser connected. Open the ClawMux page first."
 
     ws = bridge.ws
 
@@ -293,7 +293,7 @@ async def converse(
 
 @mcp.tool
 async def voice_chat_status() -> str:
-    """Check if a browser is connected to the Voice Hub WebSocket.
+    """Check if a browser is connected to the ClawMux WebSocket.
 
     Returns:
         Connection status string.
