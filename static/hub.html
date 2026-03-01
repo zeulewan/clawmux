@@ -3831,6 +3831,20 @@ document.addEventListener('keydown', (e) => {
       stopRecording(true); // discard audio
     }
   }
+
+  // Option/Alt + 1-7: switch to voice by sidebar position
+  if (e.altKey && !e.ctrlKey && !e.metaKey && e.code.startsWith('Digit')) {
+    const idx = parseInt(e.code.replace('Digit', ''), 10) - 1;
+    const voiceIds = Object.keys(VOICE_NAMES);
+    if (idx >= 0 && idx < voiceIds.length) {
+      e.preventDefault();
+      const voiceId = voiceIds[idx];
+      for (const [sid, s] of sessions) {
+        if (s.voice === voiceId) { switchTab(sid); return; }
+      }
+      spawnSession(voiceId);
+    }
+  }
 });
 
 // --- Input mode (Auto / Typing) ---
