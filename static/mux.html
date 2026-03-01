@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude Team Mux</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #06090f;
+      --bg-wash:   #0b1018;
+      --surface:   #0f1621;
+      --surface-2: #162030;
+      --border:    #1c2a3a;
+      --border-lt: #243548;
+      --text:      #e2e8f0;
+      --text-dim:  #8ea0b8;
+      --text-faint:#4e6277;
+      --purple:    #a78bfa;
+      --purple-dim:#4c1d95;
+      --violet:    #818cf8;
+      --cyan:      #22d3ee;
+      --cyan-dim:  #0e7490;
+      --green:     #34d399;
+      --orange:    #fb923c;
+      --red:       #f87171;
+      --radius:    14px;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg:        #f8fafc;
+        --bg-wash:   #f1f5f9;
+        --surface:   #ffffff;
+        --surface-2: #f1f5f9;
+        --border:    #e2e8f0;
+        --border-lt: #cbd5e1;
+        --text:      #0f172a;
+        --text-dim:  #475569;
+        --text-faint:#94a3b8;
+        --purple:    #7c3aed;
+        --purple-dim:#ede9fe;
+        --violet:    #4f46e5;
+        --cyan:      #0891b2;
+        --cyan-dim:  #cffafe;
+        --green:     #059669;
+        --orange:    #ea580c;
+        --red:       #dc2626;
+      }
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', -apple-system, sans-serif;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    a { color: var(--purple); text-decoration: none; transition: color 0.2s; }
+    a:hover { color: var(--violet); }
+
+    /* ---- AMBIENT BACKGROUND ---- */
+    .bg-glow {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      overflow: hidden;
+      pointer-events: none;
+    }
+    .bg-glow::before {
+      content: '';
+      position: absolute;
+      width: 900px; height: 900px;
+      top: -300px; left: 50%;
+      transform: translateX(-50%);
+      background: radial-gradient(circle, rgba(167,139,250,0.07) 0%, transparent 65%);
+      animation: drift 22s ease-in-out infinite alternate;
+    }
+    .bg-glow::after {
+      content: '';
+      position: absolute;
+      width: 600px; height: 600px;
+      bottom: 5%; right: -5%;
+      background: radial-gradient(circle, rgba(34,211,238,0.04) 0%, transparent 70%);
+      animation: drift 28s ease-in-out infinite alternate-reverse;
+    }
+    @keyframes drift {
+      from { transform: translateX(-50%) translateY(0); }
+      to   { transform: translateX(-44%) translateY(50px); }
+    }
+
+    /* ---- NAV ---- */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(6,9,15,0.85);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border-bottom: 1px solid rgba(28,42,58,0.6);
+    }
+    @media (prefers-color-scheme: light) {
+      nav { background: rgba(248,250,252,0.9); border-bottom-color: rgba(226,232,240,0.8); }
+    }
+    nav .logo {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.4px;
+      background: linear-gradient(120deg, #fff 0%, var(--purple) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    @media (prefers-color-scheme: light) {
+      nav .logo { background: linear-gradient(120deg, #0f172a, var(--purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    }
+    nav .badge {
+      background: linear-gradient(135deg, var(--purple-dim), var(--purple));
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 9px;
+      border-radius: 10px;
+      letter-spacing: 0.4px;
+    }
+    @media (prefers-color-scheme: light) {
+      nav .badge { background: linear-gradient(135deg, #ede9fe, var(--purple)); color: #fff; }
+    }
+    nav .nav-links {
+      margin-left: auto;
+      display: flex;
+      gap: 20px;
+      align-items: center;
+    }
+    nav .nav-links a {
+      color: var(--text-faint);
+      font-size: 13px;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    nav .nav-links a:hover { color: var(--text); }
+    nav .open-btn {
+      padding: 7px 18px;
+      background: var(--purple);
+      color: #fff;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      transition: background 0.2s, transform 0.1s;
+    }
+    nav .open-btn:hover { background: var(--violet); transform: translateY(-1px); }
+
+    /* ---- HERO ---- */
+    .hero {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 110px 28px 60px;
+      text-align: center;
+    }
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 5px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-faint);
+      letter-spacing: 0.3px;
+      margin-bottom: 28px;
+      background: rgba(15,22,33,0.5);
+    }
+    .hero-eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--purple); box-shadow: 0 0 8px rgba(167,139,250,0.6); }
+    .hero h1 {
+      font-size: clamp(38px, 6vw, 64px);
+      font-weight: 700;
+      letter-spacing: -2px;
+      line-height: 1.1;
+      margin-bottom: 24px;
+      background: linear-gradient(160deg, #fff 15%, var(--purple) 60%, var(--cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    @media (prefers-color-scheme: light) {
+      .hero h1 { background: linear-gradient(160deg, #0f172a 15%, var(--purple) 60%, var(--cyan)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    }
+    .hero p {
+      font-size: 18px;
+      color: var(--text-dim);
+      max-width: 560px;
+      margin: 0 auto 40px;
+      line-height: 1.75;
+      font-weight: 400;
+    }
+    .hero-cta {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 64px;
+    }
+    .btn-primary {
+      padding: 13px 28px;
+      background: var(--purple);
+      color: #fff;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+      box-shadow: 0 4px 20px rgba(167,139,250,0.25);
+    }
+    .btn-primary:hover { background: var(--violet); transform: translateY(-2px); box-shadow: 0 8px 30px rgba(167,139,250,0.35); }
+    .btn-secondary {
+      padding: 13px 28px;
+      background: transparent;
+      color: var(--text-dim);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: border-color 0.2s, color 0.2s, background 0.2s;
+    }
+    .btn-secondary:hover { border-color: var(--border-lt); color: var(--text); background: rgba(255,255,255,0.03); }
+
+    /* ---- TERMINAL DEMO ---- */
+    .terminal-wrap {
+      max-width: 700px;
+      margin: 0 auto 80px;
+    }
+    .terminal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      text-align: left;
+    }
+    .terminal-bar {
+      background: var(--bg-wash);
+      padding: 11px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .terminal-dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; background: var(--border-lt); flex-shrink: 0; }
+    .terminal-bar .title {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--text-faint);
+      margin-left: 6px;
+    }
+    .terminal-body {
+      padding: 20px 22px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.8;
+    }
+    .t-prompt { color: var(--purple); }
+    .t-cmd    { color: var(--text); }
+    .t-dim    { color: var(--text-faint); }
+    .t-green  { color: var(--green); }
+    .t-cyan   { color: var(--cyan); }
+    .t-orange { color: var(--orange); }
+    .t-line   { display: flex; gap: 10px; }
+    .t-gap    { margin-top: 10px; }
+
+    /* ---- SECTION ---- */
+    .section {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 60px 28px;
+    }
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--purple);
+      margin-bottom: 12px;
+    }
+    .section h2 {
+      font-size: clamp(26px, 3.5vw, 38px);
+      font-weight: 700;
+      letter-spacing: -1px;
+      line-height: 1.2;
+      margin-bottom: 16px;
+    }
+    .section > p {
+      font-size: 16px;
+      color: var(--text-dim);
+      max-width: 580px;
+      margin-bottom: 48px;
+      line-height: 1.7;
+    }
+
+    /* ---- PROBLEM CARDS ---- */
+    .problem-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+    .problem-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      transition: border-color 0.25s, box-shadow 0.25s;
+    }
+    .problem-card:hover {
+      border-color: var(--border-lt);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    }
+    .problem-num {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--purple);
+      margin-bottom: 12px;
+    }
+    .problem-card h3 {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      margin-bottom: 12px;
+      line-height: 1.3;
+    }
+    .problem-card p {
+      font-size: 14px;
+      color: var(--text-dim);
+      line-height: 1.7;
+    }
+    .problem-icon {
+      font-size: 28px;
+      margin-bottom: 16px;
+      display: block;
+    }
+
+    /* ---- INSIGHT BLOCK ---- */
+    .insight {
+      background: linear-gradient(135deg, rgba(167,139,250,0.07), rgba(34,211,238,0.04));
+      border: 1px solid rgba(167,139,250,0.2);
+      border-radius: var(--radius);
+      padding: 32px 36px;
+      margin: 40px 0;
+    }
+    .insight blockquote {
+      font-size: 17px;
+      line-height: 1.75;
+      color: var(--text-dim);
+      font-style: italic;
+    }
+    .insight blockquote strong { color: var(--text); font-style: normal; }
+
+    /* ---- TECH STACK ---- */
+    .stack-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+    }
+    .stack-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px;
+      transition: border-color 0.2s;
+    }
+    .stack-card:hover { border-color: var(--border-lt); }
+    .stack-card .stack-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      margin-bottom: 14px;
+    }
+    .stack-card h4 {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      letter-spacing: -0.2px;
+    }
+    .stack-card p {
+      font-size: 13px;
+      color: var(--text-faint);
+      line-height: 1.6;
+    }
+
+    /* ---- AGENTS DEMO ---- */
+    .agents-demo {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      margin: 40px 0;
+    }
+    .agents-demo h4 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-faint);
+      margin-bottom: 20px;
+      letter-spacing: 0.3px;
+    }
+    .agents-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .agent-chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      transition: border-color 0.2s;
+    }
+    .agent-chip .chip-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .chip-active { background: var(--green); box-shadow: 0 0 6px rgba(52,211,153,0.5); }
+    .chip-thinking { background: var(--orange); box-shadow: 0 0 6px rgba(251,146,60,0.5); animation: blink 1.4s infinite; }
+    .chip-speaking { background: var(--purple); box-shadow: 0 0 6px rgba(167,139,250,0.5); }
+    .chip-idle { background: var(--text-faint); }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    /* ---- ROADMAP ---- */
+    .roadmap-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .roadmap-item {
+      display: flex;
+      gap: 20px;
+      padding: 24px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .roadmap-item:last-child { border-bottom: none; }
+    .roadmap-status {
+      width: 80px;
+      flex-shrink: 0;
+      padding-top: 2px;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      padding: 3px 10px;
+      border-radius: 6px;
+    }
+    .status-live { background: rgba(52,211,153,0.12); color: var(--green); }
+    .status-soon { background: rgba(251,146,60,0.12); color: var(--orange); }
+    .status-planned { background: rgba(78,98,119,0.15); color: var(--text-faint); }
+    .roadmap-content h4 { font-size: 15px; font-weight: 600; letter-spacing: -0.2px; margin-bottom: 4px; }
+    .roadmap-content p { font-size: 14px; color: var(--text-faint); line-height: 1.6; }
+
+    /* ---- DIVIDER ---- */
+    .divider {
+      max-width: 1000px;
+      margin: 0 auto;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ---- FOOTER ---- */
+    footer {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 40px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    footer .footer-logo { font-size: 14px; font-weight: 600; color: var(--text-faint); }
+    footer p { font-size: 12px; color: var(--text-faint); line-height: 1.7; max-width: 520px; }
+    footer a { color: var(--text-faint); }
+    footer a:hover { color: var(--text-dim); }
+
+    /* ---- RESPONSIVE ---- */
+    @media (max-width: 600px) {
+      .hero { padding: 70px 20px 40px; }
+      .section { padding: 40px 20px; }
+      nav { padding: 12px 16px; }
+      nav .nav-links a:not(.open-btn) { display: none; }
+      .problem-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="bg-glow"></div>
+
+<nav>
+  <span class="logo">Claude Team Mux</span>
+  <span class="badge">ALPHA</span>
+  <div class="nav-links">
+    <a href="#problems">Why</a>
+    <a href="#how-it-works">How it works</a>
+    <a href="#roadmap">Roadmap</a>
+    <a href="/" class="open-btn">Open Hub →</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-eyebrow">
+    <span class="dot"></span>
+    Voice-first multi-agent engineering
+  </div>
+  <h1>Run 10 Claude agents.<br>Stay in your flow.</h1>
+  <p>Your brain evolved to communicate verbally — not stare at terminals. Claude Team Mux turns your agents into a team you can talk to.</p>
+  <div class="hero-cta">
+    <a href="/" class="btn-primary">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+      Open Hub
+    </a>
+    <a href="#problems" class="btn-secondary">
+      Learn more
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+    </a>
+  </div>
+
+  <!-- Agent chip demo -->
+  <div class="terminal-wrap">
+    <div style="margin-bottom: 16px;">
+      <div class="agents-demo">
+        <h4>Active agents — 7 running</h4>
+        <div class="agents-row">
+          <div class="agent-chip"><span class="chip-dot chip-speaking"></span> Sky</div>
+          <div class="agent-chip"><span class="chip-dot chip-thinking"></span> Adam</div>
+          <div class="agent-chip"><span class="chip-dot chip-active"></span> Alloy</div>
+          <div class="agent-chip"><span class="chip-dot chip-thinking"></span> Echo</div>
+          <div class="agent-chip"><span class="chip-dot chip-active"></span> Sarah</div>
+          <div class="agent-chip"><span class="chip-dot chip-idle"></span> Onyx</div>
+          <div class="agent-chip"><span class="chip-dot chip-active"></span> Fable</div>
+        </div>
+      </div>
+    </div>
+    <div class="terminal">
+      <div class="terminal-bar">
+        <span class="terminal-dot"></span>
+        <span class="terminal-dot"></span>
+        <span class="terminal-dot"></span>
+        <span class="title">voice-hub</span>
+      </div>
+      <div class="terminal-body">
+        <div class="t-line"><span class="t-prompt">you</span><span class="t-cmd">Hey Sky, what's the status on the API refactor?</span></div>
+        <div class="t-line t-gap"><span class="t-cyan">Sky</span><span class="t-cmd">I've got the auth endpoints done, working on pagination now. Should be ready in about 20 minutes.</span></div>
+        <div class="t-line t-gap"><span class="t-prompt">you</span><span class="t-cmd">Adam, once Sky's done, write the tests.</span></div>
+        <div class="t-line t-gap"><span class="t-orange">Adam</span><span class="t-cmd">Got it, I'll pull Sky's branch and cover the new endpoints.</span></div>
+        <div class="t-line t-gap"><span class="t-green t-dim">↳ 6 other agents working in parallel</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PROBLEMS -->
+<div class="divider"></div>
+<section class="section" id="problems">
+  <div class="section-label">Why it exists</div>
+  <h2>Two problems no one has solved yet</h2>
+  <p>Claude Code is powerful. But using it at scale — across multiple parallel workstreams — is rough. These are the two core problems we're tackling.</p>
+
+  <div class="problem-grid">
+    <div class="problem-card">
+      <span class="problem-icon">🖥️</span>
+      <div class="problem-num">Problem 01</div>
+      <h3>Remote control of Claude Code</h3>
+      <p>Claude Code runs in a terminal. That's fine for one session. But when you're on your phone, on another machine, or just want to check in — there's no way to reach it. Claude Team Mux exposes your agents through a browser and a voice interface you can access from anywhere.</p>
+    </div>
+    <div class="problem-card">
+      <span class="problem-icon">🧠</span>
+      <div class="problem-num">Problem 02</div>
+      <h3>Human context switching</h3>
+      <p>Using 10 agents at once is hard. 3 is doable. You run out of mental RAM fast. The human brain didn't evolve to read terminals — it evolved to talk to people who have voices, names, and personalities. With voice, you remember who you were talking to, and you stay in flow.</p>
+    </div>
+  </div>
+
+  <div class="insight">
+    <blockquote>
+      "You often forget what the <strong>6th terminal</strong> was doing. This is the first look at what agentic engineering — vibe coding — will look like in the future."
+    </blockquote>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<div class="divider"></div>
+<section class="section" id="how-it-works">
+  <div class="section-label">Architecture</div>
+  <h2>Simple stack, powerful result</h2>
+  <p>Built on tools you already know — tmux, Claude Code, and a lightweight Python hub that wires it all together.</p>
+
+  <div class="stack-grid">
+    <div class="stack-card">
+      <div class="stack-icon" style="background: rgba(167,139,250,0.12); color: var(--purple);">🤖</div>
+      <h4>Claude Code</h4>
+      <p>Each agent is a full Claude Code session — the same tool you use in the terminal, running in a tmux pane.</p>
+    </div>
+    <div class="stack-card">
+      <div class="stack-icon" style="background: rgba(34,211,238,0.1); color: var(--cyan);">⬛</div>
+      <h4>tmux</h4>
+      <p>Agents live in persistent tmux sessions. They survive disconnects, restarts, and context switches.</p>
+    </div>
+    <div class="stack-card">
+      <div class="stack-icon" style="background: rgba(52,211,153,0.1); color: var(--green);">🔌</div>
+      <h4>MCP Server</h4>
+      <p>A custom Model Context Protocol server gives each Claude agent a voice — letting it speak and listen through the hub.</p>
+    </div>
+    <div class="stack-card">
+      <div class="stack-icon" style="background: rgba(251,146,60,0.1); color: var(--orange);">🎙️</div>
+      <h4>Whisper + Kokoro</h4>
+      <p>Local speech-to-text and text-to-speech. Your voice stays on your machine — nothing is sent to external services.</p>
+    </div>
+    <div class="stack-card">
+      <div class="stack-icon" style="background: rgba(96,165,250,0.1); color: #60a5fa;">🐍</div>
+      <h4>Python Hub</h4>
+      <p>A FastAPI server manages agent sessions, routes audio, and exposes the WebSocket interface for the browser.</p>
+    </div>
+    <div class="stack-card">
+      <div class="stack-icon" style="background: rgba(167,139,250,0.1); color: var(--purple);">🌐</div>
+      <h4>Browser / iOS</h4>
+      <p>A clean web interface — or the native iOS app — lets you switch between agents, see chat history, and talk hands-free.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ROADMAP -->
+<div class="divider"></div>
+<section class="section" id="roadmap">
+  <div class="section-label">Roadmap</div>
+  <h2>What's live and what's coming</h2>
+  <p>We're in early alpha. The core voice interface is working. These are the next milestones.</p>
+
+  <div class="roadmap-list">
+    <div class="roadmap-item">
+      <div class="roadmap-status"><span class="status-badge status-live">● Live</span></div>
+      <div class="roadmap-content">
+        <h4>Voice-first agent control</h4>
+        <p>Talk to any Claude agent by name. Switch between them with a tap. Full speech-to-text and text-to-speech.</p>
+      </div>
+    </div>
+    <div class="roadmap-item">
+      <div class="roadmap-status"><span class="status-badge status-live">● Live</span></div>
+      <div class="roadmap-content">
+        <h4>Multi-agent sidebar</h4>
+        <p>See all your agents at a glance — who's thinking, speaking, listening, or idle.</p>
+      </div>
+    </div>
+    <div class="roadmap-item">
+      <div class="roadmap-status"><span class="status-badge status-live">● Live</span></div>
+      <div class="roadmap-content">
+        <h4>Session persistence</h4>
+        <p>Agents survive hub restarts. Reconnect from any device and pick up where you left off.</p>
+      </div>
+    </div>
+    <div class="roadmap-item">
+      <div class="roadmap-status"><span class="status-badge status-soon">◑ Soon</span></div>
+      <div class="roadmap-content">
+        <h4>Agent group chats</h4>
+        <p>Put multiple agents in a room together. Let them collaborate, debate, and build on each other's work.</p>
+      </div>
+    </div>
+    <div class="roadmap-item">
+      <div class="roadmap-status"><span class="status-badge status-soon">◑ Soon</span></div>
+      <div class="roadmap-content">
+        <h4>Orchestration</h4>
+        <p>Assign tasks across agents, track progress, and let the hub coordinate work automatically.</p>
+      </div>
+    </div>
+    <div class="roadmap-item">
+      <div class="roadmap-status"><span class="status-badge status-planned">○ Planned</span></div>
+      <div class="roadmap-content">
+        <h4>OpenClaw v2</h4>
+        <p>Move off Claude Code's subscription model to the open API. Full control, no rate limits.</p>
+      </div>
+    </div>
+    <div class="roadmap-item">
+      <div class="roadmap-status"><span class="status-badge status-planned">○ Planned</span></div>
+      <div class="roadmap-content">
+        <h4>Better model context switching</h4>
+        <p>Swap between Opus, Sonnet, and Haiku mid-conversation. Use the right model for the right task.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<div class="divider"></div>
+<footer>
+  <span class="footer-logo">Claude Team Mux</span>
+  <p>
+    Built on tmux, Claude Code, Whisper, Kokoro, and a lot of late nights.
+    Not affiliated with Anthropic. If something breaks, <a href="https://github.com">let us know</a>.
+    Please don't sue us.
+  </p>
+</footer>
+
+</body>
+</html>

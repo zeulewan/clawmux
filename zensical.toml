@@ -1,4 +1,5 @@
 [project]
+docs_dir = "zensical"
 site_name = "Voice Hub Docs"
 site_description = "Multi-session voice interface for Claude Code with local Whisper STT and Kokoro TTS."
 site_author = "Zeul"
