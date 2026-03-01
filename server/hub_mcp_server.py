@@ -128,39 +128,32 @@ async def converse(
         "goodbye": goodbye,
     })
 
-    for attempt in range(2):
-        try:
-            await hub_ws.send(payload)
+    try:
+        await hub_ws.send(payload)
 
-            # Wait for result from hub
-            while True:
-                raw = await hub_ws.recv()
-                data = json.loads(raw)
-                if data["type"] == "converse_result":
-                    text = data["text"]
-                    log(f"converse() result: {text!r:.100}")
-                    return text
+        # Wait for result from hub
+        while True:
+            raw = await hub_ws.recv()
+            data = json.loads(raw)
+            if data["type"] == "converse_result":
+                text = data["text"]
+                log(f"converse() result: {text!r:.100}")
+                return text
 
-        except ConnectionClosed:
-            log("Hub connection lost during converse(), waiting for reconnect...")
-            hub_ws = None
-            if attempt == 0:
-                # Wait up to 30s for reconnection, then re-try the converse
-                for _ in range(15):
-                    await asyncio.sleep(2)
-                    if hub_ws is not None:
-                        log("Reconnected after hub restart, re-sending converse...")
-                        break
-                else:
-                    return "Error: Lost connection to hub and could not reconnect."
-                continue  # retry with the new hub_ws
-            return "(hub reconnected)"  # second failure — give up and signal
+    except ConnectionClosed:
+        log("Hub connection lost during converse(), waiting for reconnect...")
+        hub_ws = None
+        # Wait up to 30s for reconnection, then signal the agent
+        for _ in range(15):
+            await asyncio.sleep(2)
+            if hub_ws is not None:
+                break
+        log("Reconnected after hub restart")
+        return "(hub reconnected)"  # Agent should call converse("") to silently resume listening
 
-        except Exception as e:
-            log(f"converse() error: {e}")
-            return f"Error: {e}"
-
-    return "(hub reconnected)"
+    except Exception as e:
+        log(f"converse() error: {e}")
+        return f"Error: {e}"
 
 
 @mcp.tool

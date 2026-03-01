@@ -14,6 +14,9 @@ import asyncio
 import base64
 import json
 import logging
+import os
+import signal
+import subprocess
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -936,5 +939,24 @@ async def debug_log():
     return JSONResponse({"lines": lines})
 
 
+def _log_sigterm(signum, frame):
+    """Log who sent SIGTERM so we can track down spurious hub restarts."""
+    my_pid = os.getpid()
+    try:
+        # Check all processes for anyone who recently killed us (best effort)
+        parent_pid = os.getppid()
+        parent_info = subprocess.run(
+            ["ps", "-p", str(parent_pid), "-o", "pid,ppid,cmd", "--no-headers"],
+            capture_output=True, text=True, timeout=2
+        ).stdout.strip()
+        log.warning("SIGTERM received! PID=%d parent=%s", my_pid, parent_info or str(parent_pid))
+    except Exception as e:
+        log.warning("SIGTERM received! PID=%d (could not identify sender: %s)", my_pid, e)
+    # Re-raise to let uvicorn do its graceful shutdown
+    signal.signal(signum, signal.SIG_DFL)
+    os.kill(my_pid, signum)
+
+
 if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, _log_sigterm)
     uvicorn.run(app, host="127.0.0.1", port=HUB_PORT, log_level="info")
