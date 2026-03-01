@@ -197,6 +197,54 @@ body {
   padding: 2rem;
 }
 
+/* Focus mode */
+#focus-view {
+  flex: 1;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+#focus-label {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.5;
+}
+.sidebar-focus-card {
+  margin: 0 8px 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid transparent;
+  transition: background 0.15s;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+.sidebar-focus-card:hover { background: var(--bg-hover); }
+.sidebar-focus-card.selected {
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+.sidebar-focus-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  background: #ffffff10;
+  flex-shrink: 0;
+}
+
 /* Header */
 #header {
   padding: 12px 20px;
@@ -1020,6 +1068,10 @@ body {
 
 <div id="sidebar">
   <div id="sidebar-list"></div>
+  <div class="sidebar-focus-card" id="focus-card" onclick="switchToFocus()">
+    <div class="sidebar-focus-icon">&#x1F3AF;</div>
+    <span>Focus</span>
+  </div>
   <div id="sidebar-expand-btn" style="display:none; align-items:center; justify-content:center; padding:8px; cursor:pointer; border-top:1px solid var(--border); color:var(--text-tertiary); font-size:0.7rem;" onclick="toggleSidebarExpand()">&#9776;</div>
 </div>
 <div id="sidebar-overlay" onclick="collapseSidebar()"></div>
@@ -1030,6 +1082,10 @@ body {
 
 <div id="welcome-view">
   <div>Select a voice to start chatting</div>
+</div>
+
+<div id="focus-view">
+  <div id="focus-label">Focus Mode</div>
 </div>
 
 <div id="chat-area" style="display:none;"></div>
@@ -1466,7 +1522,8 @@ function updateLayout() {
   renderSidebar(); // always keep sidebar up to date
   if (debugActive) return; // debug panel handles its own layout
   const inChat = activeSessionId && sessions.has(activeSessionId);
-  document.getElementById('welcome-view').style.display = inChat ? 'none' : 'flex';
+  document.getElementById('welcome-view').style.display = (!inChat && !focusMode) ? 'flex' : 'none';
+  document.getElementById('focus-view').style.display = focusMode ? 'flex' : 'none';
   chatArea.style.display = inChat ? 'flex' : 'none';
   document.getElementById('debug-panel').style.display = 'none';
   document.getElementById('settings-page').style.display = 'none';
@@ -1493,6 +1550,7 @@ function showWelcome() {
   pendingListenSessionId = null;
   activeSessionId = null;
   hideDebugPanel();
+  exitFocusMode();
   document.getElementById('active-voice').style.display = 'none';
   document.getElementById('session-model').style.display = 'none';
   document.getElementById('main-content').style.backgroundColor = '';
@@ -1501,6 +1559,33 @@ function showWelcome() {
 }
 // Alias for compatibility
 function showVoiceGrid() { showWelcome(); }
+
+let focusMode = false;
+
+function switchToFocus() {
+  stopThinkingSound();
+  if (recording) stopRecording(false);
+  stopActiveAudio();
+  stopElapsedTimer();
+  pendingListenSessionId = null;
+  activeSessionId = null;
+  hideDebugPanel();
+  focusMode = true;
+  document.getElementById('active-voice').style.display = 'none';
+  document.getElementById('session-model').style.display = 'none';
+  document.getElementById('main-content').style.backgroundColor = '';
+  textInputBar.classList.remove('active');
+  document.getElementById('focus-card').classList.add('selected');
+  document.getElementById('welcome-view').style.display = 'none';
+  document.getElementById('focus-view').style.display = 'flex';
+  updateLayout();
+}
+
+function exitFocusMode() {
+  focusMode = false;
+  document.getElementById('focus-card').classList.remove('selected');
+  document.getElementById('focus-view').style.display = 'none';
+}
 
 // --- Sidebar rendering ---
 function toggleSidebarExpand() {
@@ -1827,7 +1912,10 @@ function stopActiveAudio({ stashForResume = false } = {}) {
 }
 
 function switchTab(sessionId) {
+  // Don't auto-switch into agent tabs if focus mode is active
+  if (focusMode) return;
   hideDebugPanel();
+  exitFocusMode();
   // Stop audio and recording from the tab we're leaving
   if (activeSessionId && activeSessionId !== sessionId) {
     stopActiveAudio({ stashForResume: true });
@@ -2486,8 +2574,17 @@ function transportPause() {
     const resumeRate = resumeSess ? (resumeSess.speed || 1.0) : 1.0;
     currentAudio = { source, sessionId: pausedSessionId, decodedBuffer: pausedBuffer, _startTime: audioCtx.currentTime - pauseOffset };
     playbackStartTime = audioCtx.currentTime - pauseOffset;
+    // Restore karaoke: if the RAF loop is still alive (frozen during pause), just update the ref.
+    // Otherwise restart from scratch.
+    if (_pausedKaraokeWords) {
+      if (_karaokeRaf && _karaokeWords) {
+        _karaokeAudioRef = currentAudio; // RAF loop resumes using new audio ref
+      } else {
+        karaokeStart(currentAudio, _pausedKaraokeWords);
+      }
+      _pausedKaraokeWords = null;
+    }
     playbackPaused = false;
-    if (_pausedKaraokeWords) { karaokeStart(currentAudio, _pausedKaraokeWords); _pausedKaraokeWords = null; }
     source.onended = () => {
       if (!playbackPaused) {
         currentAudio = null;
@@ -3262,6 +3359,8 @@ function karaokeStart(audioRef, words) {
 
 function _karaokeFrame() {
   if (!_karaokeAudioRef || !_karaokeWords) { karaokeStop(); return; }
+  // During transport pause: keep current word highlighted, freeze loop
+  if (playbackPaused) { _karaokeRaf = requestAnimationFrame(_karaokeFrame); return; }
   // If audio changed (new playback started), stop
   if (currentAudio !== _karaokeAudioRef && currentBufferedPlayer === null) { karaokeStop(); return; }
   const startTime = _karaokeAudioRef._startTime;
