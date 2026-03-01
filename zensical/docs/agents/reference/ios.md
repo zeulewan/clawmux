@@ -183,3 +183,66 @@ All state is saved to UserDefaults:
 | `voice-hub-chats` | JSON | Chat messages per session |
 | `sessionPrefs` | JSON | Per-session voice and speed |
 | Sound/haptic toggles | Bool | Per-mode audio cue and haptic settings |
+
+## Pending Feature Parity
+
+Features added to the web client that are not yet in the iOS app. These are tracked here so that future iOS development stays in sync.
+
+### Karaoke Word Highlighting
+
+The web client highlights each word in assistant messages in real-time as it is spoken, using word-level timestamps from Kokoro's `/dev/captioned_speech` endpoint.
+
+**How it works (web):**
+- The hub calls `/dev/captioned_speech` instead of plain TTS, which returns `{audio: base64_mp3, timestamps: [{word, start_time, end_time}]}`
+- The `audio` WebSocket message now includes a `words` field alongside `data`
+- Browser spans each word in the latest assistant message, then a 60fps RAF loop highlights the current word based on `audioCtx.currentTime - startTime`
+- Active word gets `text-shadow` (bold effect without layout shift) + voice-color background highlight
+- Words are saved and re-applied when switching sessions mid-playback
+
+**iOS implementation notes:**
+- Use the new `/api/tts-captioned` endpoint (POST `{text, voice, speed}`, returns `{audio_b64, words}`) instead of `/api/tts`
+- For live speech from the hub, parse the `words` field from the `audio` WebSocket message
+- Use `AVAudioPlayer.currentTime` as the clock, drive updates with a `CADisplayLink` (60fps)
+- Highlight the current word by applying an `AttributedString` overlay or animating text color/weight in the chat view
+- Preserve word list across session switches — re-apply to the last assistant message when switching back
+
+### Audio Resume on Session Switch (Seek)
+
+The web client saves the playback offset when you switch away from a session mid-speech, then seeks to that offset when you return.
+
+**How it works (web):**
+- On session switch, remaining audio chunks are stashed to `s.audioBuffer` with an `{offset: elapsed}` marker
+- On return, `playAudio` calls `source.start(0, offset)` to seek into the buffer
+- Karaoke timestamps are adjusted by the same offset so highlighting stays in sync
+
+**iOS implementation notes:**
+- iOS already buffers audio for background sessions and replays on switch
+- Add seek: save `player.currentTime` before stopping, store with the audio data, call `player.currentTime = savedOffset` before `play()` on resume
+- `AVAudioPlayer` supports seeking via `currentTime` property
+
+### Mute Button
+
+The web client has a mute toggle that suppresses mic input (auto-record is suspended) without changing the input mode. The button occupies the same space as the cancel button so the layout doesn't shift when recording starts.
+
+**iOS implementation notes:**
+- Add a `micMuted` boolean to ViewModel
+- When muted: skip auto-record, send silent audio to unblock the agent if it's waiting for input, show a visual indicator (mic with slash icon)
+- The button should sit at a fixed position alongside the mic button — does not appear/disappear; always present
+
+### Hub Reconnect Toast
+
+When the WebSocket reconnects (not on first connect), the web client briefly shows a "Hub reconnected" toast that dismisses automatically.
+
+**iOS implementation notes:**
+- Track whether a previous connection was established before the reconnect
+- On reconnect, show a brief system toast or overlay label that auto-dismisses after 2s
+- Do not show on first connection
+
+### Per-Session Model Selection
+
+The web client exposes a model picker per session (claude-opus-4-5, claude-sonnet-4-5, etc.) that overrides the global default.
+
+**iOS implementation notes:**
+- Add model selector to session view settings (or the session detail area)
+- Send model selection via the existing session settings WebSocket message or via `/api/sessions/{id}/model` REST endpoint
+- Persist per-session in `sessionPrefs` UserDefaults key alongside voice and speed
