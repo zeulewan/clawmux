@@ -80,7 +80,7 @@ async def heartbeat_loop() -> None:
 
 # --- TTS / STT ---
 
-async def tts(text: str, voice: str = "af_sky", speed: float = 1.0) -> bytes:
+async def tts(text: str, voice: str = "af_sky") -> bytes:
     """Text → MP3 bytes via Kokoro. Retries up to 3 times on failure."""
     last_err = None
     for attempt in range(3):
@@ -88,7 +88,7 @@ async def tts(text: str, voice: str = "af_sky", speed: float = 1.0) -> bytes:
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.post(
                     f"{KOKORO_URL}/v1/audio/speech",
-                    json={"model": "tts-1", "input": text, "voice": voice, "response_format": "mp3", "speed": speed},
+                    json={"model": "tts-1", "input": text, "voice": voice, "response_format": "mp3"},
                 )
                 resp.raise_for_status()
             return resp.content
@@ -100,7 +100,7 @@ async def tts(text: str, voice: str = "af_sky", speed: float = 1.0) -> bytes:
     raise last_err
 
 
-async def tts_captioned(text: str, voice: str = "af_sky", speed: float = 1.0) -> tuple[str, list]:
+async def tts_captioned(text: str, voice: str = "af_sky") -> tuple[str, list]:
     """Text → (audio_b64, word_timestamps) via Kokoro captioned speech endpoint."""
     last_err = None
     for attempt in range(3):
@@ -108,7 +108,7 @@ async def tts_captioned(text: str, voice: str = "af_sky", speed: float = 1.0) ->
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.post(
                     f"{KOKORO_URL}/dev/captioned_speech",
-                    json={"input": text, "voice": voice, "speed": speed, "stream": False, "return_timestamps": True},
+                    json={"input": text, "voice": voice, "stream": False, "return_timestamps": True},
                 )
                 resp.raise_for_status()
                 data = resp.json()
@@ -152,20 +152,19 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
 
     session.touch()
 
-    # Use session's voice/speed overrides
+    # Use session's voice override
     voice = session.voice
-    speed = session.speed
 
     session.processing = False  # Agent is now in a converse cycle
     session.in_converse = True
 
     try:
-        return await _do_converse(session_id, session, message, wait_for_response, voice, speed, goodbye)
+        return await _do_converse(session_id, session, message, wait_for_response, voice, goodbye)
     finally:
         session.in_converse = False
 
 
-async def _do_converse(session_id, session, message, wait_for_response, voice, speed, goodbye):
+async def _do_converse(session_id, session, message, wait_for_response, voice, goodbye):
     # Check for interjections BEFORE speaking — let agent see them first
     if session.interjections:
         text = " ... ".join(session.interjections)
@@ -216,10 +215,10 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
         # TTS
         log.info("[%s] TTS: %s", session_id, message[:80])
         try:
-            audio_b64, word_timestamps = await tts_captioned(message, voice, speed)
+            audio_b64, word_timestamps = await tts_captioned(message, voice)
         except Exception as e:
             log.warning("[%s] Captioned TTS failed (%s), falling back to plain TTS", session_id, e)
-            mp3 = await tts(message, voice, speed)
+            mp3 = await tts(message, voice)
             audio_b64 = base64.b64encode(mp3).decode()
             word_timestamps = []
 
@@ -740,11 +739,10 @@ async def text_to_speech(request: Request):
     data = await request.json()
     text = data.get("text", "").strip()
     voice = data.get("voice", "af_sky")
-    speed = data.get("speed", 1.0)
     if not text:
         return JSONResponse({"error": "no text"}, status_code=400)
     try:
-        audio = await tts(text, voice=voice, speed=speed)
+        audio = await tts(text, voice=voice)
     except Exception as e:
         log.error("TTS failed: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -758,11 +756,10 @@ async def text_to_speech_captioned(request: Request):
     data = await request.json()
     text = data.get("text", "").strip()
     voice = data.get("voice", "af_sky")
-    speed = data.get("speed", 1.0)
     if not text:
         return JSONResponse({"error": "no text"}, status_code=400)
     try:
-        audio_b64, words = await tts_captioned(text, voice=voice, speed=speed)
+        audio_b64, words = await tts_captioned(text, voice=voice)
         return JSONResponse({"audio_b64": audio_b64, "words": words})
     except Exception as e:
         log.error("TTS captioned failed: %s", e)

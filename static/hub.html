@@ -1947,7 +1947,7 @@ async function playMessageTTS(btn, text, voiceId) {
     const resp = await fetch('/api/tts-captioned', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, voice: voiceId || 'af_sky', speed }),
+      body: JSON.stringify({ text, voice: voiceId || 'af_sky' }),
     });
     if (!resp.ok) throw new Error('TTS failed');
     const { audio_b64, words } = await resp.json();
