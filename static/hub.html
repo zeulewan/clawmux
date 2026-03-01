@@ -1748,31 +1748,63 @@ function renderVoiceGridIfActive() { renderSidebar(); }
 
 // --- Tab management (via voice grid) ---
 
-function stopActiveAudio() {
+function stopActiveAudio({ stashForResume = false } = {}) {
   // Stop currently playing audio (Web Audio sources can't be paused/resumed)
   const stoppedSessionId = (currentAudio && currentAudio.sessionId) ||
                            (currentBufferedPlayer && currentBufferedPlayer.sessionId) || null;
+
+  // Stash remaining audio so it can be replayed when switching back to the tab
+  if (stashForResume && stoppedSessionId) {
+    const sess = sessions.get(stoppedSessionId);
+    if (sess) {
+      const remaining = [];
+      if (currentBufferedPlayer) {
+        // Buffered playback: stash current chunk (from offset) + remaining chunks
+        const idx = currentBufferedPlayer.chunkIndex;
+        const chunks = currentBufferedPlayer.chunks;
+        // For the current chunk, note how far in we are so resume can seek
+        if (currentAudio && currentAudio.b64data && currentAudio._startTime != null) {
+          const elapsed = audioCtx.currentTime - currentAudio._startTime;
+          remaining.push({ b64data: currentAudio.b64data, offset: elapsed });
+        } else if (idx < chunks.length) {
+          remaining.push(chunks[idx]);
+        }
+        remaining.push(...chunks.slice(idx + 1));
+      } else if (currentAudio && currentAudio.b64data) {
+        // Single chunk playback: stash with seek offset
+        if (currentAudio._startTime != null) {
+          const elapsed = audioCtx.currentTime - currentAudio._startTime;
+          remaining.push({ b64data: currentAudio.b64data, offset: elapsed });
+        } else {
+          remaining.push(currentAudio.b64data);
+        }
+      }
+      // Stash queued chunks (no offset needed)
+      const queued = _audioPlayQueue.get(stoppedSessionId) || [];
+      remaining.push(...queued);
+      if (remaining.length > 0) {
+        sess.audioBuffer = [...remaining, ...(sess.audioBuffer || [])];
+      }
+    }
+  }
+
   if (currentAudio) {
     if (currentAudio.source) { try { currentAudio.source.onended = null; currentAudio.source.stop(); } catch(e) {} }
     currentAudio = null;
   }
-  // Stop buffered playback chain — remaining chunks stay in buffer
   if (currentBufferedPlayer) {
     currentBufferedPlayer.stop();
     currentBufferedPlayer = null;
   }
-  // Clear audio playback queue
   _audioPlayQueue.clear();
   _audioPlaying = false;
-  // Clear paused state
   playbackPaused = false;
   pausedBuffer = null;
   pauseOffset = 0;
   pausedSessionId = null;
-  // Clean up TTS play button state
   stopTTSPlayback();
-  // Fix the session sidebar state — it was left as 'speaking'
-  if (stoppedSessionId) {
+  // Update sidebar state — but not if stashing for resume (session will still be 'speaking')
+  if (!stashForResume && stoppedSessionId) {
     const sess = sessions.get(stoppedSessionId);
     if (sess && sess.isThinking) {
       setSessionSidebarState(stoppedSessionId, 'thinking');
@@ -1787,7 +1819,7 @@ function switchTab(sessionId) {
   hideDebugPanel();
   // Stop audio and recording from the tab we're leaving
   if (activeSessionId && activeSessionId !== sessionId) {
-    stopActiveAudio();
+    stopActiveAudio({ stashForResume: true });
     stopThinkingSound();
     if (recording) stopRecording(true); // discard — don't send to old session
     pendingListenSessionId = null;
@@ -3052,13 +3084,13 @@ function _playNextQueued(sessionId) {
   }
 }
 
-function playAudio(sessionId, b64data) {
+function playAudio(sessionId, b64data, startOffset = 0) {
   const bytes = Uint8Array.from(atob(b64data), c => c.charCodeAt(0));
   const buffer = bytes.buffer;
 
   // Track this playback instance so we can detect if it's been superseded
   const playbackId = Symbol();
-  currentAudio = { playbackId, sessionId, source: null };
+  currentAudio = { playbackId, sessionId, source: null, b64data, _startTime: null };
   if (sessionId === activeSessionId) updateMicUI();
 
   const cleanup = () => {
@@ -3095,11 +3127,11 @@ function playAudio(sessionId, b64data) {
       const source = audioCtx.createBufferSource();
       source.buffer = decoded;
       source.connect(audioCtx.destination);
-      if (currentAudio) { currentAudio.source = source; currentAudio.decodedBuffer = decoded; }
+      if (currentAudio) { currentAudio.source = source; currentAudio.decodedBuffer = decoded; currentAudio._startTime = audioCtx.currentTime - startOffset; }
       playbackStartTime = audioCtx.currentTime;
       playbackPaused = false;
       source.onended = () => { if (!playbackPaused) { stopPlaybackVAD(); sendDone(); } };
-      source.start(0);
+      source.start(0, startOffset);
       updateTransportBar();
       if (autoInterruptEnabled && !micMuted) startPlaybackVAD(sessionId);
     })
@@ -3144,7 +3176,9 @@ function playBufferedAudio(sessionId, chunks) {
       }
       return;
     }
-    const b64data = chunks[i++];
+    const chunk = chunks[i++];
+    const b64data = (typeof chunk === 'string') ? chunk : chunk.b64data;
+    const startOffset = (typeof chunk === 'object' && chunk.offset) ? chunk.offset : 0;
     const bytes = Uint8Array.from(atob(b64data), c => c.charCodeAt(0));
     const buffer = bytes.buffer;
 
@@ -3152,14 +3186,16 @@ function playBufferedAudio(sessionId, chunks) {
     ready.then(() => audioCtx.decodeAudioData(buffer.slice(0)))
       .then(decoded => {
         if (stopped) return;
+        // Clamp offset to valid range
+        const offset = Math.min(startOffset, decoded.duration - 0.05);
         const source = audioCtx.createBufferSource();
         source.buffer = decoded;
         source.connect(audioCtx.destination);
-        currentAudio = { source, sessionId, decodedBuffer: decoded };
+        currentAudio = { source, sessionId, decodedBuffer: decoded, b64data, _startTime: audioCtx.currentTime - offset };
         playbackStartTime = audioCtx.currentTime;
         playbackPaused = false;
         source.onended = () => { if (!playbackPaused) { currentAudio = null; playNext(); } };
-        source.start(0);
+        source.start(0, offset > 0 ? offset : 0);
         updateTransportBar();
       })
       .catch(() => { currentAudio = null; playNext(); });
