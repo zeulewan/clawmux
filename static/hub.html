@@ -392,6 +392,8 @@ body {
   border-bottom-left-radius: 6px;
   /* Voice color background applied via JS */
 }
+.karaoke-word { transition: color 0.05s, font-weight 0.05s; }
+.karaoke-word.active { font-weight: 700; color: #fff; }
 .msg.system {
   align-self: center;
   background: none;
@@ -1803,6 +1805,7 @@ function stopActiveAudio({ stashForResume = false } = {}) {
   pauseOffset = 0;
   pausedSessionId = null;
   stopTTSPlayback();
+  karaokeStop();
   // Update sidebar state — but not if stashing for resume (session will still be 'speaking')
   if (!stashForResume && stoppedSessionId) {
     const sess = sessions.get(stoppedSessionId);
@@ -2719,6 +2722,7 @@ function stopThinkingSound() {
 }
 
 // --- WebSocket ---
+let _wsHasConnected = false;
 function connect() {
   setConnected('connecting');
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -2727,6 +2731,8 @@ function connect() {
 
   ws.onopen = () => {
     setConnected('connected');
+    if (_wsHasConnected) showCopyToast('Hub reconnected');
+    _wsHasConnected = true;
     if (!activeSessionId) setStatus('Connected');
     // Restore persisted settings
     fetch('/api/settings').then(r => r.json()).then(s => {
@@ -2956,6 +2962,7 @@ function handleMessage(data) {
   } else if (type === 'audio') {
     s.status = 'active';
     setSessionSidebarState(session_id, 'speaking');
+    if (data.words && data.words.length) karaokeSetupMessage(session_id, data.words);
     if (session_id === activeSessionId) {
       enqueueAudio(session_id, data.data);
       setStatus('Speaking...', session_id);
@@ -3130,12 +3137,113 @@ function playAudio(sessionId, b64data, startOffset = 0) {
       if (currentAudio) { currentAudio.source = source; currentAudio.decodedBuffer = decoded; currentAudio._startTime = audioCtx.currentTime - startOffset; }
       playbackStartTime = audioCtx.currentTime;
       playbackPaused = false;
-      source.onended = () => { if (!playbackPaused) { stopPlaybackVAD(); sendDone(); } };
+      // Start karaoke if we have pending words for this session
+      const pendingWords = _pendingKaraokeWords.get(sessionId);
+      if (pendingWords) { _pendingKaraokeWords.delete(sessionId); karaokeStart(currentAudio, pendingWords); }
+      source.onended = () => { if (!playbackPaused) { stopPlaybackVAD(); karaokeStop(); sendDone(); } };
       source.start(0, startOffset);
       updateTransportBar();
       if (autoInterruptEnabled && !micMuted) startPlaybackVAD(sessionId);
     })
     .catch(() => { stopPlaybackVAD(); sendDone(); setStatus('Audio error'); });
+}
+
+// --- Karaoke word highlighting ---
+let _karaokeRaf = null;
+let _karaokeWords = null;   // [{word, start_time, end_time, el}] for real words with span refs
+let _karaokeAudioRef = null; // reference to currentAudio at karaoke start
+let _karaokeActiveIdx = -1;
+
+// Per-session pending words (waiting for audio to start)
+const _pendingKaraokeWords = new Map(); // sessionId -> words[]
+
+function karaokeSetupMessage(sessionId, words) {
+  // Filter to real (non-punctuation) words only
+  const realWords = words.filter(w => /\w/.test(w.word));
+  if (realWords.length === 0) return;
+  _pendingKaraokeWords.set(sessionId, realWords);
+
+  // Find the last assistant message element for this session and apply spans
+  if (sessionId !== activeSessionId) return;
+  const msgs = chatArea.querySelectorAll('.msg.assistant');
+  if (!msgs.length) return;
+  const msgEl = msgs[msgs.length - 1];
+  _applyKaraokeSpans(msgEl, realWords);
+}
+
+function _applyKaraokeSpans(msgEl, realWords) {
+  // Find the text node (first child before msg-actions)
+  const textNode = Array.from(msgEl.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
+  if (!textNode) return;
+  const text = textNode.textContent;
+
+  // Greedy forward match: find each word in the text in order
+  const frag = document.createDocumentFragment();
+  let pos = 0;
+  for (const w of realWords) {
+    const idx = text.indexOf(w.word, pos);
+    if (idx === -1) { w.el = null; continue; }
+    // Text before this word
+    if (idx > pos) frag.appendChild(document.createTextNode(text.slice(pos, idx)));
+    // Word span
+    const span = document.createElement('span');
+    span.className = 'karaoke-word';
+    span.textContent = w.word;
+    w.el = span;
+    frag.appendChild(span);
+    pos = idx + w.word.length;
+  }
+  // Remaining text
+  if (pos < text.length) frag.appendChild(document.createTextNode(text.slice(pos)));
+
+  textNode.replaceWith(frag);
+}
+
+function karaokeStart(audioRef, words) {
+  karaokeStop();
+  if (!words || !words.length) return;
+  const activeWords = words.filter(w => w.el);
+  if (!activeWords.length) return;
+  _karaokeWords = activeWords;
+  _karaokeAudioRef = audioRef;
+  _karaokeActiveIdx = -1;
+  _karaokeRaf = requestAnimationFrame(_karaokeFrame);
+}
+
+function _karaokeFrame() {
+  if (!_karaokeAudioRef || !_karaokeWords) { karaokeStop(); return; }
+  // If audio changed (new playback started), stop
+  if (currentAudio !== _karaokeAudioRef && currentBufferedPlayer === null) { karaokeStop(); return; }
+  const startTime = _karaokeAudioRef._startTime;
+  if (startTime == null) { _karaokeRaf = requestAnimationFrame(_karaokeFrame); return; }
+  const elapsed = audioCtx.currentTime - startTime;
+
+  // Find active word
+  let newIdx = -1;
+  for (let i = 0; i < _karaokeWords.length; i++) {
+    const w = _karaokeWords[i];
+    if (elapsed >= w.start_time && elapsed < w.end_time) { newIdx = i; break; }
+  }
+  if (newIdx !== _karaokeActiveIdx) {
+    if (_karaokeActiveIdx >= 0 && _karaokeWords[_karaokeActiveIdx].el) {
+      _karaokeWords[_karaokeActiveIdx].el.classList.remove('active');
+    }
+    if (newIdx >= 0 && _karaokeWords[newIdx].el) {
+      _karaokeWords[newIdx].el.classList.add('active');
+    }
+    _karaokeActiveIdx = newIdx;
+  }
+  _karaokeRaf = requestAnimationFrame(_karaokeFrame);
+}
+
+function karaokeStop() {
+  if (_karaokeRaf) { cancelAnimationFrame(_karaokeRaf); _karaokeRaf = null; }
+  if (_karaokeActiveIdx >= 0 && _karaokeWords && _karaokeWords[_karaokeActiveIdx]?.el) {
+    _karaokeWords[_karaokeActiveIdx].el.classList.remove('active');
+  }
+  _karaokeWords = null;
+  _karaokeAudioRef = null;
+  _karaokeActiveIdx = -1;
 }
 
 // --- Buffered playback ---
@@ -3828,8 +3936,9 @@ function handleMsgPointerUp() {
 }
 
 let copyToastTimer = null;
-function showCopyToast() {
+function showCopyToast(msg) {
   const toast = document.getElementById('copy-toast');
+  toast.textContent = msg || 'Copied!';
   toast.classList.add('visible');
   if (copyToastTimer) clearTimeout(copyToastTimer);
   copyToastTimer = setTimeout(() => toast.classList.remove('visible'), 1500);

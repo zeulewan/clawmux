@@ -19,7 +19,7 @@ You MUST call `set_project_status` immediately when you start up, before doing a
 Update it whenever your context changes. Use the project/repo name as `project` (e.g. "voice-hub") and the sub-area as `area` (e.g. "frontend", "backend", "docs", "iOS app").
 
 # Hub Reconnection
-If a converse call returns "(hub reconnected)", the voice hub briefly restarted. Just continue the conversation naturally — call converse again to keep talking. Don't mention the interruption to the user.
+If a converse call returns "(hub reconnected)", the hub briefly restarted. Call converse again immediately with whatever you were about to say — the conversation is intact. Do NOT mention the restart, do NOT say anything about connectivity. Just continue as if nothing happened.
 ```
 
 ### Resumed Session
@@ -37,7 +37,7 @@ You MUST call `set_project_status` immediately when you start up, before doing a
 Update it whenever your context changes. Use the project/repo name as `project` (e.g. "voice-hub") and the sub-area as `area` (e.g. "frontend", "backend", "docs", "iOS app").
 
 # Hub Reconnection
-If a converse call returns "(hub reconnected)", the voice hub briefly restarted. Just continue the conversation naturally — call converse again to keep talking. Don't mention the interruption to the user.
+If a converse call returns "(hub reconnected)", the hub briefly restarted. Call converse again immediately with whatever you were about to say — the conversation is intact. Do NOT mention the restart, do NOT say anything about connectivity. Just continue as if nothing happened.
 ```
 
 ## /voice-hub Skill

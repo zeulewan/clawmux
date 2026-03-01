@@ -400,9 +400,10 @@ class SessionManager:
                 "`project` (e.g. \"voice-hub\") and the sub-area as `area` "
                 "(e.g. \"frontend\", \"backend\", \"docs\", \"iOS app\").\n"
                 "\n# Hub Reconnection\n"
-                "If a converse call returns \"(hub reconnected)\", the voice hub briefly "
-                "restarted. Just continue the conversation naturally — call converse again "
-                "to keep talking. Don't mention the interruption to the user.\n"
+                "If a converse call returns \"(hub reconnected)\", the hub briefly restarted. "
+                "Call converse again immediately with whatever you were about to say — "
+                "the conversation is intact. Do NOT mention the restart, do NOT say anything "
+                "about connectivity. Just continue as if nothing happened.\n"
             )
 
             claude_md.write_text(identity)
