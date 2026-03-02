@@ -68,15 +68,47 @@ clawmux reply msg-a1b2c3 "It's running on port 8080."
 
 The hub routes this back to the original sender, unblocking their `--wait-response` call.
 
+### clawmux start
+
+Starts the ClawMux hub. Launches the hub process, binds to the configured port, and begins accepting connections.
+
+```
+clawmux start
+clawmux start --port 3460
+```
+
+### clawmux stop
+
+Stops the ClawMux hub gracefully. Active agent sessions are preserved in tmux — they just lose hub connectivity until the hub restarts.
+
+```
+clawmux stop
+```
+
 ### clawmux status
 
-Shows hub state, active sessions, and any pending or failed messages.
+Shows hub state, active sessions, and any pending or failed messages. With no arguments, shows the full overview. With an agent name, shows detailed status for that agent.
 
 ```
 clawmux status
+clawmux status sky
+clawmux status --all
 ```
 
-Prints whether the browser is connected, which sessions are active, and any unacknowledged messages for the calling agent.
+**Hub overview** (no arguments):
+
+- Hub uptime and port
+- Browser connection status
+- List of active sessions with current state (idle, thinking, speaking, listening)
+- Pending/failed message counts
+
+**Agent detail** (`clawmux status sky`):
+
+- Current state: idle, thinking, speaking, listening, or in a converse call
+- What the agent is working on (if it has pushed a status update)
+- Pending inbound messages
+- Recent message history (last 10 sent/received)
+- Session uptime
 
 ## Message Injection
 
