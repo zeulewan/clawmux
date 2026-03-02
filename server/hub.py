@@ -55,6 +55,12 @@ _browser_viewed_session: str | None = None
 async def send_to_browser(data: dict) -> bool:
     """Broadcast a message to all connected browser/app clients.
     Returns True if at least one client received the message."""
+    msg_type = data.get("type", "")
+    session_id = data.get("session_id", "")
+    if not browser_clients:
+        if msg_type in ("assistant_text", "user_text", "audio"):
+            log.warning("[%s] No browser clients for %s", session_id, msg_type)
+        return False
     dead = []
     for ws in list(browser_clients):
         try:
@@ -63,6 +69,8 @@ async def send_to_browser(data: dict) -> bool:
             dead.append(ws)
     for ws in dead:
         browser_clients.discard(ws)
+        if msg_type in ("assistant_text", "user_text", "audio"):
+            log.warning("[%s] Browser client died during %s send", session_id, msg_type)
     return len(browser_clients) > 0
 
 
@@ -108,8 +116,14 @@ async def tts_captioned(text: str, voice: str = "af_sky", speed: float = 1.0) ->
     # At higher speeds, Kokoro clips the very beginning of the audio.
     # Workaround: prepend a dummy word so the real first word isn't clipped,
     # then strip the dummy from audio and timestamps.
-    PREFIX = "Hmm, well,"
-    use_prefix = speed >= 2.0
+    # Scale prefix length based on speed — more warmup needed at higher speeds
+    if speed >= 2.0:
+        PREFIX = "Hmm, well,"
+    elif speed >= 1.5:
+        PREFIX = "Hmm,"
+    else:
+        PREFIX = None
+    use_prefix = PREFIX is not None
     tts_input = f"{PREFIX} {text}" if use_prefix else text
 
     last_err = None
