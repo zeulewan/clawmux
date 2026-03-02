@@ -9,7 +9,7 @@ Detailed release history and upcoming work. Each version page includes checklist
 
 ## Future
 
-- [v0.7.0 — Agent Orchestration](v0.7.0.md): Sub-agent workers, group messaging, public API.
+- [v0.7.0 — Agent Orchestration & Workspace](v0.7.0.md): Workspace management, agent personalities, sub-agent workers.
 
 ## History
 
