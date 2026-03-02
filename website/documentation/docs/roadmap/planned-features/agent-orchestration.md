@@ -1,4 +1,4 @@
-# v0.6.0 - Agent Orchestration
+# Agent Orchestration
 
 Dual-backend architecture, agent-to-agent communication, sub-agent workers, and a public API.
 
@@ -33,7 +33,7 @@ A new `check_inbox` tool gives agents a non-blocking way to poll for pending mes
 
 ## CLI-Based Agent Interface
 
-The MCP server is replaced by `clawmux`, a CLI tool for voice and inter-agent messaging. Moved to [v0.5.0](v0.5.0/cli.md) scope.
+The MCP server is replaced by `clawmux`, a CLI tool for voice and inter-agent messaging. Moved to [v0.5.0](../v0.5.0/cli.md) scope.
 
 ## Sub-Agent Orchestration
 
@@ -49,7 +49,7 @@ Leaders get five new tools: `spawn_worker(task)` creates a worker with a task de
 
 Workers appear indented under their leader in the sidebar. Clicking one opens its conversation with a text input. Leaders get a collapsible "Workers" panel showing all worker status and quick actions. Max 4 workers per leader, 14 total. Idle workers auto-terminate after 30 minutes. Killing a leader cascades to all its workers.
 
-Implementation details live in the [orchestration reference](../agents/reference/orchestration.md).
+Implementation details live in the [orchestration reference](../../agents/reference/orchestration.md).
 
 ## Public API
 
@@ -61,7 +61,7 @@ The hub already has a REST + WebSocket API that the browser uses. v0.6.0 formali
 
 New endpoints cover agent management: listing agents with status and worker counts, sending messages to agents, reading inboxes, and spawning or listing workers. New WebSocket events stream worker lifecycle and agent status in real time.
 
-Full protocol reference: [protocol docs](../agents/reference/protocol.md)
+Full protocol reference: [protocol docs](../../agents/reference/protocol.md)
 
 ## Checklist
 
