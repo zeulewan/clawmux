@@ -108,8 +108,8 @@ async def tts_captioned(text: str, voice: str = "af_sky", speed: float = 1.0) ->
     # At higher speeds, Kokoro clips the very beginning of the audio.
     # Workaround: prepend a dummy word so the real first word isn't clipped,
     # then strip the dummy from audio and timestamps.
-    PREFIX = "..."
-    use_prefix = speed > 1.0
+    PREFIX = "Hmm, well,"
+    use_prefix = speed >= 2.0
     tts_input = f"{PREFIX} {text}" if use_prefix else text
 
     last_err = None
@@ -144,12 +144,13 @@ def _strip_prefix_audio(audio_b64: str, timestamps: list, prefix: str) -> tuple[
     import base64, struct
 
     # Find how many timestamp entries belong to the prefix
-    prefix_words = prefix.replace(".", " . ").split()  # "..." → [".", ".", "."]
-    # The prefix generates tokens like "..." or "." — find the cut point
+    # Count words in the prefix (including punctuation as separate tokens)
+    import re
+    prefix_tokens = set(re.findall(r'\w+|[^\w\s]', prefix.lower()))
     cut_idx = 0
     for i, ts in enumerate(timestamps):
-        w = ts["word"].strip()
-        if w in (".", "...", ",", "-", "—", ""):
+        w = ts["word"].strip().lower()
+        if w in prefix_tokens or w in (".", "...", ",", "-", "—", ""):
             cut_idx = i + 1
         else:
             break  # hit a real word
@@ -158,8 +159,8 @@ def _strip_prefix_audio(audio_b64: str, timestamps: list, prefix: str) -> tuple[
 
     # The cut time is the start of the first real word
     cut_time = timestamps[cut_idx]["start_time"] if cut_idx < len(timestamps) else 0
-    # Add a small margin before the real first word to avoid clipping
-    cut_time = max(0, cut_time - 0.01)
+    # Add margin before the real first word to avoid clipping
+    cut_time = max(0, cut_time - 0.05)
 
     raw = base64.b64decode(audio_b64)
     if raw[:4] != b'RIFF' or raw[8:12] != b'WAVE':
@@ -278,11 +279,12 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
         session.interjections.clear()
         history.clear_interjections(session.voice)
         log.info("[%s] Pre-speech interjection(s), skipping TTS: %s", session_id, text[:100])
+        # Persist to history first so sync can recover if hub crashes
+        history.append(session.voice, session.label, "assistant", message)
         # Still show the assistant message in browser (but don't speak it)
         if session_id != _browser_viewed_session:
             session.unread_count += 1
         await send_to_browser({"session_id": session_id, "type": "assistant_text", "text": message})
-        history.append(session.voice, session.label, "assistant", message)
         session.status_text = ""
         session.processing = True  # Agent will process the interjection
         await send_to_browser({"session_id": session_id, "type": "done", "processing": True})
@@ -293,6 +295,9 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
     silent = not message
 
     if not silent:
+        # Persist to history FIRST so sync can recover if hub crashes mid-delivery
+        history.append(session.voice, session.label, "assistant", message)
+
         # Signal that Claude is about to speak (lets client show thinking indicator)
         await send_to_browser({"session_id": session_id, "type": "thinking"})
 
@@ -300,7 +305,6 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
         if session_id != _browser_viewed_session:
             session.unread_count += 1
         await send_to_browser({"session_id": session_id, "type": "assistant_text", "text": message})
-        history.append(session.voice, session.label, "assistant", message)
 
     # Skip TTS if silent, in text mode, or voice responses disabled
     skip_tts = silent or session.text_mode or not _load_settings().get("voice_responses", True)

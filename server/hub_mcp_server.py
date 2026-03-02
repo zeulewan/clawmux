@@ -24,6 +24,10 @@ SESSION_ID = os.environ.get("VOICE_HUB_SESSION_ID", "")
 HUB_PORT = int(os.environ.get("VOICE_CHAT_HUB_PORT", "3460"))
 HUB_WS_URL = f"ws://127.0.0.1:{HUB_PORT}/mcp/{SESSION_ID}"
 
+# Derive voice_id from work dir for history fallback
+_VOICE_ID = os.path.basename(os.getcwd())  # e.g. "bm_fable"
+_HISTORY_DIR = os.path.expanduser("~/GIT/voice-chat/data/history")
+
 # Logging to stderr + file (stdout reserved for MCP stdio)
 _logger = logging.getLogger("voice-hub")
 _logger.setLevel(logging.DEBUG)
@@ -38,6 +42,23 @@ _logger.addHandler(_file)
 
 def log(msg: str) -> None:
     _logger.info(msg)
+
+
+def _save_to_history(message: str) -> None:
+    """Write a message directly to the history file as fallback when hub delivery fails."""
+    if not message or not _VOICE_ID:
+        return
+    import time
+    path = os.path.join(_HISTORY_DIR, f"{_VOICE_ID}.json")
+    try:
+        data = json.loads(open(path).read()) if os.path.exists(path) else {}
+        msgs = data.setdefault("messages", [])
+        msgs.append({"role": "assistant", "text": message, "ts": time.time()})
+        with open(path, "w") as f:
+            json.dump(data, f, indent=2)
+        log(f"Saved undelivered message to history: {message[:60]}")
+    except Exception as e:
+        log(f"Failed to save to history: {e}")
 
 
 # Shared WebSocket connection to the hub
@@ -143,6 +164,9 @@ async def converse(
     except ConnectionClosed:
         log("Hub connection lost during converse(), waiting for reconnect...")
         hub_ws = None
+        # Save undelivered message to history so browser sync can recover it
+        if message:
+            _save_to_history(message)
         # Wait up to 30s for reconnection, then signal the agent
         for _ in range(15):
             await asyncio.sleep(2)

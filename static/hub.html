@@ -2935,6 +2935,7 @@ async function _refreshHistory(sessionId, voiceId) {
     const needsSync = serverLen > localLen ||
       (serverLen > 0 && (!lastLocal || lastServer.text !== lastLocal.text || lastServer.role !== lastLocal.role));
     if (needsSync) {
+      console.log(`[historySync] ${sessionId}: syncing — server=${serverLen} local=${localLen}`, lastServer?.text?.slice(0,50), lastLocal?.text?.slice(0,50));
       // Preserve system messages and merge with server messages
       const systemMsgs = s.messages.filter(m => m.role === 'system');
       s.messages = [...systemMsgs, ...serverMessages];
@@ -3474,7 +3475,7 @@ function karaokeSeekTo(startTime) {
 }
 
 // Play message TTS from a specific offset (or beginning). Uses cached buffer if available.
-async function karaokePlayFromWord(msgEl, startTime, fetchId, clickedWord = false) {
+async function karaokePlayFromWord(msgEl, startTime, fetchId, clickedWord = false, clickedWordText = null) {
   const voiceId = msgEl.dataset.voice || (activeSessionId ? sessions.get(activeSessionId)?.voice : null) || 'af_sky';
   const s = activeSessionId ? sessions.get(activeSessionId) : null;
   const speed = s ? (s.speed || 1.0) : 1.0;
@@ -3505,11 +3506,16 @@ async function karaokePlayFromWord(msgEl, startTime, fetchId, clickedWord = fals
   if (fetchId !== undefined && fetchId !== _karaokeFetchId) return;
   if (realWords.length) _applyKaraokeSpans(msgEl, realWords);
 
+  // If startTime was 0 because the span had no timestamp yet (first click),
+  // resolve it now from the fetched word timestamps
+  if (startTime === 0 && clickedWordText && realWords.length) {
+    const match = realWords.find(w => w.word === clickedWordText);
+    if (match) startTime = match.start_time;
+  }
+
   stopActiveAudio();
   const sessionId = activeSessionId || '__tts__';
   const offset = Math.max(0, Math.min(startTime || 0, decoded.duration - 0.05));
-  console.log('[karaokePlay] startTime=', startTime, 'offset=', offset, 'duration=', decoded.duration,
-    'firstWord=', realWords.length ? realWords[0] : 'none', 'clickedWord=', clickedWord, 'cached=', !!msgEl._ttsCache);
   const source = audioCtx.createBufferSource();
   source.buffer = decoded;
   source.connect(audioCtx.destination);
@@ -3534,7 +3540,9 @@ chatArea.addEventListener('click', async (e) => {
   if (window.getSelection && window.getSelection().toString().length > 0) return; // don't interfere with text selection
 
   const wordEl = e.target.closest('.karaoke-word');
-  const startTime = wordEl ? parseFloat(wordEl.dataset.start) : 0;
+  const clickedWordText = wordEl ? wordEl.textContent : null;
+  // dataset.start may not exist on first click (hover-only spans without timestamps)
+  const startTime = wordEl && wordEl.dataset.start != null ? parseFloat(wordEl.dataset.start) : 0;
 
   // Only seek if clicking the message that's currently playing karaoke
   const currentKaraokeMsgEl = (_karaokeWords && _karaokeWords.length > 0)
@@ -3549,7 +3557,7 @@ chatArea.addEventListener('click', async (e) => {
     // New TTS play — increment fetch ID to cancel any in-flight fetch for a different message
     const fetchId = ++_karaokeFetchId;
     e.stopPropagation();
-    await karaokePlayFromWord(msgEl, isNaN(startTime) ? 0 : startTime, fetchId, !!wordEl);
+    await karaokePlayFromWord(msgEl, isNaN(startTime) ? 0 : startTime, fetchId, !!wordEl, clickedWordText);
   }
 });
 
