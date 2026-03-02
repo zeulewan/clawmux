@@ -3,22 +3,10 @@
 site_name = "ClawMux Docs"
 site_description = "Multi-agent voice interface for Claude Code. Talk to your agents."
 site_author = "Zeul"
-site_url = "https://zeulewan.github.io/clawmux/"
+site_url = "https://clawmux.com/"
 repo_url = "https://github.com/zeulewan/clawmux"
 repo_name = "zeulewan/clawmux"
 copyright = "&copy; 2026 Zeul Mordasiewicz"
-
-[[project.nav]]
-Home = "/"
-
-[[project.nav]]
-"For Humans" = "humans/index.md"
-
-[[project.nav]]
-"For Agents" = "agents/index.md"
-
-[[project.nav]]
-Roadmap = "roadmap/planned-features.md"
 
 [project.theme]
 custom_dir = "overrides"
