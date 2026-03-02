@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy - ClawMux</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%233a86ff'/><path d='M32 12a6 6 0 0 1 6 6v14a6 6 0 0 1-12 0V18a6 6 0 0 1 6-6z' fill='white'/><path d='M20 30a12 12 0 0 0 24 0' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/><line x1='32' y1='42' x2='32' y2='50' stroke='white' stroke-width='3' stroke-linecap='round'/><line x1='25' y1='50' x2='39' y2='50' stroke='white' stroke-width='3' stroke-linecap='round'/></svg>">
+  <style>
+    :root {
+      --bg: #06090f;
+      --text: #e2e8f0;
+      --text-dim: #8ea0b8;
+      --text-faint: #4e6277;
+      --purple: #a78bfa;
+      --violet: #818cf8;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f8fafc;
+        --text: #0f172a;
+        --text-dim: #475569;
+        --text-faint: #94a3b8;
+        --purple: #7c3aed;
+        --violet: #4f46e5;
+      }
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, system-ui, sans-serif;
+      line-height: 1.7;
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 60px 24px;
+    }
+    h1 { font-size: 28px; margin-bottom: 8px; }
+    h2 { font-size: 18px; margin-top: 32px; margin-bottom: 8px; color: var(--purple); }
+    p, li { color: var(--text-dim); font-size: 15px; }
+    a { color: var(--purple); text-decoration: none; }
+    a:hover { color: var(--violet); }
+    ul { padding-left: 20px; }
+    li { margin-bottom: 6px; }
+    .back { display: inline-block; margin-bottom: 32px; font-size: 13px; color: var(--text-faint); }
+    .updated { margin-top: 40px; font-size: 13px; color: var(--text-faint); }
+  </style>
+</head>
+<body>
+  <a class="back" href="index.html">&larr; Back to ClawMux</a>
+  <h1>Privacy Policy</h1>
+  <p><strong>ClawMux</strong> does not collect, store, or transmit any personal data. Period.</p>
+
+  <h2>What the app does</h2>
+  <ul>
+    <li>Runs entirely on your local machine — your voice, your code, your data stays on your hardware</li>
+    <li>Speech-to-text and text-to-speech are processed locally via Whisper and Kokoro</li>
+    <li>No audio is sent to external services</li>
+  </ul>
+
+  <h2>Data collection</h2>
+  <ul>
+    <li>There is no analytics, tracking, or telemetry of any kind</li>
+    <li>No usage data or crash reports are collected</li>
+    <li>No cookies, fingerprinting, or third-party scripts</li>
+  </ul>
+
+  <h2>Network access</h2>
+  <ul>
+    <li>ClawMux communicates only between your local machine and your Claude Code sessions</li>
+    <li>The hub server binds to your local network — no data is routed through external servers</li>
+  </ul>
+
+  <h2>Contact</h2>
+  <p>If you have questions, open an issue at <a href="https://github.com/zeulewan/clawmux/issues">github.com/zeulewan/clawmux/issues</a></p>
+
+  <p class="updated">Last updated: March 1, 2026</p>
+</body>
+</html>

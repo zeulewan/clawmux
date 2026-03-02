@@ -3,11 +3,22 @@
 site_name = "ClawMux Docs"
 site_description = "Multi-agent voice interface for Claude Code. Talk to your agents."
 site_author = "Zeul"
-site_url = "https://zeulewan.github.io/voice-hub/"
-repo_url = "https://github.com/zeulewan/voice-hub"
-repo_name = "zeulewan/voice-hub"
+site_url = "https://zeulewan.github.io/clawmux/"
+repo_url = "https://github.com/zeulewan/clawmux"
+repo_name = "zeulewan/clawmux"
 copyright = "&copy; 2026 Zeul Mordasiewicz"
 
+[[project.nav]]
+Home = "/"
+
+[[project.nav]]
+"For Humans" = "humans/index.md"
+
+[[project.nav]]
+"For Agents" = "agents/index.md"
+
+[[project.nav]]
+Roadmap = "roadmap/planned-features.md"
 
 [project.theme]
 favicon = "assets/images/favicon.svg"
@@ -64,7 +75,7 @@ generator = false
 
 [[project.extra.social]]
 icon = "fontawesome/brands/github"
-link = "https://github.com/zeulewan/voice-hub"
+link = "https://github.com/zeulewan/clawmux"
 
 [project.markdown_extensions.admonition]
 

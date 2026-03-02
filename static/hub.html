@@ -433,9 +433,16 @@ body {
 }
 .msg.assistant {
   align-self: flex-start;
+  cursor: pointer;
   background: var(--bg-card);
   border-bottom-left-radius: 6px;
   /* Voice color background applied via JS */
+}
+.karaoke-word { cursor: pointer; transition: transform 0.1s ease, text-shadow 0.1s ease, background 0.1s ease; display: inline-block; border-radius: 3px; }
+.karaoke-word:hover {
+  background: var(--voice-color-bg, transparent);
+  text-shadow: 0 0 0.6px currentColor, 0 0 0.6px currentColor;
+  transform: scale(1.05);
 }
 .karaoke-word.active {
   background: var(--voice-color-bg, transparent);
@@ -713,13 +720,6 @@ body {
   cursor: wait;
 }
 #mic:disabled { opacity: 0.3; cursor: not-allowed; box-shadow: none; transform: none; }
-#transport-bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  padding: 4px 0;
-}
 .transport-btn {
   width: 36px;
   height: 36px;
@@ -755,13 +755,8 @@ body {
   transition: all 0.15s;
 }
 .btn-icon:hover { border-color: var(--border-light); color: var(--text-secondary); background: var(--bg-card); }
-#mic-cancel, #mic-mute { width: 36px; height: 36px; font-size: 0.75rem; flex-shrink: 0; }
-#mic-cancel { border-color: var(--red); color: var(--red); }
+#mic-cancel { width: 36px; height: 36px; font-size: 0.75rem; flex-shrink: 0; border-color: var(--red); color: var(--red); }
 #mic-cancel:hover { background: var(--red-dim); color: #ff6b7f; }
-#mic-mute { color: var(--text-tertiary); }
-#mic-mute:hover { color: var(--text-secondary); }
-#mic-mute.muted { color: var(--red); border-color: var(--red); }
-#mic-mute.muted:hover { background: var(--red-dim); color: #ff6b7f; }
 /* Options menu */
 /* Context menu */
 #context-menu {
@@ -981,7 +976,7 @@ body {
   /* Controls: mobile size overrides */
   #controls { padding: 6px 12px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
   #mic { width: 52px; height: 52px; }
-  #mic-cancel, #mic-mute { width: 30px; height: 30px; }
+  #mic-cancel { width: 30px; height: 30px; }
   .btn-icon { width: 38px; height: 38px; }
   .transport-btn { width: 28px; height: 28px; font-size: 0.85rem; }
   #waveform { height: 12px !important; }
@@ -1090,17 +1085,12 @@ body {
 <div id="controls" style="display:none;">
   <div id="controls-left">
     <canvas id="waveform" width="200" height="30" style="display:none;"></canvas>
-    <div id="transport-bar" style="display:none;">
-      <button class="btn-icon transport-btn" id="transport-prev" onclick="transportPrev()" title="Previous">&#9198;</button>
-      <button class="btn-icon transport-btn" id="transport-pause" onclick="transportPause()" title="Pause">&#9208;</button>
-      <button class="btn-icon transport-btn" id="transport-next" onclick="transportNext()" title="Next">&#9197;</button>
-    </div>
     <button id="mode-toggle" onclick="cycleInputMode()"><span class="mode-value">Voice</span><span class="mode-label">Mode</span></button>
     <div id="status"></div>
   </div>
   <div id="mic-wrapper">
     <button id="mic-cancel" class="btn-icon" style="display:none;" title="Cancel recording" onclick="cancelRecording()">&#10005;</button>
-    <button id="mic-mute" class="btn-icon" title="Mute microphone" onclick="toggleMicMute()"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg></button>
+    <button class="btn-icon transport-btn" id="transport-pause" style="display:none;" onclick="transportPause()" title="Pause">&#9208;</button>
     <button id="mic" disabled><svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg></button>
   </div>
   <div id="controls-right">
@@ -1137,10 +1127,7 @@ body {
         <div class="toggle-info"><span class="toggle-name">Auto Interrupt</span><span class="toggle-desc">Stop playback when you start talking</span></div>
         <div class="toggle-indicator" id="toggle-auto_interrupt"></div>
       </div>
-      <div class="settings-toggle" onclick="toggleMicMute()">
-        <div class="toggle-info"><span class="toggle-name">Mic Mute</span><span class="toggle-desc">Skip recording, send silence to agent</span></div>
-        <div class="toggle-indicator" id="toggle-mic_mute"></div>
-      </div>
+
       <div class="settings-inline" style="padding:12px 16px;">
         <span class="toggle-name">Playback Speed</span>
         <select id="speed-select" onchange="changeSpeed(this.value)" style="width:auto; padding:4px 8px; font-size:0.8rem;">
@@ -1150,6 +1137,24 @@ body {
           <option value="1.5">1.5x</option>
           <option value="2.0">2x</option>
         </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <h3 class="settings-section-title">Agent</h3>
+    <div class="settings-card">
+      <div class="settings-inline" style="padding:12px 16px;">
+        <div class="toggle-info"><span class="toggle-name">Default Model</span><span class="toggle-desc">Model used when spawning new agents</span></div>
+        <select id="default-model-select" onchange="setDefaultModel(this.value)" style="width:auto; padding:4px 8px; font-size:0.8rem;">
+          <option value="opus">Opus</option>
+          <option value="sonnet">Sonnet</option>
+          <option value="haiku">Haiku</option>
+        </select>
+      </div>
+      <div class="settings-toggle" onclick="toggleSetting('silent_startup')">
+        <div class="toggle-info"><span class="toggle-name">Silent Startup</span><span class="toggle-desc">Skip greeting when agents start up</span></div>
+        <div class="toggle-indicator" id="toggle-silent_startup"></div>
       </div>
     </div>
   </div>
@@ -1181,6 +1186,8 @@ body {
 </div>
 
 <div id="context-menu">
+  <div class="ctx-item" id="ctx-mark-unread">Mark as Unread</div>
+  <div class="ctx-item" id="ctx-mark-read">Mark as Read</div>
   <div class="ctx-item" id="ctx-reset">Reset History</div>
   <div class="ctx-item" id="ctx-terminate" style="color:#e63946;">Terminate Session</div>
 </div>
@@ -1281,7 +1288,6 @@ const controls = document.getElementById('controls');
 const statusEl = document.getElementById('status');
 const micBtn = document.getElementById('mic');
 const micCancelBtn = document.getElementById('mic-cancel');
-const micMuteBtn = document.getElementById('mic-mute');
 const dot = document.getElementById('dot');
 const connLabel = document.getElementById('conn-label');
 
@@ -1386,10 +1392,8 @@ function stopWaveform() {
   if (waveAnimFrame) { cancelAnimationFrame(waveAnimFrame); waveAnimFrame = null; }
   waveAnalyser = null;
   waveCanvas.style.display = 'none';
-  // Hide controls-top if transport bar is also hidden
   const topRow = document.getElementById('controls-top');
-  const bar = document.getElementById('transport-bar');
-  if (topRow && (!bar || bar.style.display === 'none')) topRow.style.display = 'none';
+  if (topRow) topRow.style.display = 'none';
 }
 
 // --- Audio cues ---
@@ -2047,6 +2051,9 @@ async function playMessageTTS(btn, text, voiceId) {
     const ready = audioCtx.state === 'suspended' ? audioCtx.resume() : Promise.resolve();
     await ready;
     const decoded = await audioCtx.decodeAudioData(bytes.buffer);
+    // Cache buffer on message element for word-click seek without re-fetching TTS
+    if (msgEl) msgEl._ttsCache = { decoded, words: realWords };
+
     const playbackId = Symbol();
     _ttsPlaybackId = playbackId;
     const source = audioCtx.createBufferSource();
@@ -2061,7 +2068,7 @@ async function playMessageTTS(btn, text, voiceId) {
 
     btn.textContent = '■';
 
-    source.onended = () => {
+    const _ttsOnEnded = () => {
       if (!playbackPaused) {
         karaokeStop();
         currentAudio = null;
@@ -2070,6 +2077,8 @@ async function playMessageTTS(btn, text, voiceId) {
         updateMicUI();
       }
     };
+    source.onended = _ttsOnEnded;
+    currentAudio._onended = _ttsOnEnded;
     source.start(0);
     updateTransportBar();
   } catch (e) {
@@ -2079,27 +2088,37 @@ async function playMessageTTS(btn, text, voiceId) {
   }
 }
 
+function _wrapWordsInSpans(container, text) {
+  // Wrap each word in a karaoke-word span (without timestamps) for hover effects
+  const frag = document.createDocumentFragment();
+  const words = text.split(/(\s+)/); // split keeping whitespace
+  for (const part of words) {
+    if (/^\s+$/.test(part)) {
+      frag.appendChild(document.createTextNode(part));
+    } else if (part) {
+      const span = document.createElement('span');
+      span.className = 'karaoke-word';
+      span.textContent = part;
+      frag.appendChild(span);
+    }
+  }
+  container.appendChild(frag);
+}
+
 function createMsgEl(role, text, voiceColorHex, voiceId) {
   const div = document.createElement('div');
   div.className = `msg ${role}`;
-  div.textContent = text;
+  if (role === 'assistant') {
+    _wrapWordsInSpans(div, text);
+  } else {
+    div.textContent = text;
+  }
+  if (voiceId) div.dataset.voice = voiceId;
+  if (text) div.dataset.text = text;
   if (role === 'assistant' && voiceColorHex) div.style.background = hexToRgba(voiceColorHex, 0.20);
   if (role !== 'system' && role !== 'thinking') {
     const actions = document.createElement('div');
     actions.className = 'msg-actions';
-
-    // Play button (only when voice responses enabled)
-    if (voiceResponsesEnabled) {
-      const playBtn = document.createElement('button');
-      playBtn.className = 'msg-action-btn';
-      playBtn.textContent = '▶';
-      playBtn.title = 'Play';
-      playBtn.onclick = (e) => {
-        e.stopPropagation();
-        playMessageTTS(playBtn, text, voiceId);
-      };
-      actions.appendChild(playBtn);
-    }
 
     // Copy button
     const copyBtn = document.createElement('button');
@@ -2280,23 +2299,6 @@ function removeSession(sessionId) {
   updateLayout();
 }
 
-// --- Mic mute ---
-function toggleMicMute() {
-  micMuted = !micMuted;
-  const el = document.getElementById('toggle-mic_mute');
-  if (el) el.classList.toggle('on', micMuted);
-  if (persistentStream) {
-    persistentStream.getAudioTracks().forEach(t => { t.enabled = !micMuted; });
-  }
-  updateMuteUI();
-}
-const MIC_MUTE_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>';
-const MIC_MUTED_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/></svg>';
-function updateMuteUI() {
-  micMuteBtn.classList.toggle('muted', micMuted);
-  micMuteBtn.innerHTML = micMuted ? MIC_MUTED_SVG : MIC_MUTE_SVG;
-  micMuteBtn.title = micMuted ? 'Unmute microphone' : 'Mute microphone';
-}
 
 // --- Voice selector ---
 const voiceSelect = document.getElementById('voice-select');
@@ -2396,6 +2398,10 @@ async function loadSettings() {
     setToggle('audio_cues', audioCuesEnabled);
     voiceResponsesEnabled = s.voice_responses !== false;
     setToggle('voice_responses', voiceResponsesEnabled);
+    setToggle('silent_startup', s.silent_startup || false);
+    // Sync default model dropdown
+    const dmSel = document.getElementById('default-model-select');
+    if (dmSel) dmSel.value = s.model || 'opus';
   } catch (e) {
     console.error('Failed to load settings:', e);
   }
@@ -2404,6 +2410,16 @@ async function loadSettings() {
 function setToggle(key, on) {
   const el = document.getElementById('toggle-' + key);
   if (el) { if (on) el.classList.add('on'); else el.classList.remove('on'); }
+}
+
+async function setDefaultModel(model) {
+  try {
+    await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model }),
+    });
+  } catch (e) { console.error('Failed to save default model:', e); }
 }
 
 async function toggleSetting(key) {
@@ -2538,24 +2554,15 @@ function toggleAudioCues() {
 
 // --- Transport controls (pause/resume, skip) ---
 function updateTransportBar() {
-  const bar = document.getElementById('transport-bar');
   const isPlaying = !!(currentAudio || currentBufferedPlayer);
-  if (isPlaying || playbackPaused) {
-    bar.style.display = 'flex';
-    document.getElementById('transport-pause').innerHTML = playbackPaused ? '&#9654;' : '&#9208;';
-    document.getElementById('transport-pause').title = playbackPaused ? 'Resume' : 'Pause';
-  } else {
-    bar.style.display = 'none';
-  }
-  // On mobile, update controls-top visibility
-  const topRow = document.getElementById('controls-top');
-  if (topRow) {
-    const wf = document.getElementById('waveform');
-    const anyVisible = (bar.style.display !== 'none') || (wf && wf.style.display !== 'none');
-    const wasHidden = topRow.style.display === 'none';
-    topRow.style.display = anyVisible ? 'flex' : 'none';
-    if (anyVisible && wasHidden) {
-      requestAnimationFrame(() => { chatArea.scrollTop = chatArea.scrollHeight; });
+  const pauseBtn = document.getElementById('transport-pause');
+  if (pauseBtn) {
+    if (isPlaying || playbackPaused) {
+      pauseBtn.style.display = 'flex';
+      pauseBtn.innerHTML = playbackPaused ? '&#9654;' : '&#9208;';
+      pauseBtn.title = playbackPaused ? 'Resume' : 'Pause';
+    } else {
+      pauseBtn.style.display = 'none';
     }
   }
 }
@@ -2582,7 +2589,7 @@ function transportPause() {
       _pausedKaraokeWords = null;
     }
     playbackPaused = false;
-    source.onended = () => {
+    const _transportOnEnded = () => {
       if (!playbackPaused) {
         currentAudio = null;
         pausedBuffer = null;
@@ -2600,6 +2607,8 @@ function transportPause() {
         }
       }
     };
+    source.onended = _transportOnEnded;
+    if (currentAudio) currentAudio._onended = _transportOnEnded;
     source.start(0, pauseOffset);
     updateTransportBar();
     updateMicUI();
@@ -2916,9 +2925,19 @@ async function _refreshHistory(sessionId, voiceId) {
         }
       }
     }
-    const localNonSystem = s.messages.filter(m => m.role !== 'system').length;
-    if (serverMessages.length > localNonSystem) {
-      s.messages = serverMessages;
+    // Check if server has messages the client is missing
+    const localNonSystem = s.messages.filter(m => m.role !== 'system');
+    const serverLen = serverMessages.length;
+    const localLen = localNonSystem.length;
+    // Compare both count and last message content to catch missed messages
+    const lastServer = serverLen > 0 ? serverMessages[serverLen - 1] : null;
+    const lastLocal = localLen > 0 ? localNonSystem[localLen - 1] : null;
+    const needsSync = serverLen > localLen ||
+      (serverLen > 0 && (!lastLocal || lastServer.text !== lastLocal.text || lastServer.role !== lastLocal.role));
+    if (needsSync) {
+      // Preserve system messages and merge with server messages
+      const systemMsgs = s.messages.filter(m => m.role === 'system');
+      s.messages = [...systemMsgs, ...serverMessages];
       if (sessionId === activeSessionId) {
         renderChat();
         requestAnimationFrame(() => { chatArea.scrollTop = chatArea.scrollHeight; });
@@ -3210,6 +3229,12 @@ const _audioPlayQueue = new Map(); // sessionId -> [b64data, ...]
 let _audioPlaying = false; // true while a playAudio decode+play is active
 
 function enqueueAudio(sessionId, b64data) {
+  // Buffer audio while user is recording — play after they stop
+  if (recording) {
+    if (!_audioPlayQueue.has(sessionId)) _audioPlayQueue.set(sessionId, []);
+    _audioPlayQueue.get(sessionId).push(b64data);
+    return;
+  }
   if (!_audioPlaying && !currentAudio) {
     // Nothing playing — play immediately
     _audioPlaying = true;
@@ -3274,21 +3299,44 @@ function playAudio(sessionId, b64data, startOffset = 0) {
   ready.then(() => audioCtx.decodeAudioData(buffer.slice(0)))
     .then(decoded => {
       if (currentAudio && currentAudio.playbackId !== playbackId) return; // superseded
+      // Pad audio for starts near the beginning to prevent first-word cutoff
+      const sess_ = sessions.get(sessionId);
+      const padSec = getAudioPadSec(sess_ ? sess_.speed : 1);
+      const usePad = startOffset < padSec * 2;
+      const buf = usePad ? padAudioBuffer(decoded, padSec) : decoded;
       const source = audioCtx.createBufferSource();
-      source.buffer = decoded;
+      source.buffer = buf;
       source.connect(audioCtx.destination);
-      if (currentAudio) { currentAudio.source = source; currentAudio.decodedBuffer = decoded; currentAudio._startTime = audioCtx.currentTime - startOffset; }
+      if (currentAudio) { currentAudio.source = source; currentAudio.decodedBuffer = buf; currentAudio._startTime = audioCtx.currentTime - startOffset; currentAudio._padOffset = usePad ? padSec : 0; }
       playbackStartTime = audioCtx.currentTime;
       playbackPaused = false;
-      // Start karaoke if we have pending words for this session
+      // Start karaoke if we have pending words for this session (shift timestamps for padding)
       const pendingWords = _pendingKaraokeWords.get(sessionId);
-      if (pendingWords) { _pendingKaraokeWords.delete(sessionId); karaokeStart(currentAudio, pendingWords); }
-      source.onended = () => { if (!playbackPaused) { stopPlaybackVAD(); karaokeStop(); sendDone(); } };
+      if (pendingWords) {
+        _pendingKaraokeWords.delete(sessionId);
+        if (usePad) pendingWords.forEach(w => { w.start_time += padSec; w.end_time += padSec; });
+        karaokeStart(currentAudio, pendingWords);
+      }
+      const _onended = () => { if (!playbackPaused) { stopPlaybackVAD(); karaokeStop(); sendDone(); } };
+      source.onended = _onended;
+      if (currentAudio) currentAudio._onended = _onended;
       source.start(0, startOffset);
       updateTransportBar();
       if (autoInterruptEnabled && !micMuted) startPlaybackVAD(sessionId);
     })
     .catch(() => { stopPlaybackVAD(); sendDone(); setStatus('Audio error'); });
+}
+
+// --- Audio padding: prepend silence to prevent first-word cutoff ---
+const AUDIO_PAD_BASE = 0.15; // base silence padding (seconds) at 1x speed
+function getAudioPadSec(speed) { return AUDIO_PAD_BASE * Math.max(1, speed || 1); }
+function padAudioBuffer(decoded, padSec) {
+  const padSamples = Math.floor(decoded.sampleRate * padSec);
+  const padded = audioCtx.createBuffer(decoded.numberOfChannels, decoded.length + padSamples, decoded.sampleRate);
+  for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
+    padded.getChannelData(ch).set(decoded.getChannelData(ch), padSamples);
+  }
+  return padded;
 }
 
 // --- Karaoke word highlighting ---
@@ -3316,10 +3364,16 @@ function karaokeSetupMessage(sessionId, words) {
 }
 
 function _applyKaraokeSpans(msgEl, realWords) {
-  // Find the text node (first child before msg-actions)
-  const textNode = Array.from(msgEl.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
-  if (!textNode) return;
-  const text = textNode.textContent;
+  const actionsEl = msgEl.querySelector('.msg-actions');
+  // Get original text — prefer stored data attribute, fall back to DOM content
+  const text = msgEl.dataset.text || Array.from(msgEl.childNodes)
+    .filter(n => n !== actionsEl)
+    .map(n => n.textContent).join('');
+  // Always clear and rebuild from scratch (avoids stale span/text-node fragments)
+  Array.from(msgEl.childNodes).forEach(n => { if (n !== actionsEl) msgEl.removeChild(n); });
+  const textNode = document.createTextNode(text);
+  if (actionsEl) msgEl.insertBefore(textNode, actionsEl);
+  else msgEl.appendChild(textNode);
 
   // Greedy forward match: find each word in the text in order
   const frag = document.createDocumentFragment();
@@ -3332,6 +3386,7 @@ function _applyKaraokeSpans(msgEl, realWords) {
     // Word span
     const span = document.createElement('span');
     span.className = 'karaoke-word';
+    span.dataset.start = w.start_time;
     span.textContent = w.word;
     w.el = span;
     frag.appendChild(span);
@@ -3390,6 +3445,113 @@ function karaokeStop() {
   _karaokeAudioRef = null;
   _karaokeActiveIdx = -1;
 }
+
+// --- Karaoke word-click seek ---
+function karaokeSeekTo(startTime) {
+  if (!currentAudio || !currentAudio.decodedBuffer) return false;
+  const { decodedBuffer, sessionId, b64data, _onended, _padOffset } = currentAudio;
+  const pad = _padOffset || 0;
+  const maxTime = decodedBuffer.duration - pad - 0.05;
+  const offset = Math.max(0, Math.min(startTime, maxTime));
+
+  // Stop current source (suppress onended)
+  try { currentAudio.source.onended = null; currentAudio.source.stop(); } catch(e) {}
+
+  // Create new source from same buffer
+  const source = audioCtx.createBufferSource();
+  source.buffer = decodedBuffer;
+  source.connect(audioCtx.destination);
+
+  currentAudio = { source, sessionId, decodedBuffer, b64data, _startTime: audioCtx.currentTime - offset, _onended, _padOffset: pad };
+  playbackStartTime = audioCtx.currentTime - offset;
+
+  // Update karaoke audio ref so the RAF loop follows the new source
+  if (_karaokeAudioRef) _karaokeAudioRef = currentAudio;
+
+  if (_onended) source.onended = _onended;
+  source.start(0, offset + pad);
+  return true;
+}
+
+// Play message TTS from a specific offset (or beginning). Uses cached buffer if available.
+async function karaokePlayFromWord(msgEl, startTime, fetchId, clickedWord = false) {
+  const voiceId = msgEl.dataset.voice || (activeSessionId ? sessions.get(activeSessionId)?.voice : null) || 'af_sky';
+  const s = activeSessionId ? sessions.get(activeSessionId) : null;
+  const speed = s ? (s.speed || 1.0) : 1.0;
+
+  let decoded, realWords;
+  if (msgEl._ttsCache) {
+    ({ decoded, words: realWords } = msgEl._ttsCache);
+  } else {
+    const text = msgEl.dataset.text;
+    if (!text) return;
+    try {
+      const resp = await fetch('/api/tts-captioned', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, voice: voiceId, speed }),
+      });
+      if (!resp.ok) throw new Error('TTS failed');
+      const { audio_b64, words } = await resp.json();
+      const bytes = Uint8Array.from(atob(audio_b64), c => c.charCodeAt(0));
+      const ready = audioCtx.state === 'suspended' ? audioCtx.resume() : Promise.resolve();
+      await ready;
+      decoded = await audioCtx.decodeAudioData(bytes.buffer);
+      realWords = words ? words.filter(w => /\w/.test(w.word)) : [];
+      msgEl._ttsCache = { decoded, words: realWords };
+    } catch(e) { console.error('TTS failed:', e); return; }
+  }
+  // If a newer click arrived while we were fetching, bail out
+  if (fetchId !== undefined && fetchId !== _karaokeFetchId) return;
+  if (realWords.length) _applyKaraokeSpans(msgEl, realWords);
+
+  stopActiveAudio();
+  const sessionId = activeSessionId || '__tts__';
+  const offset = Math.max(0, Math.min(startTime || 0, decoded.duration - 0.05));
+  console.log('[karaokePlay] startTime=', startTime, 'offset=', offset, 'duration=', decoded.duration,
+    'firstWord=', realWords.length ? realWords[0] : 'none', 'clickedWord=', clickedWord, 'cached=', !!msgEl._ttsCache);
+  const source = audioCtx.createBufferSource();
+  source.buffer = decoded;
+  source.connect(audioCtx.destination);
+  currentAudio = { source, sessionId, decodedBuffer: decoded, _startTime: audioCtx.currentTime - offset };
+  playbackStartTime = audioCtx.currentTime - offset;
+  playbackPaused = false;
+  if (realWords.length) karaokeStart(currentAudio, realWords);
+  const _onended = () => { if (!playbackPaused) { karaokeStop(); currentAudio = null; updateTransportBar(); updateMicUI(); } };
+  source.onended = _onended;
+  currentAudio._onended = _onended;
+  source.start(0, offset);
+  updateTransportBar();
+  updateMicUI();
+}
+
+// Event delegation — click on assistant message to TTS from that word (or beginning)
+let _karaokeFetchId = 0; // incremented on each new click to cancel stale async fetches
+chatArea.addEventListener('click', async (e) => {
+  const msgEl = e.target.closest('.msg.assistant');
+  if (!msgEl) return;
+  if (e.target.closest('.msg-actions')) return; // let action buttons handle themselves
+  if (window.getSelection && window.getSelection().toString().length > 0) return; // don't interfere with text selection
+
+  const wordEl = e.target.closest('.karaoke-word');
+  const startTime = wordEl ? parseFloat(wordEl.dataset.start) : 0;
+
+  // Only seek if clicking the message that's currently playing karaoke
+  const currentKaraokeMsgEl = (_karaokeWords && _karaokeWords.length > 0)
+    ? (_karaokeWords[0].el?.closest('.msg.assistant') || null) : null;
+  const isCurrentKaraokeMsg = currentKaraokeMsgEl === msgEl;
+
+  if (wordEl && currentAudio && currentAudio.decodedBuffer && isCurrentKaraokeMsg) {
+    // Audio is playing this message — seek to clicked word (sync, no guard needed)
+    e.stopPropagation();
+    karaokeSeekTo(isNaN(startTime) ? 0 : startTime);
+  } else {
+    // New TTS play — increment fetch ID to cancel any in-flight fetch for a different message
+    const fetchId = ++_karaokeFetchId;
+    e.stopPropagation();
+    await karaokePlayFromWord(msgEl, isNaN(startTime) ? 0 : startTime, fetchId, !!wordEl);
+  }
+});
 
 // --- Buffered playback ---
 function playBufferedAudio(sessionId, chunks) {
@@ -3450,9 +3612,12 @@ function playBufferedAudio(sessionId, chunks) {
         // Start karaoke if pending words exist (e.g. restored after tab switch)
         const pendingWords = _pendingKaraokeWords.get(sessionId);
         if (pendingWords) { _pendingKaraokeWords.delete(sessionId); karaokeStart(currentAudio, pendingWords); }
-        source.onended = () => { if (!playbackPaused) { currentAudio = null; playNext(); } };
+        const _onended = () => { if (!playbackPaused) { currentAudio = null; playNext(); } };
+        source.onended = _onended;
+        currentAudio._onended = _onended;
         source.start(0, offset > 0 ? offset : 0);
         updateTransportBar();
+        updateMicUI();
       })
       .catch(() => { currentAudio = null; playNext(); });
   }
@@ -3473,30 +3638,28 @@ function updateMicUI() {
   micBtn.classList.remove('recording', 'interruptable', 'processing');
 
   if (isPlaying) {
-    // During playback: show interrupt button + mute
+    // During playback: mic = interrupt/stop
     micBtn.style.display = 'flex';
     micBtn.disabled = false;
     micBtn.classList.add('interruptable');
     micBtn.innerHTML = MIC_INTERRUPT_SVG;
     micCancelBtn.style.display = 'none';
-    micMuteBtn.style.display = 'flex';
   } else if (recording) {
-    // Recording: show Send + Cancel, hide mute
+    // Recording: mic = send, cancel visible, pause hidden
+    const pauseBtn = document.getElementById('transport-pause');
+    if (pauseBtn) pauseBtn.style.display = 'none';
     micBtn.style.display = 'flex';
     micBtn.classList.add('recording');
     micBtn.innerHTML = MIC_SEND_SVG;
     micBtn.disabled = false;
     micCancelBtn.style.display = 'flex';
-    micMuteBtn.style.display = 'none';
   } else {
-    // Idle: show Record + mute
+    // Idle or paused: mic = record
     micCancelBtn.style.display = 'none';
-    micMuteBtn.style.display = 'flex';
     micBtn.style.display = 'flex';
     micBtn.innerHTML = MIC_SVG;
     micBtn.disabled = false;
   }
-  updateMuteUI();
 }
 
 // --- Persistent mic stream ---
@@ -3517,6 +3680,10 @@ async function getMicStream() {
 // --- Recording ---
 async function startRecording(sessionId) {
   recordingSessionId = sessionId;
+  // Interrupt any ongoing playback so voice doesn't continue while recording
+  if (currentAudio || currentBufferedPlayer) {
+    interruptPlayback(sessionId);
+  }
   try {
     const stream = await getMicStream();
     mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
@@ -3551,6 +3718,14 @@ function stopRecording(discard = false) {
   recording = false;
   stopWaveform();
   updateMicUI();
+  // Drain any audio that was buffered while recording
+  if (activeSessionId && !currentAudio && !_audioPlaying) {
+    const queue = _audioPlayQueue.get(activeSessionId);
+    if (queue && queue.length > 0) {
+      _audioPlaying = true;
+      _playNextQueued(activeSessionId);
+    }
+  }
 }
 
 function cancelRecording() {
@@ -3886,8 +4061,12 @@ function showContextMenu(e, sessionId, voiceId) {
   contextMenuSessionId = sessionId;
   contextMenuVoiceId = voiceId;
   const menu = document.getElementById('context-menu');
-  // Show/hide terminate based on whether there's an active session
+  // Show/hide items based on session state
   document.getElementById('ctx-terminate').style.display = sessionId ? 'block' : 'none';
+  const sess = sessionId ? sessions.get(sessionId) : null;
+  const hasUnread = sess && (sess.unreadCount || 0) > 0;
+  document.getElementById('ctx-mark-unread').style.display = (sessionId && !hasUnread) ? 'block' : 'none';
+  document.getElementById('ctx-mark-read').style.display = (sessionId && hasUnread) ? 'block' : 'none';
   menu.style.left = e.clientX + 'px';
   menu.style.top = e.clientY + 'px';
   menu.classList.add('visible');
@@ -3901,6 +4080,26 @@ function hideContextMenu() {
 
 document.getElementById('ctx-terminate').addEventListener('click', () => {
   if (contextMenuSessionId) terminateSession(contextMenuSessionId);
+  hideContextMenu();
+});
+
+document.getElementById('ctx-mark-unread').addEventListener('click', () => {
+  const sid = contextMenuSessionId;
+  if (sid) {
+    const s = sessions.get(sid);
+    if (s) {
+      // Switch away first if this is the active session
+      if (sid === activeSessionId) showWelcome();
+      s.unreadCount = (s.unreadCount || 0) + 1;
+      setSessionSidebarState(sid, 'speaking');
+      renderSidebar();
+    }
+  }
+  hideContextMenu();
+});
+
+document.getElementById('ctx-mark-read').addEventListener('click', () => {
+  if (contextMenuSessionId) clearSessionUnread(contextMenuSessionId);
   hideContextMenu();
 });
 
@@ -3951,6 +4150,14 @@ document.addEventListener('keydown', (e) => {
     }
   }
 
+  // F key: pause/resume playback (only when not typing in text input)
+  if (e.key === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey && document.activeElement !== textInput) {
+    if (currentAudio || currentBufferedPlayer || playbackPaused) {
+      e.preventDefault();
+      transportPause();
+    }
+  }
+
   // Option/Alt + 1-7: switch to voice by sidebar position
   if (e.altKey && !e.ctrlKey && !e.metaKey && e.code.startsWith('Digit')) {
     const idx = parseInt(e.code.replace('Digit', ''), 10) - 1;
@@ -3980,14 +4187,11 @@ const modeToggleText = document.getElementById('mode-toggle-text');
   // Move mode toggle and cancel button to left side
   controlsLeft.appendChild(modeToggle);
   controlsLeft.appendChild(document.getElementById('mic-cancel'));
-  controlsLeft.appendChild(document.getElementById('mic-mute'));
-  // Create a top row for waveform and transport bar
+  // Create a top row for waveform
   const topRow = document.createElement('div');
   topRow.id = 'controls-top';
   const waveform = document.getElementById('waveform');
-  const transportBar = document.getElementById('transport-bar');
   topRow.appendChild(waveform);
-  topRow.appendChild(transportBar);
   controlsEl.insertBefore(topRow, controlsEl.firstChild);
 }
 const textInputBar = document.getElementById('text-input-bar');
@@ -4342,7 +4546,6 @@ connect();
 loadSettings();
 startUsagePolling();
 startStateSync();
-updateMuteUI();
 </script>
 </body>
 </html>

@@ -105,23 +105,126 @@ async def tts(text: str, voice: str = "af_sky", speed: float = 1.0) -> bytes:
 
 async def tts_captioned(text: str, voice: str = "af_sky", speed: float = 1.0) -> tuple[str, list]:
     """Text → (audio_b64, word_timestamps) via Kokoro captioned speech endpoint."""
+    # At higher speeds, Kokoro clips the very beginning of the audio.
+    # Workaround: prepend a dummy word so the real first word isn't clipped,
+    # then strip the dummy from audio and timestamps.
+    PREFIX = "..."
+    use_prefix = speed > 1.0
+    tts_input = f"{PREFIX} {text}" if use_prefix else text
+
     last_err = None
     for attempt in range(3):
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.post(
                     f"{KOKORO_URL}/dev/captioned_speech",
-                    json={"input": text, "voice": voice, "speed": speed, "stream": False, "return_timestamps": True},
+                    json={"input": tts_input, "voice": voice, "speed": speed,
+                           "stream": False, "return_timestamps": True,
+                           "response_format": "wav"},
                 )
                 resp.raise_for_status()
                 data = resp.json()
-                return data["audio"], data.get("timestamps", [])
+                audio_b64 = data["audio"]
+                timestamps = data.get("timestamps", [])
+
+                if use_prefix and timestamps:
+                    audio_b64, timestamps = _strip_prefix_audio(audio_b64, timestamps, PREFIX)
+
+                return audio_b64, timestamps
         except Exception as e:
             last_err = e
             if attempt < 2:
                 log.warning("TTS captioned attempt %d failed: %s, retrying...", attempt + 1, e)
                 await asyncio.sleep(1 * (attempt + 1))
     raise last_err
+
+
+def _strip_prefix_audio(audio_b64: str, timestamps: list, prefix: str) -> tuple[str, list]:
+    """Strip the prefix word(s) from audio and timestamps, keeping only the real content."""
+    import base64, struct
+
+    # Find how many timestamp entries belong to the prefix
+    prefix_words = prefix.replace(".", " . ").split()  # "..." → [".", ".", "."]
+    # The prefix generates tokens like "..." or "." — find the cut point
+    cut_idx = 0
+    for i, ts in enumerate(timestamps):
+        w = ts["word"].strip()
+        if w in (".", "...", ",", "-", "—", ""):
+            cut_idx = i + 1
+        else:
+            break  # hit a real word
+    if cut_idx == 0:
+        return audio_b64, timestamps  # no prefix found to strip
+
+    # The cut time is the start of the first real word
+    cut_time = timestamps[cut_idx]["start_time"] if cut_idx < len(timestamps) else 0
+    # Add a small margin before the real first word to avoid clipping
+    cut_time = max(0, cut_time - 0.01)
+
+    raw = base64.b64decode(audio_b64)
+    if raw[:4] != b'RIFF' or raw[8:12] != b'WAVE':
+        return audio_b64, timestamps
+
+    # Parse WAV to find data chunk
+    pos = 12
+    sample_rate = 24000
+    bits_per_sample = 16
+    num_channels = 1
+    data_start = 0
+    fmt_data = b''
+
+    while pos < len(raw) - 8:
+        chunk_id = raw[pos:pos+4]
+        chunk_size = struct.unpack_from('<I', raw, pos+4)[0]
+        if chunk_id == b'fmt ':
+            num_channels = struct.unpack_from('<H', raw, pos+10)[0]
+            sample_rate = struct.unpack_from('<I', raw, pos+12)[0]
+            bits_per_sample = struct.unpack_from('<H', raw, pos+22)[0]
+            fmt_data = raw[pos:pos+8+chunk_size]
+        elif chunk_id == b'data':
+            data_start = pos + 8
+            break
+        pos += 8 + chunk_size
+        if chunk_size % 2:
+            pos += 1
+
+    if data_start == 0:
+        return audio_b64, timestamps
+
+    pcm_data = raw[data_start:]
+    bytes_per_sample = bits_per_sample // 8
+    frame_size = num_channels * bytes_per_sample
+    cut_sample = int(cut_time * sample_rate)
+    cut_bytes = cut_sample * frame_size
+
+    if cut_bytes >= len(pcm_data):
+        return audio_b64, timestamps
+
+    trimmed_pcm = pcm_data[cut_bytes:]
+    new_data_size = len(trimmed_pcm)
+
+    # Build new WAV
+    wav = bytearray()
+    wav += b'RIFF'
+    wav += struct.pack('<I', 0)  # placeholder for file size
+    wav += b'WAVE'
+    wav += fmt_data
+    wav += b'data'
+    wav += struct.pack('<I', new_data_size)
+    wav += trimmed_pcm
+    struct.pack_into('<I', wav, 4, len(wav) - 8)
+
+    trimmed_b64 = base64.b64encode(bytes(wav)).decode()
+
+    # Shift timestamps: remove prefix entries, adjust times
+    shifted = []
+    for ts in timestamps[cut_idx:]:
+        shifted.append({
+            **ts,
+            "start_time": max(0, ts["start_time"] - cut_time),
+            "end_time": ts["end_time"] - cut_time,
+        })
+    return trimmed_b64, shifted
 
 
 async def stt(audio_bytes: bytes) -> str:
@@ -793,7 +896,7 @@ async def update_settings(request: Request):
 
 def _load_settings() -> dict:
     settings_path = Path("data/settings.json")
-    defaults = {"model": "opus", "auto_record": False, "auto_end": True, "auto_interrupt": False, "thinking_sounds": True, "audio_cues": True, "voice_responses": True}
+    defaults = {"model": "opus", "auto_record": False, "auto_end": True, "auto_interrupt": False, "thinking_sounds": True, "audio_cues": True, "voice_responses": True, "silent_startup": False}
     if settings_path.exists():
         try:
             stored = json.loads(settings_path.read_text())

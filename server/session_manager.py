@@ -183,11 +183,15 @@ class SessionManager:
                     session.interjections = saved
                     session.processing = True
                     log.info("Restored %d interjection(s) for %s", len(saved), voice_id)
+            # Set model to hub default if not already set
+            if not session.model:
+                import hub_config
+                session.model = hub_config.CLAUDE_MODEL
             self.sessions[old_session_id] = session
             self._counter += 1
             adopted += 1
-            log.info("Adopted orphaned session: %s (voice=%s, tmux=%s)",
-                     old_session_id, voice_id, old_session_id)
+            log.info("Adopted orphaned session: %s (voice=%s, tmux=%s, model=%s)",
+                     old_session_id, voice_id, old_session_id, session.model)
 
         if adopted:
             log.info("Adopted %d orphaned session(s)", adopted)
@@ -372,7 +376,24 @@ class SessionManager:
 
             # Write CLAUDE.md with agent identity
             claude_md = work_dir / "CLAUDE.md"
-            if resuming:
+
+            # Check if silent startup is enabled
+            silent_startup = False
+            try:
+                settings_path = Path("data/settings.json")
+                if settings_path.exists():
+                        silent_startup = json.loads(settings_path.read_text()).get("silent_startup", False)
+            except Exception:
+                pass
+
+            if silent_startup:
+                identity = (
+                    f"Your name is {voice_name}. "
+                    f"Do NOT greet the user or say anything on startup. "
+                    f"Immediately call converse with message=\"\" and wait_for_response=True "
+                    f"to start listening silently. Say nothing until the user speaks first.\n"
+                )
+            elif resuming:
                 identity = (
                     f"Your name is {voice_name}. "
                     f"You have an ongoing conversation with this user. "
@@ -430,6 +451,7 @@ class SessionManager:
             # Start Claude with session ID (resume or fresh)
             import hub_config
             session_model = session.model or hub_config.CLAUDE_MODEL
+            session.model = session_model  # Store effective model so browser can display it
             model_flag = f" --model {session_model}" if session_model != "opus" else ""
             if resuming:
                 claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag} --resume {claude_session_id}"
@@ -514,6 +536,7 @@ class SessionManager:
         tmux_name = session.tmux_session
         import hub_config
         session_model = session.model or hub_config.CLAUDE_MODEL
+        session.model = session_model  # Store effective model
         model_flag = f" --model {session_model}" if session_model != "opus" else ""
         claude_session_id = session.claude_session_id
 
