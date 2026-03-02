@@ -1,22 +1,19 @@
-# v0.6.0 - Agent Orchestration
+# v0.6.0 - ClawMux CLI & Agent Orchestration
 
-Multi-backend support, sub-agent workers, and infrastructure improvements.
+Replace the MCP server with the ClawMux CLI. Add multi-backend support, sub-agent workers, and infrastructure improvements.
+
+## ClawMux CLI
+
+The MCP server is retired in favor of a CLI tool for voice and inter-agent messaging. Any agent runtime that can run bash uses the same interface. The browser gets a right-click menu to launch sessions with either MCP (legacy) or CLI during migration.
 
 ## Dual Backend
 
-The hub gets a pluggable backend interface so it can run sessions through either Claude Code (tmux) or OpenClaw (Gateway WebSocket). Both implement the same spawn/terminate/message interface. The frontend doesn't know which backend is underneath.
+Pluggable backend so the hub can run sessions through Claude Code or OpenClaw interchangeably.
 
 ## Sub-Agent Workers
 
-Each agent can spawn lightweight workers that inherit its voice and appear nested in the sidebar. Single-level hierarchy — workers can't spawn their own workers. Leaders get tools to spawn, list, kill, and message workers. Max 4 workers per leader, auto-terminate after 30 minutes idle.
+Agents can spawn lightweight workers that inherit their voice and appear nested in the sidebar.
 
-## Status Visibility
+## Other
 
-Agents push status updates between converse calls so the browser shows "Working" or "Reading files..." instead of just "Ready." Idle timeout after 60 seconds of silence.
-
-## Setup & Infrastructure
-
-- [ ] One-command setup — single script that installs all dependencies.
-- [ ] Standalone STT/TTS installs — Whisper and Kokoro from upstream with systemd service files.
-- [ ] Whisper model selection — choose model size from settings.
-- [ ] Public API — token auth, versioned endpoints, agent management for external clients.
+Status visibility between converse calls, streaming TTS, code block rendering, one-command setup, and deferred items from v0.5.0.

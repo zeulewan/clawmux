@@ -1,6 +1,12 @@
-# v0.6.0 - Agent Orchestration
+# v0.6.0 - ClawMux CLI & Agent Orchestration
 
-Multi-backend support, sub-agent workers, and infrastructure improvements.
+Replace the MCP server with the ClawMux CLI. Add multi-backend support, sub-agent workers, and infrastructure improvements.
+
+## ClawMux CLI
+
+The MCP server is retired in favor of `clawmux`, a CLI tool for voice converse and inter-agent messaging. Any agent runtime that can run bash — Claude Code, OpenClaw, Codex — uses the same interface. The browser UI gets a right-click menu on sessions to launch with either MCP (legacy) or CLI during the migration period.
+
+Full spec: [CLI Messaging Design](../../reference/cli-messaging.md)
 
 ## Dual Backend
 
@@ -14,9 +20,14 @@ Each agent can spawn lightweight workers that inherit its voice and appear neste
 
 Agents push status updates between converse calls so the browser shows "Working" or "Reading files..." instead of just "Ready." Idle timeout after 60 seconds of silence.
 
-## Setup & Infrastructure
+## Deferred from v0.5.0
 
-- [ ] One-command setup — single script that installs all dependencies.
-- [ ] Standalone STT/TTS installs — Whisper and Kokoro from upstream with systemd service files.
+- [ ] Hold-aware timeout — exempt sessions with pending converse calls from inactivity timeout.
+- [ ] Streaming TTS — stream audio chunks to reduce time-to-first-audio.
+- [ ] Configurable STT/TTS URLs — run Whisper and Kokoro on a different machine.
+- [ ] One-command setup — single install script.
+- [ ] Standalone STT/TTS installs — Whisper and Kokoro from upstream with systemd files.
 - [ ] Whisper model selection — choose model size from settings.
-- [ ] Public API — token auth, versioned endpoints, agent management for external clients.
+- [ ] Public API — token auth, versioned endpoints, agent management.
+- [ ] Code block rendering — render code blocks in agent responses.
+- [ ] Right-click session menu — launch with MCP or CLI.
