@@ -28,6 +28,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from history_store import HistoryStore
 from hub_config import HUB_PORT, HUB_START_TIME, KOKORO_URL, WHISPER_URL
+from message_broker import MessageBroker
 from session_manager import SessionManager
 
 # Logging
@@ -44,12 +45,16 @@ log = logging.getLogger("hub")
 
 history = HistoryStore()
 session_mgr = SessionManager(history_store=history)
+broker = MessageBroker()
 
 # Browser WebSocket clients (multiple connections supported)
 browser_clients: set[WebSocket] = set()
 
 # Currently viewed session (browser tells us which tab is active)
 _browser_viewed_session: str | None = None
+
+# Shutdown mode: "full" kills sessions, "reload" keeps them alive
+_shutdown_mode: str = "full"
 
 
 async def send_to_browser(data: dict) -> bool:
@@ -485,19 +490,30 @@ async def lifespan(app: FastAPI):
     hub_config.CLAUDE_MODEL = saved.get("model", "opus")
     log.info("Model: %s", hub_config.CLAUDE_MODEL)
     await session_mgr.cleanup_stale_sessions()
+    broker.start()
     timeout_task = asyncio.create_task(session_mgr.run_timeout_loop())
     hb_task = asyncio.create_task(heartbeat_loop())
     try:
         yield
     finally:
-        log.info("Hub shutting down, terminating all sessions")
+        broker.stop()
         timeout_task.cancel()
         hb_task.cancel()
-        for sid in list(session_mgr.sessions):
-            try:
-                await session_mgr.terminate_session(sid)
-            except Exception:
-                pass
+        if _shutdown_mode == "reload":
+            log.info("Hub reloading — keeping tmux sessions alive for re-adoption")
+            for sid, session in session_mgr.sessions.items():
+                if session.mcp_ws:
+                    try:
+                        await session.mcp_ws.close(code=1001, reason="Hub reloading")
+                    except Exception:
+                        pass
+        else:
+            log.info("Hub shutting down, terminating all sessions")
+            for sid in list(session_mgr.sessions):
+                try:
+                    await session_mgr.terminate_session(sid)
+                except Exception:
+                    pass
 
 
 app = FastAPI(lifespan=lifespan)
@@ -758,7 +774,8 @@ async def spawn_session(request: Request):
         body = await request.json() if request.headers.get("content-type") == "application/json" else {}
         label = body.get("label", "")
         voice = body.get("voice", "")
-        session = await session_mgr.spawn_session(label, voice)
+        mode = body.get("mode", "mcp")  # "mcp" (default) or "cli"
+        session = await session_mgr.spawn_session(label, voice, mode=mode)
         # Show thinking indicator while agent prepares its opening greeting
         session.processing = True
         await send_to_browser({"session_id": session.session_id, "type": "thinking"})
@@ -777,6 +794,40 @@ async def terminate_session(session_id: str):
     await session_mgr.terminate_session(session_id)
     await send_to_browser({"type": "session_terminated", "session_id": session_id})
     return JSONResponse({"status": "terminated"})
+
+
+@app.post("/api/shutdown")
+async def shutdown_hub(request: Request):
+    """Shut down the hub. Use mode=reload to keep sessions alive."""
+    global _shutdown_mode
+    body = await request.json() if request.headers.get("content-type") == "application/json" else {}
+    mode = body.get("mode", "full")  # "full" or "reload"
+    _shutdown_mode = mode
+    log.info("Shutdown requested via API (mode=%s)", mode)
+
+    async def do_shutdown():
+        await asyncio.sleep(0.3)  # Let the response send first
+        if mode == "reload":
+            log.info("Hub reloading — keeping tmux sessions alive")
+            for sid, session in session_mgr.sessions.items():
+                if session.mcp_ws:
+                    try:
+                        await session.mcp_ws.close(code=1001, reason="Hub reloading")
+                    except Exception:
+                        pass
+        else:
+            log.info("Hub shutting down — terminating all sessions")
+            for sid in list(session_mgr.sessions):
+                try:
+                    await session_mgr.terminate_session(sid)
+                except Exception:
+                    pass
+        broker.stop()
+        log.info("Shutdown cleanup done, exiting")
+        os._exit(0)
+
+    asyncio.create_task(do_shutdown())
+    return JSONResponse({"status": "shutting_down", "mode": mode})
 
 
 @app.put("/api/sessions/{session_id}/voice")
@@ -843,6 +894,140 @@ async def set_viewing_session(session_id: str):
         session.unread_count = 0
     return JSONResponse({"viewing": session_id})
 
+
+# ---------------------------------------------------------------------------
+# Messaging API
+# ---------------------------------------------------------------------------
+
+def _resolve_session(name: str):
+    """Resolve a friendly name (sky, alloy) or voice ID to a session."""
+    for s in session_mgr.sessions.values():
+        voice_name = s.voice.replace("af_", "").replace("am_", "").replace("bm_", "")
+        if (voice_name == name or s.voice == name or
+                s.session_id == name or s.label.lower() == name.lower()):
+            return s
+    return None
+
+
+@app.post("/api/messages/send")
+async def send_message(request: Request):
+    """Send a message from one agent to another via tmux injection."""
+    data = await request.json()
+    sender_id = data.get("sender")
+    recipient_name = data.get("to")
+    content = data.get("message", "")
+    expect_response = data.get("expect_response", False)
+
+    if not sender_id or not recipient_name or not content:
+        return JSONResponse({"error": "sender, to, and message are required"}, status_code=400)
+
+    sender = session_mgr.sessions.get(sender_id)
+    if not sender:
+        return JSONResponse({"error": f"sender session '{sender_id}' not found"}, status_code=404)
+
+    recipient = _resolve_session(recipient_name)
+    if not recipient:
+        return JSONResponse({"error": f"recipient '{recipient_name}' not found"}, status_code=404)
+
+    if not recipient.tmux_session:
+        return JSONResponse({"error": f"recipient has no tmux session"}, status_code=400)
+
+    sender_name = sender.voice.replace("af_", "").replace("am_", "").replace("bm_", "")
+    recip_name = recipient.voice.replace("af_", "").replace("am_", "").replace("bm_", "")
+
+    # Always use converse pipeline for inter-agent messages (no tmux injection)
+    msg = await broker.send(
+        sender=sender_id,
+        recipient=recipient.session_id,
+        content=content,
+        recipient_tmux=recipient.tmux_session,
+        sender_name=sender_name,
+        recipient_name=recip_name,
+        expect_response=expect_response,
+        skip_tmux=True,
+    )
+
+    # Inject via converse pipeline — if agent is in converse, it arrives immediately.
+    # If not, it queues as an interjection for the next converse call.
+    formatted = f"[MSG id:{msg.id} from:{sender_name}] {content}"
+    recipient.interjections.append(formatted)
+    if recipient.in_converse and recipient.audio_queue:
+        recipient.text_override = " ... ".join(recipient.interjections)
+        recipient.interjections.clear()
+        await recipient.audio_queue.put(b"__text__")
+        log.info("[%s] Message %s injected via converse pipeline", recipient.session_id, msg.id)
+
+    # Save to history so messages persist across browser reloads
+    history.append(recipient.voice, recipient.label, "system",
+                   f"[Agent msg from {sender_name.capitalize()}] {content}")
+    history.append(sender.voice, sender.label, "system",
+                   f"[Agent msg to {recip_name.capitalize()}] {content}")
+
+    # Notify browser about the message
+    await send_to_browser({
+        "type": "agent_message",
+        "message": msg.to_dict(),
+    })
+
+    return JSONResponse({"id": msg.id, "state": msg.state})
+
+
+@app.post("/api/messages/{msg_id}/ack")
+async def ack_message(msg_id: str):
+    """Acknowledge receipt of a message."""
+    if not broker.acknowledge(msg_id):
+        return JSONResponse({"error": "message not found or already acknowledged"}, status_code=404)
+
+    msg = broker.get_message(msg_id)
+    await send_to_browser({
+        "type": "agent_message",
+        "message": msg.to_dict(),
+    })
+
+    return JSONResponse({"id": msg_id, "state": "acknowledged"})
+
+
+@app.post("/api/messages/{msg_id}/reply")
+async def reply_to_message(msg_id: str, request: Request):
+    """Reply to a specific message."""
+    data = await request.json()
+    response_text = data.get("message", "")
+    if not response_text:
+        return JSONResponse({"error": "message is required"}, status_code=400)
+
+    if not broker.reply(msg_id, response_text):
+        return JSONResponse({"error": "message not found"}, status_code=404)
+
+    msg = broker.get_message(msg_id)
+    await send_to_browser({
+        "type": "agent_message",
+        "message": msg.to_dict(),
+    })
+
+    return JSONResponse({"id": msg_id, "state": "responded", "response": response_text})
+
+
+@app.get("/api/messages")
+async def list_messages(session_id: str = None):
+    """List messages, optionally filtered by session."""
+    if session_id:
+        msgs = broker.get_messages_for(session_id)
+        return JSONResponse([m.to_dict() for m in msgs])
+    return JSONResponse(broker.list_all())
+
+
+@app.get("/api/messages/{msg_id}")
+async def get_message(msg_id: str):
+    """Get a specific message by ID."""
+    msg = broker.get_message(msg_id)
+    if not msg:
+        return JSONResponse({"error": "message not found"}, status_code=404)
+    return JSONResponse(msg.to_dict())
+
+
+# ---------------------------------------------------------------------------
+# Audio API
+# ---------------------------------------------------------------------------
 
 @app.post("/api/transcribe")
 async def transcribe_audio(request: Request):
@@ -1044,6 +1229,13 @@ async def debug_info():
         "sessions": hub_sessions,
         "tmux_sessions": tmux_sessions,
         "services": services,
+        "messages": {
+            "total": len(broker.messages),
+            "pending": sum(1 for m in broker.messages.values() if m.state == "pending"),
+            "acknowledged": sum(1 for m in broker.messages.values() if m.state == "acknowledged"),
+            "responded": sum(1 for m in broker.messages.values() if m.state == "responded"),
+            "failed": sum(1 for m in broker.messages.values() if m.state == "failed"),
+        },
     })
 
 
@@ -1060,24 +1252,37 @@ async def debug_log():
     return JSONResponse({"lines": lines})
 
 
+_uvicorn_server = None
+
+
 def _log_sigterm(signum, frame):
-    """Log who sent SIGTERM so we can track down spurious hub restarts."""
+    """Log SIGTERM and trigger uvicorn's graceful shutdown.
+
+    IMPORTANT: Do NOT re-raise SIGTERM with SIG_DFL — that kills the process
+    immediately without running the lifespan finally block.
+    Instead, set uvicorn's should_exit flag for a clean shutdown.
+    """
     my_pid = os.getpid()
     try:
-        # Check all processes for anyone who recently killed us (best effort)
         parent_pid = os.getppid()
         parent_info = subprocess.run(
             ["ps", "-p", str(parent_pid), "-o", "pid,ppid,cmd", "--no-headers"],
             capture_output=True, text=True, timeout=2
         ).stdout.strip()
-        log.warning("SIGTERM received! PID=%d parent=%s", my_pid, parent_info or str(parent_pid))
+        log.warning("SIGTERM received! PID=%d parent=%s mode=%s", my_pid, parent_info or str(parent_pid), _shutdown_mode)
     except Exception as e:
-        log.warning("SIGTERM received! PID=%d (could not identify sender: %s)", my_pid, e)
-    # Re-raise to let uvicorn do its graceful shutdown
-    signal.signal(signum, signal.SIG_DFL)
-    os.kill(my_pid, signum)
+        log.warning("SIGTERM received! PID=%d mode=%s (could not identify sender: %s)", my_pid, _shutdown_mode, e)
+    # Tell uvicorn to shut down gracefully (runs lifespan finally block)
+    if _uvicorn_server:
+        _uvicorn_server.should_exit = True
+    else:
+        # Fallback: re-raise for uvicorn's default handler
+        signal.signal(signum, signal.SIG_DFL)
+        os.kill(my_pid, signum)
 
 
 if __name__ == "__main__":
+    config = uvicorn.Config(app, host="127.0.0.1", port=HUB_PORT, log_level="info")
+    _uvicorn_server = uvicorn.Server(config)
     signal.signal(signal.SIGTERM, _log_sigterm)
-    uvicorn.run(app, host="127.0.0.1", port=HUB_PORT, log_level="info")
+    _uvicorn_server.run()

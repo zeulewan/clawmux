@@ -1034,7 +1034,7 @@ body {
 <body>
 
 <div id="header">
-  <h1>ClawMux</h1>
+  <h1><a href="https://clawmux.com" target="_blank" style="color: inherit; text-decoration: none;">ClawMux</a></h1>
   <span id="active-voice" style="display:none; font-size:1.1rem; font-weight:700;"></span>
   <select id="session-model" style="display:none; font-size:0.65rem; padding:2px 4px; border-radius:6px; border:1px solid var(--border); background:var(--bg-card); color:var(--text-secondary); cursor:pointer;" onchange="setSessionModel(this.value)">
     <option value="opus">Opus</option>
@@ -1186,6 +1186,8 @@ body {
 </div>
 
 <div id="context-menu">
+  <div class="ctx-item" id="ctx-launch-mcp">Launch with MCP</div>
+  <div class="ctx-item" id="ctx-launch-cli">Launch with CLI</div>
   <div class="ctx-item" id="ctx-mark-unread">Mark as Unread</div>
   <div class="ctx-item" id="ctx-mark-read">Mark as Read</div>
   <div class="ctx-item" id="ctx-reset">Reset History</div>
@@ -2181,7 +2183,7 @@ function addMessage(sessionId, role, text) {
 }
 
 // --- Session management ---
-async function spawnSession(voiceId = '') {
+async function spawnSession(voiceId = '', mode = '') {
   if (voiceId && spawningVoices.has(voiceId)) return; // already spawning this voice
 
   // Mark voice as spawning immediately and update grid
@@ -2194,10 +2196,12 @@ async function spawnSession(voiceId = '') {
   try { await getMicStream(); } catch (e) { console.warn('Mic permission denied:', e); }
 
   try {
+    const body = { voice: voiceId };
+    if (mode) body.mode = mode;
     const resp = await fetch('/api/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ voice: voiceId }),
+      body: JSON.stringify(body),
     });
     const data = await resp.json();
     if (data.error) {
@@ -2926,11 +2930,13 @@ async function _refreshHistory(sessionId, voiceId) {
       }
     }
     // Check if server has messages the client is missing
+    // Filter out system messages from both sides for comparison
     const localNonSystem = s.messages.filter(m => m.role !== 'system');
-    const serverLen = serverMessages.length;
+    const serverNonSystem = serverMessages.filter(m => m.role !== 'system');
+    const serverLen = serverNonSystem.length;
     const localLen = localNonSystem.length;
     // Compare both count and last message content to catch missed messages
-    const lastServer = serverLen > 0 ? serverMessages[serverLen - 1] : null;
+    const lastServer = serverLen > 0 ? serverNonSystem[serverLen - 1] : null;
     const lastLocal = localLen > 0 ? localNonSystem[localLen - 1] : null;
     const needsSync = serverLen > localLen ||
       (serverLen > 0 && (!lastLocal || lastServer.text !== lastLocal.text || lastServer.role !== lastLocal.role));
@@ -3088,6 +3094,25 @@ function handleMessage(data) {
   }
   if (type === 'error') {
     alert('Hub error: ' + data.message);
+    return;
+  }
+
+  if (type === 'agent_message') {
+    const msg = data.message;
+    if (msg) {
+      const senderName = (msg.sender_name || msg.sender || '?');
+      const recipName = (msg.recipient_name || msg.recipient || '?');
+      const sName = senderName.charAt(0).toUpperCase() + senderName.slice(1);
+      const rName = recipName.charAt(0).toUpperCase() + recipName.slice(1);
+      // Show in recipient's chat
+      if (sessions.has(msg.recipient)) {
+        addMessage(msg.recipient, 'system', `[Agent msg from ${sName}] ${msg.content || ''}`);
+      }
+      // Show in sender's chat
+      if (sessions.has(msg.sender)) {
+        addMessage(msg.sender, 'system', `[Agent msg to ${rName}] ${msg.content || ''}`);
+      }
+    }
     return;
   }
 
@@ -4070,11 +4095,14 @@ function showContextMenu(e, sessionId, voiceId) {
   contextMenuVoiceId = voiceId;
   const menu = document.getElementById('context-menu');
   // Show/hide items based on session state
-  document.getElementById('ctx-terminate').style.display = sessionId ? 'block' : 'none';
+  const hasSession = !!sessionId;
+  document.getElementById('ctx-terminate').style.display = hasSession ? 'block' : 'none';
+  document.getElementById('ctx-launch-mcp').style.display = hasSession ? 'none' : 'block';
+  document.getElementById('ctx-launch-cli').style.display = hasSession ? 'none' : 'block';
   const sess = sessionId ? sessions.get(sessionId) : null;
   const hasUnread = sess && (sess.unreadCount || 0) > 0;
-  document.getElementById('ctx-mark-unread').style.display = (sessionId && !hasUnread) ? 'block' : 'none';
-  document.getElementById('ctx-mark-read').style.display = (sessionId && hasUnread) ? 'block' : 'none';
+  document.getElementById('ctx-mark-unread').style.display = (hasSession && !hasUnread) ? 'block' : 'none';
+  document.getElementById('ctx-mark-read').style.display = (hasSession && hasUnread) ? 'block' : 'none';
   menu.style.left = e.clientX + 'px';
   menu.style.top = e.clientY + 'px';
   menu.classList.add('visible');
@@ -4085,6 +4113,16 @@ function hideContextMenu() {
   contextMenuSessionId = null;
   contextMenuVoiceId = null;
 }
+
+document.getElementById('ctx-launch-mcp').addEventListener('click', () => {
+  if (contextMenuVoiceId) spawnSession(contextMenuVoiceId, 'mcp');
+  hideContextMenu();
+});
+
+document.getElementById('ctx-launch-cli').addEventListener('click', () => {
+  if (contextMenuVoiceId) spawnSession(contextMenuVoiceId, 'cli');
+  hideContextMenu();
+});
 
 document.getElementById('ctx-terminate').addEventListener('click', () => {
   if (contextMenuSessionId) terminateSession(contextMenuSessionId);

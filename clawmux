@@ -1,0 +1,629 @@
+#!/home/zeul/GIT/voice-chat/.venv/bin/python3
+"""ClawMux CLI — voice converse and inter-agent messaging.
+
+Replaces the MCP server with simple shell commands that any agent runtime
+can call. Connect, do one thing, print the result, exit.
+
+Env vars:
+    VOICE_HUB_SESSION_ID — session ID (required for converse/send/ack/reply)
+    VOICE_CHAT_HUB_PORT  — hub port (default 3460)
+"""
+
+import argparse
+import asyncio
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+
+HUB_PORT = int(os.environ.get("VOICE_CHAT_HUB_PORT", "3460"))
+HUB_BASE = f"http://127.0.0.1:{HUB_PORT}"
+SESSION_ID = os.environ.get("VOICE_HUB_SESSION_ID", "")
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def die(msg: str) -> None:
+    print(f"error: {msg}", file=sys.stderr)
+    sys.exit(1)
+
+
+def hub_url(path: str) -> str:
+    return f"{HUB_BASE}{path}"
+
+
+def require_session_id() -> str:
+    if not SESSION_ID:
+        die("VOICE_HUB_SESSION_ID not set")
+    return SESSION_ID
+
+
+async def ws_request(session_id: str, payload: dict, timeout: float = 300) -> dict:
+    """Connect to hub MCP WebSocket, send one message, wait for response, disconnect."""
+    from websockets.asyncio.client import connect as ws_connect
+
+    url = f"ws://127.0.0.1:{HUB_PORT}/mcp/{session_id}"
+    try:
+        async with ws_connect(url) as ws:
+            await ws.send(json.dumps(payload))
+            while True:
+                raw = await asyncio.wait_for(ws.recv(), timeout=timeout)
+                data = json.loads(raw)
+                if data.get("type") == "converse_result":
+                    return data
+                if data.get("type") == "status_result":
+                    return data
+                if data.get("type") == "message_result":
+                    return data
+    except asyncio.TimeoutError:
+        die("timeout waiting for hub response")
+    except ConnectionRefusedError:
+        die(f"cannot connect to hub at port {HUB_PORT} — is the hub running?")
+    except Exception as e:
+        die(f"websocket error: {e}")
+
+
+def http_get(path: str) -> dict:
+    """Simple HTTP GET to the hub REST API."""
+    import urllib.request
+    import urllib.error
+    try:
+        req = urllib.request.Request(hub_url(path))
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read())
+    except urllib.error.URLError as e:
+        die(f"cannot reach hub at {HUB_BASE}: {e.reason}")
+    except Exception as e:
+        die(f"http error: {e}")
+
+
+def http_post(path: str, data: dict) -> dict:
+    """Simple HTTP POST to the hub REST API."""
+    import urllib.request
+    import urllib.error
+    try:
+        body = json.dumps(data).encode()
+        req = urllib.request.Request(
+            hub_url(path),
+            data=body,
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        err = json.loads(e.read()) if e.headers.get("content-type", "").startswith("application/json") else {}
+        die(err.get("error", f"HTTP {e.code}: {e.reason}"))
+    except urllib.error.URLError as e:
+        die(f"cannot reach hub at {HUB_BASE}: {e.reason}")
+    except Exception as e:
+        die(f"http error: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
+
+def cmd_converse(args):
+    """Speak a message and optionally listen for response."""
+    session_id = require_session_id()
+
+    payload = {
+        "type": "converse",
+        "message": args.message,
+        "wait_for_response": not args.no_listen,
+        "voice": args.voice or "",
+        "goodbye": args.goodbye,
+    }
+
+    result = asyncio.run(ws_request(session_id, payload))
+    text = result.get("text", "")
+    if text:
+        print(text)
+
+
+def cmd_status(args):
+    """Show hub state and session info."""
+    if args.agent:
+        # Per-agent detail
+        sessions = http_get("/api/sessions")
+        found = None
+        for s in sessions:
+            name = s.get("voice", "").replace("af_", "").replace("am_", "").replace("bm_", "")
+            if name == args.agent or s.get("voice") == args.agent or s.get("session_id") == args.agent:
+                found = s
+                break
+        if not found:
+            die(f"no session found for '{args.agent}'")
+
+        print(f"Agent: {found.get('label', found.get('voice', '?'))}")
+        print(f"  Voice: {found.get('voice', '?')}")
+        print(f"  Status: {found.get('status', '?')}")
+        print(f"  Session ID: {found.get('session_id', '?')}")
+        if found.get("project"):
+            area = f" · {found['project_area']}" if found.get("project_area") else ""
+            print(f"  Project: {found['project']}{area}")
+        if found.get("work_dir"):
+            print(f"  Work dir: {found['work_dir']}")
+        if found.get("model"):
+            print(f"  Model: {found['model']}")
+        return
+
+    # Hub overview
+    sessions = http_get("/api/sessions")
+    debug = http_get("/api/debug")
+
+    hub_info = debug.get("hub", debug)
+    uptime_s = hub_info.get("uptime_seconds", 0)
+    h, m = int(uptime_s // 3600), int((uptime_s % 3600) // 60)
+    uptime = f"{h}h {m}m" if h else f"{m}m"
+
+    browser = hub_info.get("client_count", hub_info.get("browser_clients", 0))
+    print(f"Hub: port {HUB_PORT}, uptime {uptime}, {'browser connected' if browser else 'no browser'}")
+    print()
+
+    if not sessions:
+        print("No active sessions.")
+        return
+
+    print(f"{'Name':<10} {'Status':<8} {'Project':<22} {'Work Dir'}")
+    print("-" * 80)
+    for s in sessions:
+        name = s.get("label", s.get("voice", "?"))
+        status = s.get("status", "?")
+        project = s.get("project", "")
+        if s.get("project_area"):
+            project += f" · {s['project_area']}"
+        work_dir = s.get("work_dir", "")
+        # Shorten home paths
+        work_dir = work_dir.replace("/home/zeul/", "~/").replace("/tmp/voice-hub-sessions/", "~/sessions/")
+        print(f"{name:<10} {status:<8} {project:<22} {work_dir}")
+
+
+def cmd_start(args):
+    """Start the ClawMux hub."""
+    # Check if already running
+    try:
+        http_get("/api/sessions")
+        print(f"Hub is already running on port {HUB_PORT}.")
+        return
+    except SystemExit:
+        pass  # Not running, proceed
+
+    hub_dir = os.path.dirname(os.path.realpath(__file__))
+    venv_python = os.path.join(hub_dir, ".venv", "bin", "python")
+    hub_py = os.path.join(hub_dir, "server", "hub.py")
+
+    if not os.path.exists(venv_python):
+        die(f"venv not found at {venv_python}")
+    if not os.path.exists(hub_py):
+        die(f"hub.py not found at {hub_py}")
+
+    log_file = "/tmp/voice-hub.log"
+    print(f"Starting hub on port {HUB_PORT}...")
+
+    with open(log_file, "a") as log:
+        proc = subprocess.Popen(
+            [venv_python, hub_py],
+            cwd=hub_dir,
+            stdout=log,
+            stderr=log,
+            start_new_session=True,
+        )
+
+    # Wait for hub to come up
+    for i in range(30):
+        time.sleep(1)
+        try:
+            http_get("/api/sessions")
+            print(f"Hub started (PID {proc.pid}).")
+            return
+        except SystemExit:
+            continue
+
+    die("hub did not start within 30 seconds — check /tmp/voice-hub.log")
+
+
+def cmd_stop(args):
+    """Stop the ClawMux hub (keeps tmux sessions alive)."""
+    if not _shutdown_hub("reload"):
+        if not _sigterm_hub():
+            print("Hub is not running.")
+            return
+
+    # Wait for process to exit
+    for _ in range(20):
+        time.sleep(0.5)
+        check = subprocess.run(
+            ["pgrep", "-f", "python.*hub\\.py"],
+            capture_output=True, text=True,
+        )
+        if not check.stdout.strip():
+            print("Hub stopped (sessions preserved).")
+            return
+
+    print("Hub may still be shutting down.")
+
+
+def cmd_spawn(args):
+    """Spawn a new agent session."""
+    body = {"mode": args.mode or "cli"}
+    if args.voice:
+        body["voice"] = args.voice
+    if args.label:
+        body["label"] = args.label
+
+    print(f"Spawning session (mode={body['mode']})...")
+    result = http_post("/api/sessions", body)
+
+    if "error" in result:
+        die(result["error"])
+
+    sid = result.get("session_id", "?")
+    voice = result.get("voice", "?")
+    mode = result.get("mode", "?")
+    print(f"Session: {sid}")
+    print(f"Voice: {voice}")
+    print(f"Mode: {mode}")
+
+
+def cmd_send(args):
+    """Send a message to another agent."""
+    session_id = require_session_id()
+
+    result = http_post("/api/messages/send", {
+        "sender": session_id,
+        "to": args.to,
+        "message": args.message,
+        "expect_response": args.wait_response,
+    })
+
+    msg_id = result["id"]
+    print(msg_id)
+
+    if args.wait_ack:
+        # Poll for acknowledgment
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            time.sleep(2)
+            msg = http_get(f"/api/messages/{msg_id}")
+            if msg.get("state") in ("acknowledged", "responded"):
+                print("acknowledged", file=sys.stderr)
+                return
+            if msg.get("state") == "failed":
+                die("message delivery failed")
+        die("timeout waiting for acknowledgment")
+
+    if args.wait_response:
+        # Poll for response
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            time.sleep(2)
+            msg = http_get(f"/api/messages/{msg_id}")
+            if msg.get("state") == "responded":
+                print(msg.get("response_text", ""))
+                return
+            if msg.get("state") == "failed":
+                die("message delivery failed")
+        die("timeout waiting for response")
+
+
+def cmd_ack(args):
+    """Acknowledge receipt of a message."""
+    import urllib.request
+    import urllib.error
+    try:
+        req = urllib.request.Request(
+            hub_url(f"/api/messages/{args.msg_id}/ack"),
+            data=b"{}",
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            json.loads(resp.read())
+        print(f"acknowledged {args.msg_id}")
+    except urllib.error.HTTPError as e:
+        die(f"ack failed: {e.reason}")
+    except Exception as e:
+        die(f"ack error: {e}")
+
+
+def cmd_reply(args):
+    """Reply to a specific message."""
+    result = http_post(f"/api/messages/{args.msg_id}/reply", {
+        "message": args.message,
+    })
+    print(f"replied to {args.msg_id}")
+
+
+def cmd_kill_all(args):
+    """Stop the hub AND kill all voice tmux sessions."""
+    if _shutdown_hub("full"):
+        print("Stopping hub...")
+    else:
+        _sigterm_hub()
+        print("Hub is not running or using old version, cleaning up sessions...")
+
+    # Wait for hub to exit
+    for _ in range(20):
+        time.sleep(0.5)
+        check = subprocess.run(["pgrep", "-f", "python.*hub\\.py"], capture_output=True, text=True)
+        if not check.stdout.strip():
+            break
+
+    # Kill any remaining voice-* tmux sessions
+    result = subprocess.run(
+        ["tmux", "list-sessions", "-F", "#{session_name}"],
+        capture_output=True, text=True,
+    )
+    killed = 0
+    if result.returncode == 0:
+        for name in result.stdout.strip().splitlines():
+            if name.startswith("voice-"):
+                subprocess.run(["tmux", "kill-session", "-t", name], capture_output=True)
+                killed += 1
+
+    print(f"Hub stopped. Killed {killed} session(s).")
+
+
+def _shutdown_hub(mode: str = "reload") -> bool:
+    """Ask hub to shut down via API. Returns True if request was sent."""
+    import urllib.request, urllib.error
+    try:
+        body = json.dumps({"mode": mode}).encode()
+        req = urllib.request.Request(
+            hub_url("/api/shutdown"),
+            data=body,
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            resp.read()
+        return True
+    except (urllib.error.HTTPError, urllib.error.URLError):
+        # Endpoint doesn't exist (old hub) or hub not reachable — fall back to SIGTERM
+        return False
+    except Exception:
+        return False
+
+
+def _sigterm_hub():
+    """Fall back to SIGTERM for hubs without /api/shutdown."""
+    result = subprocess.run(["pgrep", "-f", "python.*hub\\.py"], capture_output=True, text=True)
+    pids = [p for p in result.stdout.strip().split("\n") if p]
+    for pid in pids:
+        try:
+            os.kill(int(pid), signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    return bool(pids)
+
+
+def cmd_reload(args):
+    """Reload the hub (graceful restart, keeps sessions alive)."""
+    if not _shutdown_hub("reload"):
+        if not _sigterm_hub():
+            die("hub is not running — use 'clawmux start' first")
+
+    print("Reloading hub...")
+
+    # Wait for shutdown
+    for _ in range(20):
+        time.sleep(0.5)
+        check = subprocess.run(
+            ["pgrep", "-f", "python.*hub\\.py"],
+            capture_output=True, text=True,
+        )
+        if not check.stdout.strip():
+            break
+
+    # Start it back up
+    hub_dir = os.path.dirname(os.path.realpath(__file__))
+    venv_python = os.path.join(hub_dir, ".venv", "bin", "python")
+    hub_py = os.path.join(hub_dir, "server", "hub.py")
+    log_file = "/tmp/voice-hub.log"
+
+    with open(log_file, "a") as log:
+        subprocess.Popen(
+            [venv_python, hub_py],
+            cwd=hub_dir,
+            stdout=log,
+            stderr=log,
+            start_new_session=True,
+        )
+
+    # Wait for hub to come up
+    for i in range(30):
+        time.sleep(1)
+        try:
+            http_get("/api/sessions")
+            print("Hub reloaded.")
+            return
+        except SystemExit:
+            continue
+
+    die("hub did not restart within 30 seconds — check /tmp/voice-hub.log")
+
+
+def cmd_messages(args):
+    """List messages."""
+    if args.session:
+        msgs = http_get(f"/api/messages?session_id={args.session}")
+    else:
+        msgs = http_get("/api/messages")
+
+    if not msgs:
+        print("No messages.")
+        return
+
+    for m in msgs:
+        state = m.get("state", "?")
+        sender = m.get("sender", "?")
+        recipient = m.get("recipient", "?")
+        content = m.get("content", "")[:60]
+        msg_id = m.get("id", "?")
+        print(f"  {msg_id}  {sender} → {recipient}  [{state}]  {content}")
+
+
+def cmd_project(args):
+    """Set project status in the sidebar."""
+    session_id = require_session_id()
+
+    payload = {
+        "type": "set_project_status",
+        "project": args.project,
+        "area": args.area or "",
+    }
+
+    asyncio.run(ws_request(session_id, payload, timeout=10))
+    area = f" · {args.area}" if args.area else ""
+    print(f"Project: {args.project}{area}")
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog="clawmux",
+        description="ClawMux CLI — voice converse and inter-agent messaging",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""commands:
+  Hub Management:
+    start       Start the ClawMux hub
+    stop        Stop the ClawMux hub
+    reload      Restart the hub (agents auto-reconnect)
+    status      Show hub state and session info
+
+  Voice:
+    converse    Speak a message and optionally listen for response
+
+  Messaging:
+    send        Send a message to another agent
+    ack         Acknowledge receipt of a message
+    reply       Reply to a specific message
+
+  Session:
+    spawn       Launch a new agent session
+    project     Set project status in sidebar
+
+examples:
+    clawmux status
+    clawmux status sky
+    clawmux converse "Hello, what should I work on?"
+    clawmux converse "Done." --no-listen
+    clawmux send --to alloy "Check the auth module"
+    clawmux start
+    clawmux reload""",
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    # converse
+    p = sub.add_parser("converse", help="Speak a message and optionally listen",
+                       description="Speak a message via TTS and optionally listen for the user's spoken response via STT. Prints the transcribed speech to stdout.",
+                       formatter_class=argparse.RawDescriptionHelpFormatter,
+                       epilog="""examples:
+    clawmux converse "What should I work on next?"
+    clawmux converse "Done with that." --no-listen
+    clawmux converse "Goodbye!" --goodbye""")
+    p.add_argument("message", help="Text to speak via TTS")
+    p.add_argument("--no-listen", action="store_true", help="Speak and exit without waiting for response")
+    p.add_argument("--voice", help="Override TTS voice (e.g. af_sky, am_echo)")
+    p.add_argument("--goodbye", action="store_true", help="End session after speaking")
+    p.set_defaults(func=cmd_converse)
+
+    # send
+    p = sub.add_parser("send", help="Send a message to another agent",
+                       description="Send a message to another agent session via tmux injection.",
+                       formatter_class=argparse.RawDescriptionHelpFormatter,
+                       epilog="""examples:
+    clawmux send --to alloy "FYI, I pushed a fix."
+    clawmux send --to alloy --wait-ack "Can you check the auth module?"
+    clawmux send --to alloy --wait-response "What port is the dev server on?" """)
+    p.add_argument("--to", required=True, help="Recipient agent name (e.g. sky, alloy, echo)")
+    p.add_argument("message", help="Message text")
+    p.add_argument("--wait-ack", action="store_true", help="Block until recipient acknowledges")
+    p.add_argument("--wait-response", action="store_true", help="Block until recipient replies")
+    p.set_defaults(func=cmd_send)
+
+    # ack
+    p = sub.add_parser("ack", help="Acknowledge receipt of a message",
+                       description="Tell the hub you received and read a message.")
+    p.add_argument("msg_id", help="Message ID to acknowledge (e.g. msg-a1b2c3)")
+    p.set_defaults(func=cmd_ack)
+
+    # reply
+    p = sub.add_parser("reply", help="Reply to a message",
+                       description="Send a response to a specific message, unblocking the sender if they used --wait-response.")
+    p.add_argument("msg_id", help="Message ID to reply to")
+    p.add_argument("message", help="Reply text")
+    p.set_defaults(func=cmd_reply)
+
+    # status
+    p = sub.add_parser("status", help="Show hub state and session info",
+                       description="Show hub overview or detailed info for a specific agent.",
+                       formatter_class=argparse.RawDescriptionHelpFormatter,
+                       epilog="""examples:
+    clawmux status              # Hub overview with all sessions
+    clawmux status sky          # Detailed info for Sky""")
+    p.add_argument("agent", nargs="?", help="Agent name for detailed status (e.g. sky, alloy)")
+    p.set_defaults(func=cmd_status)
+
+    # start
+    p = sub.add_parser("start", help="Start the ClawMux hub",
+                       description="Launch the hub process. Exits if hub is already running.")
+    p.set_defaults(func=cmd_start)
+
+    # stop
+    p = sub.add_parser("stop", help="Stop the ClawMux hub",
+                       description="Gracefully stop the hub. Agent tmux sessions are preserved.")
+    p.set_defaults(func=cmd_stop)
+
+    # reload
+    p = sub.add_parser("reload", help="Restart the hub (agents auto-reconnect)",
+                       description="Stop and restart the hub. Active agent sessions reconnect automatically via MCP.")
+    p.set_defaults(func=cmd_reload)
+
+    # spawn
+    p = sub.add_parser("spawn", help="Spawn a new agent session",
+                       description="Launch a new agent session via the hub.",
+                       formatter_class=argparse.RawDescriptionHelpFormatter,
+                       epilog="""examples:
+    clawmux spawn --voice am_echo
+    clawmux spawn --voice af_sky --mode mcp
+    clawmux spawn --voice am_echo --label "Echo Agent" """)
+    p.add_argument("--voice", help="TTS voice (e.g. af_sky, am_echo, am_onyx)")
+    p.add_argument("--mode", help="Session mode: cli (default) or mcp", default="cli")
+    p.add_argument("--label", help="Custom label for the session")
+    p.set_defaults(func=cmd_spawn)
+
+    # kill-all
+    p = sub.add_parser("kill-all", help="Stop hub and kill all agent sessions",
+                       description="Stop the hub AND kill all voice-* tmux sessions. Use for full teardown.")
+    p.set_defaults(func=cmd_kill_all)
+
+    # messages
+    p = sub.add_parser("messages", help="List inter-agent messages",
+                       description="Show message history between agents.")
+    p.add_argument("--session", help="Filter by session ID")
+    p.set_defaults(func=cmd_messages)
+
+    # project
+    p = sub.add_parser("project", help="Set project status in sidebar",
+                       description="Update the sidebar to show what project and area you're working on.",
+                       formatter_class=argparse.RawDescriptionHelpFormatter,
+                       epilog="""examples:
+    clawmux project voice-hub
+    clawmux project voice-hub --area frontend""")
+    p.add_argument("project", help="Project or repo name")
+    p.add_argument("--area", help="Sub-area (e.g. frontend, backend, docs)")
+    p.set_defaults(func=cmd_project)
+
+    args = parser.parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()
