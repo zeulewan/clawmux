@@ -1,4 +1,4 @@
-# v0.6.0 - ClawMux CLI & Multi-Provider
+# v0.7.0 - ClawMux CLI & Multi-Provider
 
 Replace the MCP server with the ClawMux CLI. Add multi-provider support and decentralize the hub.
 
@@ -40,3 +40,5 @@ The hub gets a pluggable backend interface so it can run sessions through Claude
 - [ ] Streaming TTS — stream audio chunks to reduce time-to-first-audio.
 - [ ] One-command setup — single install script.
 - [ ] Code block rendering — render code blocks in agent responses.
+- [ ] Auto mode cancel — cancel button should temp-pause auto mode, not restart recording.
+- [ ] Live reload — hub watches static files and triggers browser reload via WebSocket.

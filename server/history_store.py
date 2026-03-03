@@ -16,12 +16,22 @@ class HistoryStore:
     def __init__(self):
         HISTORY_DIR.mkdir(parents=True, exist_ok=True)
 
-    def _path(self, voice_id: str) -> Path:
+    def _path(self, voice_id: str, project: str | None = None) -> Path:
+        """Get path for a voice's history file, optionally within a project.
+
+        project=None or "default" uses the root history dir (backward compatible).
+        project="some-project" uses HISTORY_DIR/{project}/{voice_id}.json.
+        """
         safe = voice_id.replace("/", "").replace("..", "")
+        if project and project != "default":
+            safe_proj = project.replace("/", "").replace("..", "")
+            proj_dir = HISTORY_DIR / safe_proj
+            proj_dir.mkdir(parents=True, exist_ok=True)
+            return proj_dir / f"{safe}.json"
         return HISTORY_DIR / f"{safe}.json"
 
-    def _load_data(self, voice_id: str) -> dict:
-        path = self._path(voice_id)
+    def _load_data(self, voice_id: str, project: str | None = None) -> dict:
+        path = self._path(voice_id, project)
         if not path.exists():
             return {}
         try:
@@ -30,53 +40,68 @@ class HistoryStore:
             log.error("Failed to load history for %s: %s", voice_id, e)
             return {}
 
-    def _save_data(self, voice_id: str, data: dict) -> None:
+    def _save_data(self, voice_id: str, data: dict, project: str | None = None) -> None:
         try:
-            self._path(voice_id).write_text(json.dumps(data, indent=2))
+            self._path(voice_id, project).write_text(json.dumps(data, indent=2))
         except Exception as e:
             log.error("Failed to save history for %s: %s", voice_id, e)
 
-    def load(self, voice_id: str) -> list[dict]:
-        return self._load_data(voice_id).get("messages", [])
+    def load(self, voice_id: str, project: str | None = None) -> list[dict]:
+        return self._load_data(voice_id, project).get("messages", [])
 
-    def append(self, voice_id: str, voice_name: str, role: str, text: str) -> None:
-        data = self._load_data(voice_id)
+    def append(self, voice_id: str, voice_name: str, role: str, text: str, project: str | None = None) -> None:
+        data = self._load_data(voice_id, project)
         messages = data.get("messages", [])
         messages.append({"role": role, "text": text, "ts": time.time()})
         if len(messages) > MAX_MESSAGES:
             messages = messages[-MAX_MESSAGES:]
         data.update({"voice_id": voice_id, "voice_name": voice_name, "messages": messages})
-        self._save_data(voice_id, data)
+        self._save_data(voice_id, data, project)
 
-    def clear(self, voice_id: str) -> None:
-        path = self._path(voice_id)
+    def clear(self, voice_id: str, project: str | None = None) -> None:
+        path = self._path(voice_id, project)
         if path.exists():
             path.unlink()
         log.info("Cleared history for %s", voice_id)
 
-    def get_claude_session_id(self, voice_id: str) -> str | None:
+    def get_claude_session_id(self, voice_id: str, project: str | None = None) -> str | None:
         """Get the stored Claude session UUID for resuming."""
-        return self._load_data(voice_id).get("claude_session_id")
+        return self._load_data(voice_id, project).get("claude_session_id")
 
-    def set_claude_session_id(self, voice_id: str, session_id: str) -> None:
+    def set_claude_session_id(self, voice_id: str, session_id: str, project: str | None = None) -> None:
         """Store the Claude session UUID for later resume."""
-        data = self._load_data(voice_id)
+        data = self._load_data(voice_id, project)
         data["claude_session_id"] = session_id
-        self._save_data(voice_id, data)
+        self._save_data(voice_id, data, project)
 
-    def save_interjections(self, voice_id: str, interjections: list[str]) -> None:
+    def save_interjections(self, voice_id: str, interjections: list[str], project: str | None = None) -> None:
         """Persist pending interjections so they survive hub restarts."""
-        data = self._load_data(voice_id)
+        data = self._load_data(voice_id, project)
         data["pending_interjections"] = interjections
-        self._save_data(voice_id, data)
+        self._save_data(voice_id, data, project)
 
-    def load_interjections(self, voice_id: str) -> list[str]:
+    def load_interjections(self, voice_id: str, project: str | None = None) -> list[str]:
         """Load pending interjections from previous hub run."""
-        return self._load_data(voice_id).get("pending_interjections", [])
+        return self._load_data(voice_id, project).get("pending_interjections", [])
 
-    def clear_interjections(self, voice_id: str) -> None:
+    def clear_interjections(self, voice_id: str, project: str | None = None) -> None:
         """Clear pending interjections after they've been consumed."""
-        data = self._load_data(voice_id)
+        data = self._load_data(voice_id, project)
         if "pending_interjections" in data:
             del data["pending_interjections"]
-            self._save_data(voice_id, data)
+            self._save_data(voice_id, data, project)
+
+    def copy_history(self, voice_id: str, from_project: str | None, to_project: str) -> bool:
+        """Copy a voice's history from one project to another. Returns True on success.
+
+        Strips claude_session_id and pending_interjections since those are tied
+        to the source project's working directory and should not carry over.
+        """
+        data = self._load_data(voice_id, from_project)
+        if not data:
+            return False
+        # Don't copy session-specific state — new project starts fresh Claude sessions
+        copy = {k: v for k, v in data.items() if k not in ("claude_session_id", "pending_interjections")}
+        self._save_data(voice_id, copy, to_project)
+        log.info("Copied history for %s from %s to %s", voice_id, from_project or "default", to_project)
+        return True

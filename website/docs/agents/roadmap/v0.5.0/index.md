@@ -1,6 +1,6 @@
-# v0.5.0 - Polish & Reliability (Final MCP Release)
+# v0.5.0 - Polish & Reliability
 
-Stability, UX polish, and bug fixes. This is the final release using the MCP server architecture. The MCP server is now feature-frozen and will be phased out in v0.6.0 when the ClawMux CLI replaces it.
+Stability, UX polish, and bug fixes. Inter-agent messaging, CLI spawn, and hub reload.
 
 ## Hub
 

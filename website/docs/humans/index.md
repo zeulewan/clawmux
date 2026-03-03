@@ -1,17 +1,17 @@
 # For Humans
 
-ClawMux lets you talk to Claude Code with your voice. Run multiple voice agents from a single browser tab, each with their own voice and personality. Everything runs locally on your machine — no cloud audio processing.
+ClawMux lets you talk to Claude Code with your voice. Run multiple voice agents from a single browser tab, each with their own voice and personality. Everything runs locally on your machine with no cloud audio processing.
 
 ## What You Get
 
-- **Hands-free coding** — Describe what you want, Claude builds it. No typing.
-- **Multiple agents** — Run several Claude sessions at once, each with a unique voice. Switch between them with tabs.
-- **Full Claude Code power** — Each agent can read files, write code, run commands, search the web — everything Claude Code can do.
-- **Private** — All speech-to-text and text-to-speech runs on your GPU. Audio never leaves your network.
+- **Hands-free coding:** Describe what you want, Claude builds it. No typing.
+- **Multiple agents:** Run several Claude sessions at once, each with a unique voice. Switch between them with tabs.
+- **Full Claude Code power:** Each agent can read files, write code, run commands, search the web, and everything else Claude Code can do.
+- **Private:** All speech-to-text and text-to-speech runs on your GPU. Audio never leaves your network.
 
 ## How It Works
 
-You speak into your browser. The hub sends your audio to Whisper (running on your GPU) to turn it into text, then forwards it to the right Claude agent. Claude does the work — edits files, runs commands, whatever you asked — and responds. The hub sends that response to Kokoro (also on your GPU) to turn it into speech, and you hear it back. All local, all private.
+You speak into your browser. The hub sends your audio to Whisper (running on your GPU) to turn it into text, then forwards it to the right Claude agent. Claude does the work (edits files, runs commands, whatever you asked) and responds. The hub sends that response to Kokoro (also on your GPU) to turn it into speech, and you hear it back. All local, all private.
 
 ## Prerequisites
 
@@ -71,5 +71,5 @@ If anything is missing, Claude will walk you through it.
 ## Tips
 
 - **Switch tabs** to jump between agents. Audio pauses when you leave and resumes when you come back.
-- **Background work** — If an agent is talking while you're on another tab, the audio is saved and plays when you switch back.
+- **Background work:** If an agent is talking while you're on another tab, the audio is saved and plays when you switch back.
 - You can **attach to the tmux session** shown in the bottom bar to see what Claude is doing behind the scenes.

@@ -29,6 +29,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from history_store import HistoryStore
 from hub_config import HUB_PORT, HUB_START_TIME, KOKORO_URL, WHISPER_URL
 from message_broker import MessageBroker
+from project_manager import ProjectManager
 from session_manager import SessionManager
 
 # Logging
@@ -44,7 +45,8 @@ logging.basicConfig(
 log = logging.getLogger("hub")
 
 history = HistoryStore()
-session_mgr = SessionManager(history_store=history)
+project_mgr = ProjectManager()
+session_mgr = SessionManager(history_store=history, project_mgr=project_mgr)
 broker = MessageBroker()
 
 # Browser WebSocket clients (multiple connections supported)
@@ -92,6 +94,58 @@ async def heartbeat_loop() -> None:
         for ws in dead:
             log.info("Heartbeat: removing dead client (%d remain)", len(browser_clients) - 1)
             browser_clients.discard(ws)
+
+
+async def compaction_monitor_loop() -> None:
+    """Poll tmux panes for compaction status when context usage is high (>=80%)."""
+    while True:
+        await asyncio.sleep(3)
+        for session_id in list(session_mgr.sessions):
+            session = session_mgr.sessions.get(session_id)
+            if not session or session.status == "dead":
+                continue
+            # Only check when context usage is >= 80%
+            usage = session_mgr.get_context_usage(session_id)
+            if not usage or usage["percent"] < 80:
+                if session.compacting:
+                    # Context dropped below 80% (post-compaction reset)
+                    session.compacting = False
+                    await send_to_browser({
+                        "type": "compaction_status",
+                        "session_id": session_id,
+                        "compacting": False,
+                    })
+                continue
+            # Capture tmux pane and check for compaction text
+            try:
+                result = await asyncio.create_subprocess_exec(
+                    "tmux", "capture-pane", "-t", session.tmux_session, "-p",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, _ = await result.communicate()
+                pane_text = stdout.decode(errors="replace") if stdout else ""
+            except Exception:
+                continue
+            # Check for active compaction by scanning lines bottom-up
+            lines = pane_text.strip().splitlines()
+            is_compacting = False
+            for line in reversed(lines):
+                ll = line.lower().strip()
+                if "compacting" in ll and "compacted" not in ll:
+                    is_compacting = True
+                    break
+                if "compacted" in ll:
+                    # Most recent compaction-related line says "compacted" (done)
+                    break
+            if is_compacting != session.compacting:
+                session.compacting = is_compacting
+                await send_to_browser({
+                    "type": "compaction_status",
+                    "session_id": session_id,
+                    "compacting": is_compacting,
+                })
+                log.info("[%s] Compaction %s", session_id, "started" if is_compacting else "finished")
 
 
 # --- TTS / STT ---
@@ -247,16 +301,36 @@ def _strip_prefix_audio(audio_b64: str, timestamps: list, prefix: str) -> tuple[
     return trimmed_b64, shifted
 
 
+def _get_stt_prompt() -> str:
+    """Read STT prompt from voicemode.env for Whisper vocabulary biasing."""
+    env_path = os.path.expanduser("~/.voicemode/voicemode.env")
+    try:
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("VOICEMODE_STT_PROMPT="):
+                    val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    return val
+    except FileNotFoundError:
+        pass
+    return os.environ.get("VOICEMODE_STT_PROMPT", "")
+
+_stt_prompt = _get_stt_prompt()
+
+
 async def stt(audio_bytes: bytes) -> str:
     """Audio bytes → text via Whisper. Retries up to 3 times on failure."""
     last_err = None
     for attempt in range(3):
         try:
+            data = {"model": "whisper-1", "response_format": "json"}
+            if _stt_prompt:
+                data["prompt"] = _stt_prompt
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.post(
                     f"{WHISPER_URL}/v1/audio/transcriptions",
                     files={"file": ("recording.webm", audio_bytes, "audio/webm")},
-                    data={"model": "whisper-1", "response_format": "json"},
+                    data=data,
                 )
                 resp.raise_for_status()
             return resp.json().get("text", "").strip()
@@ -298,12 +372,12 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
         session.interjections.clear()
         history.clear_interjections(session.voice)
         log.info("[%s] Pre-speech interjection(s), skipping TTS: %s", session_id, text[:100])
-        # Persist to history first so sync can recover if hub crashes
-        history.append(session.voice, session.label, "assistant", message)
-        # Still show the assistant message in browser (but don't speak it)
-        if session_id != _browser_viewed_session:
-            session.unread_count += 1
-        await send_to_browser({"session_id": session_id, "type": "assistant_text", "text": message})
+        # Persist to history and show in browser (but don't speak it)
+        if message:
+            history.append(session.voice, session.label, "assistant", message)
+            if session_id != _browser_viewed_session:
+                session.unread_count += 1
+            await send_to_browser({"session_id": session_id, "type": "assistant_text", "text": message})
         session.status_text = ""
         session.processing = True  # Agent will process the interjection
         await send_to_browser({"session_id": session_id, "type": "done", "processing": True})
@@ -493,12 +567,14 @@ async def lifespan(app: FastAPI):
     broker.start()
     timeout_task = asyncio.create_task(session_mgr.run_timeout_loop())
     hb_task = asyncio.create_task(heartbeat_loop())
+    compaction_task = asyncio.create_task(compaction_monitor_loop())
     try:
         yield
     finally:
         broker.stop()
         timeout_task.cancel()
         hb_task.cancel()
+        compaction_task.cancel()
         if _shutdown_mode == "reload":
             log.info("Hub reloading — keeping tmux sessions alive for re-adoption")
             for sid, session in session_mgr.sessions.items():
@@ -775,7 +851,8 @@ async def spawn_session(request: Request):
         label = body.get("label", "")
         voice = body.get("voice", "")
         mode = body.get("mode", "mcp")  # "mcp" (default) or "cli"
-        session = await session_mgr.spawn_session(label, voice, mode=mode)
+        project = body.get("project")
+        session = await session_mgr.spawn_session(label, voice, mode=mode, project=project)
         # Show thinking indicator while agent prepares its opening greeting
         session.processing = True
         await send_to_browser({"session_id": session.session_id, "type": "thinking"})
@@ -852,6 +929,103 @@ async def set_session_speed(session_id: str, request: Request):
     session.speed = speed
     log.info("[%s] Speed changed to %s", session_id, speed)
     return JSONResponse({"speed": speed})
+
+
+# --- Project Management ---
+
+@app.get("/api/projects")
+async def list_projects():
+    """Return projects in {projects: {slug: {...}}, active_project: slug} format."""
+    projects_dict = {}
+    for p in project_mgr.list_projects():
+        slug = p.pop("slug")
+        p.pop("active", None)
+        projects_dict[slug] = p
+    return JSONResponse({
+        "projects": projects_dict,
+        "active_project": project_mgr.active_project,
+    })
+
+
+@app.post("/api/projects")
+async def create_project(request: Request):
+    data = await request.json()
+    slug = data.get("slug", "").strip().lower().replace(" ", "-")
+    name = data.get("name", slug)
+    if not slug:
+        return JSONResponse({"error": "slug is required"}, status_code=400)
+    voices = data.get("voices")  # Optional: list of voice IDs to use
+    try:
+        project = project_mgr.create_project(slug, name, voices=voices)
+        return JSONResponse(project)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@app.post("/api/projects/{slug}/copy-history")
+async def copy_project_history(slug: str, request: Request):
+    """Copy conversation history from one project to another."""
+    data = await request.json()
+    source_slug = data.get("source", "default")
+    if slug not in project_mgr.projects:
+        return JSONResponse({"error": f"Project '{slug}' not found"}, status_code=404)
+    if source_slug not in project_mgr.projects:
+        return JSONResponse({"error": f"Source project '{source_slug}' not found"}, status_code=404)
+    # Copy history for each voice shared between source and target
+    source_voices = project_mgr.projects[source_slug].get("voices", [])
+    target_voices = project_mgr.projects[slug].get("voices", [])
+    src_prefix = project_mgr.get_history_prefix(source_slug)
+    tgt_prefix = project_mgr.get_history_prefix(slug)
+    copied = 0
+    # Copy voices that exist in both projects (same voice IDs)
+    shared = set(source_voices) & set(target_voices)
+    for voice_id in shared:
+        try:
+            history.copy_history(voice_id, src_prefix, tgt_prefix)
+            copied += 1
+        except Exception as e:
+            log.warning("Failed to copy history for %s: %s", voice_id, e)
+    return JSONResponse({"copied": copied, "total": len(source_voices)})
+
+
+@app.post("/api/projects/{slug}/activate")
+async def activate_project(slug: str):
+    try:
+        project_mgr.switch_project(slug)
+        # Notify browser of project switch
+        await send_to_browser({"type": "project_switched", "project": slug})
+        return JSONResponse({"active_project": slug})
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
+
+@app.put("/api/projects/{slug}/voices")
+async def reorder_voices(slug: str, request: Request):
+    data = await request.json()
+    voices = data.get("voices", [])
+    if not voices or not isinstance(voices, list):
+        return JSONResponse({"error": "voices array is required"}, status_code=400)
+    try:
+        project_mgr.reorder_voices(slug, voices)
+        return JSONResponse({"slug": slug, "voices": voices})
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
+
+@app.delete("/api/projects/{slug}")
+async def delete_project(slug: str):
+    try:
+        # Terminate sessions belonging to this project first
+        to_terminate = [
+            sid for sid, s in session_mgr.sessions.items()
+            if s.project_slug == slug
+        ]
+        for sid in to_terminate:
+            await session_mgr.terminate_session(sid)
+        project_mgr.delete_project(slug)
+        return JSONResponse({"status": "deleted", "slug": slug, "terminated_sessions": len(to_terminate)})
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
 
 
 @app.get("/api/history/{voice_id}")

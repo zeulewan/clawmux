@@ -18,6 +18,7 @@ from hub_config import (
     TMUX_SESSION_PREFIX,
     VOICES,
 )
+from project_manager import ProjectManager
 
 log = logging.getLogger("hub.sessions")
 
@@ -49,12 +50,14 @@ class Session:
     restarting: bool = False  # True while model restart is in progress (skip health checks)
     processing: bool = False  # True when agent is busy between converse calls
     in_converse: bool = False  # True while handle_converse is running
+    compacting: bool = False  # True when Claude Code is compacting context
     unread_count: int = 0  # server-tracked unread message count
     # Per-session bridge state (set by hub after creation)
     audio_queue: asyncio.Queue | None = field(default=None, repr=False)
     playback_done: asyncio.Event | None = field(default=None, repr=False)
     claude_session_id: str = ""  # Claude Code conversation UUID (for JSONL lookup)
     mode: str = "mcp"  # "mcp" or "cli"
+    project_slug: str = "default"  # which project this session belongs to
     mcp_ws: object | None = field(default=None, repr=False)
 
     def to_dict(self) -> dict:
@@ -74,9 +77,11 @@ class Session:
             "model": self.model,
             "processing": self.processing,
             "in_converse": self.in_converse,
+            "compacting": self.compacting,
             "unread_count": self.unread_count,
             "work_dir": self.work_dir,
             "mode": self.mode,
+            "project_slug": self.project_slug,
         }
 
     def touch(self) -> None:
@@ -88,10 +93,11 @@ class Session:
 
 
 class SessionManager:
-    def __init__(self, history_store=None) -> None:
+    def __init__(self, history_store=None, project_mgr: ProjectManager | None = None) -> None:
         self.sessions: dict[str, Session] = {}
         self._counter = 0
         self.history_store = history_store
+        self.project_mgr = project_mgr or ProjectManager()
         SESSION_DIR_BASE.mkdir(parents=True, exist_ok=True)
 
     async def cleanup_stale_sessions(self) -> None:
@@ -110,19 +116,37 @@ class SessionManager:
             )
             stdout, _ = await proc.communicate()
             if proc.returncode == 0:
+                # Collect valid tmux prefixes: "voice-" for default, "{cleanslug}-" for named projects
+                valid_prefixes = [TMUX_SESSION_PREFIX + "-"]
+                for slug, proj in self.project_mgr.projects.items():
+                    if slug != "default" and not proj.get("flat_layout"):
+                        valid_prefixes.append(slug.replace("-", "") + "-")
                 for name in stdout.decode().strip().splitlines():
-                    if name.startswith(TMUX_SESSION_PREFIX + "-"):
+                    if any(name.startswith(p) for p in valid_prefixes):
                         live_tmux.add(name)
         except Exception as e:
             log.error("Error listing tmux sessions: %s", e)
 
-        # Scan voice work dirs for adoptable sessions
-        voice_ids = {v[0] for v in VOICES}
-        voice_names_map = dict(VOICES)
+        # Scan voice work dirs for adoptable sessions (all projects)
+        from hub_config import VOICE_POOL
+        voice_ids = {v[0] for v in VOICE_POOL}
+        voice_names_map = dict(VOICE_POOL)
         adopted = 0
 
+        # Collect all possible work dirs: flat layout + project subdirs
+        work_dirs_to_scan: list[tuple[str, Path]] = []
         for voice_id in voice_ids:
-            work_dir = SESSION_DIR_BASE / voice_id
+            # Flat layout (default project)
+            work_dirs_to_scan.append((voice_id, SESSION_DIR_BASE / voice_id))
+        # Also scan project subdirectories
+        for slug, proj in self.project_mgr.projects.items():
+            if not proj.get("flat_layout"):
+                for voice_id in proj.get("voices", []):
+                    proj_dir = SESSION_DIR_BASE / slug / voice_id
+                    if proj_dir.exists():
+                        work_dirs_to_scan.append((voice_id, proj_dir))
+
+        for voice_id, work_dir in work_dirs_to_scan:
 
             # Try .session.json first (works for both MCP and CLI modes)
             session_json_path = work_dir / ".session.json"
@@ -167,6 +191,14 @@ class SessionManager:
 
             # Adopt: create a Session object with the old session_id
             voice_name = voice_names_map.get(voice_id, voice_id)
+            # Determine project_slug from work_dir path
+            adopt_project = "default"
+            for slug, proj in self.project_mgr.projects.items():
+                if not proj.get("flat_layout"):
+                    proj_dir = SESSION_DIR_BASE / slug
+                    if str(work_dir).startswith(str(proj_dir)):
+                        adopt_project = slug
+                        break
             session = Session(
                 session_id=old_session_id,
                 tmux_session=old_session_id,
@@ -175,6 +207,7 @@ class SessionManager:
                 label=voice_name,
                 voice=voice_id,
                 mode=session_mode,
+                project_slug=adopt_project,
             )
             session.init_bridge()
             # Restore Claude session ID for context tracking
@@ -292,40 +325,56 @@ class SessionManager:
             log.warning("Error reading context usage for %s: %s", session_id, e)
             return None
 
-    def _next_voice(self) -> tuple[str, str]:
-        """Return the next unused (voice_id, display_name) from the rotation."""
-        used = {s.voice for s in self.sessions.values()}
-        for voice_id, name in VOICES:
+    def _next_voice(self, project_slug: str | None = None) -> tuple[str, str]:
+        """Return the next unused (voice_id, display_name) from the project's voice set."""
+        slug = project_slug or self.project_mgr.active_project
+        project_voices = self.project_mgr.get_voices(slug)
+        # Only consider voices used within THIS project, not globally
+        used = {s.voice for s in self.sessions.values() if s.project_slug == slug}
+        for voice_id, name in project_voices:
             if voice_id not in used:
                 return voice_id, name
         # All used — wrap around using counter
-        idx = self._counter % len(VOICES)
-        return VOICES[idx]
+        idx = self._counter % len(project_voices)
+        return project_voices[idx]
 
-    async def spawn_session(self, label: str = "", voice: str = "", mode: str = "mcp") -> Session:
+    async def spawn_session(self, label: str = "", voice: str = "", mode: str = "mcp", project: str | None = None) -> Session:
         """Create a temp dir with .mcp.json, tmux session, and start Claude.
 
         Args:
             mode: "mcp" (default) uses the MCP server for voice. "cli" uses clawmux CLI.
         """
-        # Reject duplicate voice
+        # Determine which project this session belongs to
+        project_slug = project or self.project_mgr.active_project
+
+        # Reject duplicate voice within the same project
         if voice:
             for s in self.sessions.values():
-                if s.voice == voice:
-                    raise RuntimeError(f"Voice {voice} already has an active session")
+                if s.voice == voice and s.project_slug == project_slug:
+                    raise RuntimeError(f"Voice {voice} already has an active session in project {project_slug}")
 
         self._counter += 1
         short_id = uuid.uuid4().hex[:6]
 
+        # Get voice from project-specific pool
+        project_voices = self.project_mgr.get_voices(project_slug)
+        pool_map = {v[0]: v[1] for v in project_voices}
+
         if voice:
             # Use specified voice
             voice_id = voice
-            voice_name = dict(VOICES).get(voice, voice)
+            voice_name = pool_map.get(voice, dict(VOICES).get(voice, voice))
         else:
-            voice_id, voice_name = self._next_voice()
+            voice_id, voice_name = self._next_voice(project_slug)
 
-        # Name session after the voice (e.g. "voice-sky")
-        session_id = f"{TMUX_SESSION_PREFIX}-{voice_name.lower()}"
+        # Name session after the voice, namespaced by project
+        # Default project: "voice-sky" (backward compatible)
+        # Named projects: "hnapp-bella" (project slug + short voice name)
+        if project_slug == "default":
+            session_id = f"{TMUX_SESSION_PREFIX}-{voice_name.lower()}"
+        else:
+            clean_slug = project_slug.replace("-", "")
+            session_id = f"{clean_slug}-{voice_name.lower()}"
         tmux_name = session_id
 
         # Kill stale tmux session with same name if it exists
@@ -337,6 +386,7 @@ class SessionManager:
             label=voice_name,
             voice=voice_id,
             mode=mode,
+            project_slug=project_slug,
         )
         session.init_bridge()
         self.sessions[session_id] = session
@@ -345,7 +395,7 @@ class SessionManager:
 
         try:
             # Use a stable work directory per voice (so --resume finds the session)
-            work_dir = SESSION_DIR_BASE / voice_id
+            work_dir = self.project_mgr.get_session_dir(voice_id, project_slug)
             work_dir.mkdir(parents=True, exist_ok=True)
             session.work_dir = str(work_dir)
 
@@ -382,8 +432,9 @@ class SessionManager:
             # Check if we can resume a previous Claude session for this voice
             claude_session_id = None
             resuming = False
+            hist_prefix = self.project_mgr.get_history_prefix(project_slug)
             if self.history_store:
-                stored_id = self.history_store.get_claude_session_id(voice_id)
+                stored_id = self.history_store.get_claude_session_id(voice_id, hist_prefix)
                 if stored_id:
                     # Verify the session file exists somewhere in ~/.claude/projects/
                     claude_projects = Path.home() / ".claude" / "projects"
@@ -405,7 +456,7 @@ class SessionManager:
                 claude_session_id = str(uuid.uuid4())
                 log.info("[%s] New Claude session %s", session_id, claude_session_id)
                 if self.history_store:
-                    self.history_store.set_claude_session_id(voice_id, claude_session_id)
+                    self.history_store.set_claude_session_id(voice_id, claude_session_id, hist_prefix)
 
             session.claude_session_id = claude_session_id
 
@@ -539,6 +590,19 @@ class SessionManager:
                 "\nKeep the user informed about inter-agent messages by briefly mentioning "
                 "\"I got a message from X about Y\" in your next converse call, but don't "
                 "read the full message aloud.\n"
+            )
+
+            # Manager role instructions
+            identity += (
+                "\n# Team Manager\n"
+                "Zeul may assign one agent as the team manager. The manager coordinates all agents and "
+                "is the sole communication channel between agents and Zeul. When a manager is assigned:\n"
+                "- The manager will broadcast to all agents that they are the manager\n"
+                "- Do NOT use converse to speak to Zeul directly — only the manager speaks to Zeul\n"
+                "- Route all status updates, questions, and task requests through the manager via the messaging API\n"
+                "- You may still communicate directly with other agents for coordination\n"
+                "- If Zeul speaks to you directly (you hear a message clearly addressed to you), you may respond via converse\n"
+                "- If no manager is assigned, you may speak to Zeul directly via converse as normal\n"
             )
 
             claude_md.write_text(identity)

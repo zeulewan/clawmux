@@ -113,6 +113,13 @@ body {
 .sidebar-card:hover {
   background: rgba(255,255,255,0.05);
 }
+.sidebar-card.dragging {
+  opacity: 0.4;
+}
+.sidebar-card.drag-over {
+  border-top: 2px solid var(--blue);
+  margin-top: -2px;
+}
 .sidebar-card.selected {
   background: rgba(255,255,255,0.08);
 }
@@ -145,6 +152,16 @@ body {
   opacity: 0.6;
   margin-top: 1px;
   line-height: 1.3;
+}
+.sidebar-card .sb-compacting {
+  font-size: 0.55rem;
+  color: var(--yellow, #ffd60a);
+  margin-top: 2px;
+  animation: compactingPulse 1.5s infinite ease-in-out;
+}
+@keyframes compactingPulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
 }
 .sidebar-card .sb-status {
   font-size: 0.6rem;
@@ -1035,6 +1052,9 @@ body {
 
 <div id="header">
   <h1><a href="https://clawmux.com" target="_blank" style="color: inherit; text-decoration: none;">ClawMux</a></h1>
+  <select id="project-selector" style="font-size:0.7rem; padding:2px 8px; border-radius:6px; border:1px solid var(--border); background:var(--bg-card); color:var(--text-secondary); cursor:pointer; display:none;" onchange="switchProject(this.value)">
+    <option value="default">Default</option>
+  </select>
   <span id="active-voice" style="display:none; font-size:1.1rem; font-weight:700;"></span>
   <select id="session-model" style="display:none; font-size:0.65rem; padding:2px 4px; border-radius:6px; border:1px solid var(--border); background:var(--bg-card); color:var(--text-secondary); cursor:pointer;" onchange="setSessionModel(this.value)">
     <option value="opus">Opus</option>
@@ -1169,6 +1189,17 @@ body {
       <div class="settings-toggle" onclick="toggleSetting('audio_cues')">
         <div class="toggle-info"><span class="toggle-name">Audio Cues</span><span class="toggle-desc">Chime when ready to record</span></div>
         <div class="toggle-indicator on" id="toggle-audio_cues"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-section" id="settings-projects-section" style="display:none;">
+    <h3 class="settings-section-title">Projects</h3>
+    <div class="settings-card" style="padding:12px 16px;">
+      <div id="settings-projects-list" style="margin-bottom:8px;"></div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <input id="new-project-name" type="text" placeholder="New project name..." style="flex:1; padding:6px 10px; font-size:0.8rem; border:1px solid var(--border); border-radius:6px; background:var(--bg-card); color:var(--text); font-family:inherit;">
+        <button onclick="createProject()" style="padding:6px 12px; font-size:0.8rem; background:var(--voice-color, #4a9eff); color:white; border:none; border-radius:6px; cursor:pointer; font-family:inherit;">Create</button>
       </div>
     </div>
   </div>
@@ -1443,27 +1474,44 @@ function cueSessionReady() {
 
 // --- Voice display names ---
 const VOICE_NAMES = {
+  // Project 1 (default)
   af_sky: 'Sky', af_alloy: 'Alloy', af_sarah: 'Sarah',
   am_adam: 'Adam', am_echo: 'Echo', am_onyx: 'Onyx',
-  bm_fable: 'Fable',
+  bm_fable: 'Fable', af_nova: 'Nova', am_eric: 'Eric',
+  // Project 2
+  af_bella: 'Bella', af_jessica: 'Jessica', af_heart: 'Heart',
+  am_michael: 'Michael', am_liam: 'Liam', am_fenrir: 'Fenrir',
+  bf_emma: 'Emma', bm_george: 'George', bm_daniel: 'Daniel',
+  // Project 3
+  af_aoede: 'Aoede', af_jadzia: 'Jadzia', af_kore: 'Kore',
+  af_nicole: 'Nicole', af_river: 'River', am_puck: 'Puck',
+  bf_alice: 'Alice', bf_lily: 'Lily', bm_lewis: 'Lewis',
 };
 const VOICE_COLORS = {
-  af_sky: '#3A86FF',
-  af_alloy: '#E67E22',
-  af_sarah: '#E63946',
-  am_adam: '#2ECC71',
-  am_echo: '#9B59B6',
-  am_onyx: '#7F8C8D',
-  bm_fable: '#F1C40F',
+  // Project 1
+  af_sky: '#3A86FF', af_alloy: '#E67E22', af_sarah: '#E63946',
+  am_adam: '#2ECC71', am_echo: '#9B59B6', am_onyx: '#7F8C8D',
+  bm_fable: '#F1C40F', af_nova: '#FF6B9D', am_eric: '#00B4D8',
+  // Project 2
+  af_bella: '#FF7043', af_jessica: '#AB47BC', af_heart: '#EC407A',
+  am_michael: '#26A69A', am_liam: '#5C6BC0', am_fenrir: '#78909C',
+  bf_emma: '#FFA726', bm_george: '#66BB6A', bm_daniel: '#42A5F5',
+  // Project 3
+  af_aoede: '#CE93D8', af_jadzia: '#4DD0E1', af_kore: '#A1887F',
+  af_nicole: '#F48FB1', af_river: '#80CBC4', am_puck: '#FFD54F',
+  bf_alice: '#90CAF9', bf_lily: '#C5E1A5', bm_lewis: '#BCAAA4',
 };
 const VOICE_ICONS = {
   af_sky: '<svg viewBox="0 0 24 16" fill="currentColor" style="width:1.2em;height:0.8em"><path d="M19.35 8.04A7.49 7.49 0 0 0 12 2C9.11 2 6.6 3.64 5.35 6.04A5.994 5.994 0 0 0 0 12c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg>',
-  af_alloy: '\u2666\uFE0E',  // diamond (text mode)
-  af_sarah: '\u2665\uFE0E',  // heart (text mode)
+  af_alloy: '\u2666\uFE0E',
+  af_sarah: '\u2665\uFE0E',
   am_adam: '<svg viewBox="0 0 24 24" fill="currentColor" style="width:1em;height:1em"><path d="M17 8C8 10 5.9 16.17 3.82 21.34l1.89.66.95-2.3c.48.17.98.3 1.34.3C19 20 22 3 22 3c-1 2-8 2.25-13 3.25S2 11.5 2 13.5s1.75 3.75 1.75 3.75C7 8 17 8 17 8z"/></svg>',
   am_echo: '<svg viewBox="0 0 22 20" fill="currentColor" style="width:1em;height:0.9em"><rect x="0" y="7" width="2.4" height="6" rx="1.2"/><rect x="4.9" y="3" width="2.4" height="14" rx="1.2"/><rect x="9.8" y="0" width="2.4" height="20" rx="1.2"/><rect x="14.7" y="4" width="2.4" height="12" rx="1.2"/><rect x="19.6" y="6" width="2.4" height="8" rx="1.2"/></svg>',
   am_onyx: '<svg viewBox="0 0 18 22" fill="currentColor" style="width:0.85em;height:1em"><path d="M9 0L0 4v6c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V4L9 0z"/></svg>',
-  bm_fable: '<svg viewBox="0 0 20 18" fill="currentColor" style="width:1em;height:0.9em"><path d="M1 1.5C1 .67 1.67 0 2.5 0H8c1.1 0 2 .9 2 2v14l-.5-.3c-.3-.2-.7-.2-1 0L7 16.8l-1.5-1.1c-.3-.2-.7-.2-1 0L3 16.8l-1.5-1.1c-.2-.15-.5-.15-.5.3V1.5zM12 2c0-1.1.9-2 2-2h5.5c.83 0 1.5.67 1.5 1.5V16c0-.45-.3-.45-.5-.3L19 16.8l-1.5-1.1c-.3-.2-.7-.2-1 0L15 16.8l-1.5-1.1c-.3-.2-.7-.2-1 0l-.5.3V2z"/></svg>'
+  bm_fable: '<svg viewBox="0 0 20 18" fill="currentColor" style="width:1em;height:0.9em"><path d="M1 1.5C1 .67 1.67 0 2.5 0H8c1.1 0 2 .9 2 2v14l-.5-.3c-.3-.2-.7-.2-1 0L7 16.8l-1.5-1.1c-.3-.2-.7-.2-1 0L3 16.8l-1.5-1.1c-.2-.15-.5-.15-.5.3V1.5zM12 2c0-1.1.9-2 2-2h5.5c.83 0 1.5.67 1.5 1.5V16c0-.45-.3-.45-.5-.3L19 16.8l-1.5-1.1c-.3-.2-.7-.2-1 0L15 16.8l-1.5-1.1c-.3-.2-.7-.2-1 0l-.5.3V2z"/></svg>',
+  af_nova: '<svg viewBox="0 0 24 24" fill="currentColor" style="width:1em;height:1em"><path d="M12 2L9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61z"/></svg>',
+  am_eric: '<svg viewBox="0 0 24 24" fill="currentColor" style="width:1em;height:1em"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>',
+  // Project 2+3 use default icon (microphone emoji) via voiceIcon() fallback
 };
 function voiceDisplayName(v) { return VOICE_NAMES[v] || v; }
 function voiceColor(v) { return VOICE_COLORS[v] || '#4a90ff'; }
@@ -1659,7 +1707,7 @@ function clearSessionUnread(sessionId) {
 function _sidebarState(voiceId) {
   let session = null;
   for (const [sid, s] of sessions) {
-    if (s.voice === voiceId) { session = s; break; }
+    if (s.voice === voiceId && (!s.project_slug || s.project_slug === currentProject)) { session = s; break; }
   }
   const isSpawning = spawningVoices.has(voiceId);
   const hasUnread = session && (session.unreadCount || 0) > 0;
@@ -1691,11 +1739,12 @@ function _sidebarState(voiceId) {
     ? session.project
     : '';
   const projectArea = session && session.project_area ? session.project_area : '';
-  return { session, isSpawning, stateClass, statusLabel, isSelected, projectText, projectArea, hasUnread };
+  const isCompacting = session && session.compacting;
+  return { session, isSpawning, stateClass, statusLabel, isSelected, projectText, projectArea, hasUnread, isCompacting };
 }
 
 function _updateSidebarCard(card, voiceId, state) {
-  const { session, isSpawning, stateClass, statusLabel, isSelected, projectText, projectArea, hasUnread } = state;
+  const { session, isSpawning, stateClass, statusLabel, isSelected, projectText, projectArea, hasUnread, isCompacting } = state;
   // Update state class only if changed
   const stateClasses = ['starting', 'thinking', 'speaking', 'unread', 'active'];
   const curState = stateClasses.find(c => card.classList.contains(c)) || '';
@@ -1732,6 +1781,41 @@ function _updateSidebarCard(card, voiceId, state) {
   } else if (!hasUnread && badge) {
     badge.remove();
   }
+  // Update compaction indicator
+  let compactEl = card.querySelector('.sb-compacting');
+  if (isCompacting && !compactEl) {
+    compactEl = document.createElement('div');
+    compactEl.className = 'sb-compacting';
+    compactEl.textContent = 'Compacting…';
+    const info = card.querySelector('.sb-info');
+    const statusLine = card.querySelector('.sb-status');
+    info.insertBefore(compactEl, statusLine);
+  } else if (!isCompacting && compactEl) {
+    compactEl.remove();
+  }
+  // Ensure draggable + drag handlers (cards created before drag feature lack these)
+  if (!card.draggable) {
+    card.draggable = true;
+    card.addEventListener('dragstart', (e) => {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', voiceId);
+      card.classList.add('dragging');
+    });
+    card.addEventListener('dragend', () => { card.classList.remove('dragging'); });
+    card.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      card.classList.add('drag-over');
+    });
+    card.addEventListener('dragleave', () => { card.classList.remove('drag-over'); });
+    card.addEventListener('drop', (e) => {
+      e.preventDefault();
+      card.classList.remove('drag-over');
+      const fromVoice = e.dataTransfer.getData('text/plain');
+      const toVoice = voiceId;
+      if (fromVoice && fromVoice !== toVoice) reorderSidebarVoice(fromVoice, toVoice);
+    });
+  }
   // Update closure refs
   card._voiceSession = session;
   card._voiceSpawning = isSpawning;
@@ -1739,7 +1823,10 @@ function _updateSidebarCard(card, voiceId, state) {
 
 function renderSidebar() {
   const list = document.getElementById('sidebar-list');
-  const allVoices = Object.entries(VOICE_NAMES);
+  // Use project-scoped voice list if available and non-empty, otherwise show all
+  const allVoices = currentProjectVoices && currentProjectVoices.length > 0
+    ? currentProjectVoices.map(v => [v, VOICE_NAMES[v] || v.replace(/^[a-z]{2}_/, '').replace(/^./, c => c.toUpperCase())])
+    : Object.entries(VOICE_NAMES);
   const currentVoiceIds = new Set(allVoices.map(([id]) => id));
   // Remove stale cards
   for (const card of [...list.children]) {
@@ -1761,6 +1848,26 @@ function renderSidebar() {
       card = document.createElement('div');
       card.className = 'sidebar-card';
       card.dataset.voiceId = voiceId;
+      card.draggable = true;
+      card.addEventListener('dragstart', (e) => {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', voiceId);
+        card.classList.add('dragging');
+      });
+      card.addEventListener('dragend', () => { card.classList.remove('dragging'); });
+      card.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        card.classList.add('drag-over');
+      });
+      card.addEventListener('dragleave', () => { card.classList.remove('drag-over'); });
+      card.addEventListener('drop', (e) => {
+        e.preventDefault();
+        card.classList.remove('drag-over');
+        const fromVoice = e.dataTransfer.getData('text/plain');
+        const toVoice = voiceId;
+        if (fromVoice && fromVoice !== toVoice) reorderSidebarVoice(fromVoice, toVoice);
+      });
       const icon = document.createElement('div');
       icon.className = 'sb-icon';
       const iconVal = voiceIcon(voiceId);
@@ -1788,6 +1895,12 @@ function renderSidebar() {
         projEl.className = 'sb-project';
         projEl.innerHTML = state.projectText + (state.projectArea ? '<br><span style="opacity:0.6;">' + state.projectArea + '</span>' : '');
         info.appendChild(projEl);
+      }
+      if (state.isCompacting) {
+        const compactEl = document.createElement('div');
+        compactEl.className = 'sb-compacting';
+        compactEl.textContent = 'Compacting…';
+        info.appendChild(compactEl);
       }
       info.appendChild(statusEl2);
       card.appendChild(icon);
@@ -1833,6 +1946,29 @@ function renderSidebar() {
       else { list.appendChild(card); }
     }
   }
+}
+
+async function reorderSidebarVoice(fromVoice, toVoice) {
+  // Get current voice order from the sidebar
+  const list = document.getElementById('sidebar-list');
+  const voices = [...list.children].map(c => c.dataset.voiceId).filter(Boolean);
+  const fromIdx = voices.indexOf(fromVoice);
+  const toIdx = voices.indexOf(toVoice);
+  if (fromIdx < 0 || toIdx < 0) return;
+  // Move fromVoice to toVoice's position
+  voices.splice(fromIdx, 1);
+  voices.splice(toIdx, 0, fromVoice);
+  // Update local state and re-render immediately
+  if (currentProjectVoices) currentProjectVoices = voices;
+  renderSidebar();
+  // Persist to backend
+  try {
+    await fetch(`/api/projects/${currentProject}/voices`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ voices }),
+    });
+  } catch (e) { console.error('Failed to save voice order:', e); }
 }
 
 // Legacy compatibility
@@ -2196,7 +2332,7 @@ async function spawnSession(voiceId = '', mode = '') {
   try { await getMicStream(); } catch (e) { console.warn('Mic permission denied:', e); }
 
   try {
-    const body = { voice: voiceId };
+    const body = { voice: voiceId, project: currentProject };
     if (mode) body.mode = mode;
     const resp = await fetch('/api/sessions', {
       method: 'POST',
@@ -2376,6 +2512,114 @@ function showSettingsPage() {
   renderSidebar();
   loadSettings();
   loadUsageForSettings();
+}
+
+// --- Project management ---
+let currentProject = 'default';
+let currentProjectVoices = null; // null = use all VOICE_NAMES (fallback)
+
+async function loadProjects() {
+  const sel = document.getElementById('project-selector');
+  try {
+    const resp = await fetch('/api/projects');
+    if (!resp.ok) return; // API not available yet — Phase 1 graceful fallback
+    const data = await resp.json();
+    // Handle both array format [{slug, name, active}] and object format {projects: {...}, active_project: ...}
+    let projectList;
+    if (Array.isArray(data)) {
+      projectList = data;
+      currentProject = (data.find(p => p.active) || {}).slug || 'default';
+    } else {
+      projectList = Object.entries(data.projects || {}).map(([slug, p]) => ({ slug, ...p }));
+      currentProject = data.active_project || 'default';
+    }
+    // Populate dropdown
+    sel.innerHTML = '';
+    for (const proj of projectList) {
+      const opt = document.createElement('option');
+      opt.value = proj.slug;
+      opt.textContent = proj.name || proj.slug;
+      sel.appendChild(opt);
+    }
+    sel.value = currentProject;
+    // Extract voices for the active project
+    const activeProj = projectList.find(p => p.slug === currentProject);
+    currentProjectVoices = activeProj && activeProj.voices ? activeProj.voices : null;
+    renderSidebar();
+    // Always show selector so users can discover project management
+    sel.style.display = 'inline-block';
+    renderProjectSettings();
+  } catch (e) {
+    // Projects API not available — hide selector
+    sel.style.display = 'none';
+  }
+}
+
+async function createProject() {
+  const input = document.getElementById('new-project-name');
+  const name = input.value.trim();
+  if (!name) return;
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  if (!slug) return;
+  try {
+    const resp = await fetch('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug, name }),
+    });
+    if (!resp.ok) { const err = await resp.json(); alert(err.error || 'Failed'); return; }
+    input.value = '';
+    await loadProjects();
+    renderProjectSettings();
+  } catch (e) { console.error('Create project error:', e); }
+}
+
+function renderProjectSettings() {
+  const section = document.getElementById('settings-projects-section');
+  const list = document.getElementById('settings-projects-list');
+  if (!section || !list) return;
+  const sel = document.getElementById('project-selector');
+  section.style.display = 'block';
+  list.innerHTML = '';
+  for (const opt of sel.options) {
+    const div = document.createElement('div');
+    div.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:0.85rem;';
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = opt.textContent;
+    nameSpan.style.color = opt.value === currentProject ? 'var(--voice-color, #4a9eff)' : 'var(--text)';
+    if (opt.value === currentProject) nameSpan.style.fontWeight = '600';
+    div.appendChild(nameSpan);
+    if (opt.value !== currentProject && opt.value !== 'default') {
+      const delBtn = document.createElement('button');
+      delBtn.textContent = 'Delete';
+      delBtn.style.cssText = 'font-size:0.7rem;padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:none;color:#e63946;cursor:pointer;font-family:inherit;';
+      delBtn.onclick = () => deleteProject(opt.value);
+      div.appendChild(delBtn);
+    }
+    list.appendChild(div);
+  }
+}
+
+async function deleteProject(slug) {
+  if (!confirm(`Delete project "${slug}"? This will terminate all its sessions.`)) return;
+  try {
+    const resp = await fetch(`/api/projects/${slug}`, { method: 'DELETE' });
+    if (!resp.ok) { const err = await resp.json(); alert(err.error || 'Failed'); return; }
+    await loadProjects();
+    renderProjectSettings();
+  } catch (e) { console.error('Delete project error:', e); }
+}
+
+async function switchProject(slug) {
+  if (slug === currentProject) return;
+  try {
+    const resp = await fetch(`/api/projects/${slug}/activate`, { method: 'POST' });
+    if (!resp.ok) { console.error('Failed to switch project'); return; }
+    currentProject = slug;
+    // The backend broadcasts project_switched via WebSocket, which triggers loadProjects + auto-switch
+  } catch (e) {
+    console.error('Project switch error:', e);
+  }
 }
 
 async function loadSettings() {
@@ -3001,6 +3245,8 @@ function handleMessage(data) {
             hideThinking(s.session_id);
             stopThinkingSound(s.session_id);
           }
+          // Restore compacting state
+          existing.compacting = !!s.compacting;
           // Restore awaiting input
           const isReady = s.status === 'ready' || s.mcp_connected;
           if (isReady && !s.processing && !s.in_converse) {
@@ -3061,6 +3307,23 @@ function handleMessage(data) {
     removeSession(data.session_id);
     return;
   }
+  if (type === 'project_switched') {
+    currentProject = data.project || 'default';
+    const sel = document.getElementById('project-selector');
+    if (sel) sel.value = currentProject;
+    loadProjects().then(() => {
+      // Auto-switch to first running agent in the new project
+      const projectVoices = currentProjectVoices || Object.keys(VOICE_NAMES);
+      for (const v of projectVoices) {
+        for (const [sid, s] of sessions) {
+          if (s.voice === v) { switchTab(sid, true); return; }
+        }
+      }
+      // No running agents — deselect
+      if (activeSessionId) switchTab(null);
+    });
+    return;
+  }
   if (type === 'session_status') {
     const s = sessions.get(data.session_id);
     if (s) {
@@ -3090,6 +3353,14 @@ function handleMessage(data) {
     }
     renderVoiceGridIfActive();
     updateHeaderProjectStatus();
+    return;
+  }
+  if (type === 'compaction_status') {
+    const s = sessions.get(data.session_id);
+    if (s) {
+      s.compacting = data.compacting;
+      renderSidebar();
+    }
     return;
   }
   if (type === 'error') {
@@ -3134,7 +3405,9 @@ function handleMessage(data) {
       chatArea.querySelectorAll('.msg.interjection').forEach(el => el.classList.remove('interjection'));
     }
     s.messages.forEach(m => { if (m.role === 'user interjection') m.role = 'user'; });
-    addMessage(session_id, 'assistant', data.text);
+    if (data.text && data.text.trim()) {
+      addMessage(session_id, 'assistant', data.text);
+    }
     if (session_id !== activeSessionId) {
       markSessionUnread(session_id);
     } else {
@@ -3142,6 +3415,7 @@ function handleMessage(data) {
       clearSessionUnread(session_id);
     }
   } else if (type === 'user_text') {
+    if (!data.text || !data.text.trim()) return;  // Skip blank user messages
     addMessage(session_id, data.interjection ? 'user interjection' : 'user', data.text);
     showThinking(session_id);
     startThinkingSound(session_id);
@@ -3401,19 +3675,33 @@ function _applyKaraokeSpans(msgEl, realWords) {
   if (actionsEl) msgEl.insertBefore(textNode, actionsEl);
   else msgEl.appendChild(textNode);
 
-  // Greedy forward match: find each word in the text in order
+  // Greedy forward match: find each word in the text in order (case-insensitive)
+  // Uses word-boundary-aware matching to avoid matching inside other words
   const frag = document.createDocumentFragment();
+  const textLower = text.toLowerCase();
   let pos = 0;
+  const isWordChar = c => /\w/.test(c);
   for (const w of realWords) {
-    const idx = text.indexOf(w.word, pos);
+    const wordLower = w.word.toLowerCase();
+    let idx = pos;
+    // Find next occurrence that isn't embedded inside another word
+    while (true) {
+      idx = textLower.indexOf(wordLower, idx);
+      if (idx === -1) break;
+      const before = idx > 0 ? textLower[idx - 1] : ' ';
+      const after = idx + wordLower.length < textLower.length ? textLower[idx + wordLower.length] : ' ';
+      // Accept if at word boundaries (not embedded inside another word)
+      if (!isWordChar(before) && !isWordChar(after)) break;
+      idx++; // skip this partial match, try next
+    }
     if (idx === -1) { w.el = null; continue; }
     // Text before this word
     if (idx > pos) frag.appendChild(document.createTextNode(text.slice(pos, idx)));
-    // Word span
+    // Word span — use original text casing, not TTS casing
     const span = document.createElement('span');
     span.className = 'karaoke-word';
     span.dataset.start = w.start_time;
-    span.textContent = w.word;
+    span.textContent = text.slice(idx, idx + w.word.length);
     w.el = span;
     frag.appendChild(span);
     pos = idx + w.word.length;
@@ -3532,10 +3820,27 @@ async function karaokePlayFromWord(msgEl, startTime, fetchId, clickedWord = fals
   if (realWords.length) _applyKaraokeSpans(msgEl, realWords);
 
   // If startTime was 0 because the span had no timestamp yet (first click),
-  // resolve it now from the fetched word timestamps
+  // resolve it now from the fetched word timestamps.
+  // Use the clicked span's position to find the correct occurrence (not just first match).
   if (startTime === 0 && clickedWordText && realWords.length) {
-    const match = realWords.find(w => w.word === clickedWordText);
-    if (match) startTime = match.start_time;
+    // Count which occurrence of this word was clicked by checking DOM order
+    const allSpans = msgEl.querySelectorAll('.karaoke-word');
+    const clickedSpan = Array.from(allSpans).find(s => s === e?.target?.closest?.('.karaoke-word'));
+    let occurrenceIdx = 0;
+    if (clickedSpan) {
+      for (const s of allSpans) {
+        if (s === clickedSpan) break;
+        if (s.textContent.toLowerCase() === clickedWordText.toLowerCase()) occurrenceIdx++;
+      }
+    }
+    // Find the nth occurrence in realWords
+    let found = 0;
+    for (const w of realWords) {
+      if (w.word.toLowerCase() === clickedWordText.toLowerCase()) {
+        if (found === occurrenceIdx) { startTime = w.start_time; break; }
+        found++;
+      }
+    }
   }
 
   stopActiveAudio();
@@ -3932,19 +4237,20 @@ function pttEnd(e) {
 // Spacebar PTT: hold Space to record, release to send (works in voice mode)
 document.addEventListener('keydown', (e) => {
   if (e.code !== 'Space' || e.repeat) return;
-  if (inputMode !== 'voice') return;
   // Don't capture Space if user is typing in text input or any input/textarea
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+  // Always prevent default scroll on Space when not in a text field
   e.preventDefault();
+  if (inputMode !== 'voice') return;
   // If auto-recording, stop it first so PTT takes over
   if (recording && !pttActive) { stopRecording(true); }
   pttStart(e);
 });
 document.addEventListener('keyup', (e) => {
   if (e.code !== 'Space') return;
-  if (inputMode !== 'voice') return;
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
   e.preventDefault();
+  if (inputMode !== 'voice') return;
   pttEnd(e);
 });
 
@@ -4204,15 +4510,15 @@ document.addEventListener('keydown', (e) => {
     }
   }
 
-  // Option/Alt + 1-7: switch to voice by sidebar position
+  // Option/Alt + 1-9: switch to voice by sidebar position
   if (e.altKey && !e.ctrlKey && !e.metaKey && e.code.startsWith('Digit')) {
     const idx = parseInt(e.code.replace('Digit', ''), 10) - 1;
-    const voiceIds = Object.keys(VOICE_NAMES);
+    const voiceIds = (currentProjectVoices && currentProjectVoices.length > 0) ? currentProjectVoices : Object.keys(VOICE_NAMES);
     if (idx >= 0 && idx < voiceIds.length) {
       e.preventDefault();
       const voiceId = voiceIds[idx];
       for (const [sid, s] of sessions) {
-        if (s.voice === voiceId) { switchTab(sid); return; }
+        if (s.voice === voiceId && (!s.project_slug || s.project_slug === currentProject)) { switchTab(sid); return; }
       }
       spawnSession(voiceId);
     }
@@ -4590,6 +4896,7 @@ restoreInputMode();
 renderSidebar();
 connect();
 loadSettings();
+loadProjects();
 startUsagePolling();
 startStateSync();
 </script>

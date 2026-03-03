@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ClawMux Site</title>
+  <title>ClawMux</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%233a86ff'/><path d='M32 12a6 6 0 0 1 6 6v14a6 6 0 0 1-12 0V18a6 6 0 0 1 6-6z' fill='white'/><path d='M20 30a12 12 0 0 0 24 0' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/><line x1='32' y1='42' x2='32' y2='50' stroke='white' stroke-width='3' stroke-linecap='round'/><line x1='25' y1='50' x2='39' y2='50' stroke='white' stroke-width='3' stroke-linecap='round'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -301,7 +301,7 @@
       font-size: 17px;
       line-height: 1.75;
       color: var(--text-dim);
-      font-style: italic;
+      font-style: normal;
     }
     .insight blockquote strong { color: var(--text); font-style: normal; }
 
@@ -406,18 +406,19 @@
       <h3>API costs don't scale</h3>
       <p>Running 10 agents on the API would cost hundreds per day. ClawMux runs on top of Claude Code itself, not the API. Your existing Max subscription covers everything, no per-token billing.</p>
     </div>
+    <div class="problem-card">
+      <span class="problem-icon">🤝</span>
+      <div class="problem-num">Problem 05</div>
+      <h3>Inter-agent communication</h3>
+      <p>Getting agents to actually coordinate is hard. ClawMux lets your agents talk to each other like teammates, so you can remember who's doing what because they have names, voices, and real conversations. It's hard to appreciate until you try it.</p>
+    </div>
   </div>
 
   <div class="insight">
-    <blockquote>
-      "You often forget what the <strong>6th terminal</strong> was doing. This is the first look at what agentic engineering will look like in the future."
-    </blockquote>
-  </div>
-
-  <div class="insight" style="margin-top: 16px;">
-    <blockquote>
-      You should never be waiting on an agent to finish. <strong>The agents should be waiting on you.</strong>
-    </blockquote>
+    <ul style="list-style: disc; padding-left: 20px; display: flex; flex-direction: column; gap: 12px;">
+      <li style="font-size: 17px; line-height: 1.75; color: var(--text-dim);">You often forget what the <strong>6th terminal</strong> was doing. This is the first look at what agentic engineering will look like in the future.</li>
+      <li style="font-size: 17px; line-height: 1.75; color: var(--text-dim);">You should never be waiting on an agent to finish. <strong>The agents should be waiting on you.</strong></li>
+    </ul>
   </div>
 </div>
 

@@ -269,7 +269,7 @@ async def converse(
                 files={
                     "file": ("recording.webm", audio_bytes, "audio/webm"),
                 },
-                data={"model": "whisper-1", "response_format": "json"},
+                data={"model": "whisper-1", "response_format": "json", **({"prompt": os.environ["VOICEMODE_STT_PROMPT"]} if os.environ.get("VOICEMODE_STT_PROMPT") else {})},
             )
             stt_resp.raise_for_status()
 
