@@ -1648,8 +1648,8 @@ async def speak_to_user(request: Request):
     if sender_id != _browser_viewed_session:
         sender.unread_count += 1
 
-    # Send text to browser chat
-    await send_to_browser({"session_id": sender_id, "type": "assistant_text", "text": content, "msg_id": amid})
+    # Send text to browser chat (fire_and_forget prevents auto-record trigger)
+    await send_to_browser({"session_id": sender_id, "type": "assistant_text", "text": content, "msg_id": amid, "fire_and_forget": True})
 
     # TTS — strip non-speakable content and play
     skip_tts = sender.text_mode or not _load_settings().get("voice_responses", True)

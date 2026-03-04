@@ -3912,7 +3912,10 @@ function handleMessage(data) {
     stopThinkingSound();
     stopThinkingVAD();
     s.userSpokeThisCycle = false;
-    s.awaitingInput = true;  // Converse cycle started — expect normal input flow
+    // Only set awaitingInput if this is a converse cycle (not fire-and-forget speak)
+    if (!data.fire_and_forget) {
+      s.awaitingInput = true;  // Converse cycle started — expect normal input flow
+    }
     // Don't change sidebar state here — let it stay as working until audio arrives
     // to avoid a brief flash of 'idle' between working and speaking
     // Promote interjection messages to normal user messages (agent acknowledged them)
