@@ -158,7 +158,7 @@ function connect() {
   ws.onopen = () => {
     console.log('[ws] Connected');
     setConnected(true);
-    setStatus('Connected — waiting for Claude (/voice-hub)');
+    setStatus('Connected — waiting for Claude (/clawmux)');
     mic.disabled = false;
   };
 
