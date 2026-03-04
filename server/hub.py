@@ -1093,16 +1093,15 @@ async def speak_to_user(request: Request):
         return JSONResponse({"error": "message is required"}, status_code=400)
 
     sender_name = sender.voice.replace("af_", "").replace("am_", "").replace("bm_", "")
-    msg_id = f"msg-{uuid.uuid4().hex[:8]}"
+    msg_id = _gen_msg_id()
 
     # Save to history
-    amid = _gen_msg_id()
-    history.append(sender.voice, sender.label, "assistant", content, _hist_prefix(sender), msg_id=amid)
+    history.append(sender.voice, sender.label, "assistant", content, _hist_prefix(sender), msg_id=msg_id)
     if sender_id != _browser_viewed_session:
         sender.unread_count += 1
 
     # Send text to browser chat (fire_and_forget prevents auto-record trigger)
-    await send_to_browser({"session_id": sender_id, "type": "assistant_text", "text": content, "msg_id": amid, "fire_and_forget": True})
+    await send_to_browser({"session_id": sender_id, "type": "assistant_text", "text": content, "msg_id": msg_id, "fire_and_forget": True})
 
     # TTS — strip non-speakable content and play
     skip_tts = sender.text_mode or not _load_settings().get("voice_responses", True)
