@@ -676,6 +676,28 @@ async def lifespan(app: FastAPI):
         compaction_task.cancel()
         if _shutdown_mode == "reload":
             log.info("Hub reloading — keeping tmux sessions alive for re-adoption")
+            # Drain pending audio from queues and save as interjections before shutdown
+            for sid, session in session_mgr.sessions.items():
+                pending_audio = []
+                while not session.audio_queue.empty():
+                    try:
+                        item = session.audio_queue.get_nowait()
+                        if item and item not in (b"", b"__text__") and len(item) > 100:
+                            pending_audio.append(item)
+                    except Exception:
+                        break
+                if pending_audio:
+                    log.info("[%s] Transcribing %d pending audio chunk(s) before reload", sid, len(pending_audio))
+                    for audio_bytes in pending_audio:
+                        try:
+                            text = await stt(audio_bytes)
+                            if text and text.strip():
+                                session.interjections.append(text)
+                                log.info("[%s] Saved pending audio as interjection: %s", sid, text[:80])
+                        except Exception as e:
+                            log.warning("[%s] Failed to transcribe pending audio: %s", sid, e)
+                    if session.interjections:
+                        history.save_interjections(session.voice, session.interjections, _hist_prefix(session))
             for sid, session in session_mgr.sessions.items():
                 if session.mcp_ws:
                     try:
