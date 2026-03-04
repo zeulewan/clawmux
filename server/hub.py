@@ -220,28 +220,10 @@ async def lifespan(app: FastAPI):
         compaction_task.cancel()
         if _shutdown_mode == "reload":
             log.info("Hub reloading — keeping tmux sessions alive for re-adoption")
-            # Drain pending audio from queues and save as interjections before shutdown
+            # Save any pending interjections before shutdown
             for sid, session in session_mgr.sessions.items():
-                pending_audio = []
-                while not session.audio_queue.empty():
-                    try:
-                        item = session.audio_queue.get_nowait()
-                        if item and item not in (b"", b"__text__") and len(item) > 100:
-                            pending_audio.append(item)
-                    except Exception:
-                        break
-                if pending_audio:
-                    log.info("[%s] Transcribing %d pending audio chunk(s) before reload", sid, len(pending_audio))
-                    for audio_bytes in pending_audio:
-                        try:
-                            text = await stt(audio_bytes)
-                            if text and text.strip():
-                                session.interjections.append(text)
-                                log.info("[%s] Saved pending audio as interjection: %s", sid, text[:80])
-                        except Exception as e:
-                            log.warning("[%s] Failed to transcribe pending audio: %s", sid, e)
-                    if session.interjections:
-                        history.save_interjections(session.voice, session.interjections, _hist_prefix(session))
+                if session.interjections:
+                    history.save_interjections(session.voice, session.interjections, _hist_prefix(session))
         else:
             log.info("Hub shutting down, terminating all sessions")
             for sid in list(session_mgr.sessions):
@@ -302,12 +284,10 @@ async def browser_websocket(ws: WebSocket):
         browser_clients.discard(ws)
         log.info("Clients remaining: %d", len(browser_clients))
         if not browser_clients:
-            # No clients left — unblock any waiting audio queues
+            # No clients left — unblock any waiting playback events
             for session in session_mgr.sessions.values():
                 if session.playback_done:
                     session.playback_done.set()
-                if session.audio_queue:
-                    await session.audio_queue.put(b"")  # unblock audio_queue.get()
 
 
 async def handle_browser_message(data: dict) -> None:
@@ -359,8 +339,13 @@ async def handle_browser_message(data: dict) -> None:
             umid = _gen_msg_id()
             await send_to_browser({"session_id": session_id, "type": "user_text", "text": text, "msg_id": umid})
             history.append(session.voice, session.label, "user", text, _hist_prefix(session), msg_id=umid)
-            session.text_override = text
-            await session.audio_queue.put(b"__text__")
+            if session.work_dir:
+                await _inbox_write_and_notify(session, {
+                    "from": "user",
+                    "type": "text",
+                    "content": text,
+                })
+            await send_to_browser({"session_id": session_id, "type": "done", "processing": False})
 
     elif msg_type == "interjection":
         # User spoke/typed while agent was busy — transcribe and queue

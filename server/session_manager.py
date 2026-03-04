@@ -39,7 +39,6 @@ class Session:
     status_text: str = ""  # last status sent to browser (e.g. "Speaking...", "Transcribing...")
     project: str = ""  # current project/repo name (set by agent via set_project_status)
     project_area: str = ""  # current sub-area (e.g. "frontend", "docs")
-    text_override: str = ""  # set by browser "text" message or inbox injection
     text_mode: bool = False  # when True, skip TTS and just send text
     interjections: list[str] = field(default_factory=list)  # queued user messages sent while agent was busy
     model: str = ""  # per-session Claude model override (opus/sonnet/haiku); empty = use global default
@@ -50,7 +49,6 @@ class Session:
     compacting: bool = False  # True when Claude Code is compacting context
     unread_count: int = 0  # server-tracked unread message count
     # Per-session bridge state (set by hub after creation)
-    audio_queue: asyncio.Queue | None = field(default=None, repr=False)
     playback_done: asyncio.Event | None = field(default=None, repr=False)
     claude_session_id: str = ""  # Claude Code conversation UUID (for JSONL lookup)
     project_slug: str = "default"  # which project this session belongs to
@@ -83,7 +81,6 @@ class Session:
         self.last_activity = time.time()
 
     def init_bridge(self) -> None:
-        self.audio_queue = asyncio.Queue()
         self.playback_done = asyncio.Event()
 
 
@@ -505,12 +502,6 @@ class SessionManager:
                     "2. **Wait** — While idle, `clawmux wait` receives pushed messages from the hub.\n\n"
                     "Process ALL messages you receive, whether from hooks or wait. For voice messages from the user, "
                     "respond with `clawmux send --to user`. For agent messages, respond with `clawmux send --to <agent>`.\n\n"
-                    "# Deprecated Commands (do not use)\n"
-                    "- ~~clawmux converse~~ → use `send --to user` + `wait`\n"
-                    "- ~~clawmux ack~~ → use `send --re <msg_id>` with no content\n"
-                    "- ~~clawmux reply~~ → use `send --to <agent> --re <msg_id> \"response\"`\n"
-                    "- ~~--wait-ack~~ → fire and forget, responses come via inbox\n"
-                    "- ~~--wait-response~~ → fire and forget, responses come via inbox\n\n"
                     "# CLI Environment\n"
                     "`clawmux` is already in your PATH at `/usr/local/bin/clawmux`. "
                     "Environment variables (`CLAWMUX_SESSION_ID`, `CLAWMUX_PORT`) are automatically set. "
