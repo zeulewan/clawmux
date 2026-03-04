@@ -12,12 +12,15 @@ Usage:
 
 import asyncio
 import base64
+import collections
 import json
 import logging
 import os
+import re
 import signal
 import subprocess
 import sys
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -27,7 +30,8 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 
 from history_store import HistoryStore
-from hub_config import HUB_PORT, HUB_START_TIME, KOKORO_URL, WHISPER_URL
+import hub_config
+from hub_config import HUB_PORT, HUB_START_TIME
 from message_broker import MessageBroker
 from project_manager import ProjectManager
 from session_manager import SessionManager
@@ -39,7 +43,7 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
     handlers=[
         logging.StreamHandler(sys.stderr),
-        logging.FileHandler("/tmp/voice-hub.log", mode="a"),
+        logging.FileHandler("/tmp/clawmux.log", mode="a"),
     ],
 )
 log = logging.getLogger("hub")
@@ -63,6 +67,31 @@ _browser_viewed_session: str | None = None
 # Shutdown mode: "full" kills sessions, "reload" keeps them alive
 _shutdown_mode: str = "full"
 
+# Message queue for when browser is disconnected (bounded, with timestamps for TTL)
+_QUEUE_MAX = 100
+_QUEUE_TTL = 30  # seconds — discard queued messages older than this
+_QUEUEABLE_TYPES = {"assistant_text", "user_text", "audio", "done", "session_status", "session_ended"}
+_browser_msg_queue: collections.deque[tuple[float, dict]] = collections.deque(maxlen=_QUEUE_MAX)
+
+
+async def _flush_browser_queue(ws: WebSocket) -> None:
+    """Send all queued messages to a newly connected browser, discarding stale ones."""
+    now = time.time()
+    flushed = 0
+    while _browser_msg_queue:
+        ts, msg = _browser_msg_queue[0]
+        if now - ts > _QUEUE_TTL:
+            _browser_msg_queue.popleft()  # too old, discard
+            continue
+        _browser_msg_queue.popleft()
+        try:
+            await ws.send_json(msg)
+            flushed += 1
+        except Exception:
+            break
+    if flushed:
+        log.info("Flushed %d queued messages to reconnected browser", flushed)
+
 
 async def send_to_browser(data: dict) -> bool:
     """Broadcast a message to all connected browser/app clients.
@@ -70,8 +99,11 @@ async def send_to_browser(data: dict) -> bool:
     msg_type = data.get("type", "")
     session_id = data.get("session_id", "")
     if not browser_clients:
-        if msg_type in ("assistant_text", "user_text", "audio"):
-            log.warning("[%s] No browser clients for %s", session_id, msg_type)
+        # Queue important messages for replay when browser reconnects
+        if msg_type in _QUEUEABLE_TYPES:
+            _browser_msg_queue.append((time.time(), data))
+            log.info("[%s] Queued %s for browser reconnect (%d in queue)",
+                     session_id, msg_type, len(_browser_msg_queue))
         return False
     dead = []
     for ws in list(browser_clients):
@@ -130,7 +162,8 @@ async def compaction_monitor_loop() -> None:
                 )
                 stdout, _ = await result.communicate()
                 pane_text = stdout.decode(errors="replace") if stdout else ""
-            except Exception:
+            except Exception as exc:
+                log.debug("[%s] compaction tmux capture failed: %s", session_id, exc)
                 continue
             # Check for active compaction by scanning lines bottom-up
             lines = pane_text.strip().splitlines()
@@ -155,6 +188,55 @@ async def compaction_monitor_loop() -> None:
 
 # --- TTS / STT ---
 
+def strip_non_speakable(text: str) -> str:
+    """Convert markdown to plain text suitable for speech synthesis.
+
+    Keeps the readable content but removes formatting symbols that Kokoro
+    would otherwise read aloud (e.g. '##', '|', '```', '---', '$$').
+    """
+    # Remove fenced code blocks (```...```) — keep the code inside
+    text = re.sub(r'```\w*\n?', '', text)
+    # Remove display math ($$...$$)
+    text = re.sub(r'\$\$[\s\S]*?\$\$', '', text)
+    # Remove inline math ($...$)
+    text = re.sub(r'\$([^\$\n]+?)\$', '', text)
+    # Remove LaTeX delimiters \[...\] and \(...\)
+    text = re.sub(r'\\\[[\s\S]*?\\\]', '', text)
+    text = re.sub(r'\\\([\s\S]*?\\\)', '', text)
+    # Remove inline code backticks but keep the text
+    text = re.sub(r'`([^`]+)`', r'\1', text)
+    # Remove images ![alt](url) → alt
+    text = re.sub(r'!\[([^\]]*)\]\([^)]+\)', r'\1', text)
+    # Remove links [text](url) → text
+    text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+    # Remove HTML tags (like <u>underline</u>)
+    text = re.sub(r'<[^>]+>', '', text)
+    # Remove heading markers
+    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+    # Remove horizontal rules (---, ***, ___)
+    text = re.sub(r'^[\s]*[-*_]{3,}\s*$', '', text, flags=re.MULTILINE)
+    # Remove bold/italic markers (**, __, *, _) but keep the text
+    text = re.sub(r'\*{1,3}([^*]+)\*{1,3}', r'\1', text)
+    text = re.sub(r'_{1,3}([^_]+)_{1,3}', r'\1', text)
+    # Remove blockquote markers
+    text = re.sub(r'^>\s?', '', text, flags=re.MULTILINE)
+    # Convert markdown tables to spoken form:
+    # Remove separator rows (|---|---|)
+    text = re.sub(r'^\|[\s\-:|]+\|\s*$', '', text, flags=re.MULTILINE)
+    # Convert table rows: | A | B | C | → A, B, C
+    def _table_row(m):
+        cells = [c.strip() for c in m.group(0).split('|') if c.strip()]
+        return ', '.join(cells)
+    text = re.sub(r'^\|(.+)\|\s*$', _table_row, text, flags=re.MULTILINE)
+    # Remove bullet markers (-, *, +) at line start
+    text = re.sub(r'^[\s]*[-*+]\s+', '', text, flags=re.MULTILINE)
+    # Remove numbered list markers (1., 2., etc.)
+    text = re.sub(r'^[\s]*\d+\.\s+', '', text, flags=re.MULTILINE)
+    # Collapse multiple blank lines into one
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
 async def tts(text: str, voice: str = "af_sky", speed: float = 1.0) -> bytes:
     """Text → MP3 bytes via Kokoro. Retries up to 3 times on failure."""
     last_err = None
@@ -162,7 +244,7 @@ async def tts(text: str, voice: str = "af_sky", speed: float = 1.0) -> bytes:
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.post(
-                    f"{KOKORO_URL}/v1/audio/speech",
+                    f"{hub_config.KOKORO_URL}/v1/audio/speech",
                     json={"model": "tts-1", "input": text, "voice": voice, "response_format": "mp3", "speed": speed},
                 )
                 resp.raise_for_status()
@@ -195,7 +277,7 @@ async def tts_captioned(text: str, voice: str = "af_sky", speed: float = 1.0) ->
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.post(
-                    f"{KOKORO_URL}/dev/captioned_speech",
+                    f"{hub_config.KOKORO_URL}/dev/captioned_speech",
                     json={"input": tts_input, "voice": voice, "speed": speed,
                            "stream": False, "return_timestamps": True,
                            "response_format": "wav"},
@@ -333,7 +415,7 @@ async def stt(audio_bytes: bytes) -> str:
                 data["prompt"] = _stt_prompt
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.post(
-                    f"{WHISPER_URL}/v1/audio/transcriptions",
+                    f"{hub_config.WHISPER_URL}/v1/audio/transcriptions",
                     files={"file": ("recording.webm", audio_bytes, "audio/webm")},
                     data=data,
                 )
@@ -356,6 +438,8 @@ async def handle_converse(session_id: str, message: str, wait_for_response: bool
         return "Error: Session not found."
 
     session.touch()
+    session.last_converse_time = time.time()
+    session.reinject_attempts = 0  # Reset re-injection counter on successful converse
 
     # Use session's voice/speed overrides
     voice = session.voice
@@ -421,27 +505,37 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
         session.status_text = "Speaking..."
         await send_to_browser({"session_id": session_id, "type": "status", "text": "Speaking..."})
 
-        # TTS
-        log.info("[%s] TTS: %s", session_id, message[:80])
-        try:
-            audio_b64, word_timestamps = await tts_captioned(message, voice, speed)
-        except Exception as e:
-            log.warning("[%s] Captioned TTS failed (%s), falling back to plain TTS", session_id, e)
-            mp3 = await tts(message, voice, speed)
-            audio_b64 = base64.b64encode(mp3).decode()
-            word_timestamps = []
+        # TTS — strip code blocks, equations, tables before speaking
+        tts_message = strip_non_speakable(message)
+        log.info("[%s] TTS: %s", session_id, tts_message[:80])
+        if not tts_message.strip():
+            # Nothing speakable — skip TTS entirely
+            log.info("[%s] No speakable content, skipping TTS", session_id)
+            audio_b64, word_timestamps = None, []
+        else:
+            try:
+                audio_b64, word_timestamps = await tts_captioned(tts_message, voice, speed)
+            except Exception as e:
+                log.warning("[%s] Captioned TTS failed (%s), falling back to plain TTS", session_id, e)
+                mp3 = await tts(tts_message, voice, speed)
+                audio_b64 = base64.b64encode(mp3).decode()
+                word_timestamps = []
 
-        # Send audio to browser
-        session.playback_done.clear()
-        audio_msg = {"session_id": session_id, "type": "audio", "data": audio_b64}
-        if word_timestamps:
-            audio_msg["words"] = word_timestamps
-        has_clients = await send_to_browser(audio_msg)
-
-        if not has_clients:
-            # No clients received the audio — no one will send playback_done
-            log.warning("[%s] No clients connected, skipping playback wait", session_id)
+        # Send audio to browser (skip if nothing speakable)
+        if audio_b64 is None:
             session.playback_done.set()
+            early_audio = None
+        else:
+            session.playback_done.clear()
+            audio_msg = {"session_id": session_id, "type": "audio", "data": audio_b64}
+            if word_timestamps:
+                audio_msg["words"] = word_timestamps
+            has_clients = await send_to_browser(audio_msg)
+
+            if not has_clients:
+                # No clients received the audio — no one will send playback_done
+                log.warning("[%s] No clients connected, skipping playback wait", session_id)
+                session.playback_done.set()
 
         if not wait_for_response:
             session.status_text = ""
@@ -632,6 +726,9 @@ async def browser_websocket(ws: WebSocket):
             "type": "session_list",
             "sessions": session_mgr.list_sessions(),
         })
+
+        # Flush any messages queued while browser was disconnected
+        await _flush_browser_queue(ws)
 
         while True:
             data = await ws.receive_json()
@@ -1239,7 +1336,7 @@ async def text_to_speech(request: Request):
     if not text:
         return JSONResponse({"error": "no text"}, status_code=400)
     try:
-        audio = await tts(text, voice=voice, speed=speed)
+        audio = await tts(strip_non_speakable(text), voice=voice, speed=speed)
     except Exception as e:
         log.error("TTS failed: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -1257,7 +1354,7 @@ async def text_to_speech_captioned(request: Request):
     if not text:
         return JSONResponse({"error": "no text"}, status_code=400)
     try:
-        audio_b64, words = await tts_captioned(text, voice=voice, speed=speed)
+        audio_b64, words = await tts_captioned(strip_non_speakable(text), voice=voice, speed=speed)
         return JSONResponse({"audio_b64": audio_b64, "words": words})
     except Exception as e:
         log.error("TTS captioned failed: %s", e)
@@ -1271,13 +1368,25 @@ async def get_settings():
 
 @app.put("/api/settings")
 async def update_settings(request: Request):
-    import hub_config
     data = await request.json()
     settings = _load_settings()
     settings.update(data)
     # Apply model change at runtime
     if "model" in data and data["model"] in ("opus", "sonnet", "haiku"):
         hub_config.CLAUDE_MODEL = data["model"]
+    # Apply deployment mode settings at runtime (hot-reload, no restart needed)
+    if "deployment_mode" in data and data["deployment_mode"] in ("local", "split", "remote"):
+        hub_config.DEPLOYMENT_MODE = data["deployment_mode"]
+    if "tts_url" in data and data["tts_url"]:
+        hub_config.KOKORO_URL = data["tts_url"].rstrip("/")
+        log.info("TTS URL changed to: %s", hub_config.KOKORO_URL)
+    if "stt_url" in data and data["stt_url"]:
+        hub_config.WHISPER_URL = data["stt_url"].rstrip("/")
+        log.info("STT URL changed to: %s", hub_config.WHISPER_URL)
+    if "quality_mode" in data and data["quality_mode"] in ("high", "medium", "low"):
+        hub_config.QUALITY_MODE = data["quality_mode"]
+        log.info("Quality mode changed to: %s (model: %s)", data["quality_mode"],
+                 hub_config.QUALITY_MODEL_MAP.get(data["quality_mode"]))
     _save_settings(settings)
     log.info("Settings updated: %s", data)
     return JSONResponse(settings)
@@ -1285,7 +1394,20 @@ async def update_settings(request: Request):
 
 def _load_settings() -> dict:
     settings_path = Path("data/settings.json")
-    defaults = {"model": "opus", "auto_record": False, "auto_end": True, "auto_interrupt": False, "thinking_sounds": True, "audio_cues": True, "voice_responses": True, "silent_startup": False}
+    defaults = {
+        "model": "opus",
+        "auto_record": False,
+        "auto_end": True,
+        "auto_interrupt": False,
+        "thinking_sounds": True,
+        "audio_cues": True,
+        "voice_responses": True,
+        "silent_startup": False,
+        "deployment_mode": "local",
+        "tts_url": hub_config.KOKORO_URL,
+        "stt_url": hub_config.WHISPER_URL,
+        "quality_mode": "high",
+    }
     if settings_path.exists():
         try:
             stored = json.loads(settings_path.read_text())
@@ -1386,7 +1508,7 @@ async def debug_info():
     # Check service connectivity
     services = {}
     async with httpx.AsyncClient(timeout=3) as client:
-        for name, url in [("whisper", WHISPER_URL), ("kokoro", KOKORO_URL)]:
+        for name, url in [("whisper", hub_config.WHISPER_URL), ("kokoro", hub_config.KOKORO_URL)]:
             try:
                 resp = await client.get(url)
                 services[name] = {"status": "up", "code": resp.status_code, "url": url}
@@ -1427,7 +1549,7 @@ async def debug_info():
 
 @app.get("/api/debug/log")
 async def debug_log():
-    log_path = Path("/tmp/voice-hub.log")
+    log_path = Path("/tmp/clawmux.log")
     lines = []
     try:
         if log_path.exists():
