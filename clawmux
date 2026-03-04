@@ -118,7 +118,9 @@ def cmd_converse(args):
         "goodbye": args.goodbye,
     }
 
-    result = asyncio.run(ws_request(session_id, payload))
+    # No timeout when waiting for user speech — user may be idle for hours
+    timeout = 86400 if not args.no_listen else 300
+    result = asyncio.run(ws_request(session_id, payload, timeout=timeout))
     text = result.get("text", "")
     if text:
         print(text)
