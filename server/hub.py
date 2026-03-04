@@ -333,34 +333,24 @@ async def handle_browser_message(data: dict) -> None:
     elif msg_type == "audio":
         audio_bytes = base64.b64decode(data["data"])
         log.info("[%s] Audio from browser: %d bytes", session_id, len(audio_bytes))
-        # CLI mode: transcribe and deliver via inbox (no converse loop to consume audio_queue)
-        if not hasattr(session, 'mode') or session.mode == "cli":
-            await send_to_browser({"session_id": session_id, "type": "status", "text": "Transcribing..."})
-            text = await stt(audio_bytes)
-            if text:
-                log.info("[%s] Audio STT: %s", session_id, text[:100])
-                umid = _gen_msg_id()
-                await send_to_browser({"session_id": session_id, "type": "user_text", "text": text, "msg_id": umid})
-                history.append(session.voice, session.label, "user", text, _hist_prefix(session), msg_id=umid)
-                if session.in_wait and session.work_dir:
-                    await _inbox_write_and_notify(session, {
-                        "from": "user",
-                        "type": "voice",
-                        "content": text,
-                    })
-                elif session.work_dir:
-                    session.text_override = text
-                    await _inbox_write_and_notify(session, {
-                        "from": "user",
-                        "type": "voice",
-                        "content": text,
-                    })
-                await send_to_browser({"session_id": session_id, "type": "done", "processing": False})
-            else:
-                log.info("[%s] Audio STT: empty result", session_id)
-                await send_to_browser({"session_id": session_id, "type": "done", "processing": False})
+        # Transcribe and deliver via inbox (CLI mode — no converse loop)
+        await send_to_browser({"session_id": session_id, "type": "status", "text": "Transcribing..."})
+        text = await stt(audio_bytes)
+        if text:
+            log.info("[%s] Audio STT: %s", session_id, text[:100])
+            umid = _gen_msg_id()
+            await send_to_browser({"session_id": session_id, "type": "user_text", "text": text, "msg_id": umid})
+            history.append(session.voice, session.label, "user", text, _hist_prefix(session), msg_id=umid)
+            if session.work_dir:
+                await _inbox_write_and_notify(session, {
+                    "from": "user",
+                    "type": "voice",
+                    "content": text,
+                })
+            await send_to_browser({"session_id": session_id, "type": "done", "processing": False})
         else:
-            await session.audio_queue.put(audio_bytes)
+            log.info("[%s] Audio STT: empty result", session_id)
+            await send_to_browser({"session_id": session_id, "type": "done", "processing": False})
 
     elif msg_type == "text":
         text = data.get("text", "").strip()
