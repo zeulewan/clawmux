@@ -366,13 +366,19 @@ async def handle_browser_message(data: dict) -> None:
             await send_to_browser({"session_id": session_id, "type": "user_text", "text": text, "interjection": True, "msg_id": umid})
             history.append(session.voice, session.label, "user", text, _hist_prefix(session), msg_id=umid)
 
-            # If agent is in wait mode, inject via audio queue for immediate pickup
-            if session.in_wait:
-                log.info("[%s] Agent in wait, injecting interjection via audio queue", session_id)
-                session.text_override = " ... ".join(session.interjections)
+            # If agent is in wait mode, push via inbox for immediate pickup by wait WS
+            if session.in_wait and session.work_dir:
+                log.info("[%s] Agent in wait, pushing voice message via inbox", session_id)
+                combined = " ... ".join(session.interjections)
                 session.interjections.clear()
                 history.clear_interjections(session.voice, _hist_prefix(session))
-                await session.audio_queue.put(b"__text__")
+                sender_name = data.get("voice", session.voice or "user")
+                sender_name = sender_name.replace("af_", "").replace("am_", "").replace("bm_", "")
+                await _inbox_write_and_notify(session, {
+                    "from": sender_name,
+                    "type": "voice",
+                    "content": combined,
+                })
             elif session.work_dir:
                 # Agent not in wait — write to inbox for hook-based delivery
                 # (PostToolUse/PreToolUse will pick it up via additionalContext)
@@ -420,6 +426,7 @@ async def wait_websocket(ws: WebSocket, session_id: str):
 
     log.info("[%s] Wait WS connected", session_id)
     session.in_wait = True  # Agent is idle and ready for input
+    session.processing = False  # Clear processing state — agent is idle now
 
     # Tell browser agent is listening (so voice input isn't treated as interjection)
     await send_to_browser({"session_id": session_id, "type": "listening"})
@@ -1003,15 +1010,16 @@ async def send_message(request: Request):
     )
 
     # Deliver via exactly ONE path to avoid duplicate delivery:
-    # - In wait → audio queue (immediate, agent sees it now)
+    # - In wait → inbox + wait queue push (immediate, agent sees it now)
     # - Not in wait → inbox (hooks deliver via additionalContext)
-    formatted = f"[MSG id:{msg.id} from:{sender_name}] {content}"
-    if recipient.in_wait and recipient.audio_queue:
-        # Wait mode — immediate delivery via audio queue
-        recipient.interjections.append(formatted)
-        recipient.text_override = " ... ".join(recipient.interjections)
-        recipient.interjections.clear()
-        await recipient.audio_queue.put(b"__text__")
+    if recipient.in_wait and recipient.work_dir:
+        # Wait mode — push via inbox + wait queue for immediate delivery
+        await _inbox_write_and_notify(recipient, {
+            "id": msg.id,
+            "from": sender_name,
+            "type": "agent",
+            "content": content,
+        })
         log.info("[%s] Message %s injected via wait queue", recipient.session_id, msg.id)
     elif recipient.work_dir:
         # Inbox — hook-based delivery (PostToolUse/PreToolUse additionalContext)

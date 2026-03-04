@@ -514,7 +514,15 @@ class SessionManager:
                     "# CLI Environment\n"
                     "`clawmux` is already in your PATH at `/usr/local/bin/clawmux`. "
                     "Environment variables (`CLAWMUX_SESSION_ID`, `CLAWMUX_PORT`) are automatically set. "
-                    "Never `cd` into the repo directory or manually export these variables — just run `clawmux` directly.\n"
+                    "Never `cd` into the repo directory or manually export these variables — just run `clawmux` directly.\n\n"
+                    "# Hub Management\n"
+                    "NEVER use `pkill`, `kill`, or any signal-based commands to restart the hub. "
+                    "Use the built-in CLI commands instead:\n"
+                    "- `clawmux reload` — Gracefully restart the hub (agents auto-reconnect)\n"
+                    "- `clawmux start` — Start the hub if it's not running\n"
+                    "- `clawmux stop` — Stop the hub gracefully\n"
+                    "- `clawmux status` — Check hub state and sessions\n"
+                    "- `clawmux spawn` — Launch a new agent session\n"
                 )
             # Inter-agent messaging instructions
             identity += (
