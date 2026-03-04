@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test the voice-hub MCP server end-to-end.
+"""Test the clawmux MCP server end-to-end.
 
 Tests:
   python test_server.py           # Basic: HTTP, WebSocket, services

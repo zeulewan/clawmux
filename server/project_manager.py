@@ -13,7 +13,7 @@ from hub_config import AGENTS_PER_PROJECT, VOICE_POOL, VOICES
 
 log = logging.getLogger("hub.projects")
 
-SESSION_DIR_BASE = Path("/tmp/voice-hub-sessions")
+SESSION_DIR_BASE = Path("/tmp/clawmux-sessions")
 DATA_DIR = Path(__file__).parent.parent / "data"
 
 
@@ -189,8 +189,8 @@ class ProjectManager:
     def get_session_dir(self, voice_id: str, project_slug: str | None = None) -> Path:
         """Get the work directory for a voice in a project.
 
-        For default (flat_layout=True): /tmp/voice-hub-sessions/{voice_id}
-        For named projects: /tmp/voice-hub-sessions/{project_slug}/{voice_id}
+        For default (flat_layout=True): /tmp/clawmux-sessions/{voice_id}
+        For named projects: /tmp/clawmux-sessions/{project_slug}/{voice_id}
         """
         slug = project_slug or self.active_project
         proj = self.projects.get(slug)

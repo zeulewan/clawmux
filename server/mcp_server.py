@@ -27,10 +27,10 @@ from fastmcp import FastMCP
 WHISPER_URL = "http://127.0.0.1:2022"
 KOKORO_URL = "http://127.0.0.1:8880"
 WS_PORT = int(os.environ.get("VOICE_CHAT_PORT", "3456"))
-LOG_FILE = "/tmp/voice-hub-mcp.log"
+LOG_FILE = "/tmp/clawmux-mcp.log"
 
 # Set up logging to both stderr and file
-_logger = logging.getLogger("voice-hub")
+_logger = logging.getLogger("clawmux")
 _logger.setLevel(logging.DEBUG)
 _fmt = logging.Formatter("%(asctime)s %(message)s", datefmt="%H:%M:%S")
 _stderr_handler = logging.StreamHandler(sys.stderr)
@@ -42,7 +42,7 @@ _logger.addHandler(_file_handler)
 
 
 def log(msg: str) -> None:
-    """Log to stderr and /tmp/voice-hub-mcp.log (stdout is reserved for MCP stdio)."""
+    """Log to stderr and /tmp/clawmux-mcp.log (stdout is reserved for MCP stdio)."""
     _logger.info(msg)
 
 
@@ -168,7 +168,7 @@ async def lifespan(server: FastMCP) -> AsyncIterator[dict]:
 
 
 mcp = FastMCP(
-    name="voice-hub",
+    name="clawmux",
     lifespan=lifespan,
 )
 

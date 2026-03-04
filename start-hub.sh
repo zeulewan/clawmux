@@ -8,5 +8,5 @@ if [ -n "$pids" ]; then
   sleep 1
 fi
 echo "Starting hub.py..."
-.venv/bin/python server/hub.py >> /tmp/voice-hub.log 2>&1 &
+.venv/bin/python server/hub.py >> /tmp/clawmux.log 2>&1 &
 echo "Started PID $!"

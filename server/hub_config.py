@@ -3,7 +3,7 @@
 import os
 import time
 
-HUB_PORT = int(os.environ.get("VOICE_CHAT_HUB_PORT", "3460"))
+HUB_PORT = int(os.environ.get("CLAWMUX_PORT", "3460"))
 HUB_START_TIME = time.time()
 SESSION_TIMEOUT_MINUTES = int(os.environ.get("VOICE_CHAT_TIMEOUT", "0"))  # 0 = never timeout
 HEALTH_CHECK_INTERVAL_SECONDS = 15
@@ -12,6 +12,18 @@ CLAUDE_MODEL = os.environ.get("VOICE_CHAT_MODEL", "opus")  # opus, sonnet, haiku
 TMUX_SESSION_PREFIX = "voice"
 WHISPER_URL = "http://127.0.0.1:2022"
 KOKORO_URL = "http://127.0.0.1:8880"
+
+# Deployment modes: "local" (all on this machine), "split" (hub local, TTS/STT remote),
+# "remote" (thin client — hub, TTS, STT all remote)
+DEPLOYMENT_MODE = "local"
+
+# Quality mode maps to Whisper model sizes: "high" = large-v3, "medium" = medium, "low" = tiny
+QUALITY_MODE = "high"
+QUALITY_MODEL_MAP = {
+    "high": "large-v3",
+    "medium": "medium",
+    "low": "tiny",
+}
 
 # Default project voices (9 agents)
 VOICES = [

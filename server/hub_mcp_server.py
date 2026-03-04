@@ -4,8 +4,8 @@ Connects to the hub via WebSocket and proxies converse() calls.
 The hub handles TTS/STT and browser audio routing.
 
 Env vars:
-    VOICE_HUB_SESSION_ID — session ID assigned by the hub (required)
-    VOICE_CHAT_HUB_PORT  — hub port (default 3460)
+    CLAWMUX_SESSION_ID — session ID assigned by the hub (required)
+    CLAWMUX_PORT       — hub port (default 3460)
 """
 
 import asyncio
@@ -20,22 +20,22 @@ from websockets.asyncio.client import connect as ws_connect
 from websockets.exceptions import ConnectionClosed
 from fastmcp import FastMCP
 
-SESSION_ID = os.environ.get("VOICE_HUB_SESSION_ID", "")
-HUB_PORT = int(os.environ.get("VOICE_CHAT_HUB_PORT", "3460"))
+SESSION_ID = os.environ.get("CLAWMUX_SESSION_ID", "")
+HUB_PORT = int(os.environ.get("CLAWMUX_PORT", "3460"))
 HUB_WS_URL = f"ws://127.0.0.1:{HUB_PORT}/mcp/{SESSION_ID}"
 
 # Derive voice_id from work dir for history fallback
 _VOICE_ID = os.path.basename(os.getcwd())  # e.g. "bm_fable"
-_HISTORY_DIR = os.path.expanduser("~/GIT/voice-chat/data/history")
+_HISTORY_DIR = os.path.expanduser("~/GIT/clawmux/data/history")
 
 # Logging to stderr + file (stdout reserved for MCP stdio)
-_logger = logging.getLogger("voice-hub")
+_logger = logging.getLogger("clawmux")
 _logger.setLevel(logging.DEBUG)
 _fmt = logging.Formatter("%(asctime)s %(message)s", datefmt="%H:%M:%S")
 _stderr = logging.StreamHandler(sys.stderr)
 _stderr.setFormatter(_fmt)
 _logger.addHandler(_stderr)
-_file = logging.FileHandler("/tmp/voice-hub-mcp.log", mode="a")
+_file = logging.FileHandler("/tmp/clawmux-mcp.log", mode="a")
 _file.setFormatter(_fmt)
 _logger.addHandler(_file)
 
@@ -92,7 +92,7 @@ async def _reconnect_loop():
 async def lifespan(server: FastMCP) -> AsyncIterator[dict]:
     global hub_ws, _reconnect_task
     if not SESSION_ID:
-        log("WARNING: VOICE_HUB_SESSION_ID not set")
+        log("WARNING: CLAWMUX_SESSION_ID not set")
 
     try:
         hub_ws = await connect_to_hub()
@@ -114,7 +114,7 @@ async def lifespan(server: FastMCP) -> AsyncIterator[dict]:
             log("Disconnected from hub")
 
 
-mcp = FastMCP(name="voice-hub", lifespan=lifespan)
+mcp = FastMCP(name="clawmux", lifespan=lifespan)
 
 
 @mcp.tool
@@ -188,7 +188,7 @@ async def set_project_status(project: str, area: str = "") -> str:
     working on a different repo or switch between frontend/backend/docs work.
 
     Args:
-        project: The project or repo name (e.g. "voice-hub", "isaac-sim").
+        project: The project or repo name (e.g. "clawmux", "isaac-sim").
         area: Optional sub-area (e.g. "frontend", "backend", "docs", "iOS app").
 
     Returns:

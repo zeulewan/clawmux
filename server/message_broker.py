@@ -15,7 +15,7 @@ import subprocess
 import time
 from dataclasses import dataclass, field
 
-log = logging.getLogger("voice-hub.broker")
+log = logging.getLogger("clawmux.broker")
 
 # Message lifecycle states
 PENDING = "pending"
