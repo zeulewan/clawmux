@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>ClawMux</title>
+<title>ClawMux App</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%233a86ff'/><path d='M32 12a6 6 0 0 1 6 6v14a6 6 0 0 1-12 0V18a6 6 0 0 1 6-6z' fill='white'/><path d='M20 30a12 12 0 0 0 24 0' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/><line x1='32' y1='42' x2='32' y2='50' stroke='white' stroke-width='3' stroke-linecap='round'/><line x1='25' y1='50' x2='39' y2='50' stroke='white' stroke-width='3' stroke-linecap='round'/></svg>">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -1138,7 +1138,7 @@ body {
 <body>
 
 <div id="header">
-  <h1><a href="https://clawmux.com" target="_blank" style="color: inherit; text-decoration: none;">ClawMux</a></h1>
+  <h1><a href="https://clawmux.com" target="_blank" style="color: inherit; text-decoration: none;">ClawMux App</a></h1>
   <select id="project-selector" style="font-size:0.7rem; padding:2px 8px; border-radius:6px; border:1px solid var(--border); background:var(--bg-card); color:var(--text-secondary); cursor:pointer; display:none;" onchange="switchProject(this.value)">
     <option value="default">Default</option>
   </select>
@@ -4989,12 +4989,54 @@ document.addEventListener('keydown', (e) => {
     } else if (e.key === 'ArrowRight') {
       newIdx = Math.min(_karaokeWords.length - 1, oldIdx + 1);
     } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-      // Jump by ~10 words (approximate line) for up/down
-      const jump = 10;
-      if (e.key === 'ArrowUp') {
-        newIdx = Math.max(0, oldIdx - jump);
-      } else {
-        newIdx = Math.min(_karaokeWords.length - 1, oldIdx + jump);
+      // Navigate by visual line: find the word on the line above/below
+      // at the closest horizontal position to the current word
+      const curEl = _karaokeWords[oldIdx]?.el;
+      if (curEl) {
+        const curTop = curEl.offsetTop;
+        const curLeft = curEl.offsetLeft + curEl.offsetWidth / 2;
+        if (e.key === 'ArrowUp') {
+          // Find the previous line's top position
+          let prevLineTop = -1;
+          for (let i = oldIdx - 1; i >= 0; i--) {
+            const el = _karaokeWords[i]?.el;
+            if (el && el.offsetTop < curTop) { prevLineTop = el.offsetTop; break; }
+          }
+          if (prevLineTop >= 0) {
+            // Find closest word on that line by horizontal position
+            let bestIdx = 0, bestDist = Infinity;
+            for (let i = 0; i < _karaokeWords.length; i++) {
+              const el = _karaokeWords[i]?.el;
+              if (el && el.offsetTop === prevLineTop) {
+                const dist = Math.abs((el.offsetLeft + el.offsetWidth / 2) - curLeft);
+                if (dist < bestDist) { bestDist = dist; bestIdx = i; }
+              }
+            }
+            newIdx = bestIdx;
+          } else {
+            newIdx = 0; // Already on first line
+          }
+        } else {
+          // Find the next line's top position
+          let nextLineTop = -1;
+          for (let i = oldIdx + 1; i < _karaokeWords.length; i++) {
+            const el = _karaokeWords[i]?.el;
+            if (el && el.offsetTop > curTop) { nextLineTop = el.offsetTop; break; }
+          }
+          if (nextLineTop >= 0) {
+            let bestIdx = _karaokeWords.length - 1, bestDist = Infinity;
+            for (let i = 0; i < _karaokeWords.length; i++) {
+              const el = _karaokeWords[i]?.el;
+              if (el && el.offsetTop === nextLineTop) {
+                const dist = Math.abs((el.offsetLeft + el.offsetWidth / 2) - curLeft);
+                if (dist < bestDist) { bestDist = dist; bestIdx = i; }
+              }
+            }
+            newIdx = bestIdx;
+          } else {
+            newIdx = _karaokeWords.length - 1; // Already on last line
+          }
+        }
       }
     }
     if (newIdx !== undefined && newIdx !== oldIdx) {
