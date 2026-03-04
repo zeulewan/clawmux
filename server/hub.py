@@ -1013,12 +1013,14 @@ async def hook_tool_status(request: Request):
     if not session:
         return JSONResponse({})
 
-    if event in ("PostToolUse", "PostToolUseFailure"):
+    if event in ("PostToolUse", "PostToolUseFailure", "Stop"):
         session.status_text = ""
     elif event == "PreToolUse":
         tool_name = data.get("tool_name", "")
         tool_input = data.get("tool_input", {})
         session.status_text = _tool_status_text(tool_name, tool_input)
+    elif event == "PreCompact":
+        session.status_text = "Compacting context..."
     else:
         return JSONResponse({})
 
