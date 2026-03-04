@@ -3903,13 +3903,14 @@ function handleMessage(data) {
       const rName = recipName.charAt(0).toUpperCase() + recipName.slice(1);
       const isBareAck = msg.bare_ack || (msg.parent_id && !msg.content);
       const threadOpts = { id: msg.id || null, parentId: msg.parent_id || null, isBareAck };
+      // Bare acks (thumbs-up) always show; other agent messages respect toggle
       // Show in recipient's chat
-      if (showAgentMessages && sessions.has(msg.recipient)) {
+      if ((isBareAck || showAgentMessages) && sessions.has(msg.recipient)) {
         const text = isBareAck ? '' : `[Agent msg from ${sName}] ${msg.content || ''}`;
         addMessage(msg.recipient, 'system', text, threadOpts);
       }
       // Show in sender's chat
-      if (showAgentMessages && sessions.has(msg.sender)) {
+      if ((isBareAck || showAgentMessages) && sessions.has(msg.sender)) {
         const text = isBareAck ? '' : `[Agent msg to ${rName}] ${msg.content || ''}`;
         addMessage(msg.sender, 'system', text, threadOpts);
       }

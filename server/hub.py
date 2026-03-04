@@ -1617,13 +1617,17 @@ async def speak_to_user(request: Request):
         msg_id = f"msg-{uuid.uuid4().hex[:8]}"
         sender_name = sender.voice.replace("af_", "").replace("am_", "").replace("bm_", "")
         await send_to_browser({
-            "session_id": sender_id,
             "type": "agent_message",
-            "id": msg_id,
-            "from": sender_name,
-            "parent_id": parent_id,
-            "content": "",
-            "bare_ack": True,
+            "message": {
+                "id": msg_id,
+                "sender": sender_id,
+                "sender_name": sender_name,
+                "recipient": sender_id,  # show in sender's chat
+                "recipient_name": "user",
+                "content": "",
+                "parent_id": parent_id,
+                "bare_ack": True,
+            },
         })
         return {"id": msg_id, "status": "ack_sent"}
 
