@@ -2752,17 +2752,10 @@ async function addSession(data, autoSwitch = false) {
     if (resp.ok) {
       const hist = await resp.json();
       serverMessages = (hist.messages || []).map(m => ({ role: m.role, text: m.text }));
-      // Mark trailing user messages as interjections if model hasn't seen them
-      const pendingCount = hist.pending_interjections || 0;
-      if (pendingCount > 0) {
-        let marked = 0;
-        for (let i = serverMessages.length - 1; i >= 0 && marked < pendingCount; i--) {
-          if (serverMessages[i].role === 'user') {
-            serverMessages[i].role = 'user interjection';
-            marked++;
-          }
-        }
-      }
+      // Note: pending_interjections is NOT used here to mark messages as italic.
+      // Interjection styling is applied in real-time when user_text arrives with
+      // interjection: true, and removed when the agent acknowledges (inbox_update).
+      // Re-marking from history would cause stale italics after page/hub reload.
     }
   } catch (e) {
     console.warn('Failed to fetch history:', e);
@@ -3654,17 +3647,10 @@ async function _refreshHistory(sessionId, voiceId) {
       if (m.bare_ack) obj.isBareAck = true;
       return obj;
     });
-    // Mark trailing user messages as interjections if they haven't been seen by the model
-    const pendingCount = hist.pending_interjections || 0;
-    if (pendingCount > 0) {
-      let marked = 0;
-      for (let i = serverMessages.length - 1; i >= 0 && marked < pendingCount; i--) {
-        if (serverMessages[i].role === 'user') {
-          serverMessages[i].role = 'user interjection';
-          marked++;
-        }
-      }
-    }
+    // Note: pending_interjections is NOT used to re-mark messages as italic.
+    // Interjection styling is transient — applied in real-time via user_text events
+    // and cleared on inbox_update. Re-marking from history causes stale italics
+    // after page/hub reload when interjections haven't been consumed yet.
     // Check if server has messages the client is missing
     // Filter out system messages from both sides for comparison
     const localNonSystem = s.messages.filter(m => m.role !== 'system');
