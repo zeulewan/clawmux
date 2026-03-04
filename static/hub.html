@@ -4054,6 +4054,13 @@ function handleMessage(data) {
     // v0.6.0: inbox message count update
     s.inboxCount = data.count || 0;
     s.inboxPreview = data.latest ? data.latest.preview : '';
+    // When inbox is cleared (hook delivered messages), promote interjections to normal messages
+    if (data.count === 0) {
+      if (session_id === activeSessionId) {
+        chatArea.querySelectorAll('.msg.interjection').forEach(el => el.classList.remove('interjection'));
+      }
+      s.messages.forEach(m => { if (m.role === 'user interjection') m.role = 'user'; });
+    }
     renderSidebar();
   }
 }
