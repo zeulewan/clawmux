@@ -23,21 +23,46 @@ Install ClawMux — an open-source voice interface for managing multiple Claude 
 4. Install the CLI:
    sudo cp cli/clawmux /usr/local/bin/clawmux && sudo chmod +x /usr/local/bin/clawmux
 
-5. Register MCP server:
-   claude mcp add -s user clawmux -- ~/GIT/clawmux/.venv/bin/python ~/GIT/clawmux/server/mcp_server.py
-
-6. Install slash commands:
-   mkdir -p ~/.claude/commands && cp ~/GIT/clawmux/.claude/commands/clawmux.md ~/.claude/commands/clawmux.md
-
-7. Start the hub:
+5. Start the hub:
    cd ~/GIT/clawmux && ./start-hub.sh
 
-8. Verify: curl -s http://localhost:3460/api/sessions and open http://localhost:3460 in a browser.
+6. Verify: curl -s http://localhost:3460/api/sessions and open http://localhost:3460 in a browser.
 
 Run each step, fix any errors, and report what happened.
 ```
 
-## Mac (Apple Silicon)
+## Mac — Split Mode (recommended)
+
+Hub runs on your Mac, TTS/STT run on a remote GPU server. Simpler setup — no local AI models needed.
+
+Copy and paste this into Claude Code:
+
+```
+Install ClawMux — an open-source voice interface for managing multiple Claude Code agents. The code is fully auditable on GitHub.
+
+1. Clone the repo:
+   git clone https://github.com/zeulewan/clawmux.git ~/GIT/clawmux
+
+2. Set up Python:
+   cd ~/GIT/clawmux && python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+
+3. Install the CLI:
+   sudo cp cli/clawmux /usr/local/bin/clawmux && sudo chmod +x /usr/local/bin/clawmux
+
+4. Start the hub:
+   cd ~/GIT/clawmux && ./start-hub.sh
+
+5. Configure Split mode — point TTS/STT at your remote GPU server:
+   curl -X PUT http://localhost:3460/api/settings -H "Content-Type: application/json" -d '{"deployment_mode": "split", "tts_url": "http://YOUR_GPU_SERVER:8880", "stt_url": "http://YOUR_GPU_SERVER:2022"}'
+
+6. Verify: curl -s http://localhost:3460/api/sessions and open http://localhost:3460 in a browser.
+
+Run each step, fix any errors, and report what happened.
+```
+
+## Mac — Together Mode
+
+Everything runs locally on your Mac (Apple Silicon required). Install local TTS and STT models.
 
 Copy and paste this into Claude Code:
 
@@ -52,25 +77,15 @@ Install ClawMux — an open-source voice interface for managing multiple Claude 
 
 3. Install TTS/STT for Apple Silicon:
    pip install mlx-audio
-   Note: Whisper via whisper.cpp and Kokoro via mlx-audio are still being integrated.
-   For now, use Split mode — point TTS/STT at a remote GPU server after setup.
+   Install whisper.cpp for STT: brew install whisper-cpp
 
 4. Install the CLI:
    sudo cp cli/clawmux /usr/local/bin/clawmux && sudo chmod +x /usr/local/bin/clawmux
 
-5. Register MCP server:
-   claude mcp add -s user clawmux -- ~/GIT/clawmux/.venv/bin/python ~/GIT/clawmux/server/mcp_server.py
-
-6. Install slash commands:
-   mkdir -p ~/.claude/commands && cp ~/GIT/clawmux/.claude/commands/clawmux.md ~/.claude/commands/clawmux.md
-
-7. Start the hub:
+5. Start the hub:
    cd ~/GIT/clawmux && ./start-hub.sh
 
-8. Verify: curl -s http://localhost:3460/api/sessions and open http://localhost:3460 in a browser.
-
-9. If using Split mode (remote GPU for TTS/STT), configure after hub starts:
-   curl -X PUT http://localhost:3460/api/settings -H "Content-Type: application/json" -d '{"deployment_mode": "split", "tts_url": "http://YOUR_GPU_SERVER:8880", "stt_url": "http://YOUR_GPU_SERVER:2022"}'
+6. Verify: curl -s http://localhost:3460/api/sessions and open http://localhost:3460 in a browser.
 
 Run each step, fix any errors, and report what happened.
 ```
@@ -80,8 +95,6 @@ Run each step, fix any errors, and report what happened.
 - Python venv with hub dependencies
 - Whisper STT + Kokoro TTS (if GPU available)
 - `clawmux` CLI for terminal control
-- MCP server registered with Claude Code
-- Slash commands for quick voice mode access
 
 ## Requirements
 
