@@ -3515,25 +3515,33 @@ function stopThinkingVAD() {
 function showThinking(sessionId) {
   const s = sessions.get(sessionId);
   if (!s) return;
-  hideThinking(sessionId); // remove existing if any
-
-  if (sessionId === activeSessionId) {
-    const div = document.createElement('div');
-    div.className = 'msg thinking';
-    div.id = `thinking-${sessionId}`;
-    for (let i = 0; i < 3; i++) {
-      const dot = document.createElement('span');
-      dot.className = 'thinking-dot';
-      div.appendChild(dot);
-    }
-    const label = document.createElement('span');
-    label.className = 'thinking-label';
-    label.textContent = s.toolStatusText || '';
-    div.appendChild(label);
-    chatArea.appendChild(div);
-    chatScrollToBottom();
-  }
   s.isThinking = true;
+
+  if (sessionId !== activeSessionId) return;
+
+  // Don't recreate if already showing — preserves hook-driven tool activity label
+  const existing = document.getElementById(`thinking-${sessionId}`);
+  if (existing) {
+    // Just update label text in case toolStatusText changed
+    const label = existing.querySelector('.thinking-label');
+    if (label) label.textContent = s.toolStatusText || '';
+    return;
+  }
+
+  const div = document.createElement('div');
+  div.className = 'msg thinking';
+  div.id = `thinking-${sessionId}`;
+  for (let i = 0; i < 3; i++) {
+    const dot = document.createElement('span');
+    dot.className = 'thinking-dot';
+    div.appendChild(dot);
+  }
+  const label = document.createElement('span');
+  label.className = 'thinking-label';
+  label.textContent = s.toolStatusText || '';
+  div.appendChild(label);
+  chatArea.appendChild(div);
+  chatScrollToBottom();
 }
 
 function updateThinkingLabel(sessionId) {
