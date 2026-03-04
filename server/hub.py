@@ -418,8 +418,12 @@ async def handle_browser_message(data: dict) -> None:
         # User acknowledged a message (double-click or thumbs-up button)
         msg_id = data.get("msg_id", "")
         if msg_id:
-            ack_id = f"msg-{uuid.uuid4().hex[:8]}"
+            ack_id = _gen_msg_id()
             log.info("[%s] User ack on %s", session_id, msg_id)
+            # Save to history so acks persist across reloads
+            history.append(session.voice, session.label, "user", "",
+                           _hist_prefix(session), msg_id=ack_id,
+                           parent_id=msg_id, bare_ack=True)
             await send_to_browser({
                 "session_id": session_id,
                 "type": "user_ack",
