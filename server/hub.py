@@ -1097,8 +1097,12 @@ async def speak_to_user(request: Request):
     ack_only = data.get("ack_only", False)
     if ack_only and parent_id:
         # Bare ack — just send thumbs up to browser, no TTS
-        msg_id = f"msg-{uuid.uuid4().hex[:8]}"
+        msg_id = _gen_msg_id()
         sender_name = sender.voice.replace("af_", "").replace("am_", "").replace("bm_", "")
+        # Save to history so ack persists across reloads
+        history.append(sender.voice, sender.label, "assistant", "",
+                       _hist_prefix(sender), msg_id=msg_id,
+                       parent_id=parent_id, bare_ack=True)
         await send_to_browser({
             "type": "agent_message",
             "message": {
