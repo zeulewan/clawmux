@@ -334,7 +334,7 @@ async def handle_browser_message(data: dict) -> None:
         audio_bytes = base64.b64decode(data["data"])
         log.info("[%s] Audio from browser: %d bytes", session_id, len(audio_bytes))
         # CLI mode: transcribe and deliver via inbox (no converse loop to consume audio_queue)
-        if session.mode == "cli" or not hasattr(session, 'mode'):
+        if not hasattr(session, 'mode') or session.mode == "cli":
             await send_to_browser({"session_id": session_id, "type": "status", "text": "Transcribing..."})
             text = await stt(audio_bytes)
             if text:
