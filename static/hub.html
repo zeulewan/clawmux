@@ -834,8 +834,16 @@ body {
   border-bottom-left-radius: 6px;
   padding: 14px 18px;
   display: flex;
+  align-items: center;
   gap: 5px;
   animation: msgAppear 0.2s ease-out;
+}
+.thinking-label {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  margin-left: 4px;
+  white-space: nowrap;
+  transition: opacity 0.2s;
 }
 .thinking-dot {
   display: block;
@@ -2566,6 +2574,10 @@ function renderChat(forceScroll = false) {
       dot.className = 'thinking-dot';
       div.appendChild(dot);
     }
+    const label = document.createElement('span');
+    label.className = 'thinking-label';
+    label.textContent = s.toolStatusText || '';
+    div.appendChild(label);
     chatArea.appendChild(div);
   }
   if (wasNearBottom) chatArea.scrollTop = chatArea.scrollHeight;
@@ -3404,10 +3416,28 @@ function showThinking(sessionId) {
       dot.className = 'thinking-dot';
       div.appendChild(dot);
     }
+    const label = document.createElement('span');
+    label.className = 'thinking-label';
+    label.textContent = s.toolStatusText || '';
+    div.appendChild(label);
     chatArea.appendChild(div);
     chatScrollToBottom();
   }
   s.isThinking = true;
+}
+
+function updateThinkingLabel(sessionId) {
+  const s = sessions.get(sessionId);
+  if (!s) return;
+  const el = document.getElementById(`thinking-${sessionId}`);
+  if (!el) return;
+  let label = el.querySelector('.thinking-label');
+  if (!label) {
+    label = document.createElement('span');
+    label.className = 'thinking-label';
+    el.appendChild(label);
+  }
+  label.textContent = s.toolStatusText || '';
 }
 
 function hideThinking(sessionId) {
@@ -3685,6 +3715,7 @@ function handleMessage(data) {
       // Tool status updates from Claude Code hooks (status_text without status field)
       if ('status_text' in data && !data.status) {
         s.toolStatusText = data.status_text || '';
+        updateThinkingLabel(data.session_id);
         renderSidebar();
         return;
       }
