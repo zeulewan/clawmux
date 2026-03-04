@@ -1002,9 +1002,14 @@ async def hook_tool_status(request: Request):
         return JSONResponse({})
 
     event = data.get("hook_event_name", "")
-    cwd = data.get("cwd", "")
 
-    session = _session_from_cwd(cwd)
+    # Prefer X-ClawMux-Session header (set via CLAWMUX_SESSION_ID env var),
+    # fall back to cwd-based lookup
+    clawmux_sid = request.headers.get("x-clawmux-session", "")
+    session = session_mgr.sessions.get(clawmux_sid) if clawmux_sid else None
+    if not session:
+        cwd = data.get("cwd", "")
+        session = _session_from_cwd(cwd)
     if not session:
         return JSONResponse({})
 
