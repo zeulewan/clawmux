@@ -874,8 +874,8 @@ async def handle_browser_message(data: dict) -> None:
                     "content": text,
                 })
                 log.info("[%s] Voice interjection written to inbox for hook delivery", session_id)
-                # Signal browser that processing is complete so mic re-enables
-                await send_to_browser({"session_id": session_id, "type": "done", "processing": True})
+                # Signal browser that message was queued (not actively processing)
+                await send_to_browser({"session_id": session_id, "type": "done", "processing": False})
 
     elif msg_type == "set_mode":
         mode = data.get("mode", "voice")
@@ -909,6 +909,10 @@ async def wait_websocket(ws: WebSocket, session_id: str):
         return
 
     log.info("[%s] Wait WS connected", session_id)
+    session.in_converse = True  # Agent is idle and ready for input
+
+    # Tell browser agent is listening (so voice input isn't treated as interjection)
+    await send_to_browser({"session_id": session_id, "type": "listening"})
 
     # Register this WS for push notifications
     if not hasattr(session, "_wait_queue"):
@@ -955,6 +959,7 @@ async def wait_websocket(ws: WebSocket, session_id: str):
     except Exception as e:
         log.warning("[%s] Wait WS error: %s", session_id, e)
     finally:
+        session.in_converse = False
         if hasattr(session, "_wait_queue"):
             del session._wait_queue
 
