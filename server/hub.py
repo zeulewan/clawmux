@@ -414,6 +414,19 @@ async def handle_browser_message(data: dict) -> None:
             log.info("[%s] Model restart requested: %s", session_id, model)
             asyncio.create_task(session_mgr.restart_claude_with_model(session_id))
 
+    elif msg_type == "user_ack":
+        # User acknowledged a message (double-click or thumbs-up button)
+        msg_id = data.get("msg_id", "")
+        if msg_id:
+            ack_id = f"msg-{uuid.uuid4().hex[:8]}"
+            log.info("[%s] User ack on %s", session_id, msg_id)
+            await send_to_browser({
+                "session_id": session_id,
+                "type": "user_ack",
+                "msg_id": msg_id,
+                "ack_id": ack_id,
+            })
+
 
 # --- Wait WebSocket (push-based inbox delivery for CLI) ---
 

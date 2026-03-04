@@ -330,11 +330,20 @@ function handleMessage(data) {
         const text = isBareAck ? '' : `[Agent msg from ${sName}] ${msg.content || ''}`;
         addMessage(msg.recipient, 'system', text, threadOpts);
       }
-      // Show in sender's chat
-      if ((isBareAck || showAgentMessages) && sessions.has(msg.sender)) {
+      // Show in sender's chat (skip if same as recipient to avoid double-counting)
+      if (msg.sender !== msg.recipient && (isBareAck || showAgentMessages) && sessions.has(msg.sender)) {
         const text = isBareAck ? '' : `[Agent msg to ${rName}] ${msg.content || ''}`;
         addMessage(msg.sender, 'system', text, threadOpts);
       }
+    }
+    return;
+  }
+
+  if (type === 'user_ack') {
+    // User acknowledged a message — add bare ack to the session's message list
+    const sid = data.session_id;
+    if (sid && data.msg_id) {
+      addMessage(sid, 'system', '', { id: data.ack_id || null, parentId: data.msg_id, isBareAck: true });
     }
     return;
   }

@@ -437,6 +437,8 @@ body {
   line-height: 1;
 }
 .msg .msg-action-btn:hover { background: rgba(128,128,128,0.4); }
+.msg .msg-ack-btn { font-size: 0.7rem; padding: 1px 4px; }
+.msg .msg-ack-btn:active { opacity: 0.6; }
 .msg .msg-action-btn.playing { color: var(--green); }
 #chat-area { overflow-x: hidden; }
 @keyframes msgAppear {
@@ -1662,7 +1664,8 @@ async function addSession(data, autoSwitch = false) {
     speed: _initSpeed,
     messages: serverMessages,
     statusText: data.status_text || (isReady ? 'Ready' : 'Starting...'),
-    sidebarState: (data.unread_count > 0) ? 'speaking' : (isReady ? 'idle' : 'starting'),
+    toolStatusText: data.status_text || '',
+    sidebarState: (data.unread_count > 0) ? 'speaking' : (data.in_wait ? 'idle' : (isReady ? 'idle' : 'starting')),
     unreadCount: data.unread_count || 0,
     compacting: data.compacting ?? false,
   });
@@ -1685,16 +1688,20 @@ async function addSession(data, autoSwitch = false) {
     addMessage(data.session_id, 'system', 'Waiting for Claude...');
   }
 
-  // Restore thinking indicator if session is processing
-  if (data.processing) {
+  // Restore session state from server
+  if (data.in_wait) {
+    // Agent is in wait mode — idle and ready for input
+    const sess = sessions.get(data.session_id);
+    if (sess) {
+      sess.sessionState = 'idle';
+      sess.sidebarState = 'idle';
+    }
+  } else if (data.processing) {
     const sess = sessions.get(data.session_id);
     if (sess) sess.sidebarState = 'working';
     showThinking(data.session_id);
     startThinkingSound(data.session_id);
-  }
-
-  // Restore session state from server
-  if (isReady && !data.processing && !data.in_wait) {
+  } else if (isReady) {
     const sess = sessions.get(data.session_id);
     if (sess && !sess.sessionState) sess.sessionState = 'idle';
   }

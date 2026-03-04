@@ -147,9 +147,36 @@ function createMsgEl(role, text, voiceColorHex, voiceId, msgObj = null) {
     };
     actions.appendChild(copyBtn);
 
+    // Thumbs-up (ack) button — only on messages with an ID
+    if (msgObj && msgObj.id) {
+      const ackBtn = document.createElement('button');
+      ackBtn.className = 'msg-action-btn msg-ack-btn';
+      ackBtn.textContent = '\uD83D\uDC4D';
+      ackBtn.title = 'Acknowledge';
+      ackBtn.onclick = (e) => {
+        e.stopPropagation();
+        _sendUserAck(msgObj.id);
+      };
+      actions.appendChild(ackBtn);
+    }
+
     div.appendChild(actions);
   }
+
+  // Double-click to ack messages with an ID
+  if (msgObj && msgObj.id && role !== 'system' && role !== 'thinking') {
+    div.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      _sendUserAck(msgObj.id);
+    });
+  }
+
   return div;
+}
+
+function _sendUserAck(msgId) {
+  if (!activeSessionId || !ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ session_id: activeSessionId, type: 'user_ack', msg_id: msgId }));
 }
 
 function renderChat(forceScroll = false) {
