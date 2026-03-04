@@ -939,6 +939,92 @@ async def get_debug_log():
     return JSONResponse({"lines": _browser_debug_log})
 
 
+# --- Claude Code Hook Endpoint ---
+
+def _session_from_cwd(cwd: str) -> "SessionInfo | None":
+    """Map a working directory path to its ClawMux session.
+
+    Claude Code hooks send the agent's cwd (e.g. /tmp/clawmux-sessions/clawmux/am_echo).
+    We match that against each session's work_dir.
+    """
+    for session in session_mgr.sessions.values():
+        if session.work_dir and cwd.rstrip("/") == session.work_dir.rstrip("/"):
+            return session
+    return None
+
+
+_TOOL_STATUS_MAP = {
+    "Glob": "Finding files",
+    "Agent": "Spawning agent",
+    "WebSearch": "Searching web",
+    "NotebookEdit": "Editing notebook",
+}
+
+
+def _tool_status_text(tool_name: str, tool_input: dict) -> str:
+    """Convert a tool name + input into a human-readable status string."""
+    if tool_name == "Read":
+        path = tool_input.get("file_path", "")
+        return f"Reading {Path(path).name}" if path else "Reading file"
+    if tool_name == "Write":
+        path = tool_input.get("file_path", "")
+        return f"Writing {Path(path).name}" if path else "Writing file"
+    if tool_name == "Edit":
+        path = tool_input.get("file_path", "")
+        return f"Editing {Path(path).name}" if path else "Editing file"
+    if tool_name == "Bash":
+        cmd = tool_input.get("command", "")
+        desc = tool_input.get("description", "")
+        preview = desc or cmd
+        if len(preview) > 40:
+            preview = preview[:37] + "..."
+        return f"Running {preview}" if preview else "Running command"
+    if tool_name == "Grep":
+        pattern = tool_input.get("pattern", "")
+        return f"Searching for {pattern[:30]}" if pattern else "Searching"
+    if tool_name == "WebFetch":
+        url = tool_input.get("url", "")
+        try:
+            from urllib.parse import urlparse
+            domain = urlparse(url).netloc
+            return f"Fetching {domain}" if domain else "Fetching URL"
+        except Exception:
+            return "Fetching URL"
+    return _TOOL_STATUS_MAP.get(tool_name, tool_name)
+
+
+@app.post("/api/hooks/tool-status")
+async def hook_tool_status(request: Request):
+    """Receive Claude Code PreToolUse/PostToolUse hooks to update live session status."""
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({})
+
+    event = data.get("hook_event_name", "")
+    cwd = data.get("cwd", "")
+
+    session = _session_from_cwd(cwd)
+    if not session:
+        return JSONResponse({})
+
+    if event in ("PostToolUse", "PostToolUseFailure"):
+        session.status_text = ""
+    elif event == "PreToolUse":
+        tool_name = data.get("tool_name", "")
+        tool_input = data.get("tool_input", {})
+        session.status_text = _tool_status_text(tool_name, tool_input)
+    else:
+        return JSONResponse({})
+
+    await send_to_browser({
+        "type": "session_status",
+        "session_id": session.session_id,
+        "status_text": session.status_text,
+    })
+    return JSONResponse({})
+
+
 # --- REST API ---
 
 @app.get("/api/sessions")
