@@ -49,6 +49,11 @@ project_mgr = ProjectManager()
 session_mgr = SessionManager(history_store=history, project_mgr=project_mgr)
 broker = MessageBroker()
 
+
+def _hist_prefix(session) -> str | None:
+    """Get the history prefix for a session's project."""
+    return project_mgr.get_history_prefix(session.project_slug)
+
 # Browser WebSocket clients (multiple connections supported)
 browser_clients: set[WebSocket] = set()
 
@@ -370,11 +375,11 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
     if session.interjections:
         text = " ... ".join(session.interjections)
         session.interjections.clear()
-        history.clear_interjections(session.voice)
+        history.clear_interjections(session.voice, _hist_prefix(session))
         log.info("[%s] Pre-speech interjection(s), skipping TTS: %s", session_id, text[:100])
         # Persist to history and show in browser (but don't speak it)
         if message:
-            history.append(session.voice, session.label, "assistant", message)
+            history.append(session.voice, session.label, "assistant", message, _hist_prefix(session))
             if session_id != _browser_viewed_session:
                 session.unread_count += 1
             await send_to_browser({"session_id": session_id, "type": "assistant_text", "text": message})
@@ -389,7 +394,7 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
 
     if not silent:
         # Persist to history FIRST so sync can recover if hub crashes mid-delivery
-        history.append(session.voice, session.label, "assistant", message)
+        history.append(session.voice, session.label, "assistant", message, _hist_prefix(session))
 
         # Signal that Claude is about to speak (lets client show thinking indicator)
         await send_to_browser({"session_id": session_id, "type": "thinking"})
@@ -463,7 +468,7 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
     if session.interjections:
         text = " ... ".join(session.interjections)
         session.interjections.clear()
-        history.clear_interjections(session.voice)
+        history.clear_interjections(session.voice, _hist_prefix(session))
         log.info("[%s] Returning %d interjection(s): %s", session_id, text.count("...")+1, text[:100])
         session.status_text = ""
         session.processing = True  # Agent will process the interjection
@@ -543,7 +548,7 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
     # Send user's transcribed text to browser for chat display
     if text and not text_already_shown:
         await send_to_browser({"session_id": session_id, "type": "user_text", "text": text})
-        history.append(session.voice, session.label, "user", text)
+        history.append(session.voice, session.label, "user", text, _hist_prefix(session))
 
     session.status_text = ""
     session.processing = bool(text)  # Agent will process the user's response
@@ -677,7 +682,7 @@ async def handle_browser_message(data: dict) -> None:
         if text:
             log.info("[%s] Text from browser: %s", session_id, text[:100])
             await send_to_browser({"session_id": session_id, "type": "user_text", "text": text})
-            history.append(session.voice, session.label, "user", text)
+            history.append(session.voice, session.label, "user", text, _hist_prefix(session))
             session.text_override = text
             await session.audio_queue.put(b"__text__")
 
@@ -697,9 +702,9 @@ async def handle_browser_message(data: dict) -> None:
             log.info("[%s] Interjection STT: %s", session_id, text[:100] if text else "(empty)")
         if text:
             session.interjections.append(text)
-            history.save_interjections(session.voice, session.interjections)
+            history.save_interjections(session.voice, session.interjections, _hist_prefix(session))
             await send_to_browser({"session_id": session_id, "type": "user_text", "text": text, "interjection": True})
-            history.append(session.voice, session.label, "user", text)
+            history.append(session.voice, session.label, "user", text, _hist_prefix(session))
 
             # If agent is in an active converse call waiting for audio, inject
             # the interjection as audio queue input so it gets picked up immediately
@@ -707,7 +712,7 @@ async def handle_browser_message(data: dict) -> None:
                 log.info("[%s] Agent in converse, injecting interjection via audio queue", session_id)
                 session.text_override = " ... ".join(session.interjections)
                 session.interjections.clear()
-                history.clear_interjections(session.voice)
+                history.clear_interjections(session.voice, _hist_prefix(session))
                 await session.audio_queue.put(b"__text__")
 
     elif msg_type == "set_mode":
@@ -1029,8 +1034,11 @@ async def delete_project(slug: str):
 
 
 @app.get("/api/history/{voice_id}")
-async def get_history(voice_id: str):
-    messages = history.load(voice_id)
+async def get_history(voice_id: str, request: Request):
+    # Use project from query param or active project
+    project = request.query_params.get("project", project_mgr.active_project)
+    prefix = project_mgr.get_history_prefix(project)
+    messages = history.load(voice_id, prefix)
     # Include count of pending interjections so browser can style unseen messages
     pending_count = 0
     for s in session_mgr.sessions.values():
@@ -1041,8 +1049,10 @@ async def get_history(voice_id: str):
 
 
 @app.delete("/api/history/{voice_id}")
-async def clear_history(voice_id: str):
-    history.clear(voice_id)
+async def clear_history(voice_id: str, request: Request):
+    project = request.query_params.get("project", project_mgr.active_project)
+    prefix = project_mgr.get_history_prefix(project)
+    history.clear(voice_id, prefix)
     return JSONResponse({"status": "cleared", "voice_id": voice_id})
 
 
@@ -1133,9 +1143,11 @@ async def send_message(request: Request):
 
     # Save to history so messages persist across browser reloads
     history.append(recipient.voice, recipient.label, "system",
-                   f"[Agent msg from {sender_name.capitalize()}] {content}")
+                   f"[Agent msg from {sender_name.capitalize()}] {content}",
+                   _hist_prefix(recipient))
     history.append(sender.voice, sender.label, "system",
-                   f"[Agent msg to {recip_name.capitalize()}] {content}")
+                   f"[Agent msg to {recip_name.capitalize()}] {content}",
+                   _hist_prefix(sender))
 
     # Notify browser about the message
     await send_to_browser({

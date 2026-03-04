@@ -3158,7 +3158,7 @@ async function _refreshHistory(sessionId, voiceId) {
   const s = sessions.get(sessionId);
   if (!s) return;
   try {
-    const resp = await fetch(`/api/history/${voiceId}`);
+    const resp = await fetch(`/api/history/${voiceId}?project=${currentProject}`);
     if (!resp.ok) return;
     const hist = await resp.json();
     const serverMessages = (hist.messages || []).map(m => ({ role: m.role, text: m.text }));
