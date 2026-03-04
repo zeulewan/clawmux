@@ -1,11 +1,11 @@
 #!/home/zeul/GIT/clawmux/.venv/bin/python3
-"""ClawMux CLI — voice converse and inter-agent messaging.
+"""ClawMux CLI — voice and inter-agent messaging.
 
-Replaces the MCP server with simple shell commands that any agent runtime
-can call. Connect, do one thing, print the result, exit.
+Simple shell commands that any agent runtime can call.
+Connect, do one thing, print the result, exit.
 
 Env vars:
-    CLAWMUX_SESSION_ID — session ID (required for converse/send/ack/reply)
+    CLAWMUX_SESSION_ID — session ID (required for send/wait/ack/reply)
     CLAWMUX_PORT       — hub port (default 3460)
 """
 
@@ -107,24 +107,8 @@ def http_post(path: str, data: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def cmd_converse(args):
-    """Speak a message and optionally listen for response."""
-    print("DEPRECATED: Use 'clawmux send --to user' to speak and 'clawmux wait' to listen.", file=sys.stderr)
-    session_id = require_session_id()
-
-    payload = {
-        "type": "converse",
-        "message": args.message,
-        "wait_for_response": not args.no_listen,
-        "voice": args.voice or "",
-        "goodbye": args.goodbye,
-    }
-
-    # No timeout when waiting for user speech — user may be idle for hours
-    timeout = 86400 if not args.no_listen else 300
-    result = asyncio.run(ws_request(session_id, payload, timeout=timeout))
-    text = result.get("text", "")
-    if text:
-        print(text)
+    """Converse removed in v0.6.0."""
+    die("converse is removed in v0.6.0. Use 'clawmux send --to user \"message\"' to speak and 'clawmux wait' to listen.")
 
 
 def cmd_wait(args):
@@ -184,8 +168,8 @@ def cmd_status(args):
             detail_state = found["status"]
         elif found.get("compacting"):
             detail_state = "working"
-        elif found.get("in_converse"):
-            detail_state = "converse"
+        elif found.get("in_wait"):
+            detail_state = "waiting"
         elif found.get("status_text") or found.get("processing"):
             detail_state = "working"
         else:
@@ -249,8 +233,8 @@ def cmd_status(args):
                 state = s["status"]
             elif s.get("compacting"):
                 state = "working"
-            elif s.get("in_converse"):
-                state = "converse"
+            elif s.get("in_wait"):
+                state = "waiting"
             elif s.get("status_text") or s.get("processing"):
                 state = "working"
             else:
@@ -1023,7 +1007,7 @@ def cmd_project(args):
 def main():
     parser = argparse.ArgumentParser(
         prog="clawmux",
-        description="ClawMux CLI — voice converse and inter-agent messaging",
+        description="ClawMux CLI — voice and inter-agent messaging",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""commands:
   Hub Management:
@@ -1033,11 +1017,9 @@ def main():
     status      Show hub state and session info
     projects    List all projects
 
-  Voice:
-    converse    Speak a message and optionally listen for response
-
   Messaging:
-    send        Send a message to another agent
+    send        Send a message to an agent or user (TTS)
+    wait        Block until a message arrives (idle mode)
     ack         Acknowledge receipt of a message
     reply       Reply to a specific message
 
@@ -1052,9 +1034,9 @@ examples:
     clawmux status
     clawmux status sky
     clawmux projects
-    clawmux converse "Hello, what should I work on?"
-    clawmux converse "Done." --no-listen
+    clawmux send --to user "Hello, what should I work on?"
     clawmux send --to alloy "Check the auth module"
+    clawmux wait
     clawmux start
     clawmux reload
     clawmux monitor

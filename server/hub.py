@@ -309,7 +309,7 @@ async def browser_websocket(ws: WebSocket):
         browser_clients.discard(ws)
         log.info("Clients remaining: %d", len(browser_clients))
         if not browser_clients:
-            # No clients left — unblock any waiting converse() calls
+            # No clients left — unblock any waiting audio queues
             for session in session_mgr.sessions.values():
                 if session.playback_done:
                     session.playback_done.set()
@@ -373,16 +373,15 @@ async def handle_browser_message(data: dict) -> None:
             await send_to_browser({"session_id": session_id, "type": "user_text", "text": text, "interjection": True, "msg_id": umid})
             history.append(session.voice, session.label, "user", text, _hist_prefix(session), msg_id=umid)
 
-            # If agent is in an active converse call waiting for audio, inject
-            # the interjection as audio queue input so it gets picked up immediately
+            # If agent is in wait mode, inject via audio queue for immediate pickup
             if session.in_wait:
-                log.info("[%s] Agent in converse, injecting interjection via audio queue", session_id)
+                log.info("[%s] Agent in wait, injecting interjection via audio queue", session_id)
                 session.text_override = " ... ".join(session.interjections)
                 session.interjections.clear()
                 history.clear_interjections(session.voice, _hist_prefix(session))
                 await session.audio_queue.put(b"__text__")
             elif session.work_dir:
-                # Agent NOT in converse — write to inbox for hook-based delivery
+                # Agent not in wait — write to inbox for hook-based delivery
                 # (PostToolUse/PreToolUse will pick it up via additionalContext)
                 sender_name = data.get("voice", session.voice or "user")
                 sender_name = sender_name.replace("af_", "").replace("am_", "").replace("bm_", "")
@@ -1052,7 +1051,7 @@ async def send_message(request: Request):
     sender_name = sender.voice.replace("af_", "").replace("am_", "").replace("bm_", "")
     recip_name = recipient.voice.replace("af_", "").replace("am_", "").replace("bm_", "")
 
-    # Always use converse pipeline for inter-agent messages (no tmux injection)
+    # Send via broker (skip tmux injection for inter-agent messages)
     msg = await broker.send(
         sender=sender_id,
         recipient=recipient.session_id,
@@ -1066,16 +1065,16 @@ async def send_message(request: Request):
     )
 
     # Deliver via exactly ONE path to avoid duplicate delivery:
-    # - In converse → converse pipeline (immediate, agent sees it now)
-    # - Not in converse → inbox (hooks deliver via additionalContext)
+    # - In wait → audio queue (immediate, agent sees it now)
+    # - Not in wait → inbox (hooks deliver via additionalContext)
     formatted = f"[MSG id:{msg.id} from:{sender_name}] {content}"
     if recipient.in_wait and recipient.audio_queue:
-        # Converse pipeline — immediate delivery
+        # Wait mode — immediate delivery via audio queue
         recipient.interjections.append(formatted)
         recipient.text_override = " ... ".join(recipient.interjections)
         recipient.interjections.clear()
         await recipient.audio_queue.put(b"__text__")
-        log.info("[%s] Message %s injected via converse pipeline", recipient.session_id, msg.id)
+        log.info("[%s] Message %s injected via wait queue", recipient.session_id, msg.id)
     elif recipient.work_dir:
         # Inbox — hook-based delivery (PostToolUse/PreToolUse additionalContext)
         await _inbox_write_and_notify(recipient, {
@@ -1086,7 +1085,7 @@ async def send_message(request: Request):
         })
         log.info("[%s] Message %s written to inbox for hook delivery", recipient.session_id, msg.id)
     else:
-        # Fallback — no inbox, no converse, queue as interjection
+        # Fallback — no inbox, not in wait, queue as interjection
         recipient.interjections.append(formatted)
         log.info("[%s] Message %s queued as interjection (fallback)", recipient.session_id, msg.id)
 

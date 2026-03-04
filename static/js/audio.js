@@ -1530,7 +1530,7 @@ function _flushPendingAudio() {
   _pendingAudioSend = null;
   console.log('[flushPendingAudio] Sending stashed audio as interjection for', sessionId);
   // Send as interjection — hub will transcribe and queue it properly
-  // (regular audio would be drained as stale by the converse handler)
+  // (regular audio would be drained as stale by the wait handler)
   const reader = new FileReader();
   reader.onload = () => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -1569,7 +1569,7 @@ function interruptPlayback(sessionId) {
   updateMicUI();
   setStatus('Ready', sessionId);
 
-  // Send playback_done to unblock hub's converse() call
+  // Send playback_done to notify hub that audio finished
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ session_id: sessionId, type: 'playback_done' }));
   }

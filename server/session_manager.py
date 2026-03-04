@@ -42,14 +42,14 @@ class Session:
     status_text: str = ""  # last status sent to browser (e.g. "Speaking...", "Transcribing...")
     project: str = ""  # current project/repo name (set by agent via set_project_status)
     project_area: str = ""  # current sub-area (e.g. "frontend", "docs")
-    text_override: str = ""  # set by browser "text" message, consumed by handle_converse
+    text_override: str = ""  # set by browser "text" message or inbox injection
     text_mode: bool = False  # when True, skip TTS and just send text
     interjections: list[str] = field(default_factory=list)  # queued user messages sent while agent was busy
     model: str = ""  # per-session Claude model override (opus/sonnet/haiku); empty = use global default
     pending_model_restart: bool = False  # True when model was changed and needs restart after current turn
     restarting: bool = False  # True while model restart is in progress (skip health checks)
-    processing: bool = False  # True when agent is busy between converse calls
-    in_converse: bool = False  # True while handle_converse is running
+    processing: bool = False  # True when agent is actively working
+    in_wait: bool = False  # True while connected to wait WS (ready for input)
     compacting: bool = False  # True when Claude Code is compacting context
     unread_count: int = 0  # server-tracked unread message count
     # Per-session bridge state (set by hub after creation)
@@ -79,7 +79,8 @@ class Session:
             "project_area": self.project_area,
             "model": self.model,
             "processing": self.processing,
-            "in_converse": self.in_converse,
+            "in_wait": self.in_wait,
+            "in_converse": self.in_wait,  # backward compat for iOS client
             "compacting": self.compacting,
             "unread_count": self.unread_count,
             "work_dir": self.work_dir,
@@ -951,7 +952,7 @@ class SessionManager:
         # Skip sessions that aren't ready, are actively in converse, processing, or restarting
         if session.status != "ready":
             return
-        if session.in_converse or session.processing or session.restarting or session.compacting:
+        if session.in_wait or session.processing or session.restarting or session.compacting:
             return
         # Skip if max re-injection attempts exceeded
         if session.reinject_attempts >= session.max_reinject_attempts:
