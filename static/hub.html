@@ -1846,7 +1846,8 @@ function _sidebarState(voiceId) {
     if (st === 'starting') {
       stateClass = 'starting'; statusLabel = 'Starting...';
     } else if (st === 'thinking') {
-      stateClass = 'thinking'; statusLabel = 'Thinking...';
+      stateClass = 'thinking';
+      statusLabel = session.toolStatusText || 'Thinking...';
     } else if (st === 'speaking') {
       const unreadN = session ? (session.unreadCount || 0) : 0;
       if (unreadN > 0) {
@@ -1857,7 +1858,11 @@ function _sidebarState(voiceId) {
         statusLabel = 'Speaking...';
       }
     } else {
-      stateClass = 'active'; statusLabel = 'Idle';
+      if (session.toolStatusText) {
+        stateClass = 'thinking'; statusLabel = session.toolStatusText;
+      } else {
+        stateClass = 'active'; statusLabel = 'Idle';
+      }
     }
   }
   const isSelected = session && session.session_id === activeSessionId;
@@ -3671,8 +3676,15 @@ function handleMessage(data) {
   if (type === 'session_status') {
     const s = sessions.get(data.session_id);
     if (s) {
+      // Tool status updates from Claude Code hooks (status_text without status field)
+      if ('status_text' in data && !data.status) {
+        s.toolStatusText = data.status_text || '';
+        renderSidebar();
+        return;
+      }
       s.status = data.status;
       if (data.status === 'ready') {
+        s.toolStatusText = '';
         // Don't override to ready if session has unread messages (keep showing "New Message")
         if (!(s.unreadCount > 0)) {
           setSessionSidebarState(data.session_id, 'ready');
