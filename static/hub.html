@@ -445,13 +445,14 @@ body {
 }
 .msg.interjection {
   opacity: 0.75;
-  border: 1px dashed rgba(255,255,255,0.3);
+  border: 1px dashed var(--border-light);
   font-style: italic;
 }
 .msg.assistant {
   align-self: flex-start;
   cursor: pointer;
   background: var(--bg-card);
+  color: var(--text);
   border-bottom-left-radius: 6px;
   /* Voice color background applied via JS */
 }
@@ -1047,23 +1048,24 @@ body {
   #sidebar-overlay.visible { opacity: 1; pointer-events: auto; }
 }
 /* --- Markdown message styles --- */
-.msg.assistant .md-content { line-height: 1.6; }
+.msg.assistant .md-content { line-height: 1.6; color: var(--text); }
 .msg.assistant .md-content p { margin: 0.3em 0; }
 .msg.assistant .md-content p:first-child { margin-top: 0; }
 .msg.assistant .md-content p:last-child { margin-bottom: 0; }
 .msg.assistant .md-content h1, .msg.assistant .md-content h2, .msg.assistant .md-content h3,
 .msg.assistant .md-content h4, .msg.assistant .md-content h5, .msg.assistant .md-content h6 {
-  margin: 0.5em 0 0.3em; font-weight: 600;
+  margin: 0.5em 0 0.3em; font-weight: 600; color: var(--text);
 }
 .msg.assistant .md-content h1 { font-size: 1.2em; }
 .msg.assistant .md-content h2 { font-size: 1.1em; }
 .msg.assistant .md-content h3 { font-size: 1.0em; }
 .msg.assistant .md-content code {
-  background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 4px;
+  background: var(--md-code-bg, rgba(255,255,255,0.08)); padding: 1px 5px; border-radius: 4px;
   font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; font-size: 0.85em;
+  color: var(--text);
 }
 .msg.assistant .md-content pre {
-  background: rgba(0,0,0,0.4); border-radius: 8px; padding: 10px 14px;
+  background: var(--md-pre-bg, rgba(0,0,0,0.4)); border-radius: 8px; padding: 10px 14px;
   margin: 0.4em 0; overflow-x: auto; position: relative;
 }
 .msg.assistant .md-content pre .code-copy-btn {
@@ -1074,15 +1076,15 @@ body {
 .msg.assistant .md-content pre:hover .code-copy-btn { opacity: 1; }
 .msg.assistant .md-content pre .code-copy-btn:hover { background: rgba(128,128,128,0.5); }
 .msg.assistant .md-content code:not(pre code) { cursor: pointer; transition: background 0.15s; }
-.msg.assistant .md-content code:not(pre code):hover { background: rgba(255,255,255,0.15); }
-.msg.assistant .md-content code:not(pre code):active { background: rgba(255,255,255,0.25); }
+.msg.assistant .md-content code:not(pre code):hover { background: var(--md-code-hover-bg, rgba(255,255,255,0.15)); }
+.msg.assistant .md-content code:not(pre code):active { background: var(--md-code-active-bg, rgba(255,255,255,0.25)); }
 .msg.assistant .md-content pre code {
-  background: none; padding: 0; font-size: 0.82em; line-height: 1.5; color: #e0e0e0;
+  background: none; padding: 0; font-size: 0.82em; line-height: 1.5; color: var(--md-pre-code-color, #e0e0e0);
 }
 .msg.assistant .md-content ul, .msg.assistant .md-content ol {
   margin: 0.3em 0; padding-left: 1.4em;
 }
-.msg.assistant .md-content li { margin: 0.15em 0; }
+.msg.assistant .md-content li { margin: 0.15em 0; color: var(--text); }
 .msg.assistant .md-content blockquote {
   border-left: 3px solid var(--text-tertiary); padding-left: 10px;
   margin: 0.4em 0; color: var(--text-secondary); font-style: italic;
@@ -1093,26 +1095,34 @@ body {
   border-collapse: collapse; margin: 0.4em 0; font-size: 0.85em;
 }
 .msg.assistant .md-content th, .msg.assistant .md-content td {
-  border: 1px solid var(--border); padding: 4px 8px;
+  border: 1px solid var(--border); padding: 4px 8px; color: var(--text);
 }
-.msg.assistant .md-content th { background: rgba(255,255,255,0.05); }
+.msg.assistant .md-content th { background: var(--md-th-bg, rgba(255,255,255,0.05)); }
 .msg.assistant .md-content hr { border: none; border-top: 1px solid var(--border); margin: 0.5em 0; }
 .msg.assistant .md-content img { max-width: 100%; border-radius: 6px; }
+.msg.assistant .md-content strong { color: var(--text); }
+.msg.assistant .md-content em { color: var(--text-secondary); }
 /* KaTeX overrides */
-.msg.assistant .md-content .katex { font-size: 0.95em; }
+.msg.assistant .md-content .katex { font-size: 0.95em; color: var(--text); }
 .msg.assistant .md-content .katex-display { margin: 0.4em 0; overflow-x: auto; }
-/* Light mode overrides */
+/* Light mode markdown overrides */
 @media (prefers-color-scheme: light) {
-  .msg.assistant .md-content code { background: rgba(0,0,0,0.06); }
-  .msg.assistant .md-content pre { background: rgba(0,0,0,0.06); }
-  .msg.assistant .md-content pre code { color: #1a1a1a; }
+  :root {
+    --md-code-bg: rgba(0,0,0,0.06);
+    --md-pre-bg: rgba(0,0,0,0.06);
+    --md-pre-code-color: #1a1a1a;
+    --md-code-hover-bg: rgba(0,0,0,0.10);
+    --md-code-active-bg: rgba(0,0,0,0.16);
+    --md-th-bg: rgba(0,0,0,0.04);
+  }
 }
 </style>
 <!-- Markdown rendering: marked.js + DOMPurify + highlight.js + KaTeX -->
 <script src="https://cdn.jsdelivr.net/npm/marked@15/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/highlight.min.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github-dark.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github.min.css" media="(prefers-color-scheme: light)">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.css">
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16/dist/contrib/auto-render.min.js"></script>
@@ -3902,6 +3912,11 @@ function playAudio(sessionId, b64data, startOffset = 0) {
   currentAudio = { playbackId, sessionId, source: null, b64data, _startTime: null };
   if (sessionId === activeSessionId) updateMicUI();
 
+  // Capture pending karaoke words NOW (synchronously) before async decode,
+  // to avoid race where a new message's karaokeSetupMessage overwrites them
+  const capturedKaraokeWords = _pendingKaraokeWords.get(sessionId) || null;
+  if (capturedKaraokeWords) _pendingKaraokeWords.delete(sessionId);
+
   const cleanup = () => {
     if (currentAudio && currentAudio.playbackId === playbackId) currentAudio = null;
     updateMicUI();
@@ -3944,12 +3959,10 @@ function playAudio(sessionId, b64data, startOffset = 0) {
       if (currentAudio) { currentAudio.source = source; currentAudio.decodedBuffer = buf; currentAudio._startTime = audioCtx.currentTime - startOffset; currentAudio._padOffset = usePad ? padSec : 0; }
       playbackStartTime = audioCtx.currentTime;
       playbackPaused = false;
-      // Start karaoke if we have pending words for this session (shift timestamps for padding)
-      const pendingWords = _pendingKaraokeWords.get(sessionId);
-      if (pendingWords) {
-        _pendingKaraokeWords.delete(sessionId);
-        if (usePad) pendingWords.forEach(w => { w.start_time += padSec; w.end_time += padSec; });
-        karaokeStart(currentAudio, pendingWords);
+      // Start karaoke if we captured pending words for this playback (shift timestamps for padding)
+      if (capturedKaraokeWords) {
+        if (usePad) capturedKaraokeWords.forEach(w => { w.start_time += padSec; w.end_time += padSec; });
+        karaokeStart(currentAudio, capturedKaraokeWords);
       }
       const _onended = () => { if (!playbackPaused) { stopPlaybackVAD(); karaokeStop(); sendDone(); } };
       source.onended = _onended;
