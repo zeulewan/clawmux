@@ -4,17 +4,12 @@ Detailed release history and upcoming work. Each version page includes checklist
 
 ## Current
 
-- [v0.6.0 — Agent Orchestration & Workspace](v0.6.0.md): Project folders, workspace management, agent personalities, sub-agent workers.
-  - [Project Folders Spec](v0.6.0-projects.md): Full architecture spec for multi-project support.
-
-## Future
-
-- [v0.7.0 — ClawMux CLI & Multi-Provider](v0.7.0/index.md): Replace MCP server with CLI, multi-provider backend, decentralized hub.
-  - [ClawMux CLI](v0.5.0/cli.md): Replace MCP server with a CLI tool for voice converse and inter-agent messaging. Fire-and-forget, wait-for-ack, and wait-for-response modes. Tmux injection for message delivery.
+- [v0.6.0 — Hook-Based Agent Communication](v0.6.0.md): Replace tmux-injection messaging with Claude Code hooks for reliable, event-driven delivery. Unified `send`/`wait` commands, message threading, inbox-based architecture.
 
 ## History
 
-- [v0.5.0 — Polish & Reliability](v0.5.0/index.md): Inter-agent messaging, hub stability, browser bug fixes, UX polish.
+- [v0.5.0 — Polish & Reliability](v0.5.0/index.md): Inter-agent messaging, hub stability, browser bug fixes, UX polish. ClawMux CLI.
+  - [ClawMux CLI](v0.5.0/cli.md): CLI tool for voice converse and inter-agent messaging.
 - [v0.4.0 — iOS App](v0.4.0.md)
 - [v0.3.0 — Multi-Session](v0.3.0.md)
 - [v0.2.0 — Voice Modes](v0.2.0.md)
@@ -31,5 +26,6 @@ Detailed release history and upcoming work. Each version page includes checklist
 
 ## Reference
 
-- [CLI Messaging Design](../reference/cli-messaging.md): Full technical spec for the ClawMux CLI — commands, message format, acknowledgment flow, hub architecture changes.
-- [Orchestration Reference](../reference/orchestration.md): Session model, spawn flow, worker CLAUDE.md template, message routing, resource limits.
+- [Project Folders Spec](v0.6.0-projects.md): Multi-project architecture (shipped in v0.5.x).
+- [CLI Messaging Design](../reference/cli-messaging.md): Full technical spec for the ClawMux CLI.
+- [Orchestration Reference](../reference/orchestration.md): Session model, spawn flow, worker template, message routing, resource limits.

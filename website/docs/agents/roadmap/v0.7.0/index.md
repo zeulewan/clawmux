@@ -1,44 +1,35 @@
-# v0.7.0 - ClawMux CLI & Multi-Provider
+# v0.7.0 — Direct API & Multi-Provider
 
-Replace the MCP server with the ClawMux CLI. Add multi-provider support and decentralize the hub.
+Migrate from Claude Code CLI to direct Anthropic API access. Add pluggable backend support for multiple AI providers.
 
-## ClawMux CLI
+## Direct API Migration
 
-The MCP server is retired in favor of `clawmux`, a CLI tool for voice converse and inter-agent messaging. Any agent runtime that can run bash — Claude Code, OpenClaw, Codex — uses the same interface. The browser UI gets a right-click menu on sessions to launch with either MCP (legacy) or CLI during the migration period.
+Replace the Claude Code process layer with direct `@anthropic-ai/sdk` streaming. Adopt OpenClaw-style architecture:
 
-Full spec: [CLI Messaging Design](../../reference/cli-messaging.md)
-
-- [ ] `clawmux converse` — speak and listen, replacing the MCP converse tool.
-- [ ] `clawmux send` — inter-agent messaging with fire-and-forget, wait-for-ack, and wait-for-response modes.
-- [ ] `clawmux ack` / `clawmux reply` — acknowledge and respond to injected messages.
-- [ ] `clawmux status` — hub overview and per-agent detail (idle, thinking, speaking, working on X).
-- [ ] `clawmux start` / `clawmux stop` — hub lifecycle management.
-- [ ] Hub message broker — in-memory message tracking with lifecycle states (pending → ack → responded → failed).
-- [ ] Tmux injection — deliver messages via `tmux send-keys` with structured `[MSG ...]` prefix.
-- [ ] Right-click session menu — launch with MCP or CLI.
-
-## Decentralized Hub
-
-- [ ] Configurable STT/TTS URLs — run agents on a local machine, use Kokoro and Whisper from a remote workstation.
-
-## Status Visibility
-
-Agents push status updates between converse calls so the browser shows "Working" or "Reading files..." instead of just "Ready." Idle timeout after 60 seconds of silence.
+- [ ] Direct `client.messages.stream()` calls instead of Claude Code CLI
+- [ ] Session lane + global lane concurrency control for multi-agent coordination
+- [ ] JSONL session files for conversation persistence and resume
+- [ ] Block reply pipeline adapted for TTS segment delivery
+- [ ] Native tool definitions (read, write, exec, send, converse) registered via API
+- [ ] Context window management with auto-compaction
 
 ## Multi-Provider Backend
 
-The hub gets a pluggable backend interface so it can run sessions through Claude Code (tmux), OpenClaw (Gateway WebSocket), or OpenAI-compatible agents. All backends implement the same spawn/terminate/message interface. The frontend doesn't know which backend is underneath.
+Pluggable backend interface so the hub can run sessions through different AI providers:
 
-- [ ] Backend interface — abstract spawn, terminate, send, and status behind a common interface.
-- [ ] Claude Code backend — current tmux-based session management, extracted into the interface.
-- [ ] OpenClaw backend — spawn and manage OpenClaw sessions via Gateway WebSocket.
-- [ ] OpenAI backend — support OpenAI-compatible agents.
+- [ ] Backend interface — abstract spawn, terminate, send, and status behind a common interface
+- [ ] Claude Code backend — current tmux-based session management (legacy, for migration period)
+- [ ] Anthropic API backend — direct streaming via SDK
+- [ ] OpenClaw backend — spawn and manage sessions via Gateway WebSocket
+- [ ] OpenAI-compatible backend — support OpenAI and compatible agents
 
-## Deferred from v0.5.0
+## Decentralized Hub
 
-- [ ] Hold-aware timeout — exempt sessions with pending converse calls from inactivity timeout.
-- [ ] Streaming TTS — stream audio chunks to reduce time-to-first-audio.
-- [ ] One-command setup — single install script.
-- [ ] Code block rendering — render code blocks in agent responses.
-- [ ] Auto mode cancel — cancel button should temp-pause auto mode, not restart recording.
-- [ ] Live reload — hub watches static files and triggers browser reload via WebSocket.
+- [ ] Configurable STT/TTS URLs — run agents on a local machine, use Kokoro and Whisper from a remote workstation
+- [ ] Streaming TTS — stream audio chunks to reduce time-to-first-audio
+
+## Other
+
+- [ ] One-command setup — single install script
+- [ ] Code block rendering — render code blocks in agent responses
+- [ ] Hold-aware timeout — exempt sessions with pending calls from inactivity timeout
