@@ -166,8 +166,15 @@ function handleMessage(data) {
           existing.project = s.project || existing.project || '';
           existing.project_area = s.project_area || existing.project_area || '';
           existing.unreadCount = s.unread_count || 0;
+          // Restore tool status text from server (persists across reloads)
+          if (s.status_text) {
+            existing.toolStatusText = s.status_text;
+          }
           // Restore session state from server
-          if (s.processing && existing.sessionState !== 'processing') {
+          if (s.in_wait) {
+            setSessionState(s.session_id, 'idle');
+            setSessionSidebarState(s.session_id, 'idle');
+          } else if (s.processing && existing.sessionState !== 'processing') {
             setSessionState(s.session_id, 'processing');
           } else if (!s.processing && existing.sessionState === 'processing') {
             setSessionState(s.session_id, 'idle');
@@ -255,6 +262,7 @@ function handleMessage(data) {
         if (data.agent_idle) {
           s.toolStatusText = '';
           setSessionSidebarState(data.session_id, 'idle');
+          setSessionState(data.session_id, 'idle');
           hideThinking(data.session_id);
           stopThinkingSound();
         } else if (data.status_text) {
