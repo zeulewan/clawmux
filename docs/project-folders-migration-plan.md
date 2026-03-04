@@ -17,7 +17,7 @@ Multi-project workspaces where each project gets its own isolated set of agents,
 ### Directory Layout
 
 ```
-/tmp/voice-hub-sessions/
+/tmp/clawmux-sessions/
 ├── af_sky/          # ← "default" project (flat, legacy)
 ├── am_onyx/
 ├── ...
@@ -30,7 +30,7 @@ Multi-project workspaces where each project gets its own isolated set of agents,
     └── ...
 ```
 
-The flat layout (`/tmp/voice-hub-sessions/{voice_id}`) continues to work as the **implicit "default" project**. Named projects live in subdirectories. No migration of existing directories ever happens.
+The flat layout (`/tmp/clawmux-sessions/{voice_id}`) continues to work as the **implicit "default" project**. Named projects live in subdirectories. No migration of existing directories ever happens.
 
 ### Data Layout
 
@@ -59,13 +59,13 @@ data/
     "default": {
       "name": "Default",
       "created": "2026-03-03T00:00:00Z",
-      "session_dir": "/tmp/voice-hub-sessions",
+      "session_dir": "/tmp/clawmux-sessions",
       "flat_layout": true
     },
     "zeuldocs": {
       "name": "ZeulDocs",
       "created": "2026-03-03T12:00:00Z",
-      "session_dir": "/tmp/voice-hub-sessions/zeuldocs",
+      "session_dir": "/tmp/clawmux-sessions/zeuldocs",
       "flat_layout": false
     }
   },
@@ -181,7 +181,7 @@ Changes:
 ### Phase 2: Enable project creation
 
 1. Add API endpoints and UI for creating new projects
-2. New projects get their own subdirectory under `/tmp/voice-hub-sessions/`
+2. New projects get their own subdirectory under `/tmp/clawmux-sessions/`
 3. New projects spawn fresh agents — no migration from default
 4. Users can switch between projects in the UI
 
@@ -199,10 +199,10 @@ After confirming the new project-based agents are working correctly and all desi
 2. **Verify history is transferred** — spot-check that conversation history in the new project matches the originals
 3. **Terminate old flat-layout sessions** — kill tmux sessions for the old `voice-{name}` agents
 4. **Clean up old state files** — remove `.session.json` and `.mcp.json` from flat-layout voice dirs
-5. **Archive old session directories** — move `/tmp/voice-hub-sessions/{voice_id}/` to `/tmp/voice-hub-sessions/.archive/{voice_id}/` (not delete — keep as safety net)
+5. **Archive old session directories** — move `/tmp/clawmux-sessions/{voice_id}/` to `/tmp/clawmux-sessions/.archive/{voice_id}/` (not delete — keep as safety net)
 6. **Archive old history** — copy `data/history/{voice_id}.json` and `data/history/default/{voice_id}.json` to `data/archive/default/`
 7. **Update projects.json** — mark the "default" project as `"decommissioned": true` or remove it
-8. **Clean Claude Code session data** — remove the old `~/.claude/projects/-tmp-voice-hub-sessions-{voice_id}/` directories (these are the JSONL transcripts keyed to the old paths)
+8. **Clean Claude Code session data** — remove the old `~/.claude/projects/-tmp-clawmux-sessions-{voice_id}/` directories (these are the JSONL transcripts keyed to the old paths)
 9. **Update hub config** — if the flat layout is fully decommissioned, the new project becomes the new "default"
 
 **Safety net:** Keep the `.archive/` directories for at least 7 days before permanent deletion. If anything breaks, restore from archive by moving directories back and reverting `projects.json`.
