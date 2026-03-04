@@ -109,7 +109,7 @@ def cmd_wait(args):
                             elif msg_type == "agent":
                                 print(f"[MSG id:{msg_id} from:{sender}] {content}")
                             elif msg_type == "voice":
-                                print(f"[VOICE from:{sender}] {content}")
+                                print(f"[VOICE id:{msg_id} from:{sender}] {content}")
                             else:
                                 print(f"[SYSTEM] {content}")
                         return
