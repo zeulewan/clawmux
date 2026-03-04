@@ -430,6 +430,14 @@ async def handle_browser_message(data: dict) -> None:
                 "msg_id": msg_id,
                 "ack_id": ack_id,
             })
+            # Deliver ack to agent inbox so it gets notified
+            if session.work_dir:
+                await _inbox_write_and_notify(session, {
+                    "from": "user",
+                    "type": "ack",
+                    "content": "",
+                    "parent_id": msg_id,
+                })
 
 
 # --- Wait WebSocket (push-based inbox delivery for CLI) ---
