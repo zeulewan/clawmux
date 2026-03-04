@@ -1406,6 +1406,7 @@ body {
   <div class="ctx-item" id="ctx-launch">Launch Session</div>
   <div class="ctx-item" id="ctx-mark-unread">Mark as Unread</div>
   <div class="ctx-item" id="ctx-mark-read">Mark as Read</div>
+  <div class="ctx-item" id="ctx-restart">Restart Agent</div>
   <div class="ctx-item" id="ctx-reset">Reset History</div>
   <div class="ctx-item" id="ctx-terminate" style="color:#e63946;">Terminate Session</div>
 </div>
@@ -2239,6 +2240,7 @@ function showContextMenu(e, sessionId, voiceId) {
   // Show/hide items based on session state
   const hasSession = !!sessionId;
   document.getElementById('ctx-terminate').style.display = hasSession ? 'block' : 'none';
+  document.getElementById('ctx-restart').style.display = hasSession ? 'block' : 'none';
   document.getElementById('ctx-launch').style.display = hasSession ? 'none' : 'block';
   const sess = sessionId ? sessions.get(sessionId) : null;
   const hasUnread = sess && (sess.unreadCount || 0) > 0;
@@ -2263,6 +2265,19 @@ document.getElementById('ctx-launch').addEventListener('click', () => {
 document.getElementById('ctx-terminate').addEventListener('click', () => {
   if (contextMenuSessionId) terminateSession(contextMenuSessionId);
   hideContextMenu();
+});
+
+document.getElementById('ctx-restart').addEventListener('click', async () => {
+  const sid = contextMenuSessionId;
+  if (!sid) { hideContextMenu(); return; }
+  hideContextMenu();
+  try {
+    const resp = await fetch(`/api/sessions/${sid}/restart`, { method: 'POST' });
+    const data = await resp.json();
+    if (data.error) console.error('Restart error:', data.error);
+  } catch (e) {
+    console.error('Restart error:', e);
+  }
 });
 
 document.getElementById('ctx-mark-unread').addEventListener('click', () => {

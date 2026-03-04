@@ -787,6 +787,25 @@ async def terminate_session(session_id: str):
     return JSONResponse({"status": "terminated"})
 
 
+@app.post("/api/sessions/{session_id}/restart")
+async def restart_session(session_id: str):
+    """Kill and respawn an agent session, preserving the voice and project."""
+    session = session_mgr.sessions.get(session_id)
+    if not session:
+        return JSONResponse({"error": "session not found"}, status_code=404)
+    voice = session.voice
+    project_slug = session.project_slug
+    # Terminate the existing session
+    await session_mgr.terminate_session(session_id)
+    await send_to_browser({"type": "session_terminated", "session_id": session_id})
+    # Respawn with the same voice and project
+    new_session = await session_mgr.spawn_session(voice=voice, project=project_slug)
+    await send_to_browser({"type": "session_spawned", "session": new_session.to_dict()})
+    new_session.processing = True
+    await send_to_browser({"session_id": new_session.session_id, "type": "thinking"})
+    return JSONResponse({"status": "restarted", "session_id": new_session.session_id})
+
+
 @app.post("/api/shutdown")
 async def shutdown_hub(request: Request):
     """Shut down the hub. Use mode=reload to keep sessions alive."""
