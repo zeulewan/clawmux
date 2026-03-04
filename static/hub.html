@@ -2232,9 +2232,12 @@ function stopActiveAudio({ stashForResume = false } = {}) {
   karaokeStop();
   // Update sidebar state — but not if stashing for resume (session will still be 'speaking')
   if (!stashForResume && stoppedSessionId) {
-    const sess = sessions.get(stoppedSessionId);
-    if (sess && sess.isThinking) {
+    const st = getSessionState(stoppedSessionId);
+    if (st === 'processing') {
       setSessionSidebarState(stoppedSessionId, 'working');
+    } else if (st === 'speaking') {
+      // Audio stopped, transition to idle
+      setSessionState(stoppedSessionId, 'idle');
     } else {
       setSessionSidebarState(stoppedSessionId, 'idle');
     }
@@ -2300,8 +2303,8 @@ function switchTab(sessionId, manual = false) {
       sessionModelEl.style.display = 'inline-block';
     }
 
-    // Resume thinking sound if this session is thinking
-    if (s.isThinking) startThinkingSound(sessionId);
+    // Resume thinking sound if this session is processing
+    if (getSessionState(sessionId) === 'processing') startThinkingSound(sessionId);
 
     // Play buffered audio if any accumulated while tab was inactive
     if (s.audioBuffer && s.audioBuffer.length > 0) {
@@ -2662,8 +2665,8 @@ function renderChat(forceScroll = false) {
       chatArea.appendChild(createMsgEl(msg.role, msg.text, vc, s.voice, msg));
     }
   }
-  // Re-show thinking indicator if session is thinking
-  if (s.isThinking) {
+  // Re-show thinking indicator if session is processing
+  if (getSessionState(activeSessionId) === 'processing') {
     const div = document.createElement('div');
     div.className = 'msg thinking';
     div.id = `thinking-${activeSessionId}`;
@@ -2802,10 +2805,10 @@ async function addSession(data, autoSwitch = false) {
     startThinkingSound(data.session_id);
   }
 
-  // Restore awaiting input state if session is idle (not processing, not in converse)
-  if (isReady && !data.processing && !data.in_converse) {
+  // Restore session state from server
+  if (isReady && !data.processing && !data.in_wait) {
     const sess = sessions.get(data.session_id);
-    if (sess) sess.awaitingInput = true;
+    if (sess && !sess.sessionState) sess.sessionState = 'idle';
   }
 }
 
@@ -3458,7 +3461,7 @@ function startThinkingVAD(sessionId) {
     thinkingVadInterval = setInterval(() => {
       // Stop if session is no longer thinking, or we're already recording
       const s = sessions.get(sessionId);
-      if (!s || s.awaitingInput || recording) {
+      if (!s || s.sessionState === 'listening' || s.sessionState === 'idle' || recording) {
         stopThinkingVAD();
         return;
       }
@@ -3552,6 +3555,110 @@ function hideThinking(sessionId) {
   if (s) s.isThinking = false;
   const el = document.getElementById(`thinking-${sessionId}`);
   if (el) el.remove();
+}
+
+// --- Session state machine ---
+// States: 'idle' | 'listening' | 'processing' | 'speaking'
+// Replaces overlapping booleans: awaitingInput, isThinking, userSpokeThisCycle
+function setSessionState(sessionId, newState) {
+  const s = sessions.get(sessionId);
+  if (!s) return;
+  const prev = s.sessionState || 'idle';
+  if (prev === newState) return;
+  s.sessionState = newState;
+
+  // Sync legacy boolean flags (for any code not yet migrated)
+  s.awaitingInput = (newState === 'listening');
+  s.isThinking = (newState === 'processing');
+  s.userSpokeThisCycle = false;
+
+  // Side effects per state
+  if (newState === 'idle') {
+    hideThinking(sessionId);
+    stopThinkingSound();
+    stopThinkingVAD();
+    setSessionSidebarState(sessionId, 'idle');
+    if (sessionId === activeSessionId) {
+      setStatus('Ready', sessionId);
+      micBtn.disabled = false;
+      updateMicUI();
+    }
+  } else if (newState === 'listening') {
+    hideThinking(sessionId);
+    stopThinkingSound();
+    stopThinkingVAD();
+    // Promote interjection messages (agent is now listening = acknowledged them)
+    if (sessionId === activeSessionId) {
+      chatArea.querySelectorAll('.msg.interjection').forEach(el => el.classList.remove('interjection'));
+    }
+    s.messages.forEach(m => { if (m.role === 'user interjection') m.role = 'user'; });
+    setSessionSidebarState(sessionId, 'listening');
+    if (sessionId === activeSessionId) {
+      micBtn.disabled = false;
+      updateMicUI();
+    }
+  } else if (newState === 'processing') {
+    showThinking(sessionId);
+    startThinkingSound(sessionId);
+    setSessionSidebarState(sessionId, 'working');
+    if (sessionId === activeSessionId) {
+      setStatus('Thinking...', sessionId);
+      startThinkingVAD(sessionId);
+    }
+  } else if (newState === 'speaking') {
+    hideThinking(sessionId);
+    stopThinkingSound();
+    stopThinkingVAD();
+    setSessionSidebarState(sessionId, 'speaking');
+    if (sessionId === activeSessionId) {
+      setStatus('Speaking...', sessionId);
+    }
+  }
+}
+
+function getSessionState(sessionId) {
+  const s = sessions.get(sessionId);
+  return s ? (s.sessionState || 'idle') : 'idle';
+}
+
+function _handleListeningUI(session_id, s) {
+  // Set up recording/input UI when entering listening state
+  if (recording && recordingSessionId === session_id) {
+    // Already recording for this session
+  } else if (pendingListenSessionId === session_id) {
+    // Already waiting for manual mic click
+  } else if (inputMode === 'typing') {
+    if (session_id === activeSessionId) {
+      setStatus('Type your message', session_id);
+      textInput.focus();
+    } else {
+      s.pendingListen = true;
+      s.statusText = 'Waiting...';
+    }
+  } else if (micMuted) {
+    sendSilentAudio(session_id);
+  } else if (session_id === activeSessionId && autoMode && inputMode === 'voice') {
+    cueListening();
+    startRecording(session_id);
+  } else if (session_id === activeSessionId && inputMode === 'voice' && !autoMode) {
+    cueListening();
+    pendingListenSessionId = session_id;
+    updateMicUI();
+    setStatus(isMobile ? 'Tap to Record' : 'Tap or Hold Space');
+  } else {
+    s.pendingListen = true;
+    s.statusText = 'Waiting...';
+  }
+}
+
+function _checkPendingListen(sessionId) {
+  // Called after audio playback completes — check if a listening transition was deferred
+  const s = sessions.get(sessionId);
+  if (s && s.pendingListenAfterPlayback) {
+    s.pendingListenAfterPlayback = false;
+    setSessionState(sessionId, 'listening');
+    _handleListeningUI(sessionId, s);
+  }
 }
 
 // --- Thinking sound ---
@@ -3727,24 +3834,14 @@ function handleMessage(data) {
           existing.project = s.project || existing.project || '';
           existing.project_area = s.project_area || existing.project_area || '';
           existing.unreadCount = s.unread_count || 0;
-          // Restore processing/thinking state
-          if (s.processing && !existing.isThinking) {
-            existing.isThinking = true;
-            existing.sidebarState = 'working';
-            showThinking(s.session_id);
-            startThinkingSound(s.session_id);
-          } else if (!s.processing && existing.isThinking) {
-            existing.isThinking = false;
-            hideThinking(s.session_id);
-            stopThinkingSound(s.session_id);
+          // Restore session state from server
+          if (s.processing && existing.sessionState !== 'processing') {
+            setSessionState(s.session_id, 'processing');
+          } else if (!s.processing && existing.sessionState === 'processing') {
+            setSessionState(s.session_id, 'idle');
           }
           // Restore compacting state
           existing.compacting = !!s.compacting;
-          // Restore awaiting input
-          const isReady = s.status === 'ready' || s.mcp_connected;
-          if (isReady && !s.processing && !s.in_converse) {
-            existing.awaitingInput = true;
-          }
         }
       }
     }
@@ -3908,40 +4005,35 @@ function handleMessage(data) {
   if (!s) return;
 
   if (type === 'assistant_text') {
-    hideThinking(session_id);
-    stopThinkingSound();
-    stopThinkingVAD();
-    s.userSpokeThisCycle = false;
-    // Only set awaitingInput if this is a converse cycle (not fire-and-forget speak)
-    if (!data.fire_and_forget) {
-      s.awaitingInput = true;  // Converse cycle started — expect normal input flow
-    }
-    // Don't change sidebar state here — let it stay as working until audio arrives
-    // to avoid a brief flash of 'idle' between working and speaking
-    // Promote interjection messages to normal user messages (agent acknowledged them)
-    if (session_id === activeSessionId) {
-      chatArea.querySelectorAll('.msg.interjection').forEach(el => el.classList.remove('interjection'));
-    }
-    s.messages.forEach(m => { if (m.role === 'user interjection') m.role = 'user'; });
-    if (data.text && data.text.trim()) {
-      addMessage(session_id, 'assistant', data.text, { id: data.msg_id || null });
-    }
-    if (session_id !== activeSessionId) {
-      markSessionUnread(session_id);
+    if (data.fire_and_forget) {
+      // Fire-and-forget speak: just add message to chat, don't change state
+      if (data.text && data.text.trim()) {
+        addMessage(session_id, 'assistant', data.text, { id: data.msg_id || null });
+      }
+      if (session_id !== activeSessionId) {
+        markSessionUnread(session_id);
+      } else {
+        clearSessionUnread(session_id);
+      }
     } else {
-      // Active session — auto-clear server unread since user is viewing
-      clearSessionUnread(session_id);
+      // Converse-driven response: transition to listening state
+      setSessionState(session_id, 'listening');
+      if (data.text && data.text.trim()) {
+        addMessage(session_id, 'assistant', data.text, { id: data.msg_id || null });
+      }
+      if (session_id !== activeSessionId) {
+        markSessionUnread(session_id);
+      } else {
+        clearSessionUnread(session_id);
+      }
     }
   } else if (type === 'user_text') {
     if (!data.text || !data.text.trim()) return;  // Skip blank user messages
     addMessage(session_id, data.interjection ? 'user interjection' : 'user', data.text, { id: data.msg_id || null });
-    showThinking(session_id);
-    startThinkingSound(session_id);
-    s.userSpokeThisCycle = true;
-    setSessionSidebarState(session_id, 'working');
+    setSessionState(session_id, 'processing');
   } else if (type === 'audio') {
     s.status = 'active';
-    setSessionSidebarState(session_id, 'speaking');
+    setSessionState(session_id, 'speaking');
     if (data.words && data.words.length) karaokeSetupMessage(session_id, data.words);
     if (session_id === activeSessionId) {
       enqueueAudio(session_id, data.data);
@@ -3951,87 +4043,35 @@ function handleMessage(data) {
       s.statusText = 'Speaking...';
       if (!s.audioBuffer) s.audioBuffer = [];
       s.audioBuffer.push(data.data);
-      // Don't markSessionUnread here — assistant_text already counted it
     }
   } else if (type === 'listening') {
-    s.awaitingInput = true;
-    if (recording && recordingSessionId === session_id) {
-      // Already recording for this session (e.g. voice interrupt started it)
-      setSessionSidebarState(session_id, 'listening');
-    } else if (pendingListenSessionId === session_id) {
-      // Already waiting for manual mic click on this session — ignore re-sent listening
-    } else if (inputMode === 'typing') {
-      // In typing mode: don't record, just focus the text input
-      if (session_id === activeSessionId) {
-        setStatus('Type your message', session_id);
-        textInput.focus();
-        setSessionSidebarState(session_id, 'listening');
-      } else {
-        s.pendingListen = true;
-        s.statusText = 'Waiting...';
-        setSessionSidebarState(session_id, 'listening');
-      }
-    } else if (micMuted) {
-      // Mic muted: send empty audio so hub doesn't hang
-      sendSilentAudio(session_id);
-    } else if (session_id === activeSessionId && autoMode && inputMode === 'voice') {
-      cueListening();
-      startRecording(session_id);
-      setSessionSidebarState(session_id, 'listening');
-    } else if (session_id === activeSessionId && inputMode === 'voice' && !autoMode) {
-      // Manual voice mode: show Record button and wait for tap or Space
-      cueListening();
-      pendingListenSessionId = session_id;
-      updateMicUI();
-      setStatus(isMobile ? 'Tap to Record' : 'Tap or Hold Space');
-      setSessionSidebarState(session_id, 'listening');
+    // Defer transition to listening if audio is still playing (speak → wait race)
+    const isPlaying = (currentAudio && currentAudio.sessionId === session_id) ||
+                      (currentBufferedPlayer && currentBufferedPlayer.sessionId === session_id) ||
+                      (s.audioBuffer && s.audioBuffer.length > 0);
+    if (isPlaying) {
+      s.pendingListenAfterPlayback = true;
     } else {
-      // Background tab — mark pending
-      s.pendingListen = true;
-      s.statusText = 'Waiting...';
-      setSessionSidebarState(session_id, 'listening');
+      setSessionState(session_id, 'listening');
+      _handleListeningUI(session_id, s);
     }
   } else if (type === 'thinking') {
-    showThinking(session_id);
-    startThinkingSound(session_id);
-    setSessionSidebarState(session_id, 'working');
+    setSessionState(session_id, 'processing');
   } else if (type === 'status') {
     s.statusText = data.text;
     if (session_id === activeSessionId) setStatus(data.text, session_id);
     else renderSidebar();
   } else if (type === 'done') {
-    s.awaitingInput = false;
-    s.statusText = 'Ready';
-    s.status = 'ready';
-    if (session_id === activeSessionId) {
-      micBtn.disabled = false;
-      updateMicUI();
-    }
-    // Decide next state cleanly (no hide-then-show flash)
-    if (data.processing || s.userSpokeThisCycle) {
-      // Agent still processing — stay in or transition to thinking
-      s.userSpokeThisCycle = false;
-      showThinking(session_id);
-      startThinkingSound(session_id);
-      setSessionSidebarState(session_id, 'working');
-      if (session_id === activeSessionId) {
-        setStatus('Thinking...', session_id);
-        startThinkingVAD(session_id);
-      }
+    if (data.processing) {
+      setSessionState(session_id, 'processing');
     } else {
-      // Agent done — clear thinking state
-      hideThinking(session_id);
-      stopThinkingSound();
       const isPlaying = (currentAudio && currentAudio.sessionId === session_id) ||
                         (currentBufferedPlayer && currentBufferedPlayer.sessionId === session_id) ||
                         (s.audioBuffer && s.audioBuffer.length > 0);
-      if (isPlaying || (s.unreadCount || 0) > 0) {
-        // Leave sidebar as 'speaking' — will transition to ready when playback ends or tab switches
+      if (isPlaying) {
+        setSessionState(session_id, 'speaking');
       } else {
-        setSessionSidebarState(session_id, 'idle');
-      }
-      if (session_id === activeSessionId) {
-        setStatus('Ready', session_id);
+        setSessionState(session_id, 'idle');
       }
     }
   } else if (type === 'session_ended') {
@@ -4117,16 +4157,17 @@ function playAudio(sessionId, b64data, startOffset = 0) {
       return; // Don't send playback_done yet — more audio to play
     }
     _audioPlaying = false;
-    // Transition sidebar from speaking to idle (unless agent is working)
-    const sess = sessions.get(sessionId);
-    if (sess && sess.isThinking) {
+    // Use state machine for transition after playback
+    const st = getSessionState(sessionId);
+    if (st === 'speaking') {
+      setSessionState(sessionId, 'idle');
+    } else if (st === 'processing') {
       setSessionSidebarState(sessionId, 'working');
-    } else {
-      setSessionSidebarState(sessionId, 'idle');
     }
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ session_id: sessionId, type: 'playback_done' }));
     }
+    _checkPendingListen(sessionId);
   };
 
   // Resume audioCtx if suspended (Safari suspends until user gesture)
@@ -4479,16 +4520,17 @@ function playBufferedAudio(sessionId, chunks) {
       playbackPaused = false;
       updateMicUI();
       updateTransportBar();
-      // Transition sidebar: thinking if agent still processing, else ready
-      const sess = sessions.get(sessionId);
-      if (sess && sess.isThinking) {
+      // Use state machine for transition after playback
+      const st = getSessionState(sessionId);
+      if (st === 'speaking') {
+        setSessionState(sessionId, 'idle');
+      } else if (st === 'processing') {
         setSessionSidebarState(sessionId, 'working');
-      } else {
-        setSessionSidebarState(sessionId, 'idle');
       }
       if (!stopped && ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ session_id: sessionId, type: 'playback_done' }));
       }
+      _checkPendingListen(sessionId);
       return;
     }
     const chunk = chunks[i++];
@@ -4673,7 +4715,7 @@ function sendAudio(sessionId) {
         updateMicUI();
         // Restart thinking VAD to listen for more interjections
         const s = sessions.get(sessionId);
-        if (s && !s.awaitingInput && sessionId === activeSessionId) {
+        if (s && s.sessionState === 'processing' && sessionId === activeSessionId) {
           startThinkingVAD(sessionId);
         }
       }, 500);
@@ -4735,6 +4777,7 @@ function interruptPlayback(sessionId) {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ session_id: sessionId, type: 'playback_done' }));
   }
+  _checkPendingListen(sessionId);
 }
 
 // --- Mic button ---
@@ -4768,7 +4811,7 @@ micBtn.addEventListener('click', (e) => {
   } else if (activeSessionId) {
     // Check if agent is NOT awaiting input — record as interjection
     const s = sessions.get(activeSessionId);
-    if (s && !s.awaitingInput) {
+    if (s && s.sessionState !== 'listening') {
       interjectionMode = true;
     }
     startRecording(activeSessionId);
@@ -4796,9 +4839,9 @@ function pttStart(e) {
   if (!sid) return;
   if (pendingListenSessionId) pendingListenSessionId = null;
 
-  // Check if agent is NOT awaiting input — record as interjection
+  // Check if agent is NOT listening — record as interjection
   const s = sessions.get(sid);
-  if (s && !s.awaitingInput) {
+  if (s && s.sessionState !== 'listening') {
     interjectionMode = true;
   }
   startRecording(sid);
@@ -5267,7 +5310,7 @@ function sendTextMessage() {
   if (!text || !ws || ws.readyState !== WebSocket.OPEN || !activeSessionId) return;
   // Check if agent is NOT awaiting input — send as interjection
   const s = sessions.get(activeSessionId);
-  const isInterjection = s && !s.awaitingInput;
+  const isInterjection = s && s.sessionState !== 'listening';
   const msgType = isInterjection ? 'interjection' : 'text';
   ws.send(JSON.stringify({ session_id: activeSessionId, type: msgType, text }));
   textInput.value = '';
@@ -5535,26 +5578,16 @@ async function syncProcessingState() {
     for (const srv of serverSessions) {
       const s = sessions.get(srv.session_id);
       if (!s) continue;
+      const st = s.sessionState || 'idle';
       // Fix drift: server says processing but browser doesn't show thinking
-      if (srv.processing && !s.isThinking && !s.awaitingInput) {
-        console.log('[state-sync] Restoring thinking state for', srv.session_id);
-        showThinking(srv.session_id);
-        startThinkingSound(srv.session_id);
-        setSessionSidebarState(srv.session_id, 'working');
-        if (srv.session_id === activeSessionId) {
-          setStatus('Thinking...', srv.session_id);
-          startThinkingVAD(srv.session_id);
-        }
+      if (srv.processing && st !== 'processing' && st !== 'listening' && st !== 'speaking') {
+        console.log('[state-sync] Restoring processing state for', srv.session_id);
+        setSessionState(srv.session_id, 'processing');
       }
-      // Fix drift: server says NOT processing but browser stuck in thinking
-      if (!srv.processing && !srv.in_converse && s.isThinking && !s.awaitingInput) {
-        console.log('[state-sync] Clearing stale thinking state for', srv.session_id);
-        hideThinking(srv.session_id);
-        stopThinkingSound();
-        setSessionSidebarState(srv.session_id, 'idle');
-        if (srv.session_id === activeSessionId) {
-          setStatus('Ready', srv.session_id);
-        }
+      // Fix drift: server says NOT processing but browser stuck in processing
+      if (!srv.processing && !srv.in_wait && st === 'processing') {
+        console.log('[state-sync] Clearing stale processing state for', srv.session_id);
+        setSessionState(srv.session_id, 'idle');
       }
     }
   } catch (e) { /* network error — ignore */ }
