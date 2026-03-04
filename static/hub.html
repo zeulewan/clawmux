@@ -3452,6 +3452,8 @@ function connect() {
     if (_wsHasConnected) showCopyToast('Hub reconnected');
     _wsHasConnected = true;
     if (!activeSessionId) setStatus('Connected');
+    // Flush any audio that was recorded during disconnect
+    _flushPendingAudio();
     // Restore persisted settings
     fetch('/api/settings').then(r => r.json()).then(s => {
       autoMode = s.auto_record || false;
@@ -4435,6 +4437,7 @@ async function startRecording(sessionId) {
 }
 
 let discardRecording = false;
+let _pendingAudioSend = null; // { sessionId, blob, isInterjection } — stashed when WS disconnected
 
 function stopRecording(discard = false) {
   discardRecording = discard;
@@ -4465,14 +4468,16 @@ function cancelRecording() {
 let interjectionMode = false;  // true when recording an interjection (agent is busy)
 
 function sendAudio(sessionId) {
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
-    setStatus('Not connected');
-    return;
-  }
   const isInterjection = interjectionMode;
   interjectionMode = false;
-
   const blob = new Blob(audioChunks, { type: 'audio/webm' });
+
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    // Stash audio for retry after reconnect instead of dropping it
+    _pendingAudioSend = { sessionId, blob, isInterjection };
+    setStatus('Reconnecting — audio saved...');
+    return;
+  }
   if (isInterjection) {
     setStatus('Transcribing...', sessionId);
   } else {
@@ -4505,6 +4510,23 @@ function sendAudio(sessionId) {
   reader.onerror = () => {
     setStatus('Error reading audio');
     updateMicUI();
+  };
+  reader.readAsDataURL(blob);
+}
+
+function _flushPendingAudio() {
+  if (!_pendingAudioSend || !ws || ws.readyState !== WebSocket.OPEN) return;
+  const { sessionId, blob } = _pendingAudioSend;
+  _pendingAudioSend = null;
+  console.log('[flushPendingAudio] Sending stashed audio as interjection for', sessionId);
+  // Send as interjection — hub will transcribe and queue it properly
+  // (regular audio would be drained as stale by the converse handler)
+  const reader = new FileReader();
+  reader.onload = () => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const b64 = reader.result.split(',')[1];
+    ws.send(JSON.stringify({ session_id: sessionId, type: 'interjection', data: b64 }));
+    setStatus('Transcribing...', sessionId);
   };
   reader.readAsDataURL(blob);
 }
