@@ -1468,13 +1468,9 @@ body {
 
 <script src="/static/js/state.js"></script>
 <script src="/static/js/ws.js"></script>
-<script src="/static/js/audio.js"></script>
 <script>
-
-// --- DOM refs ---
+// --- DOM refs (loaded before audio.js which references these) ---
 const chatArea = document.getElementById('chat-area');
-/** Scroll chat to bottom only if user is already near the bottom (within 150px).
- *  Pass force=true to always scroll (e.g. after renderChat or tab switch). */
 function chatScrollToBottom(force = false) {
   if (force || chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150) {
     chatArea.scrollTop = chatArea.scrollHeight;
@@ -1486,6 +1482,9 @@ const micBtn = document.getElementById('mic');
 const micCancelBtn = document.getElementById('mic-cancel');
 const dot = document.getElementById('dot');
 const connLabel = document.getElementById('conn-label');
+</script>
+<script src="/static/js/audio.js"></script>
+<script>
 
 // --- Waveform & Audio Cues (extracted to js/audio.js) ---
 
