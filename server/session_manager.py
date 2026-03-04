@@ -565,10 +565,11 @@ class SessionManager:
             session_model = session.model or hub_config.CLAUDE_MODEL
             session.model = session_model  # Store effective model so browser can display it
             model_flag = f" --model {session_model}" if session_model != "opus" else ""
+            startup_prompt = "Run this exact command now: clawmux wait"
             if resuming:
-                claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag} --resume {claude_session_id}"
+                claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag} --resume {claude_session_id} '{startup_prompt}'"
             else:
-                claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag} --session-id {claude_session_id}"
+                claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag} --session-id {claude_session_id} '{startup_prompt}'"
             await self._run(
                 f'tmux send-keys -t {tmux_name} "{claude_cmd}" Enter'
             )
@@ -692,10 +693,11 @@ class SessionManager:
                     self.history_store.set_claude_session_id(session.voice, claude_session_id, hist_prefix)
 
         # Start Claude with --resume (if session exists) or --session-id (fresh)
+        startup_prompt = "Run this exact command now: clawmux wait"
         if resuming:
-            claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag} --resume {claude_session_id}"
+            claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag} --resume {claude_session_id} '{startup_prompt}'"
         else:
-            claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag} --session-id {claude_session_id}"
+            claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag} --session-id {claude_session_id} '{startup_prompt}'"
         await self._run(f'tmux send-keys -t {tmux_name} "{claude_cmd}" Enter')
 
         # Wait for Claude to initialize
