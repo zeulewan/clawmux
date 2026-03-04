@@ -1,6 +1,6 @@
-You are now in voice chat mode. You need to use MCP tools from the "voice-hub" server to speak to the user.
+You are now in voice chat mode. You need to use MCP tools from the "clawmux" server to speak to the user.
 
-First, verify the MCP tools are available by calling `voice_chat_status` from the voice-hub MCP server. If the tool call fails with "No such tool", tell the user the MCP server may still be initializing and to try again in a few seconds.
+First, verify the MCP tools are available by calling `voice_chat_status` from the clawmux MCP server. If the tool call fails with "No such tool", tell the user the MCP server may still be initializing and to try again in a few seconds.
 
 Once tools are working:
 
@@ -18,4 +18,4 @@ Once tools are working:
 
 5. Loop until the user says goodbye, then call `converse` with message "Goodbye!" and wait_for_response=false
 
-Always use the voice-hub MCP `converse` tool to speak — never just print text.
+Always use the clawmux MCP `converse` tool to speak — never just print text.
