@@ -1,0 +1,426 @@
+// ClawMux — WebSocket Connection & Message Handling
+// Extracted from hub.html Phase 1 refactor.
+// All functions and variables remain global (window-scoped).
+//
+// Dependencies (defined in state.js and hub.html inline script):
+//   state.js: sessions, activeSessionId, ws, autoMode, vadEnabled,
+//             autoInterruptEnabled, voiceResponsesEnabled, currentAudio,
+//             currentBufferedPlayer, playbackPaused, showAgentMessages,
+//             recording, micMuted
+//   hub.html: setConnected, setStatus, showCopyToast, _flushPendingAudio,
+//             setToggle, renderSidebar, renderVoiceGridIfActive, addSession,
+//             removeSession, switchTab, addMessage, setSessionSidebarState,
+//             setSessionState, hideThinking, stopThinkingSound,
+//             updateThinkingLabel, cueSessionReady, loadProjects,
+//             markSessionUnread, clearSessionUnread, enqueueAudio,
+//             updateMicUI, startPlaybackVAD, _handleListeningUI,
+//             terminateSession, karaokeSetupMessage, chatArea,
+//             updateHeaderProjectStatus, renderChat, chatScrollToBottom,
+//             _karaokeWords, _applyKaraokeSpans, currentProject,
+//             currentProjectVoices, getSessionState, updateTransportBar
+
+// --- WebSocket ---
+let _wsHasConnected = false;
+function connect() {
+  setConnected('connecting');
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url = `${proto}//${location.host}/ws`;
+  ws = new WebSocket(url);
+
+  ws.onopen = () => {
+    setConnected('connected');
+    if (_wsHasConnected) showCopyToast('Hub reconnected');
+    _wsHasConnected = true;
+    if (!activeSessionId) setStatus('Connected');
+    // Flush any audio that was recorded during disconnect
+    _flushPendingAudio();
+    // Restore persisted settings
+    fetch('/api/settings').then(r => r.json()).then(s => {
+      autoMode = s.auto_record || false;
+      vadEnabled = s.auto_end !== false;
+      autoInterruptEnabled = s.auto_interrupt || false;
+      setToggle('auto_record', autoMode);
+      setToggle('auto_end', vadEnabled);
+      setToggle('auto_interrupt', autoInterruptEnabled);
+      voiceResponsesEnabled = s.voice_responses !== false;
+      setToggle('voice_responses', voiceResponsesEnabled);
+    }).catch(() => {});
+    startHistorySync();
+  };
+
+  ws.onclose = () => {
+    setConnected('disconnected');
+    ws = null;
+    setTimeout(connect, 2000);
+  };
+
+  ws.onerror = () => { ws?.close(); };
+
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (_sessionsLoading) {
+      _messageBuffer.push(data);
+    } else {
+      handleMessage(data);
+    }
+  };
+}
+
+let _sessionsLoading = false;
+const _messageBuffer = [];
+
+async function _refreshHistory(sessionId, voiceId) {
+  const s = sessions.get(sessionId);
+  if (!s) return;
+  // Skip sync for the active session while audio is playing or karaoke is active
+  // to avoid DOM re-renders that break karaoke highlighting and cause visual flashes
+  if (sessionId === activeSessionId && (currentAudio || currentBufferedPlayer || _karaokeWords || playbackPaused)) return;
+  try {
+    const resp = await fetch(`/api/history/${voiceId}?project=${currentProject}`);
+    if (!resp.ok) return;
+    const hist = await resp.json();
+    const serverMessages = (hist.messages || []).map(m => {
+      const obj = { role: m.role, text: m.text };
+      if (m.id) obj.id = m.id;
+      if (m.parent_id) obj.parentId = m.parent_id;
+      if (m.bare_ack) obj.isBareAck = true;
+      return obj;
+    });
+    // Note: pending_interjections is NOT used to re-mark messages as italic.
+    // Interjection styling is transient — applied in real-time via user_text events
+    // and cleared on inbox_update. Re-marking from history causes stale italics
+    // after page/hub reload when interjections haven't been consumed yet.
+    // Check if server has messages the client is missing
+    // Filter out system messages from both sides for comparison
+    const localNonSystem = s.messages.filter(m => m.role !== 'system');
+    const serverNonSystem = serverMessages.filter(m => m.role !== 'system');
+    const serverLen = serverNonSystem.length;
+    const localLen = localNonSystem.length;
+    // Compare both count and last message content to catch missed messages
+    const lastServer = serverLen > 0 ? serverNonSystem[serverLen - 1] : null;
+    const lastLocal = localLen > 0 ? localNonSystem[localLen - 1] : null;
+    const needsSync = serverLen > localLen ||
+      (serverLen > 0 && (!lastLocal || lastServer.text !== lastLocal.text || lastServer.role !== lastLocal.role));
+    if (needsSync) {
+      console.log(`[historySync] ${sessionId}: syncing — server=${serverLen} local=${localLen}`, lastServer?.text?.slice(0,50), lastLocal?.text?.slice(0,50));
+      // Preserve local-only system messages (e.g. "Claude connected") but
+      // deduplicate ones already in server history (e.g. agent messages)
+      const serverSystemTexts = new Set(serverMessages.filter(m => m.role === 'system').map(m => m.text));
+      const uniqueLocalSystem = s.messages.filter(m => m.role === 'system' && !serverSystemTexts.has(m.text));
+      s.messages = [...uniqueLocalSystem, ...serverMessages];
+      if (sessionId === activeSessionId) {
+        // Save karaoke state before renderChat destroys DOM refs
+        let savedKaraokeWords = null;
+        if (_karaokeWords && _karaokeWords.length > 0) {
+          savedKaraokeWords = _karaokeWords.map(w => ({ word: w.word, start_time: w.start_time, end_time: w.end_time }));
+        }
+        renderChat();
+        // Restore karaoke spans after DOM rebuild
+        if (savedKaraokeWords && savedKaraokeWords.length > 0) {
+          const msgs = chatArea.querySelectorAll('.msg.assistant');
+          if (msgs.length) _applyKaraokeSpans(msgs[msgs.length - 1], savedKaraokeWords);
+        }
+        requestAnimationFrame(() => { chatScrollToBottom(); });
+      }
+    }
+  } catch (e) { /* ignore */ }
+}
+
+// Periodic history sync — catches messages missed during WebSocket drops
+let _historySyncTimer = null;
+function startHistorySync() {
+  if (_historySyncTimer) return;
+  _historySyncTimer = setInterval(() => {
+    for (const [sid, s] of sessions) {
+      if (s.voice) _refreshHistory(sid, s.voice);
+    }
+  }, 5000);
+}
+
+function _flushMessageBuffer() {
+  while (_messageBuffer.length > 0) {
+    handleMessage(_messageBuffer.shift());
+  }
+}
+
+function handleMessage(data) {
+  const { type, session_id } = data;
+
+  // Heartbeat — ignore pings
+  if (type === 'ping') return;
+
+  // Hub-level messages (no session_id)
+  if (type === 'session_list') {
+    _sessionsLoading = true;
+    const promises = [];
+    for (const s of data.sessions) {
+      if (!sessions.has(s.session_id)) {
+        promises.push(addSession(s, false));
+      } else {
+        // Session already exists — refresh history and restore state
+        promises.push(_refreshHistory(s.session_id, s.voice));
+        const existing = sessions.get(s.session_id);
+        if (existing) {
+          existing.speed = s.speed || existing.speed;
+          existing.model = s.model || existing.model;
+          existing.project = s.project || existing.project || '';
+          existing.project_area = s.project_area || existing.project_area || '';
+          existing.unreadCount = s.unread_count || 0;
+          // Restore session state from server
+          if (s.processing && existing.sessionState !== 'processing') {
+            setSessionState(s.session_id, 'processing');
+          } else if (!s.processing && existing.sessionState === 'processing') {
+            setSessionState(s.session_id, 'idle');
+          }
+          // Restore compacting state
+          existing.compacting = !!s.compacting;
+        }
+      }
+    }
+    Promise.all(promises).then(() => {
+      _sessionsLoading = false;
+      _flushMessageBuffer();
+      renderVoiceGridIfActive();
+      renderSidebar();
+      // Push saved speed from localStorage to server for all sessions
+      const savedSpd = localStorage.getItem('hub_speed');
+      if (savedSpd) {
+        const spd = parseFloat(savedSpd);
+        for (const [sid, s] of sessions) {
+          if ((s.speed || 1.0) !== spd) {
+            s.speed = spd;
+            fetch(`/api/sessions/${sid}/speed`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ speed: spd }),
+            }).catch(() => {});
+          }
+        }
+      }
+      // Auto-restore previously active session on reconnect
+      if (!activeSessionId) {
+        try {
+          const savedVoice = (() => { try { return localStorage.getItem('hub_active_voice'); } catch(e) { return null; } })();
+          if (savedVoice) {
+            for (const [sid, s] of sessions) {
+              if (s.voice === savedVoice) {
+                switchTab(sid);
+                break;
+              }
+            }
+          }
+          // Fallback: if still no active session and only one session, auto-select it
+          if (!activeSessionId && sessions.size === 1) {
+            const [sid] = sessions.keys();
+            switchTab(sid);
+          }
+        } catch(e) {}
+      }
+    });
+    return;
+  }
+  if (type === 'session_spawned') {
+    if (!sessions.has(data.session.session_id)) {
+      addSession(data.session, false).then(() => renderVoiceGridIfActive());
+    }
+    return;
+  }
+  if (type === 'session_terminated') {
+    removeSession(data.session_id);
+    return;
+  }
+  if (type === 'project_switched') {
+    currentProject = data.project || 'default';
+    const sel = document.getElementById('project-selector');
+    if (sel) sel.value = currentProject;
+    loadProjects().then(() => {
+      // Auto-switch to first running agent in the new project
+      const projectVoices = currentProjectVoices || Object.keys(VOICE_NAMES);
+      for (const v of projectVoices) {
+        for (const [sid, s] of sessions) {
+          if (s.voice === v) { switchTab(sid, true); return; }
+        }
+      }
+      // No running agents — deselect
+      if (activeSessionId) switchTab(null);
+    });
+    return;
+  }
+  if (type === 'session_status') {
+    const s = sessions.get(data.session_id);
+    if (s) {
+      // Tool status updates from Claude Code hooks (status_text without status field)
+      if ('status_text' in data && !data.status) {
+        // Stop hook signals agent finished processing → transition to idle
+        if (data.agent_idle) {
+          s.toolStatusText = '';
+          setSessionSidebarState(data.session_id, 'idle');
+          hideThinking(data.session_id);
+          stopThinkingSound();
+        } else if (data.status_text) {
+          // Agent is actively using a tool → working state
+          s.toolStatusText = data.status_text;
+          setSessionSidebarState(data.session_id, 'working');
+        }
+        // When status_text is empty but not agent_idle (PostToolUse between tools),
+        // keep the previous toolStatusText to avoid flashing "Working..." briefly
+        updateThinkingLabel(data.session_id);
+        renderSidebar();
+        return;
+      }
+      s.status = data.status;
+      if (data.status === 'ready') {
+        s.toolStatusText = '';
+        setSessionSidebarState(data.session_id, 'idle');
+        if (!data.silent) {
+          cueSessionReady();
+          addMessage(data.session_id, 'system', 'Claude connected.');
+          // Don't auto-switch — let user stay where they are
+        }
+      } else if (data.status === 'starting') {
+        setSessionSidebarState(data.session_id, 'starting');
+      }
+    }
+    renderSidebar();
+    return;
+  }
+  if (type === 'project_status') {
+    const s = sessions.get(data.session_id);
+    if (s) {
+      s.project = data.project || '';
+      s.project_area = data.area || '';
+    }
+    renderVoiceGridIfActive();
+    updateHeaderProjectStatus();
+    return;
+  }
+  if (type === 'compaction_status') {
+    const s = sessions.get(data.session_id);
+    if (s) {
+      s.compacting = data.compacting;
+      renderSidebar();
+    }
+    return;
+  }
+  if (type === 'error') {
+    alert('Hub error: ' + data.message);
+    return;
+  }
+
+  if (type === 'agent_message') {
+    const msg = data.message;
+    if (msg) {
+      const senderName = (msg.sender_name || msg.sender || '?');
+      const recipName = (msg.recipient_name || msg.recipient || '?');
+      const sName = senderName.charAt(0).toUpperCase() + senderName.slice(1);
+      const rName = recipName.charAt(0).toUpperCase() + recipName.slice(1);
+      const isBareAck = msg.bare_ack || (msg.parent_id && !msg.content);
+      const threadOpts = { id: msg.id || null, parentId: msg.parent_id || null, isBareAck };
+      // Bare acks (thumbs-up) always show; other agent messages respect toggle
+      // Show in recipient's chat
+      if ((isBareAck || showAgentMessages) && sessions.has(msg.recipient)) {
+        const text = isBareAck ? '' : `[Agent msg from ${sName}] ${msg.content || ''}`;
+        addMessage(msg.recipient, 'system', text, threadOpts);
+      }
+      // Show in sender's chat
+      if ((isBareAck || showAgentMessages) && sessions.has(msg.sender)) {
+        const text = isBareAck ? '' : `[Agent msg to ${rName}] ${msg.content || ''}`;
+        addMessage(msg.sender, 'system', text, threadOpts);
+      }
+    }
+    return;
+  }
+
+  // Session-scoped messages
+  if (!session_id) return;
+  const s = sessions.get(session_id);
+  if (!s) return;
+
+  if (type === 'assistant_text') {
+    if (data.fire_and_forget) {
+      // Fire-and-forget speak: just add message to chat, don't change state
+      if (data.text && data.text.trim()) {
+        addMessage(session_id, 'assistant', data.text, { id: data.msg_id || null });
+      }
+      if (session_id !== activeSessionId) {
+        markSessionUnread(session_id);
+      } else {
+        clearSessionUnread(session_id);
+      }
+    } else {
+      // Converse-driven response: transition to listening state
+      setSessionState(session_id, 'listening');
+      if (data.text && data.text.trim()) {
+        addMessage(session_id, 'assistant', data.text, { id: data.msg_id || null });
+      }
+      if (session_id !== activeSessionId) {
+        markSessionUnread(session_id);
+      } else {
+        clearSessionUnread(session_id);
+      }
+    }
+  } else if (type === 'user_text') {
+    if (!data.text || !data.text.trim()) return;  // Skip blank user messages
+    addMessage(session_id, data.interjection ? 'user interjection' : 'user', data.text, { id: data.msg_id || null });
+    setSessionState(session_id, 'processing');
+  } else if (type === 'audio') {
+    s.status = 'active';
+    setSessionState(session_id, 'speaking');
+    if (data.words && data.words.length) karaokeSetupMessage(session_id, data.words);
+    if (session_id === activeSessionId) {
+      enqueueAudio(session_id, data.data);
+      setStatus('Speaking...', session_id);
+    } else {
+      // Buffer audio for background session — don't play or ack
+      s.statusText = 'Speaking...';
+      if (!s.audioBuffer) s.audioBuffer = [];
+      s.audioBuffer.push(data.data);
+    }
+  } else if (type === 'listening') {
+    // Defer transition to listening if audio is still playing (speak → wait race)
+    const isPlaying = (currentAudio && currentAudio.sessionId === session_id) ||
+                      (currentBufferedPlayer && currentBufferedPlayer.sessionId === session_id) ||
+                      (s.audioBuffer && s.audioBuffer.length > 0);
+    if (isPlaying) {
+      s.pendingListenAfterPlayback = true;
+    } else {
+      setSessionState(session_id, 'listening');
+      _handleListeningUI(session_id, s);
+    }
+  } else if (type === 'thinking') {
+    setSessionState(session_id, 'processing');
+  } else if (type === 'status') {
+    s.statusText = data.text;
+    if (session_id === activeSessionId) setStatus(data.text, session_id);
+    else renderSidebar();
+  } else if (type === 'done') {
+    if (data.processing) {
+      setSessionState(session_id, 'processing');
+    } else {
+      const isPlaying = (currentAudio && currentAudio.sessionId === session_id) ||
+                        (currentBufferedPlayer && currentBufferedPlayer.sessionId === session_id) ||
+                        (s.audioBuffer && s.audioBuffer.length > 0);
+      if (isPlaying) {
+        setSessionState(session_id, 'speaking');
+      } else {
+        setSessionState(session_id, 'idle');
+      }
+    }
+  } else if (type === 'session_ended') {
+    // Agent said goodbye — auto-close after a short delay
+    addMessage(session_id, 'system', 'Session ended.');
+    setTimeout(() => terminateSession(session_id), 3000);
+  } else if (type === 'inbox_update') {
+    // v0.6.0: inbox message count update
+    s.inboxCount = data.count || 0;
+    s.inboxPreview = data.latest ? data.latest.preview : '';
+    // When inbox is cleared (hook delivered messages), promote interjections to normal messages
+    if (data.count === 0) {
+      if (session_id === activeSessionId) {
+        chatArea.querySelectorAll('.msg.interjection').forEach(el => el.classList.remove('interjection'));
+      }
+      s.messages.forEach(m => { if (m.role === 'user interjection') m.role = 'user'; });
+    }
+    renderSidebar();
+  }
+}
