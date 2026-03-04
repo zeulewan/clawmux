@@ -253,10 +253,11 @@ class SessionManager:
                 log.warning("Killing unadoptable orphaned tmux session: %s", name)
                 await self._cleanup_tmux(name)
 
-        # Clean orphaned session work dirs (but keep voice dirs for --resume)
+        # Clean orphaned session work dirs (but keep voice dirs for --resume and project dirs)
+        project_slugs = set(self.project_mgr.projects.keys())
         try:
             for d in SESSION_DIR_BASE.iterdir():
-                if d.is_dir() and d.name not in self.sessions and d.name not in voice_ids:
+                if d.is_dir() and d.name not in self.sessions and d.name not in voice_ids and d.name not in project_slugs:
                     log.warning("Removing orphaned work dir: %s", d)
                     shutil.rmtree(d, ignore_errors=True)
         except Exception as e:
