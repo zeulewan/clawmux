@@ -1963,9 +1963,11 @@ function _updateSidebarCard(card, voiceId, state) {
 function renderSidebar() {
   const list = document.getElementById('sidebar-list');
   // Use project-scoped voice list if available and non-empty, otherwise show all
+  // Voice ordering: use persisted project order (stable across restarts),
+  // falling back to alphabetical-by-display-name for predictable default positions
   const allVoices = currentProjectVoices && currentProjectVoices.length > 0
     ? currentProjectVoices.map(v => [v, VOICE_NAMES[v] || v.replace(/^[a-z]{2}_/, '').replace(/^./, c => c.toUpperCase())])
-    : Object.entries(VOICE_NAMES);
+    : Object.entries(VOICE_NAMES).sort((a, b) => a[1].localeCompare(b[1]));
   const currentVoiceIds = new Set(allVoices.map(([id]) => id));
   // Remove stale cards
   for (const card of [...list.children]) {
@@ -5003,7 +5005,7 @@ document.addEventListener('keydown', (e) => {
   // Option/Alt + 1-9: switch to voice by sidebar position
   if (e.altKey && !e.ctrlKey && !e.metaKey && e.code.startsWith('Digit')) {
     const idx = parseInt(e.code.replace('Digit', ''), 10) - 1;
-    const voiceIds = (currentProjectVoices && currentProjectVoices.length > 0) ? currentProjectVoices : Object.keys(VOICE_NAMES);
+    const voiceIds = (currentProjectVoices && currentProjectVoices.length > 0) ? currentProjectVoices : Object.keys(VOICE_NAMES).sort((a, b) => (VOICE_NAMES[a] || a).localeCompare(VOICE_NAMES[b] || b));
     if (idx >= 0 && idx < voiceIds.length) {
       e.preventDefault();
       const voiceId = voiceIds[idx];

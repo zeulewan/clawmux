@@ -46,7 +46,8 @@ class ProjectManager:
             except Exception as e:
                 log.error("Failed to load projects.json: %s", e)
         # Bootstrap: implicit default project with flat layout and original voices
-        default_voices = [v[0] for v in VOICES]
+        # Sorted alphabetically by display name for predictable sidebar positions
+        default_voices = sorted([v[0] for v in VOICES], key=lambda vid: dict(VOICES).get(vid, vid).lower())
         return {
             "projects": {
                 "default": {
@@ -120,16 +121,20 @@ class ProjectManager:
         available = [v[0] for v in VOICE_POOL if v[0] not in used]
 
         if len(available) >= AGENTS_PER_PROJECT:
-            return available[:AGENTS_PER_PROJECT]
+            selected = available[:AGENTS_PER_PROJECT]
+        else:
+            # Not enough unique voices — wrap around from pool start
+            selected = list(available)
+            pool_ids = [v[0] for v in VOICE_POOL]
+            idx = 0
+            while len(selected) < AGENTS_PER_PROJECT:
+                selected.append(pool_ids[idx % len(pool_ids)])
+                idx += 1
 
-        # Not enough unique voices — wrap around from pool start
-        assigned = list(available)
-        pool_ids = [v[0] for v in VOICE_POOL]
-        idx = 0
-        while len(assigned) < AGENTS_PER_PROJECT:
-            assigned.append(pool_ids[idx % len(pool_ids)])
-            idx += 1
-        return assigned
+        # Sort alphabetically by display name for predictable default ordering
+        pool_map = {v[0]: v[1] for v in VOICE_POOL}
+        selected.sort(key=lambda vid: pool_map.get(vid, vid).lower())
+        return selected
 
     def create_project(self, slug: str, name: str, voices: list[str] | None = None) -> dict:
         """Create a new project with its own subdirectory and voice assignment.
