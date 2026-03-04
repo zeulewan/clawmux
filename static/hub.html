@@ -3717,6 +3717,15 @@ function handleMessage(data) {
       // Tool status updates from Claude Code hooks (status_text without status field)
       if ('status_text' in data && !data.status) {
         s.toolStatusText = data.status_text || '';
+        // Stop hook signals agent finished processing → transition to idle
+        if (data.agent_idle) {
+          s.toolStatusText = '';
+          if (!(s.unreadCount > 0)) {
+            setSessionSidebarState(data.session_id, 'ready');
+          }
+          hideThinking(data.session_id);
+          stopThinkingSound();
+        }
         updateThinkingLabel(data.session_id);
         renderSidebar();
         return;
