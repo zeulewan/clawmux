@@ -92,7 +92,7 @@ Shows whether the browser is connected, which agent sessions are active, and any
 
 When the hub spawns a new agent session, it writes `/clawmux` into the tmux pane. This triggers a skill that teaches the agent all the CLI commands, the message format, and how to handle injected messages. The skill describes when to use each sending mode, how to ack immediately on receipt, and the expected response patterns.
 
-The `VOICE_HUB_SESSION_ID` environment variable identifies the agent session, same as the current MCP server.
+The `CLAWMUX_SESSION_ID` environment variable identifies the agent session, same as the current MCP server.
 
 ## Hub Architecture
 

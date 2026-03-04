@@ -23,20 +23,20 @@ Claude will check your system, install dependencies, clone the repo, register th
 Start:
 
 ```bash
-cd ~/GIT/voice-chat
+cd ~/GIT/clawmux
 ./start-hub.sh
 ```
 
 Or in tmux (keeps running after your terminal closes):
 
 ```bash
-tmux new-session -d -s voice-hub 'cd ~/GIT/voice-chat && ./start-hub.sh'
+tmux new-session -d -s clawmux 'cd ~/GIT/clawmux && ./start-hub.sh'
 ```
 
 Stop:
 
 ```bash
-tmux kill-session -t voice-hub
+tmux kill-session -t clawmux
 ```
 
 Or kill directly:
@@ -52,6 +52,6 @@ pkill -f hub.py
 
 **MCP tools not found:** Wait 10 seconds after starting Claude Code for the MCP server to initialize, then try again.
 
-**502 Bad Gateway in browser:** The hub hasn't started yet. Check `tail -f /tmp/voice-hub.log`.
+**502 Bad Gateway in browser:** The hub hasn't started yet. Check `tail -f /tmp/clawmux.log`.
 
 **Port 3460 in use:** Run `pkill -f hub.py` to clear any stale processes, then restart.

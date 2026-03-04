@@ -70,10 +70,10 @@ sudo tailscale serve --https=3456 off
 
 ## Logging
 
-Server logs are written to `/tmp/voice-hub-mcp.log` and stderr. Watch in real time:
+Server logs are written to `/tmp/clawmux-mcp.log` and stderr. Watch in real time:
 
 ```bash
-tail -f /tmp/voice-hub-mcp.log
+tail -f /tmp/clawmux-mcp.log
 ```
 
 ## Ports Summary

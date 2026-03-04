@@ -82,7 +82,7 @@ Add `GET /.well-known/agent.json` to the hub. Returns a manifest for the hub its
     "pushNotifications": false
   },
   "skills": [
-    {"id": "voice-chat", "name": "Voice Conversation"},
+    {"id": "clawmux-voice", "name": "Voice Conversation"},
     {"id": "code-task", "name": "Code Task Execution"},
     {"id": "research", "name": "Research & Analysis"}
   ],

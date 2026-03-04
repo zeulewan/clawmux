@@ -4,7 +4,7 @@
 
 Self-hosted hub on Linux with NVIDIA GPU. Uses Kokoro TTS and Whisper STT. Browser UI for real-time voice chat with multiple concurrent Claude Code sessions.
 
-Source: https://github.com/zeulewan/voice-hub
+Source: https://github.com/zeulewan/clawmux
 
 ## Docs
 

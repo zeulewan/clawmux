@@ -15,12 +15,12 @@ Browser ←—single WSS—→ Hub (:3460) ←—WS—→ MCP Server A (Claude s
 1. **Hub** (`hub.py`) runs on port 3460 as a standalone FastAPI service
 2. **Browser** connects to the hub via a single WebSocket
 3. When you click "New Session", the hub:
-    - Creates a temp directory at `/tmp/voice-hub-sessions/{session-id}/`
+    - Creates a temp directory at `/tmp/clawmux-sessions/{session-id}/`
     - Writes a `.mcp.json` into that directory with the session ID baked in
     - Starts a tmux session and launches `claude --dangerously-skip-permissions` from that directory
     - Claude Code picks up the project-level `.mcp.json` and spawns `hub_mcp_server.py`
-    - `hub_mcp_server.py` reads `VOICE_HUB_SESSION_ID` from its MCP env config and connects back to the hub via WebSocket at `ws://127.0.0.1:3460/mcp/{session-id}`
-    - Hub sends `/voice-hub` to the tmux session so Claude enters voice mode
+    - `hub_mcp_server.py` reads `CLAWMUX_SESSION_ID` from its MCP env config and connects back to the hub via WebSocket at `ws://127.0.0.1:3460/mcp/{session-id}`
+    - Hub sends `/clawmux` to the tmux session so Claude enters voice mode
 4. **Audio flow** for `converse()`:
     - Claude calls `converse("Hello")` → `hub_mcp_server.py` forwards to hub via WS
     - Hub does TTS (Kokoro) using the session's configured voice → sends MP3 to browser tagged with session_id
@@ -37,12 +37,12 @@ Claude Code MCP servers get their environment **only from `.mcp.json`**, not fro
 ```json
 {
   "mcpServers": {
-    "voice-hub": {
+    "clawmux": {
       "command": "/path/to/.venv/bin/python",
       "args": ["/path/to/hub_mcp_server.py"],
       "env": {
-        "VOICE_HUB_SESSION_ID": "voice-1-abc123",
-        "VOICE_CHAT_HUB_PORT": "3460"
+        "CLAWMUX_SESSION_ID": "voice-1-abc123",
+        "CLAWMUX_PORT": "3460"
       }
     }
   }
@@ -65,7 +65,7 @@ Claude is started from this directory, picks up the project-level config, and th
 
 ```bash
 # Start the hub
-cd ~/GIT/voice-hub-dev
+cd ~/GIT/clawmux-dev
 source .venv/bin/activate
 python hub.py
 
@@ -91,10 +91,10 @@ Open `https://workstation.tailee9084.ts.net:3460` and click "New Session".
 
 ```bash
 # Hub logs
-tail -f /tmp/voice-hub.log
+tail -f /tmp/clawmux.log
 
 # MCP server logs (per-session)
-tail -f /tmp/voice-hub-mcp.log
+tail -f /tmp/clawmux-mcp.log
 
 # See spawned tmux sessions
 tmux ls
@@ -103,7 +103,7 @@ tmux ls
 tmux attach -t voice-1-abc123
 
 # Check temp directories
-ls /tmp/voice-hub-sessions/
+ls /tmp/clawmux-sessions/
 ```
 
 ## Session Lifecycle
@@ -121,9 +121,9 @@ Sessions auto-terminate after 30 minutes of inactivity (configurable via `VOICE_
 
 | Command | MCP Server | Use Case |
 |---------|-----------|----------|
-| `/voice-hub` | `voice-hub` | Direct voice chat (main branch, port 3456) |
-| `/voice-hub-dev` | `voice-hub-dev` | Direct voice chat (dev branch, port 3457) |
-| `/voice-hub` | `voice-hub` | Hub-managed session (used by spawned sessions) |
+| `/clawmux` | `clawmux` | Direct voice chat (main branch, port 3456) |
+| `/clawmux-dev` | `clawmux-dev` | Direct voice chat (dev branch, port 3457) |
+| `/clawmux` | `clawmux` | Hub-managed session (used by spawned sessions) |
 
 ## REST API
 

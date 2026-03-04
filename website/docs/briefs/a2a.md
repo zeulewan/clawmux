@@ -1,5 +1,7 @@
 # A2A Integration Brief
 
+*Created: 2026-03-02*
+
 How ClawMux will let your agents talk to the outside world.
 
 ## The Problem

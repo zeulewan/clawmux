@@ -195,7 +195,7 @@ Three animated dots that pulse in sequence. Appears after user sends audio (when
 4. Tab appears, switches to session view, shows "Waiting for Claude..."
 5. Claude boots in tmux, MCP server connects to hub
 6. Hub sends `session_status: ready` → tab dot turns green, "Claude connected." system message, ready chime plays
-7. Hub sends `/voice-hub` to tmux → Claude enters voice mode and greets user
+7. Hub sends `/clawmux` to tmux → Claude enters voice mode and greets user
 
 ### Session End
 
@@ -225,7 +225,7 @@ Shows hub internals with auto-refresh every 5 seconds:
 - **Services** — Whisper and Kokoro URLs and connectivity
 - **Hub Sessions** — ID, voice, status, MCP connected, idle time, age, work directory
 - **tmux Sessions** — All tmux sessions (voice and non-voice), window count, attached status
-- **Hub Log** — Last 50 lines of `/tmp/voice-hub.log`
+- **Hub Log** — Last 50 lines of `/tmp/clawmux.log`
 
 Switching to the Debug tab stops audio and recording from the current session (same cleanup as switching to any other view).
 

@@ -180,7 +180,7 @@ All state is saved to UserDefaults:
 | `backgroundMode` | Bool | Background keepalive enabled |
 | `liveActivityAuto` | Bool | Live Activity for auto mode |
 | `liveActivityPTT` | Bool | Live Activity for PTT mode |
-| `voice-hub-chats` | JSON | Chat messages per session |
+| `clawmux-chats` | JSON | Chat messages per session |
 | `sessionPrefs` | JSON | Per-session voice and speed |
 | Sound/haptic toggles | Bool | Per-mode audio cue and haptic settings |
 

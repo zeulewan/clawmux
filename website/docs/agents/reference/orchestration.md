@@ -17,8 +17,8 @@ class Session:
 ## Spawn Flow
 
 1. Leader calls `spawn_worker("Refactor auth to JWT")`
-2. Hub creates work dir at `/tmp/voice-hub-sessions/{leader_voice}/workers/{name}/`
-3. Hub writes `.mcp.json` with new `VOICE_HUB_SESSION_ID`
+2. Hub creates work dir at `/tmp/clawmux-sessions/{leader_voice}/workers/{name}/`
+3. Hub writes `.mcp.json` with new `CLAWMUX_SESSION_ID`
 4. Hub writes `CLAUDE.md` with worker identity and task
 5. Hub starts tmux session `voice-{leader}-{letter}` and launches Claude Code
 6. Claude loads MCP server, connects to hub

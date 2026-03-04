@@ -138,7 +138,7 @@ The hub stores all messages in memory with their full history: ID, sender, recip
 
 ## Session Identity
 
-Each agent session has an ID derived from its voice name (`af_sky`, `af_alloy`, etc.). The CLI reads `VOICE_HUB_SESSION_ID` from the environment, same as the current MCP server. The `--to` flag accepts human-friendly names like `sky`, `alloy`, `echo` — the hub resolves these to session IDs.
+Each agent session has an ID derived from its voice name (`af_sky`, `af_alloy`, etc.). The CLI reads `CLAWMUX_SESSION_ID` from the environment, same as the current MCP server. The `--to` flag accepts human-friendly names like `sky`, `alloy`, `echo` — the hub resolves these to session IDs.
 
 ## Hub Changes
 

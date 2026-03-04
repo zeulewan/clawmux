@@ -80,8 +80,8 @@ Or any OpenAI-compatible TTS server on port 8880.
 ## Installation
 
 ```bash
-git clone https://github.com/zeulewan/voice-hub.git
-cd voice-hub
+git clone https://github.com/zeulewan/clawmux.git
+cd clawmux
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -90,15 +90,15 @@ pip install -r requirements.txt
 ### Register MCP Server
 
 ```bash
-claude mcp add -s user voice-hub -- /path/to/voice-hub/.venv/bin/python /path/to/voice-hub/mcp_server.py
+claude mcp add -s user clawmux -- /path/to/clawmux/.venv/bin/python /path/to/clawmux/mcp_server.py
 ```
 
 ### Install Slash Commands
 
 ```bash
-cp .claude/commands/voice-hub.md ~/.claude/commands/voice-hub.md
+cp .claude/commands/clawmux.md ~/.claude/commands/clawmux.md
 mkdir -p ~/.claude/commands
-cp .claude/commands/voice-hub.md ~/.claude/commands/voice-hub.md  # for hub mode
+cp .claude/commands/clawmux.md ~/.claude/commands/clawmux.md  # for hub mode
 ```
 
 ### Tailscale HTTPS (for remote access)
@@ -112,7 +112,7 @@ Then access at `https://<hostname>.ts.net:3460`.
 ### Start the Hub
 
 ```bash
-cd /path/to/voice-hub
+cd /path/to/clawmux
 source .venv/bin/activate
 python hub.py
 ```
@@ -120,7 +120,7 @@ python hub.py
 ## File Map
 
 ```
-voice-hub/
+clawmux/
 ├── hub.py                  # Main service — FastAPI, REST API, browser WS, MCP WS, TTS/STT
 ├── hub_config.py           # Constants — ports, timeouts, voice list, service URLs
 ├── hub_mcp_server.py       # Thin MCP server — runs inside each Claude session, proxies converse() to hub
@@ -152,8 +152,8 @@ voice-hub/
 │       └── v0.4.0.md       # Next release
 └── .claude/
     ├── commands/
-    │   └── voice-hub.md   # Slash command for direct voice mode
-    └── skills/voice-hub/skill.md
+    │   └── clawmux.md   # Slash command for direct voice mode
+    └── skills/clawmux/skill.md
 ```
 
 ## Core Flow
@@ -162,12 +162,12 @@ voice-hub/
 
 1. Allocate unique session ID: `voice-{counter}-{uuid6}`
 2. Pick next unused voice from `hub_config.VOICES`
-3. Create temp dir at `/tmp/voice-hub-sessions/{session_id}/`
-4. Write `.mcp.json` with `VOICE_HUB_SESSION_ID` and `VOICE_CHAT_HUB_PORT` env vars
+3. Create temp dir at `/tmp/clawmux-sessions/{session_id}/`
+4. Write `.mcp.json` with `CLAWMUX_SESSION_ID` and `CLAWMUX_PORT` env vars
 5. Write `CLAUDE.md` with agent name, greeting, and conversation history from `history_store`
 6. `tmux new-session` starting in the temp dir
 7. `tmux send-keys` to launch `claude --dangerously-skip-permissions`
-8. Wait 10s, then send `/voice-hub` slash command
+8. Wait 10s, then send `/clawmux` slash command
 9. Poll for MCP WebSocket connection (45s timeout)
 10. Session status → `ready`
 
@@ -234,7 +234,7 @@ Each session has asyncio primitives for hub ↔ browser synchronization:
 
 | Constant | Default | Env var | Purpose |
 |----------|---------|---------|---------|
-| `HUB_PORT` | 3460 | `VOICE_CHAT_HUB_PORT` | Hub listen port |
+| `HUB_PORT` | 3460 | `CLAWMUX_PORT` | Hub listen port |
 | `WHISPER_URL` | `http://127.0.0.1:2022` | `VOICE_CHAT_WHISPER_URL` | Whisper STT endpoint |
 | `KOKORO_URL` | `http://127.0.0.1:8880` | `VOICE_CHAT_KOKORO_URL` | Kokoro TTS endpoint |
 | `SESSION_TIMEOUT_MINUTES` | 30 | `VOICE_CHAT_TIMEOUT` | Idle session timeout |
@@ -244,10 +244,10 @@ Each session has asyncio primitives for hub ↔ browser synchronization:
 
 ```bash
 # Hub logs (all sessions)
-tail -f /tmp/voice-hub.log
+tail -f /tmp/clawmux.log
 
 # MCP server logs (all sessions share one log)
-tail -f /tmp/voice-hub-mcp.log
+tail -f /tmp/clawmux-mcp.log
 
 # List tmux sessions
 tmux ls
@@ -256,7 +256,7 @@ tmux ls
 tmux attach -t voice-1-abc123
 
 # Check session temp dirs
-ls /tmp/voice-hub-sessions/
+ls /tmp/clawmux-sessions/
 
 # Kill a stuck session manually
 tmux kill-session -t voice-1-abc123
