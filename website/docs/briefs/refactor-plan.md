@@ -218,12 +218,13 @@ export {
 
 | Lines | Function | Description |
 |-------|----------|-------------|
-| 84–125 | `_flush_browser_queue()`, `send_to_browser()` | Browser WS send helpers |
 | 523–660 | `browser_websocket()`, `handle_browser_message()` | Browser `/ws` handler |
 | 658–725 | `wait_websocket()` | Agent `/ws/wait/{session_id}` handler |
 | 725–803 | `mcp_websocket()` | MCP `/mcp/{session_id}` handler |
 
-**Total: ~350 lines → `websocket.py`**
+**Total: ~300 lines → `websocket.py`**
+
+> **Note on circular dependencies:** `send_to_browser()`, `_flush_browser_queue()`, `browser_ws`, and `browser_queue` stay in `hub.py` as shared infrastructure. Both `websocket.py` and `messaging.py` import them from hub — this avoids a circular dependency where messaging needs to push browser notifications and websocket handlers need to call messaging functions.
 
 ### Module: `server/messaging.py` — Send, Inbox, Hooks
 
@@ -240,12 +241,13 @@ export {
 
 **Total: ~450 lines → `messaging.py`**
 
-### What stays in `hub.py` (~270 lines)
+### What stays in `hub.py` (~310 lines)
 
 | Lines | Function | Description |
 |-------|----------|-------------|
 | 1–58 | Imports, constants, globals | App-wide state |
 | 59–65 | `_hist_prefix()`, `_gen_msg_id()` | Shared helpers |
+| 84–125 | `_flush_browser_queue()`, `send_to_browser()` | Browser WS send helpers (shared by websocket.py + messaging.py) |
 | 128–195 | `heartbeat_loop()`, `compaction_monitor_loop()` | Background tasks |
 | 442–503 | `lifespan()` | App startup/shutdown lifecycle |
 | 1789–1819 | `_log_sigterm()`, `__main__` block | Process signal handling |
