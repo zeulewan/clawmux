@@ -41,30 +41,6 @@ def require_session_id() -> str:
     return SESSION_ID
 
 
-async def ws_request(session_id: str, payload: dict, timeout: float = 300) -> dict:
-    """Connect to hub MCP WebSocket, send one message, wait for response, disconnect."""
-    from websockets.asyncio.client import connect as ws_connect
-
-    url = f"ws://127.0.0.1:{HUB_PORT}/mcp/{session_id}"
-    try:
-        async with ws_connect(url) as ws:
-            await ws.send(json.dumps(payload))
-            while True:
-                raw = await asyncio.wait_for(ws.recv(), timeout=timeout)
-                data = json.loads(raw)
-                if data.get("type") == "converse_result":
-                    return data
-                if data.get("type") == "status_result":
-                    return data
-                if data.get("type") == "message_result":
-                    return data
-    except asyncio.TimeoutError:
-        die("timeout waiting for hub response")
-    except ConnectionRefusedError:
-        die(f"cannot connect to hub at port {HUB_PORT} — is the hub running?")
-    except Exception as e:
-        die(f"websocket error: {e}")
-
 
 def http_get(path: str) -> dict:
     """Simple HTTP GET to the hub REST API."""
@@ -105,11 +81,6 @@ def http_post(path: str, data: dict) -> dict:
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
-
-def cmd_converse(args):
-    """Converse removed in v0.6.0."""
-    die("converse is removed in v0.6.0. Use 'clawmux send --to user \"message\"' to speak and 'clawmux wait' to listen.")
-
 
 def cmd_wait(args):
     """Block until an inbox message arrives, then print it."""
@@ -345,13 +316,13 @@ def cmd_stop(args):
 
 def cmd_spawn(args):
     """Spawn a new agent session."""
-    body = {"mode": args.mode or "cli"}
+    body = {}
     if args.voice:
         body["voice"] = args.voice
     if args.label:
         body["label"] = args.label
 
-    print(f"Spawning session (mode={body['mode']})...")
+    print("Spawning session...")
     result = http_post("/api/sessions", body)
 
     if "error" in result:
@@ -359,10 +330,8 @@ def cmd_spawn(args):
 
     sid = result.get("session_id", "?")
     voice = result.get("voice", "?")
-    mode = result.get("mode", "?")
     print(f"Session: {sid}")
     print(f"Voice: {voice}")
-    print(f"Mode: {mode}")
 
 
 def cmd_send(args):
@@ -988,14 +957,10 @@ while True:
 def cmd_project(args):
     """Set project status in the sidebar."""
     session_id = require_session_id()
-
-    payload = {
-        "type": "set_project_status",
+    http_post(f"/api/project-status/{session_id}", {
         "project": args.project,
         "area": args.area or "",
-    }
-
-    asyncio.run(ws_request(session_id, payload, timeout=10))
+    })
     area = f" · {args.area}" if args.area else ""
     print(f"Project: {args.project}{area}")
 
@@ -1053,20 +1018,6 @@ examples:
     text=$(clawmux wait)             # Capture message text""")
     p.set_defaults(func=cmd_wait)
 
-    # converse (DEPRECATED)
-    p = sub.add_parser("converse", help="[DEPRECATED] Speak a message and optionally listen",
-                       description="DEPRECATED: Use 'clawmux send --to user' to speak and 'clawmux wait' to listen.",
-                       formatter_class=argparse.RawDescriptionHelpFormatter,
-                       epilog="""examples:
-    clawmux converse "What should I work on next?"
-    clawmux converse "Done with that." --no-listen
-    clawmux converse "Goodbye!" --goodbye""")
-    p.add_argument("message", help="Text to speak via TTS")
-    p.add_argument("--no-listen", action="store_true", help="Speak and exit without waiting for response")
-    p.add_argument("--voice", help="Override TTS voice (e.g. af_sky, am_echo)")
-    p.add_argument("--goodbye", action="store_true", help="End session after speaking")
-    p.set_defaults(func=cmd_converse)
-
     # send
     p = sub.add_parser("send", help="Send a message to an agent or user",
                        description="Send a message to another agent or to the user. Use --to user for TTS output.",
@@ -1123,7 +1074,7 @@ examples:
 
     # reload
     p = sub.add_parser("reload", help="Restart the hub (agents auto-reconnect)",
-                       description="Stop and restart the hub. Active agent sessions reconnect automatically via MCP.")
+                       description="Stop and restart the hub. Active agent sessions reconnect automatically.")
     p.set_defaults(func=cmd_reload)
 
     # spawn
@@ -1132,10 +1083,9 @@ examples:
                        formatter_class=argparse.RawDescriptionHelpFormatter,
                        epilog="""examples:
     clawmux spawn --voice am_echo
-    clawmux spawn --voice af_sky --mode mcp
+    clawmux spawn --voice af_sky
     clawmux spawn --voice am_echo --label "Echo Agent" """)
     p.add_argument("--voice", help="TTS voice (e.g. af_sky, am_echo, am_onyx)")
-    p.add_argument("--mode", help="Session mode: cli (default) or mcp", default="cli")
     p.add_argument("--label", help="Custom label for the session")
     p.set_defaults(func=cmd_spawn)
 

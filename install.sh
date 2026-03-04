@@ -181,15 +181,9 @@ else
     warn "CLI not found at $CLI_SRC — skipping CLI install"
 fi
 
-# --- Register MCP Server ---
+# --- Install Slash Commands ---
 
 if command -v claude &>/dev/null; then
-    info "Registering ClawMux MCP server with Claude Code..."
-    claude mcp add -s user clawmux -- "$INSTALL_DIR/.venv/bin/python" "$INSTALL_DIR/server/mcp_server.py" 2>/dev/null || {
-        warn "MCP server registration failed. Register manually:"
-        warn "  claude mcp add -s user clawmux -- $INSTALL_DIR/.venv/bin/python $INSTALL_DIR/server/mcp_server.py"
-    }
-
     # Install slash commands
     mkdir -p ~/.claude/commands
     if [ -f "$INSTALL_DIR/.claude/commands/clawmux.md" ]; then

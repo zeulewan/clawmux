@@ -104,7 +104,7 @@ class MessageBroker:
         skip_tmux: bool = False,
         parent_id: str = "",
     ) -> Message:
-        """Send a message. Injects into tmux unless skip_tmux=True (converse pipeline used instead)."""
+        """Send a message. Injects into tmux unless skip_tmux=True."""
         msg_id = self.generate_id(sender, recipient)
         msg = Message(
             id=msg_id,
@@ -124,7 +124,7 @@ class MessageBroker:
         if expect_response:
             self._response_waiters[msg_id] = asyncio.Event()
 
-        # Inject into tmux (skip if caller will use converse pipeline instead)
+        # Inject into tmux (skip if caller delivers via audio queue instead)
         if not skip_tmux:
             self._inject(msg, recipient_tmux, sender_name, recipient_name)
 

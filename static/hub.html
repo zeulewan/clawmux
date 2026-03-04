@@ -1400,8 +1400,7 @@ body {
 </div>
 
 <div id="context-menu">
-  <div class="ctx-item" id="ctx-launch-mcp">Launch with MCP</div>
-  <div class="ctx-item" id="ctx-launch-cli">Launch with CLI</div>
+  <div class="ctx-item" id="ctx-launch">Launch Session</div>
   <div class="ctx-item" id="ctx-mark-unread">Mark as Unread</div>
   <div class="ctx-item" id="ctx-mark-read">Mark as Read</div>
   <div class="ctx-item" id="ctx-reset">Reset History</div>
@@ -1437,7 +1436,7 @@ body {
   <div class="debug-section">
     <div class="debug-title">Hub Sessions</div>
     <table class="debug-table" id="debug-sessions">
-      <thead><tr><th>ID</th><th>Voice</th><th>Status</th><th>MCP</th><th>Idle</th><th>Age</th><th>Work Dir</th></tr></thead>
+      <thead><tr><th>ID</th><th>Voice</th><th>Status</th><th>Idle</th><th>Age</th><th>Work Dir</th></tr></thead>
       <tbody></tbody>
     </table>
     <div id="debug-no-sessions" style="color:var(--text-tertiary); padding:0.35rem; display:none;">No active sessions</div>
@@ -1597,7 +1596,7 @@ function switchTab(sessionId, manual = false) {
 
 
 // --- Session management ---
-async function spawnSession(voiceId = '', mode = 'cli') {
+async function spawnSession(voiceId = '') {
   if (voiceId && spawningVoices.has(voiceId)) return; // already spawning this voice
 
   // Mark voice as spawning immediately and update grid
@@ -1611,7 +1610,6 @@ async function spawnSession(voiceId = '', mode = 'cli') {
 
   try {
     const body = { voice: voiceId, project: currentProject };
-    if (mode) body.mode = mode;
     const resp = await fetch('/api/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1636,7 +1634,7 @@ async function spawnSession(voiceId = '', mode = 'cli') {
 }
 
 async function addSession(data, autoSwitch = false) {
-  const isReady = data.status === 'ready' || data.mcp_connected;
+  const isReady = data.status === 'ready';
 
   // Fetch persistent history from server
   let serverMessages = [];
@@ -2185,7 +2183,7 @@ async function refreshDebug() {
     document.getElementById('debug-no-sessions').style.display = data.sessions.length ? 'none' : 'block';
     for (const s of data.sessions) {
       const sc = s.status === 'ready' ? 'up' : s.status === 'starting' ? 'voice' : 'down';
-      stb2.innerHTML += `<tr><td>${s.session_id}</td><td>${s.voice}</td><td><span class="debug-badge ${sc}">${s.status}</span></td><td><span class="debug-badge ${s.mcp_connected ? 'yes' : 'no'}">${s.mcp_connected ? 'yes' : 'no'}</span></td><td>${debugDuration(s.idle_seconds)}</td><td>${debugDuration(s.age_seconds)}</td><td style="color:#555">${s.work_dir}</td></tr>`;
+      stb2.innerHTML += `<tr><td>${s.session_id}</td><td>${s.voice}</td><td><span class="debug-badge ${sc}">${s.status}</span></td><td>${debugDuration(s.idle_seconds)}</td><td>${debugDuration(s.age_seconds)}</td><td style="color:#555">${s.work_dir}</td></tr>`;
     }
 
     // tmux sessions
@@ -2227,8 +2225,7 @@ function showContextMenu(e, sessionId, voiceId) {
   // Show/hide items based on session state
   const hasSession = !!sessionId;
   document.getElementById('ctx-terminate').style.display = hasSession ? 'block' : 'none';
-  document.getElementById('ctx-launch-mcp').style.display = hasSession ? 'none' : 'block';
-  document.getElementById('ctx-launch-cli').style.display = hasSession ? 'none' : 'block';
+  document.getElementById('ctx-launch').style.display = hasSession ? 'none' : 'block';
   const sess = sessionId ? sessions.get(sessionId) : null;
   const hasUnread = sess && (sess.unreadCount || 0) > 0;
   document.getElementById('ctx-mark-unread').style.display = (hasSession && !hasUnread) ? 'block' : 'none';
@@ -2244,13 +2241,8 @@ function hideContextMenu() {
   contextMenuVoiceId = null;
 }
 
-document.getElementById('ctx-launch-mcp').addEventListener('click', () => {
-  if (contextMenuVoiceId) spawnSession(contextMenuVoiceId, 'mcp');
-  hideContextMenu();
-});
-
-document.getElementById('ctx-launch-cli').addEventListener('click', () => {
-  if (contextMenuVoiceId) spawnSession(contextMenuVoiceId, 'cli');
+document.getElementById('ctx-launch').addEventListener('click', () => {
+  if (contextMenuVoiceId) spawnSession(contextMenuVoiceId);
   hideContextMenu();
 });
 

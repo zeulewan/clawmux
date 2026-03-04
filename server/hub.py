@@ -2,7 +2,6 @@
 
 Standalone FastAPI service that:
   - Spawns Claude Code sessions in tmux
-  - Accepts MCP server connections from each session (WS /mcp/{session_id})
   - Handles TTS (Kokoro) and STT (Whisper) for all sessions
   - Multiplexes audio between browser and sessions via a single browser WS
 
@@ -243,12 +242,6 @@ async def lifespan(app: FastAPI):
                             log.warning("[%s] Failed to transcribe pending audio: %s", sid, e)
                     if session.interjections:
                         history.save_interjections(session.voice, session.interjections, _hist_prefix(session))
-            for sid, session in session_mgr.sessions.items():
-                if session.mcp_ws:
-                    try:
-                        await session.mcp_ws.close(code=1001, reason="Hub reloading")
-                    except Exception:
-                        pass
         else:
             log.info("Hub shutting down, terminating all sessions")
             for sid in list(session_mgr.sessions):
@@ -481,81 +474,33 @@ async def wait_websocket(ws: WebSocket, session_id: str):
             del session._wait_queue
 
 
-# --- MCP Server WebSocket (one per session) ---
+# --- Project Status API ---
 
-@app.websocket("/mcp/{session_id}")
-async def mcp_websocket(ws: WebSocket, session_id: str):
-    """WebSocket endpoint for hub_mcp_server.py instances to connect to."""
-    await ws.accept()
-    log.info("[%s] MCP server connected", session_id)
-
+@app.post("/api/project-status/{session_id}")
+async def set_project_status(session_id: str, request: Request):
+    """Set project status for a session (used by clawmux project command)."""
     session = session_mgr.sessions.get(session_id)
     if not session:
-        log.error("[%s] MCP connected but session not found", session_id)
-        await ws.close(code=4004, reason="Session not found")
-        return
-
-    was_already_ready = session.status == "ready" and session.mcp_ws is None
-    session.mcp_ws = ws
-
-    # Notify browser (skip noisy notification on reconnect after hub restart)
-    if not was_already_ready:
-        await send_to_browser({
-            "type": "session_status",
-            "session_id": session_id,
-            "status": "ready",
-        })
-    else:
-        # Silent reconnect — just update mcp_connected flag in browser
-        await send_to_browser({
-            "type": "session_status",
-            "session_id": session_id,
-            "status": "ready",
-            "silent": True,
-        })
-
-    try:
-        while True:
-            data = await ws.receive_json()
-            msg_type = data.get("type")
-
-            if msg_type == "converse":
-                # Converse removed in v0.6.0
-                await ws.send_json({"type": "converse_result", "text": "Error: converse removed in v0.6.0. Use clawmux send --to user and clawmux wait."})
-
-            elif msg_type == "set_project_status":
-                if session:
-                    session.project = data.get("project", "")
-                    session.project_area = data.get("area", "")
-                    log.info("[%s] Project status: %s / %s", session_id, session.project, session.project_area)
-                    await send_to_browser({
-                        "type": "project_status",
-                        "session_id": session_id,
-                        "project": session.project,
-                        "area": session.project_area,
-                    })
-                    # Persist to disk so it survives hub restarts
-                    if session.work_dir:
-                        try:
-                            Path(session.work_dir, ".project_status.json").write_text(
-                                json.dumps({"project": session.project, "area": session.project_area})
-                            )
-                        except Exception as e:
-                            log.warning("[%s] Failed to persist project status: %s", session_id, e)
-
-            elif msg_type == "status_check":
-                await ws.send_json({
-                    "type": "status_result",
-                    "connected": len(browser_clients) > 0,
-                })
-
-    except WebSocketDisconnect:
-        log.info("[%s] MCP server disconnected", session_id)
-    except Exception as e:
-        log.error("[%s] MCP WS error: %s: %s", session_id, type(e).__name__, e)
-    finally:
-        if session and session.mcp_ws is ws:
-            session.mcp_ws = None
+        return JSONResponse({"error": "session not found"}, status_code=404)
+    data = await request.json()
+    session.project = data.get("project", "")
+    session.project_area = data.get("area", "")
+    log.info("[%s] Project status: %s / %s", session_id, session.project, session.project_area)
+    await send_to_browser({
+        "type": "project_status",
+        "session_id": session_id,
+        "project": session.project,
+        "area": session.project_area,
+    })
+    # Persist to disk so it survives hub restarts
+    if session.work_dir:
+        try:
+            Path(session.work_dir, ".project_status.json").write_text(
+                json.dumps({"project": session.project, "area": session.project_area})
+            )
+        except Exception as e:
+            log.warning("[%s] Failed to persist project status: %s", session_id, e)
+    return JSONResponse({"ok": True})
 
 
 # --- Debug log from browser ---
@@ -784,9 +729,8 @@ async def spawn_session(request: Request):
         body = await request.json() if request.headers.get("content-type") == "application/json" else {}
         label = body.get("label", "")
         voice = body.get("voice", "")
-        mode = body.get("mode", "mcp")  # "mcp" (default) or "cli"
         project = body.get("project")
-        session = await session_mgr.spawn_session(label, voice, mode=mode, project=project)
+        session = await session_mgr.spawn_session(label, voice, project=project)
         # Notify browser of the new session so the sidebar updates immediately
         await send_to_browser({"type": "session_spawned", "session": session.to_dict()})
         # Show thinking indicator while agent prepares its opening greeting
@@ -822,12 +766,6 @@ async def shutdown_hub(request: Request):
         await asyncio.sleep(0.3)  # Let the response send first
         if mode == "reload":
             log.info("Hub reloading — keeping tmux sessions alive")
-            for sid, session in session_mgr.sessions.items():
-                if session.mcp_ws:
-                    try:
-                        await session.mcp_ws.close(code=1001, reason="Hub reloading")
-                    except Exception:
-                        pass
         else:
             log.info("Hub shutting down — terminating all sessions")
             for sid in list(session_mgr.sessions):

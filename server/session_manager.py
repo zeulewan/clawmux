@@ -22,9 +22,6 @@ from project_manager import ProjectManager
 
 log = logging.getLogger("hub.sessions")
 
-# Path to the hub_mcp_server.py script
-HUB_MCP_SERVER = str(Path(__file__).parent / "hub_mcp_server.py")
-HUB_MCP_PYTHON = str(Path(__file__).parent.parent / ".venv" / "bin" / "python")
 SESSION_DIR_BASE = Path("/tmp/clawmux-sessions")
 
 
@@ -56,10 +53,7 @@ class Session:
     audio_queue: asyncio.Queue | None = field(default=None, repr=False)
     playback_done: asyncio.Event | None = field(default=None, repr=False)
     claude_session_id: str = ""  # Claude Code conversation UUID (for JSONL lookup)
-    mode: str = "mcp"  # "mcp" or "cli"
     project_slug: str = "default"  # which project this session belongs to
-    mcp_ws: object | None = field(default=None, repr=False)
-    last_converse_time: float = 0.0  # last time converse was called (0 = never)
     reinject_attempts: int = 0  # number of voice-mode re-injection attempts
     max_reinject_attempts: int = 3  # max re-injection attempts before giving up
 
@@ -73,18 +67,15 @@ class Session:
             "label": self.label,
             "voice": self.voice,
             "speed": self.speed,
-            "mcp_connected": self.mcp_ws is not None,
             "status_text": self.status_text,
             "project": self.project,
             "project_area": self.project_area,
             "model": self.model,
             "processing": self.processing,
             "in_wait": self.in_wait,
-            "in_converse": self.in_wait,  # backward compat for iOS client
             "compacting": self.compacting,
             "unread_count": self.unread_count,
             "work_dir": self.work_dir,
-            "mode": self.mode,
             "project_slug": self.project_slug,
         }
 
@@ -105,11 +96,7 @@ class SessionManager:
         SESSION_DIR_BASE.mkdir(parents=True, exist_ok=True)
 
     async def cleanup_stale_sessions(self) -> None:
-        """Adopt orphaned voice-* tmux sessions from previous hub runs.
-
-        Instead of killing orphaned sessions, re-create Session objects so the
-        MCP servers inside them can reconnect to the hub.
-        """
+        """Adopt orphaned voice-* tmux sessions from previous hub runs."""
         # Build set of live tmux sessions
         live_tmux: set[str] = set()
         try:
@@ -152,29 +139,13 @@ class SessionManager:
 
         for voice_id, work_dir in work_dirs_to_scan:
 
-            # Try .session.json first (works for both MCP and CLI modes)
             session_json_path = work_dir / ".session.json"
-            mcp_json_path = work_dir / ".mcp.json"
             old_session_id = ""
-            session_mode = "mcp"
 
             if session_json_path.exists():
                 try:
                     session_data = json.loads(session_json_path.read_text())
                     old_session_id = session_data.get("session_id", "")
-                    session_mode = session_data.get("mode", "mcp")
-                except Exception:
-                    pass
-            elif mcp_json_path.exists():
-                # Legacy: fall back to .mcp.json for older sessions
-                try:
-                    mcp_config = json.loads(mcp_json_path.read_text())
-                    old_session_id = (
-                        mcp_config.get("mcpServers", {})
-                        .get("clawmux", {})
-                        .get("env", {})
-                        .get("CLAWMUX_SESSION_ID", "")
-                    )
                 except Exception:
                     pass
 
@@ -186,7 +157,6 @@ class SessionManager:
                 # No tmux session — clean up stale state files
                 log.info("No tmux for %s (%s), cleaning state files", voice_id, old_session_id)
                 session_json_path.unlink(missing_ok=True)
-                mcp_json_path.unlink(missing_ok=True)
                 continue
 
             # Already tracked by this hub instance
@@ -210,7 +180,6 @@ class SessionManager:
                 status="ready",
                 label=voice_name,
                 voice=voice_id,
-                mode=session_mode,
                 project_slug=adopt_project,
             )
             session.init_bridge()
@@ -345,12 +314,8 @@ class SessionManager:
         idx = self._counter % len(project_voices)
         return project_voices[idx]
 
-    async def spawn_session(self, label: str = "", voice: str = "", mode: str = "mcp", project: str | None = None) -> Session:
-        """Create a temp dir with .mcp.json, tmux session, and start Claude.
-
-        Args:
-            mode: "mcp" (default) uses the MCP server for voice. "cli" uses clawmux CLI.
-        """
+    async def spawn_session(self, label: str = "", voice: str = "", project: str | None = None) -> Session:
+        """Create a temp dir with session config, tmux session, and start Claude."""
         # Determine which project this session belongs to
         project_slug = project or self.project_mgr.active_project
 
@@ -392,7 +357,6 @@ class SessionManager:
             tmux_session=tmux_name,
             label=voice_name,
             voice=voice_id,
-            mode=mode,
             project_slug=project_slug,
         )
         session.init_bridge()
@@ -419,32 +383,8 @@ class SessionManager:
             # Write session state file (used for re-adoption after hub reload)
             (work_dir / ".session.json").write_text(json.dumps({
                 "session_id": session_id,
-                "mode": mode,
                 "voice": voice_id,
             }))
-
-            # Write project-level .mcp.json for MCP mode
-            mcp_json_path = work_dir / ".mcp.json"
-            if mode == "mcp":
-                mcp_config = {
-                    "mcpServers": {
-                        "clawmux": {
-                            "command": HUB_MCP_PYTHON,
-                            "args": [HUB_MCP_SERVER],
-                            "env": {
-                                "CLAWMUX_SESSION_ID": session_id,
-                                "CLAWMUX_PORT": str(HUB_PORT),
-                            },
-                        }
-                    }
-                }
-                mcp_json_path.write_text(json.dumps(mcp_config, indent=2))
-                log.info("Wrote %s", mcp_json_path)
-            else:
-                # CLI mode — remove stale .mcp.json if it exists
-                if mcp_json_path.exists():
-                    mcp_json_path.unlink()
-                    log.info("Removed stale %s for CLI mode", mcp_json_path)
 
             # Check if we can resume a previous Claude session for this voice
             claude_session_id = None
@@ -485,44 +425,25 @@ class SessionManager:
             except Exception:
                 pass
 
-            if silent_startup and mode == "cli":
+            if silent_startup:
                 identity = (
                     f"Your name is {voice_name}. "
                     f"Do NOT greet the user or say anything on startup. "
                     f"Immediately run: clawmux wait\n"
                     f"This will block until a message arrives. Say nothing until you receive a message.\n"
                 )
-            elif silent_startup:
-                identity = (
-                    f"Your name is {voice_name}. "
-                    f"Do NOT greet the user or say anything on startup. "
-                    f"Immediately call converse with message=\"\" and wait_for_response=True "
-                    f"to start listening silently. Say nothing until the user speaks first.\n"
-                )
-            elif resuming and mode == "cli":
+            elif resuming:
                 identity = (
                     f"Your name is {voice_name}. "
                     f"You have an ongoing conversation with this user. "
                     f"Greet them with: clawmux send --to user \"Hi, I'm back!\"\n"
                     f"Then run: clawmux wait\n"
                 )
-            elif resuming:
-                identity = (
-                    f"Your name is {voice_name}. "
-                    f"You have an ongoing conversation with this user. "
-                    f"Greet them naturally as a returning friend, "
-                    f"referencing something from your recent conversation.\n"
-                )
-            elif mode == "cli":
+            else:
                 identity = (
                     f"Your name is {voice_name}. "
                     f"Greet the user by running: clawmux send --to user \"Hi, I'm {voice_name}! How can I help?\"\n"
                     f"Then run: clawmux wait\n"
-                )
-            else:
-                identity = (
-                    f"Your name is {voice_name}. "
-                    f"When greeting the user, say: \"Hi, I'm {voice_name}! How can I help?\"\n"
                 )
 
             # Add behavioral instructions
@@ -543,8 +464,7 @@ class SessionManager:
                 "The browser renders full markdown, so take advantage of it.\n"
             )
 
-            if mode == "cli":
-                identity += (
+            identity += (
                     "\n# Communication (v0.6.0)\n"
                     "You are running in CLI mode. All communication uses the unified `clawmux send` and `clawmux wait` commands.\n\n"
                     "## Speaking to the user (TTS)\n"
@@ -596,35 +516,6 @@ class SessionManager:
                     "Environment variables (`CLAWMUX_SESSION_ID`, `CLAWMUX_PORT`) are automatically set. "
                     "Never `cd` into the repo directory or manually export these variables — just run `clawmux` directly.\n"
                 )
-            else:
-                identity += (
-                    "\n# Project Status\n"
-                    "You MUST call `set_project_status` immediately when you start up, "
-                    "before doing anything else. If you know what project you're working on, "
-                    "set it right away. If you're just starting fresh with no context yet, "
-                    "set project to \"ready\". The sidebar should ALWAYS show a project status — "
-                    "it must never be blank.\n\n"
-                    "Update it whenever your context changes. Use the project/repo name as "
-                    "`project` (e.g. \"clawmux\") and the sub-area as `area` "
-                    "(e.g. \"frontend\", \"backend\", \"docs\", \"iOS app\").\n"
-                    "\n# Output Rules\n"
-                    "IMPORTANT: Always use the `converse` MCP tool for ALL output to the user — "
-                    "spoken responses, markdown, code blocks, tables, equations, everything. "
-                    "Never just output text to the Claude Code chat. Text printed directly "
-                    "is NOT visible to the user in the browser. Only content sent through "
-                    "the `converse` tool reaches the user.\n"
-                    "\n# Hub Reconnection\n"
-                    "If a converse call returns \"(hub reconnected)\", the hub briefly restarted. "
-                    "Immediately call converse with message=\"\" and wait_for_response=True to resume "
-                    "listening silently. Do NOT say anything — no greeting, no acknowledgment, no mention "
-                    "of the restart. The conversation is intact. Just listen.\n"
-                    "\n# CLI Environment\n"
-                    "If you need to run `clawmux` commands via Bash, it is already in your PATH "
-                    "at `/usr/local/bin/clawmux`. Environment variables (`CLAWMUX_SESSION_ID`, "
-                    "`CLAWMUX_PORT`) are automatically set. Never `cd` into the repo directory "
-                    "or manually export these variables.\n"
-                )
-
             # Inter-agent messaging instructions
             identity += (
                 "\n# Inter-Agent Messaging\n"
@@ -702,67 +593,34 @@ class SessionManager:
             else:
                 log.warning("[%s] Claude init poll timed out, sending command anyway", session_id)
 
-            if mode == "mcp":
-                # Wait for the MCP server to connect to the hub (Claude loads it on startup)
-                deadline = time.time() + 45
-                while time.time() < deadline:
-                    if session.mcp_ws is not None:
-                        break
-                    await asyncio.sleep(1)
-                else:
-                    raise TimeoutError(
-                        f"MCP server for session {session_id} did not connect within 45s"
+            # Wait for Claude Code to fully initialize before injecting
+            # The > prompt appears early but Claude isn't ready for input yet,
+            # especially on --resume where context loads after the prompt shows.
+            # Poll for the status bar (contains model name) as a reliable readiness signal.
+            log.info("[%s] Waiting for full initialization", session_id)
+            ready_deadline = time.time() + 30
+            while time.time() < ready_deadline:
+                try:
+                    result = await self._run(
+                        f"tmux capture-pane -t {tmux_name} -p -e"
                     )
-
-                # MCP connected — now send the /clawmux skill command
-                log.info("[%s] MCP connected, sending /clawmux", session_id)
-                await self._run(f'tmux send-keys -t {tmux_name} "/clawmux" Enter')
-                await asyncio.sleep(0.5)
-                await self._run(f'tmux send-keys -t {tmux_name} Enter')
+                    if result and ("Opus" in result or "Sonnet" in result or "Haiku" in result
+                                   or "opus" in result or "sonnet" in result or "haiku" in result
+                                   or "bypass" in result or "plan" in result):
+                        log.info("[%s] Claude Code fully initialized", session_id)
+                        break
+                except Exception:
+                    pass
+                await asyncio.sleep(1)
             else:
-                # CLI mode — wait for Claude Code to fully initialize before injecting
-                # The > prompt appears early but Claude isn't ready for input yet,
-                # especially on --resume where context loads after the prompt shows.
-                # Poll for the status bar (contains model name) as a reliable readiness signal.
-                log.info("[%s] CLI mode — waiting for full initialization", session_id)
-                ready_deadline = time.time() + 30
-                while time.time() < ready_deadline:
-                    try:
-                        # Capture the entire pane including status bar
-                        result = await self._run(
-                            f"tmux capture-pane -t {tmux_name} -p -e"
-                        )
-                        # Claude Code shows model info in status bar when ready
-                        if result and ("Opus" in result or "Sonnet" in result or "Haiku" in result
-                                       or "opus" in result or "sonnet" in result or "haiku" in result
-                                       or "bypass" in result or "plan" in result):
-                            log.info("[%s] Claude Code fully initialized", session_id)
-                            break
-                    except Exception:
-                        pass
-                    await asyncio.sleep(1)
-                else:
-                    log.warning("[%s] Claude Code init poll timed out, injecting anyway", session_id)
+                log.warning("[%s] Claude Code init poll timed out, injecting anyway", session_id)
 
-                # Small extra delay for input buffer to be ready
-                await asyncio.sleep(1)
-
-                # Send startup command
-                log.info("[%s] CLI mode — sending startup prompt", session_id)
-                if silent_startup:
-                    startup_msg = 'Run this exact command now: clawmux converse ""'
-                elif resuming:
-                    startup_msg = "Run this exact command now: clawmux converse \"Hey there!\""
-                else:
-                    startup_msg = f"Run this exact command now: clawmux converse \"Hi, this is {voice_name}! How can I help?\""
-                await self._tmux_type(tmux_name, startup_msg)
-                await asyncio.sleep(1)
-                # Send Enter to confirm (Claude Code may prompt for confirmation)
-                await self._run(f'tmux send-keys -t {tmux_name} Enter')
+            # Small extra delay for input buffer to be ready
+            await asyncio.sleep(1)
 
             session.status = "ready"
             session.touch()
-            log.info("Session %s ready (%s mode)", session_id, mode)
+            log.info("Session %s ready", session_id)
             return session
 
         except Exception as e:
@@ -780,12 +638,6 @@ class SessionManager:
 
         log.info("Terminating session %s", session_id)
         session.status = "dead"
-        if session.mcp_ws:
-            try:
-                await session.mcp_ws.close(code=1001, reason="Session terminated")
-            except Exception:
-                pass
-            session.mcp_ws = None
         await self._cleanup_tmux(session.tmux_session)
         self._cleanup_workdir(session)
         del self.sessions[session_id]
@@ -806,14 +658,6 @@ class SessionManager:
         session.pending_model_restart = False
         session.restarting = True
         session.status = "starting"
-
-        # Close existing MCP connection
-        if session.mcp_ws:
-            try:
-                await session.mcp_ws.close(code=1001, reason="Model restart")
-            except Exception:
-                pass
-            session.mcp_ws = None
 
         # Kill the entire tmux session (cleanly kills all processes inside)
         await self._cleanup_tmux(tmux_name)
@@ -871,30 +715,22 @@ class SessionManager:
         else:
             log.warning("[%s] Claude restart poll timed out", session_id)
 
-        if session.mode == "cli":
-            # CLI mode — send startup command
-            log.info("[%s] CLI mode restart — sending startup prompt", session_id)
-            startup_msg = 'Run this exact command now: clawmux converse ""'
-            await self._tmux_type(tmux_name, startup_msg)
-            await asyncio.sleep(0.5)
-            await self._run(f'tmux send-keys -t {tmux_name} Enter')
-        else:
-            # Wait for MCP server to reconnect
-            deadline = time.time() + 45
-            while time.time() < deadline:
-                if session.mcp_ws is not None:
+        # Wait for Claude Code to fully reinitialize
+        log.info("[%s] Waiting for full reinitialization after restart", session_id)
+        ready_deadline = time.time() + 30
+        while time.time() < ready_deadline:
+            try:
+                result = await self._run(f"tmux capture-pane -t {tmux_name} -p -e")
+                if result and ("Opus" in result or "Sonnet" in result or "Haiku" in result
+                               or "opus" in result or "sonnet" in result or "haiku" in result
+                               or "bypass" in result or "plan" in result):
                     break
-                await asyncio.sleep(1)
-            else:
-                log.error("[%s] MCP server did not reconnect after model restart", session_id)
-                session.restarting = False
-                return
-
-            # Send /clawmux skill command
-            log.info("[%s] MCP reconnected after restart, sending /clawmux", session_id)
-            await self._run(f'tmux send-keys -t {tmux_name} "/clawmux" Enter')
-            await asyncio.sleep(0.5)
-            await self._run(f'tmux send-keys -t {tmux_name} Enter')
+            except Exception:
+                pass
+            await asyncio.sleep(1)
+        else:
+            log.warning("[%s] Claude Code reinit poll timed out", session_id)
+        await asyncio.sleep(1)
 
         session.restarting = False
         session.status = "ready"
@@ -930,7 +766,7 @@ class SessionManager:
                     del self.sessions[session_id]
                     continue
 
-                # Voice mode watchdog: detect agents that dropped out of converse loop
+                # Voice mode watchdog: detect agents that dropped out of wait loop
                 await self._voice_watchdog(session_id, session, now)
 
                 if timeout > 0:
@@ -940,16 +776,8 @@ class SessionManager:
                         await self.terminate_session(session_id)
 
     async def _voice_watchdog(self, session_id: str, session: Session, now: float) -> None:
-        """Detect agents that dropped out of voice mode and re-inject the voice command.
-
-        Detection strategy:
-        - MCP mode: mcp_ws is None means the MCP server disconnected (crashed/lost connection).
-          A healthy MCP agent keeps a persistent WebSocket open.
-        - CLI mode: mcp_ws is None between converse calls (normal), but if no converse call
-          has happened for a while AND mcp_ws is None, the agent likely dropped out.
-          We use last_converse_time with a generous timeout to avoid false positives.
-        """
-        # Skip sessions that aren't ready, are actively in converse, processing, or restarting
+        """Detect agents that dropped out of voice mode and re-inject the wait command."""
+        # Skip sessions that aren't ready, are actively waiting, processing, or restarting
         if session.status != "ready":
             return
         if session.in_wait or session.processing or session.restarting or session.compacting:
@@ -958,43 +786,17 @@ class SessionManager:
         if session.reinject_attempts >= session.max_reinject_attempts:
             return
 
-        needs_reinject = False
-
-        if session.mode == "mcp":
-            # MCP mode: mcp_ws being None is the definitive signal
-            if session.mcp_ws is not None:
-                return  # WebSocket connected, agent is fine
-            # MCP disconnected — but give a grace period for reconnection
-            if session.last_converse_time > 0 and (now - session.last_converse_time) < 30:
-                return  # Disconnected recently, might be reconnecting
-            # Grace period for new sessions
-            if session.last_converse_time == 0 and (now - session.created_at) < 120:
-                return
-            needs_reinject = True
-
-        else:
-            # CLI mode: mcp_ws is transiently None between calls, so we can't rely on it alone.
-            # Instead, check if clawmux is running in the tmux pane.
-            if session.mcp_ws is not None:
-                return  # Currently in a converse call, agent is fine
-            # Grace period for new sessions
-            if session.last_converse_time == 0 and (now - session.created_at) < 120:
-                return
-            # If last converse was recent, agent is probably just processing between calls
-            if session.last_converse_time > 0 and (now - session.last_converse_time) < 90:
-                return
-            # Check if clawmux is visible in the tmux pane (actively waiting)
-            try:
-                result = await self._run(f"tmux capture-pane -t {session.tmux_session} -p")
-                # If clawmux or "Listening..." is visible, agent is still in voice mode
-                if result and ("clawmux" in result.lower() or "listening" in result.lower()):
-                    return
-            except Exception:
-                pass
-            needs_reinject = True
-
-        if not needs_reinject:
+        # Grace period for new sessions
+        if (now - session.created_at) < 120:
             return
+
+        # Check if clawmux is visible in the tmux pane (actively waiting)
+        try:
+            result = await self._run(f"tmux capture-pane -t {session.tmux_session} -p")
+            if result and ("clawmux" in result.lower() or "listening" in result.lower()):
+                return
+        except Exception:
+            pass
 
         # Agent appears to have dropped out of voice mode — attempt re-injection
         session.reinject_attempts += 1
@@ -1013,19 +815,11 @@ class SessionManager:
                 log.info("[%s] Voice watchdog: Claude not at prompt, skipping re-inject", session_id)
                 return
 
-            if session.mode == "mcp":
-                # MCP mode: send /clawmux skill command
-                log.info("[%s] Voice watchdog: re-injecting /clawmux (MCP mode)", session_id)
-                await self._run(f'tmux send-keys -t {tmux_name} "/clawmux" Enter')
-                await asyncio.sleep(0.5)
-                await self._run(f'tmux send-keys -t {tmux_name} Enter')
-            else:
-                # CLI mode: send clawmux converse command
-                log.info("[%s] Voice watchdog: re-injecting clawmux converse (CLI mode)", session_id)
-                startup_msg = 'Run this exact command now: clawmux converse ""'
-                await self._tmux_type(tmux_name, startup_msg)
-                await asyncio.sleep(1)
-                await self._run(f'tmux send-keys -t {tmux_name} Enter')
+            log.info("[%s] Voice watchdog: re-injecting clawmux wait", session_id)
+            startup_msg = 'Run this exact command now: clawmux wait'
+            await self._tmux_type(tmux_name, startup_msg)
+            await asyncio.sleep(1)
+            await self._run(f'tmux send-keys -t {tmux_name} Enter')
         except Exception as e:
             log.error("[%s] Voice watchdog re-inject failed: %s", session_id, e)
 
@@ -1033,7 +827,7 @@ class SessionManager:
         # Don't delete voice work dirs — they persist for --resume
         # Only clean up state files so stale config doesn't interfere
         if session.work_dir:
-            for name in (".mcp.json", ".session.json"):
+            for name in (".session.json",):
                 p = Path(session.work_dir) / name
                 if p.exists():
                     try:

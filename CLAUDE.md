@@ -203,8 +203,8 @@ clawmux spawn
 # Specify voice
 clawmux spawn --voice am_echo
 
-# MCP mode with custom label
-clawmux spawn --voice af_sky --mode mcp --label "Sky Agent"
+# With custom label
+clawmux spawn --voice af_sky --label "Sky Agent"
 ```
 
 **Flags:**
@@ -212,10 +212,9 @@ clawmux spawn --voice af_sky --mode mcp --label "Sky Agent"
 | Flag | Description | Default |
 |---|---|---|
 | `--voice <id>` | TTS voice (e.g. `af_sky`, `am_echo`, `am_onyx`) | random |
-| `--mode <mode>` | Session mode: `cli` or `mcp` | `cli` |
 | `--label <name>` | Custom display label for the session | — |
 
-**Output:** Prints session ID, voice, and mode.
+**Output:** Prints session ID and voice.
 
 #### `clawmux project "<name>"`
 Set the project and area displayed in the sidebar for your session.
