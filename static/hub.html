@@ -3716,27 +3716,13 @@ function handleMessage(data) {
     if (s) {
       // Tool status updates from Claude Code hooks (status_text without status field)
       if ('status_text' in data && !data.status) {
-        if (data.status_text) {
-          // New tool started — show immediately, cancel any pending clear
-          clearTimeout(s._toolStatusClearTimer);
-          s.toolStatusText = data.status_text;
-        } else {
-          // Tool finished — debounce the clear to avoid flashing "Thinking..." between rapid tool calls
-          clearTimeout(s._toolStatusClearTimer);
-          s._toolStatusClearTimer = setTimeout(() => {
-            s.toolStatusText = '';
-            updateThinkingLabel(data.session_id);
-            renderSidebar();
-          }, 1500);
-          return; // don't update UI yet
-        }
+        s.toolStatusText = data.status_text || '';
         updateThinkingLabel(data.session_id);
         renderSidebar();
         return;
       }
       s.status = data.status;
       if (data.status === 'ready') {
-        clearTimeout(s._toolStatusClearTimer);
         s.toolStatusText = '';
         // Don't override to ready if session has unread messages (keep showing "New Message")
         if (!(s.unreadCount > 0)) {
