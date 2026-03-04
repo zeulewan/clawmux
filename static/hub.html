@@ -2600,7 +2600,7 @@ function addMessage(sessionId, role, text) {
 }
 
 // --- Session management ---
-async function spawnSession(voiceId = '', mode = '') {
+async function spawnSession(voiceId = '', mode = 'cli') {
   if (voiceId && spawningVoices.has(voiceId)) return; // already spawning this voice
 
   // Mark voice as spawning immediately and update grid
