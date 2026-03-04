@@ -32,6 +32,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from history_store import HistoryStore
 import hub_config
 from hub_config import HUB_PORT, HUB_START_TIME
+import inbox
 from message_broker import MessageBroker
 from project_manager import ProjectManager
 from session_manager import SessionManager
@@ -1352,7 +1353,16 @@ async def send_message(request: Request):
         skip_tmux=True,
     )
 
-    # Inject via converse pipeline — if agent is in converse, it arrives immediately.
+    # Write to inbox for hook-based delivery
+    if recipient.work_dir:
+        await _inbox_write_and_notify(recipient, {
+            "id": msg.id,
+            "from": sender_name,
+            "type": "agent",
+            "content": content,
+        })
+
+    # Also inject via converse pipeline — if agent is in converse, it arrives immediately.
     # If not, it queues as an interjection for the next converse call.
     formatted = f"[MSG id:{msg.id} from:{sender_name}] {content}"
     recipient.interjections.append(formatted)
@@ -1430,6 +1440,62 @@ async def get_message(msg_id: str):
     if not msg:
         return JSONResponse({"error": "message not found"}, status_code=404)
     return JSONResponse(msg.to_dict())
+
+
+# ---------------------------------------------------------------------------
+# Inbox API
+# ---------------------------------------------------------------------------
+
+@app.get("/api/inbox/{session_id}")
+async def get_inbox(session_id: str):
+    """Read and clear all inbox messages for a session."""
+    session = session_mgr.sessions.get(session_id)
+    if not session or not session.work_dir:
+        return JSONResponse({"messages": []})
+    messages = inbox.read_and_clear(session.work_dir)
+    if messages:
+        # Notify browser that inbox was cleared
+        await send_to_browser({
+            "type": "inbox_update",
+            "session_id": session_id,
+            "count": 0,
+        })
+    return JSONResponse({"messages": messages})
+
+
+@app.get("/api/inbox/{session_id}/peek")
+async def peek_inbox(session_id: str):
+    """Check inbox without consuming messages."""
+    session = session_mgr.sessions.get(session_id)
+    if not session or not session.work_dir:
+        return JSONResponse({"count": 0})
+    count = inbox.peek(session.work_dir)
+    latest = inbox.peek_latest(session.work_dir) if count > 0 else None
+    result = {"count": count}
+    if latest:
+        result["latest"] = {
+            "from": latest.get("from", ""),
+            "type": latest.get("type", ""),
+            "preview": latest.get("content", "")[:100],
+        }
+    return JSONResponse(result)
+
+
+async def _inbox_write_and_notify(session, msg_dict: dict) -> dict:
+    """Write to inbox and notify browser."""
+    written = inbox.write(session.work_dir, msg_dict)
+    count = inbox.peek(session.work_dir)
+    await send_to_browser({
+        "type": "inbox_update",
+        "session_id": session.session_id,
+        "count": count,
+        "latest": {
+            "from": msg_dict.get("from", ""),
+            "type": msg_dict.get("type", ""),
+            "preview": msg_dict.get("content", "")[:100],
+        },
+    })
+    return written
 
 
 # ---------------------------------------------------------------------------
