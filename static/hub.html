@@ -1855,6 +1855,8 @@ function _sidebarState(voiceId) {
     const st = session.sidebarState || 'idle';
     if (st === 'starting') {
       stateClass = 'starting'; statusLabel = 'Starting...';
+    } else if (session.compacting) {
+      stateClass = 'working'; statusLabel = 'Compacting...';
     } else if (st === 'working' || st === 'thinking') {
       stateClass = 'working';
       statusLabel = session.toolStatusText || 'Working...';

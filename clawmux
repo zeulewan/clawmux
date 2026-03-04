@@ -142,7 +142,24 @@ def cmd_status(args):
 
         print(f"Agent: {found.get('label', found.get('voice', '?'))}")
         print(f"  Voice: {found.get('voice', '?')}")
-        print(f"  Status: {found.get('status', '?')}")
+        # Derive high-level state
+        if found.get("status") in ("starting", "dead"):
+            detail_state = found["status"]
+        elif found.get("compacting"):
+            detail_state = "working"
+        elif found.get("in_converse"):
+            detail_state = "converse"
+        elif found.get("status_text") or found.get("processing"):
+            detail_state = "working"
+        else:
+            detail_state = "idle"
+        print(f"  State: {detail_state}")
+        # Show tool activity as sub-detail
+        activity = found.get("status_text", "")
+        if found.get("compacting"):
+            activity = "Compacting context"
+        if activity:
+            print(f"  Activity: {activity}")
         print(f"  Session ID: {found.get('session_id', '?')}")
         if found.get("project"):
             area = f" · {found['project_area']}" if found.get("project_area") else ""
@@ -186,15 +203,31 @@ def cmd_status(args):
         active_marker = " *" if slug == active_project else ""
         agent_count = len(by_project[slug])
         print(f"  {proj_name}{active_marker} ({agent_count} agents)")
-        print(f"  {'Name':<10} {'Status':<8} {'Area':<22} {'Work Dir'}")
-        print(f"  {'-' * 70}")
+        print(f"  {'Name':<10} {'State':<8} {'Activity':<22} {'Area':<22} {'Work Dir'}")
+        print(f"  {'-' * 90}")
         for s in sorted(by_project[slug], key=lambda s: s.get("label", "")):
             name = s.get("label", s.get("voice", "?"))
-            status = s.get("status", "?")
+            # Derive high-level state (matches sidebar)
+            if s.get("status") in ("starting", "dead"):
+                state = s["status"]
+            elif s.get("compacting"):
+                state = "working"
+            elif s.get("in_converse"):
+                state = "converse"
+            elif s.get("status_text") or s.get("processing"):
+                state = "working"
+            else:
+                state = "idle"
+            # Tool activity as separate column
+            activity = s.get("status_text", "")
+            if s.get("compacting"):
+                activity = "Compacting..."
+            if len(activity) > 20:
+                activity = activity[:18] + ".."
             area = s.get("project_area", "")
             work_dir = s.get("work_dir", "")
             work_dir = work_dir.replace("/home/zeul/", "~/").replace("/tmp/clawmux-sessions/", "~/sessions/")
-            print(f"  {name:<10} {status:<8} {area:<22} {work_dir}")
+            print(f"  {name:<10} {state:<8} {activity:<22} {area:<22} {work_dir}")
         print()
 
 
