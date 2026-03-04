@@ -21,6 +21,10 @@ Detailed release history and upcoming work. Each version page includes checklist
 - [v0.1.0 — MCP Rewrite](v0.1.0.md)
 - [v0.0.1 — Initial Release](v0.0.1.md)
 
+## Vision
+
+- [Vision Roadmap](vision.md): Long-term phases for federation, trust, and next-gen version control.
+
 ## Research
 
 - [A2A Protocol Feasibility Study](a2a-feasibility.md): Assessment of integrating the Agent2Agent protocol for hub federation and external agent interop.

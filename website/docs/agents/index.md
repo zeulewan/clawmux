@@ -11,6 +11,17 @@ Start here depending on what you're working on:
 | **iOS Dev** | [iOS Development](ios-dev.md) | Building the native iOS app. What to read, what to implement, what files to watch |
 | **Web Dev** | [Web Development](web-dev.md) | Building browser features. What docs to keep updated, conventions, testing |
 
+## Vision
+
+Long-term architecture for federation, trust, and next-gen version control:
+
+| Document | Description |
+|----------|-------------|
+| [Agent Federation](federation.md) | Decentralized agent-to-agent communication via A2A protocol |
+| [Trust & Reputation](trust.md) | Trust tiers, dynamic scoring, cryptographic verification |
+| [Next-Gen Version Control](vcs.md) | CRDT-based real-time collaborative editing, checkpoint model |
+| [Vision Roadmap](roadmap/vision.md) | Long-term phases for federation, trust, and VCS |
+
 ## Reference
 
 | Document | Description |
