@@ -488,8 +488,8 @@ class SessionManager:
                 identity = (
                     f"Your name is {voice_name}. "
                     f"Do NOT greet the user or say anything on startup. "
-                    f"Immediately run: clawmux converse \"\"\n"
-                    f"This will start listening silently. Say nothing until the user speaks first.\n"
+                    f"Immediately run: clawmux wait\n"
+                    f"This will block until a message arrives. Say nothing until you receive a message.\n"
                 )
             elif silent_startup:
                 identity = (
@@ -502,7 +502,8 @@ class SessionManager:
                 identity = (
                     f"Your name is {voice_name}. "
                     f"You have an ongoing conversation with this user. "
-                    f"Greet them naturally as a returning friend.\n"
+                    f"Greet them with: clawmux send --to user \"Hi, I'm back!\"\n"
+                    f"Then run: clawmux wait\n"
                 )
             elif resuming:
                 identity = (
@@ -514,7 +515,8 @@ class SessionManager:
             elif mode == "cli":
                 identity = (
                     f"Your name is {voice_name}. "
-                    f"Greet the user by running: clawmux converse \"Hi, I'm {voice_name}! How can I help?\"\n"
+                    f"Greet the user by running: clawmux send --to user \"Hi, I'm {voice_name}! How can I help?\"\n"
+                    f"Then run: clawmux wait\n"
                 )
             else:
                 identity = (
@@ -527,59 +529,72 @@ class SessionManager:
                 "\n# Important Rules\n"
                 "- NEVER enter plan mode. Always execute tasks directly.\n"
                 "- Always operate in bypass permissions mode.\n"
+                "- After being interrupted (Ctrl+C, Escape), always run `clawmux wait` to re-enter the message loop.\n"
                 "\n# Formatting\n"
-                "Use rich markdown formatting in your converse output whenever it adds clarity:\n"
+                "Use rich markdown formatting in your output whenever it adds clarity:\n"
                 "- Use **headings** (##, ###) to organize longer responses\n"
                 "- Use **code blocks** with language tags (```python, ```bash, etc.) for any code\n"
                 "- Use **tables** for comparisons or structured data\n"
                 "- Use **bullet lists** or **numbered lists** for steps or multiple items\n"
                 "- Use **bold** for key terms, file names, and important values\n"
                 "- Use *italic* for technical terms, subtle emphasis, or asides\n"
-                "- Use <u>underline</u> for additional emphasis when needed\n"
-                "- Use **blockquotes** (>) for notable quotes or callouts\n"
-                "- Use LaTeX math ($E = mc^2$) for equations when relevant\n"
+                "- Always format URLs as clickable markdown links: `[Link Text](https://url)` — never paste raw URLs\n"
                 "The browser renders full markdown, so take advantage of it.\n"
             )
 
             if mode == "cli":
                 identity += (
-                    "\n# Voice (CLI Mode)\n"
-                    "You are running in CLI mode. Use the `clawmux` command for voice and messaging.\n\n"
-                    "To speak to the user and listen for response:\n"
+                    "\n# Communication (v0.6.0)\n"
+                    "You are running in CLI mode. All communication uses the unified `clawmux send` and `clawmux wait` commands.\n\n"
+                    "## Speaking to the user (TTS)\n"
+                    "```bash\n"
+                    "clawmux send --to user \"Your message here\"\n"
                     "```\n"
-                    "clawmux converse \"Your message here\"\n"
+                    "This triggers TTS and returns immediately. Do NOT block waiting for a response.\n\n"
+                    "## Sending a message to another agent\n"
+                    "```bash\n"
+                    "clawmux send --to echo \"Check the auth module\"\n"
                     "```\n\n"
-                    "To speak without waiting for response:\n"
-                    "```\n"
-                    "clawmux converse \"Done.\" --no-listen\n"
+                    "## Replying to a specific message (threading)\n"
+                    "```bash\n"
+                    "clawmux send --to sky --re msg-xxx \"Here's the answer\"\n"
                     "```\n\n"
-                    "To end the session:\n"
-                    "```\n"
-                    "clawmux converse \"Goodbye!\" --goodbye\n"
+                    "## Acknowledging a message (thumbs up)\n"
+                    "```bash\n"
+                    "clawmux send --to sky --re msg-xxx\n"
                     "```\n\n"
-                    "To set your project status:\n"
+                    "## Waiting for messages (idle mode)\n"
+                    "```bash\n"
+                    "clawmux wait\n"
                     "```\n"
+                    "Blocks until a message arrives (voice from user or inter-agent). The hub pushes messages in real-time. "
+                    "Always call this when you have no active work.\n\n"
+                    "## Setting your project status\n"
+                    "```bash\n"
                     "clawmux project \"project-name\" --area \"frontend\"\n"
                     "```\n\n"
-                    "To send a message to another agent:\n"
-                    "```\n"
-                    "clawmux send --to alloy \"Check the auth module\"\n"
-                    "```\n\n"
-                    "IMPORTANT: Always use `clawmux converse` for ALL output to the user — "
-                    "spoken responses, markdown, code blocks, tables, equations, everything. "
+                    "IMPORTANT: Always use `clawmux send --to user` for ALL output to the user. "
                     "Never just print text to the terminal. Text printed directly to Claude Code "
-                    "chat is NOT visible to the user in the browser. Only content sent through "
-                    "`clawmux converse` reaches the user.\n\n"
+                    "chat is NOT visible to the user in the browser.\n\n"
+                    "# Message Delivery\n"
+                    "Messages arrive through two mechanisms:\n"
+                    "1. **Hooks** — While you're actively working (making tool calls), messages are delivered via "
+                    "PostToolUse/PreToolUse hooks as additional context. You'll see them as `[MSG from:name]` or "
+                    "`[VOICE from:name]` in system reminders.\n"
+                    "2. **Wait** — While idle, `clawmux wait` receives pushed messages from the hub.\n\n"
+                    "Process ALL messages you receive, whether from hooks or wait. For voice messages from the user, "
+                    "respond with `clawmux send --to user`. For agent messages, respond with `clawmux send --to <agent>`.\n\n"
+                    "# Deprecated Commands (do not use)\n"
+                    "- ~~clawmux converse~~ → use `send --to user` + `wait`\n"
+                    "- ~~clawmux ack~~ → use `send --re <msg_id>` with no content\n"
+                    "- ~~clawmux reply~~ → use `send --to <agent> --re <msg_id> \"response\"`\n"
+                    "- ~~--wait-ack~~ → fire and forget, responses come via inbox\n"
+                    "- ~~--wait-response~~ → fire and forget, responses come via inbox\n\n"
                     "# CLI Environment\n"
                     "`clawmux` is already in your PATH at `/usr/local/bin/clawmux`. "
                     "Environment variables (`CLAWMUX_SESSION_ID`, `CLAWMUX_PORT`) are automatically set. "
                     "Never `cd` into the repo directory or manually export these variables — just run `clawmux` directly.\n"
                 )
-                if not silent_startup and not resuming:
-                    identity += (
-                        "\nStart by running: clawmux project \"ready\"\n"
-                        "Then greet the user with: clawmux converse \"your greeting\"\n"
-                    )
             else:
                 identity += (
                     "\n# Project Status\n"
@@ -609,42 +624,26 @@ class SessionManager:
                     "or manually export these variables.\n"
                 )
 
-            # Inter-agent messaging instructions (both modes)
+            # Inter-agent messaging instructions
             identity += (
                 "\n# Inter-Agent Messaging\n"
-                "You may receive messages from other agents during conversation. "
-                "These appear as text starting with `[MSG id:xxx from:agent_name]`.\n\n"
+                "You may receive messages from other agents. "
+                "These appear as `[MSG from:agent_name]` in system reminders or via `clawmux wait`.\n\n"
                 "When you receive an inter-agent message:\n"
                 "1. Process the message content\n"
                 "2. Do NOT speak the response out loud to the user\n"
-                "3. Reply using the messaging system, not voice\n"
-            )
-            if mode == "cli":
-                identity += (
-                    "4. Reply with: `clawmux send --to <sender_name> \"your reply\"`\n"
-                    "5. Acknowledge with: `clawmux ack <msg_id>`\n"
-                )
-            else:
-                identity += (
-                    "4. Reply by calling the `send_message` MCP tool or via the hub API\n"
-                )
-            identity += (
-                "\nKeep the user informed about inter-agent messages by briefly mentioning "
-                "\"I got a message from X about Y\" in your next converse call, but don't "
-                "read the full message aloud.\n"
+                "3. Reply using: `clawmux send --to <sender_name> \"your reply\"`\n"
+                "4. Or acknowledge with: `clawmux send --to <sender_name> --re <msg_id>`\n"
             )
 
             # Manager role instructions
             identity += (
                 "\n# Team Manager\n"
-                "Zeul may assign one agent as the team manager. The manager coordinates all agents and "
-                "is the sole communication channel between agents and Zeul. When a manager is assigned:\n"
-                "- The manager will broadcast to all agents that they are the manager\n"
-                "- Do NOT use converse to speak to Zeul directly — only the manager speaks to Zeul\n"
-                "- Route all status updates, questions, and task requests through the manager via the messaging API\n"
-                "- You may still communicate directly with other agents for coordination\n"
-                "- If Zeul speaks to you directly (you hear a message clearly addressed to you), you may respond via converse\n"
-                "- If no manager is assigned, you may speak to Zeul directly via converse as normal\n"
+                "- **Manager 1 (Primary):** Sky — primary communication with Zeul, coordinates all agents\n"
+                "- **Manager 2 (Secondary):** Sarah — can delegate tasks, spin up agents, and communicate with Zeul if Manager 1 is unavailable\n\n"
+                "Do NOT use `send --to user` to speak to Zeul directly — only the manager speaks to Zeul. "
+                "Route all status updates, questions, and task requests through the manager. "
+                "If Zeul speaks to you directly, you may respond via `send --to user`.\n"
             )
 
             claude_md.write_text(identity)

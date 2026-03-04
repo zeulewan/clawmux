@@ -21,8 +21,11 @@ RESPONSE=$(curl -sf "http://localhost:${CLAWMUX_PORT}/api/inbox/${CLAWMUX_SESSIO
 MESSAGES=$(echo "$RESPONSE" | jq -r '.messages // []')
 COUNT=$(echo "$MESSAGES" | jq 'length')
 
-# No messages → let Claude stop normally
-[ "$COUNT" = "0" ] && exit 0
+# No messages → prompt agent to enter idle mode
+if [ "$COUNT" = "0" ]; then
+    echo "No pending messages. Run \`clawmux wait\` to enter idle mode and receive messages." >&2
+    exit 2
+fi
 
 # Format messages for Claude's context (stderr on exit 2 is fed to Claude)
 {

@@ -21,6 +21,7 @@ import signal
 import subprocess
 import sys
 import time
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -605,11 +606,29 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
         log.info("[%s] Listening...", session_id)
 
         # Wait for recorded audio (re-send listening every 5s in case client reconnected)
+        # Also watch inbox for messages arriving during listen phase
         while True:
             try:
                 audio_bytes = await asyncio.wait_for(session.audio_queue.get(), timeout=5)
                 break
             except asyncio.TimeoutError:
+                # Check inbox for messages that arrived during listen
+                if session.work_dir:
+                    inbox_msgs = inbox.read_and_clear(session.work_dir)
+                    if inbox_msgs:
+                        formatted = _format_inbox_messages(inbox_msgs)
+                        log.info("[%s] Inbox messages during listen: %d", session_id, len(inbox_msgs))
+                        session.interjections.append(formatted)
+                        session.text_override = " ... ".join(session.interjections)
+                        session.interjections.clear()
+                        history.clear_interjections(session.voice, _hist_prefix(session))
+                        await session.audio_queue.put(b"__text__")
+                        await send_to_browser({
+                            "type": "inbox_update",
+                            "session_id": session_id,
+                            "count": 0,
+                        })
+                        continue  # Loop back to get the __text__ marker
                 # Re-send listening to any newly connected clients
                 if browser_clients:
                     await send_to_browser({"session_id": session_id, "type": "listening"})
@@ -834,6 +853,19 @@ async def handle_browser_message(data: dict) -> None:
                 session.interjections.clear()
                 history.clear_interjections(session.voice, _hist_prefix(session))
                 await session.audio_queue.put(b"__text__")
+            elif session.work_dir:
+                # Agent NOT in converse — write to inbox for hook-based delivery
+                # (PostToolUse/PreToolUse will pick it up via additionalContext)
+                sender_name = data.get("voice", session.voice or "user")
+                sender_name = sender_name.replace("af_", "").replace("am_", "").replace("bm_", "")
+                await _inbox_write_and_notify(session, {
+                    "from": sender_name,
+                    "type": "voice",
+                    "content": text,
+                })
+                log.info("[%s] Voice interjection written to inbox for hook delivery", session_id)
+                # Signal browser that processing is complete so mic re-enables
+                await send_to_browser({"session_id": session_id, "type": "done", "processing": True})
 
     elif msg_type == "set_mode":
         mode = data.get("mode", "voice")
@@ -853,6 +885,68 @@ async def handle_browser_message(data: dict) -> None:
             session.model = model
             log.info("[%s] Model restart requested: %s", session_id, model)
             asyncio.create_task(session_mgr.restart_claude_with_model(session_id))
+
+
+# --- Wait WebSocket (push-based inbox delivery for CLI) ---
+
+@app.websocket("/ws/wait/{session_id}")
+async def wait_websocket(ws: WebSocket, session_id: str):
+    """Push-based inbox delivery. CLI connects, blocks until a message arrives."""
+    await ws.accept()
+    session = session_mgr.sessions.get(session_id)
+    if not session:
+        await ws.close(code=4004, reason="Session not found")
+        return
+
+    log.info("[%s] Wait WS connected", session_id)
+
+    # Register this WS for push notifications
+    if not hasattr(session, "_wait_queue"):
+        session._wait_queue = asyncio.Queue()
+
+    try:
+        # First, check if there are already pending inbox messages
+        if session.work_dir:
+            messages = inbox.read_and_clear(session.work_dir)
+            if messages:
+                await ws.send_json({"type": "messages", "messages": messages})
+                await send_to_browser({
+                    "type": "inbox_update",
+                    "session_id": session_id,
+                    "count": 0,
+                })
+                return
+
+        # Block until a message is pushed to our queue
+        while True:
+            try:
+                msg = await asyncio.wait_for(session._wait_queue.get(), timeout=5)
+                await ws.send_json({"type": "messages", "messages": [msg]})
+                return
+            except asyncio.TimeoutError:
+                # Check inbox file as fallback (in case message was written directly)
+                if session.work_dir:
+                    messages = inbox.read_and_clear(session.work_dir)
+                    if messages:
+                        await ws.send_json({"type": "messages", "messages": messages})
+                        await send_to_browser({
+                            "type": "inbox_update",
+                            "session_id": session_id,
+                            "count": 0,
+                        })
+                        return
+                # Send keepalive ping
+                try:
+                    await ws.send_json({"type": "ping"})
+                except Exception:
+                    break
+    except WebSocketDisconnect:
+        log.info("[%s] Wait WS disconnected", session_id)
+    except Exception as e:
+        log.warning("[%s] Wait WS error: %s", session_id, e)
+    finally:
+        if hasattr(session, "_wait_queue"):
+            del session._wait_queue
 
 
 # --- MCP Server WebSocket (one per session) ---
@@ -1016,6 +1110,23 @@ def _tool_status_text(tool_name: str, tool_input: dict) -> str:
     return _TOOL_STATUS_MAP.get(tool_name, tool_name)
 
 
+def _format_inbox_messages(messages: list[dict]) -> str:
+    """Format inbox messages as text for Claude's additionalContext."""
+    lines = [f"You have {len(messages)} new message(s):"]
+    for msg in messages:
+        msg_type = msg.get("type", "system")
+        sender = msg.get("from", "unknown")
+        content = msg.get("content", "")
+        msg_id = msg.get("id", "")
+        if msg_type == "agent":
+            lines.append(f"[MSG id:{msg_id} from:{sender}] {content}")
+        elif msg_type == "voice":
+            lines.append(f"[VOICE from:{sender}] {content}")
+        else:
+            lines.append(f"[SYSTEM] {content}")
+    return "\n".join(lines)
+
+
 @app.post("/api/hooks/tool-status")
 async def hook_tool_status(request: Request):
     """Receive Claude Code PreToolUse/PostToolUse hooks to update live session status."""
@@ -1036,8 +1147,27 @@ async def hook_tool_status(request: Request):
     if not session:
         return JSONResponse({})
 
+    response_json = {}
+
     if event in ("PostToolUse", "PostToolUseFailure"):
         session.status_text = ""
+        # Check inbox for pending messages — deliver via additionalContext
+        if session.work_dir:
+            messages = inbox.read_and_clear(session.work_dir)
+            if messages:
+                formatted = _format_inbox_messages(messages)
+                response_json = {
+                    "hookSpecificOutput": {
+                        "hookEventName": event,
+                        "additionalContext": formatted,
+                    }
+                }
+                # Notify browser that inbox was cleared
+                await send_to_browser({
+                    "type": "inbox_update",
+                    "session_id": session.session_id,
+                    "count": 0,
+                })
     elif event == "Stop":
         session.status_text = ""
         session.processing = False
@@ -1046,6 +1176,65 @@ async def hook_tool_status(request: Request):
         tool_input = data.get("tool_input", {})
         session.status_text = _tool_status_text(tool_name, tool_input)
         session.processing = True
+        # Check inbox for urgent messages — deliver via additionalContext
+        if session.work_dir:
+            messages = inbox.read_and_clear(session.work_dir)
+            if messages:
+                formatted = _format_inbox_messages(messages)
+                response_json = {
+                    "hookSpecificOutput": {
+                        "hookEventName": event,
+                        "additionalContext": formatted,
+                    }
+                }
+                await send_to_browser({
+                    "type": "inbox_update",
+                    "session_id": session.session_id,
+                    "count": 0,
+                })
+    elif event == "Notification":
+        # Notification hook — relay to browser and check inbox
+        notification = data.get("notification", {})
+        await send_to_browser({
+            "type": "notification",
+            "session_id": session.session_id,
+            "notification": notification,
+        })
+        # Also deliver any pending inbox messages
+        if session.work_dir:
+            messages = inbox.read_and_clear(session.work_dir)
+            if messages:
+                formatted = _format_inbox_messages(messages)
+                response_json = {
+                    "hookSpecificOutput": {
+                        "hookEventName": event,
+                        "additionalContext": formatted,
+                    }
+                }
+                await send_to_browser({
+                    "type": "inbox_update",
+                    "session_id": session.session_id,
+                    "count": 0,
+                })
+    elif event == "SessionStart":
+        # SessionStart hook — mark session active, inject any pending inbox
+        session.processing = True
+        session.status_text = "Starting session..."
+        if session.work_dir:
+            messages = inbox.read_and_clear(session.work_dir)
+            if messages:
+                formatted = _format_inbox_messages(messages)
+                response_json = {
+                    "hookSpecificOutput": {
+                        "hookEventName": event,
+                        "additionalContext": formatted,
+                    }
+                }
+                await send_to_browser({
+                    "type": "inbox_update",
+                    "session_id": session.session_id,
+                    "count": 0,
+                })
     elif event == "PreCompact":
         session.status_text = "Compacting context..."
     else:
@@ -1059,7 +1248,7 @@ async def hook_tool_status(request: Request):
     if event == "Stop":
         msg["agent_idle"] = True
     await send_to_browser(msg)
-    return JSONResponse({})
+    return JSONResponse(response_json)
 
 
 # --- REST API ---
@@ -1323,9 +1512,10 @@ async def send_message(request: Request):
     recipient_name = data.get("to")
     content = data.get("message", "")
     expect_response = data.get("expect_response", False)
+    parent_id = data.get("parent_id", "")
 
-    if not sender_id or not recipient_name or not content:
-        return JSONResponse({"error": "sender, to, and message are required"}, status_code=400)
+    if not sender_id or not recipient_name or (not content and not parent_id):
+        return JSONResponse({"error": "sender, to, and message are required (or use parent_id for bare ack)"}, status_code=400)
 
     sender = session_mgr.sessions.get(sender_id)
     if not sender:
@@ -1351,26 +1541,33 @@ async def send_message(request: Request):
         recipient_name=recip_name,
         expect_response=expect_response,
         skip_tmux=True,
+        parent_id=parent_id,
     )
 
-    # Write to inbox for hook-based delivery
-    if recipient.work_dir:
+    # Deliver via exactly ONE path to avoid duplicate delivery:
+    # - In converse → converse pipeline (immediate, agent sees it now)
+    # - Not in converse → inbox (hooks deliver via additionalContext)
+    formatted = f"[MSG id:{msg.id} from:{sender_name}] {content}"
+    if recipient.in_converse and recipient.audio_queue:
+        # Converse pipeline — immediate delivery
+        recipient.interjections.append(formatted)
+        recipient.text_override = " ... ".join(recipient.interjections)
+        recipient.interjections.clear()
+        await recipient.audio_queue.put(b"__text__")
+        log.info("[%s] Message %s injected via converse pipeline", recipient.session_id, msg.id)
+    elif recipient.work_dir:
+        # Inbox — hook-based delivery (PostToolUse/PreToolUse additionalContext)
         await _inbox_write_and_notify(recipient, {
             "id": msg.id,
             "from": sender_name,
             "type": "agent",
             "content": content,
         })
-
-    # Also inject via converse pipeline — if agent is in converse, it arrives immediately.
-    # If not, it queues as an interjection for the next converse call.
-    formatted = f"[MSG id:{msg.id} from:{sender_name}] {content}"
-    recipient.interjections.append(formatted)
-    if recipient.in_converse and recipient.audio_queue:
-        recipient.text_override = " ... ".join(recipient.interjections)
-        recipient.interjections.clear()
-        await recipient.audio_queue.put(b"__text__")
-        log.info("[%s] Message %s injected via converse pipeline", recipient.session_id, msg.id)
+        log.info("[%s] Message %s written to inbox for hook delivery", recipient.session_id, msg.id)
+    else:
+        # Fallback — no inbox, no converse, queue as interjection
+        recipient.interjections.append(formatted)
+        log.info("[%s] Message %s queued as interjection (fallback)", recipient.session_id, msg.id)
 
     # Save to history so messages persist across browser reloads
     history.append(recipient.voice, recipient.label, "system",
@@ -1387,6 +1584,69 @@ async def send_message(request: Request):
     })
 
     return JSONResponse({"id": msg.id, "state": msg.state})
+
+
+@app.post("/api/messages/speak")
+async def speak_to_user(request: Request):
+    """Agent speaks to user via TTS — fire and forget."""
+    data = await request.json()
+    sender_id = data.get("sender", "")
+    content = data.get("message", "")
+    parent_id = data.get("parent_id", "")
+
+    sender = session_mgr.sessions.get(sender_id)
+    if not sender:
+        return JSONResponse({"error": f"sender session '{sender_id}' not found"}, status_code=404)
+
+    ack_only = data.get("ack_only", False)
+    if ack_only and parent_id:
+        # Bare ack — just send thumbs up to browser, no TTS
+        msg_id = f"msg-{uuid.uuid4().hex[:8]}"
+        sender_name = sender.voice.replace("af_", "").replace("am_", "").replace("bm_", "")
+        await send_to_browser({
+            "session_id": sender_id,
+            "type": "agent_message",
+            "id": msg_id,
+            "from": sender_name,
+            "parent_id": parent_id,
+            "content": "",
+            "bare_ack": True,
+        })
+        return {"id": msg_id, "status": "ack_sent"}
+
+    if not content:
+        return JSONResponse({"error": "message is required"}, status_code=400)
+
+    sender_name = sender.voice.replace("af_", "").replace("am_", "").replace("bm_", "")
+    msg_id = f"msg-{uuid.uuid4().hex[:8]}"
+
+    # Save to history
+    history.append(sender.voice, sender.label, "assistant", content, _hist_prefix(sender))
+    if sender_id != _browser_viewed_session:
+        sender.unread_count += 1
+
+    # Send text to browser chat
+    await send_to_browser({"session_id": sender_id, "type": "assistant_text", "text": content})
+
+    # TTS — strip non-speakable content and play
+    skip_tts = sender.text_mode or not _load_settings().get("voice_responses", True)
+    if not skip_tts:
+        tts_message = strip_non_speakable(content)
+        if tts_message.strip():
+            try:
+                audio_b64, word_timestamps = await tts_captioned(tts_message, sender.voice, sender.speed)
+            except Exception as e:
+                log.warning("[%s] Captioned TTS failed (%s), falling back", sender_id, e)
+                mp3 = await tts(tts_message, sender.voice, sender.speed)
+                audio_b64 = base64.b64encode(mp3).decode()
+                word_timestamps = []
+            audio_msg = {"session_id": sender_id, "type": "audio", "data": audio_b64}
+            if word_timestamps:
+                audio_msg["words"] = word_timestamps
+            await send_to_browser(audio_msg)
+
+    log.info("[%s] Spoke to user: %s", sender_id, content[:80])
+    return JSONResponse({"id": msg_id, "state": "delivered"})
 
 
 @app.post("/api/messages/{msg_id}/ack")
@@ -1482,7 +1742,7 @@ async def peek_inbox(session_id: str):
 
 
 async def _inbox_write_and_notify(session, msg_dict: dict) -> dict:
-    """Write to inbox and notify browser."""
+    """Write to inbox and notify browser + wait WS."""
     written = inbox.write(session.work_dir, msg_dict)
     count = inbox.peek(session.work_dir)
     await send_to_browser({
@@ -1495,6 +1755,12 @@ async def _inbox_write_and_notify(session, msg_dict: dict) -> dict:
             "preview": msg_dict.get("content", "")[:100],
         },
     })
+    # Push to wait WS if connected (for clawmux wait)
+    if hasattr(session, "_wait_queue"):
+        try:
+            session._wait_queue.put_nowait(written)
+        except Exception:
+            pass
     return written
 
 

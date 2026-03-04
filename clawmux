@@ -108,6 +108,7 @@ def http_post(path: str, data: dict) -> dict:
 
 def cmd_converse(args):
     """Speak a message and optionally listen for response."""
+    print("DEPRECATED: Use 'clawmux send --to user' to speak and 'clawmux wait' to listen.", file=sys.stderr)
     session_id = require_session_id()
 
     payload = {
@@ -124,6 +125,42 @@ def cmd_converse(args):
     text = result.get("text", "")
     if text:
         print(text)
+
+
+def cmd_wait(args):
+    """Block until an inbox message arrives, then print it."""
+    session_id = require_session_id()
+
+    async def _wait():
+        from websockets.asyncio.client import connect as ws_connect
+        url = f"ws://127.0.0.1:{HUB_PORT}/ws/wait/{session_id}"
+        try:
+            async with ws_connect(url) as ws:
+                while True:
+                    raw = await ws.recv()
+                    data = json.loads(raw)
+                    if data.get("type") == "ping":
+                        continue
+                    if data.get("type") == "messages":
+                        messages = data.get("messages", [])
+                        for msg in messages:
+                            msg_type = msg.get("type", "system")
+                            sender = msg.get("from", "unknown")
+                            content = msg.get("content", "")
+                            msg_id = msg.get("id", "")
+                            if msg_type == "agent":
+                                print(f"[MSG id:{msg_id} from:{sender}] {content}")
+                            elif msg_type == "voice":
+                                print(f"[VOICE from:{sender}] {content}")
+                            else:
+                                print(f"[SYSTEM] {content}")
+                        return
+        except ConnectionRefusedError:
+            die(f"cannot connect to hub at port {HUB_PORT} — is the hub running?")
+        except Exception as e:
+            die(f"websocket error: {e}")
+
+    asyncio.run(_wait())
 
 
 def cmd_status(args):
@@ -345,20 +382,45 @@ def cmd_spawn(args):
 
 
 def cmd_send(args):
-    """Send a message to another agent."""
+    """Send a message to another agent or to the user."""
     session_id = require_session_id()
+    message = args.message or ""
 
-    result = http_post("/api/messages/send", {
+    # Bare ack: --re with no content
+    if not message and not getattr(args, "re", None):
+        die("message is required (or use --re for bare acknowledgment)")
+
+    payload = {
         "sender": session_id,
         "to": args.to,
-        "message": args.message,
-        "expect_response": args.wait_response,
-    })
+        "message": message,
+        "expect_response": getattr(args, "wait_response", False),
+    }
+    if getattr(args, "re", None):
+        payload["parent_id"] = args.re
+
+    if args.to == "user":
+        if not message and not getattr(args, "re", None):
+            die("message is required for --to user (unless using --re for ack)")
+        if not message and getattr(args, "re", None):
+            # Bare ack to user message — no TTS, just notify browser of thumbs up
+            result = http_post("/api/messages/speak", {**payload, "ack_only": True})
+            msg_id = result.get("id", "")
+            print(msg_id)
+            return
+        # TTS message to user — fire and forget
+        result = http_post("/api/messages/speak", payload)
+        msg_id = result.get("id", "")
+        print(msg_id)
+        return
+
+    result = http_post("/api/messages/send", payload)
 
     msg_id = result["id"]
     print(msg_id)
 
     if args.wait_ack:
+        print("DEPRECATED: --wait-ack is deprecated. Use 'clawmux wait' for push-based delivery.", file=sys.stderr)
         # Poll for acknowledgment
         deadline = time.time() + 30
         while time.time() < deadline:
@@ -371,7 +433,8 @@ def cmd_send(args):
                 die("message delivery failed")
         die("timeout waiting for acknowledgment")
 
-    if args.wait_response:
+    if getattr(args, "wait_response", False):
+        print("DEPRECATED: --wait-response is deprecated. Use 'clawmux wait' for push-based delivery.", file=sys.stderr)
         # Poll for response
         deadline = time.time() + 120
         while time.time() < deadline:
@@ -387,6 +450,7 @@ def cmd_send(args):
 
 def cmd_ack(args):
     """Acknowledge receipt of a message."""
+    print("DEPRECATED: Use 'clawmux send --to <agent> --re <msg_id>' for threaded replies.", file=sys.stderr)
     import urllib.request
     import urllib.error
     try:
@@ -407,6 +471,7 @@ def cmd_ack(args):
 
 def cmd_reply(args):
     """Reply to a specific message."""
+    print("DEPRECATED: Use 'clawmux send --to <agent> --re <msg_id> \"reply text\"' instead.", file=sys.stderr)
     result = http_post(f"/api/messages/{args.msg_id}/reply", {
         "message": args.message,
     })
@@ -997,9 +1062,18 @@ examples:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    # converse
-    p = sub.add_parser("converse", help="Speak a message and optionally listen",
-                       description="Speak a message via TTS and optionally listen for the user's spoken response via STT. Prints the transcribed speech to stdout.",
+    # wait (NEW — push-based idle mode)
+    p = sub.add_parser("wait", help="Block until a message arrives",
+                       description="Enter idle mode. Blocks until an inbox message arrives, then prints it to stdout.",
+                       formatter_class=argparse.RawDescriptionHelpFormatter,
+                       epilog="""examples:
+    clawmux wait                     # Block until message arrives
+    text=$(clawmux wait)             # Capture message text""")
+    p.set_defaults(func=cmd_wait)
+
+    # converse (DEPRECATED)
+    p = sub.add_parser("converse", help="[DEPRECATED] Speak a message and optionally listen",
+                       description="DEPRECATED: Use 'clawmux send --to user' to speak and 'clawmux wait' to listen.",
                        formatter_class=argparse.RawDescriptionHelpFormatter,
                        epilog="""examples:
     clawmux converse "What should I work on next?"
@@ -1012,28 +1086,30 @@ examples:
     p.set_defaults(func=cmd_converse)
 
     # send
-    p = sub.add_parser("send", help="Send a message to another agent",
-                       description="Send a message to another agent session via tmux injection.",
+    p = sub.add_parser("send", help="Send a message to an agent or user",
+                       description="Send a message to another agent or to the user. Use --to user for TTS output.",
                        formatter_class=argparse.RawDescriptionHelpFormatter,
                        epilog="""examples:
     clawmux send --to alloy "FYI, I pushed a fix."
-    clawmux send --to alloy --wait-ack "Can you check the auth module?"
-    clawmux send --to alloy --wait-response "What port is the dev server on?" """)
-    p.add_argument("--to", required=True, help="Recipient agent name (e.g. sky, alloy, echo)")
-    p.add_argument("message", help="Message text")
-    p.add_argument("--wait-ack", action="store_true", help="Block until recipient acknowledges")
-    p.add_argument("--wait-response", action="store_true", help="Block until recipient replies")
+    clawmux send --to user "Here's what I found."
+    clawmux send --to alloy --re msg-abc123 "Got it, thanks."
+    clawmux send --to alloy --wait-ack "Can you check the auth module?" """)
+    p.add_argument("--to", required=True, help="Recipient: agent name (e.g. sky, echo) or 'user' for TTS")
+    p.add_argument("message", nargs="?", default="", help="Message text (optional with --re for bare acknowledgment)")
+    p.add_argument("--re", help="Parent message ID for threaded reply (e.g. msg-abc123)")
+    p.add_argument("--wait-ack", action="store_true", help="[DEPRECATED] Block until recipient acknowledges")
+    p.add_argument("--wait-response", action="store_true", help="[DEPRECATED] Block until recipient replies")
     p.set_defaults(func=cmd_send)
 
-    # ack
-    p = sub.add_parser("ack", help="Acknowledge receipt of a message",
-                       description="Tell the hub you received and read a message.")
+    # ack (DEPRECATED)
+    p = sub.add_parser("ack", help="[DEPRECATED] Acknowledge receipt of a message",
+                       description="DEPRECATED: Use 'clawmux send --to <agent> --re <msg_id>' instead.")
     p.add_argument("msg_id", help="Message ID to acknowledge (e.g. msg-a1b2c3)")
     p.set_defaults(func=cmd_ack)
 
-    # reply
-    p = sub.add_parser("reply", help="Reply to a message",
-                       description="Send a response to a specific message, unblocking the sender if they used --wait-response.")
+    # reply (DEPRECATED)
+    p = sub.add_parser("reply", help="[DEPRECATED] Reply to a message",
+                       description="DEPRECATED: Use 'clawmux send --to <agent> --re <msg_id> \"reply text\"' instead.")
     p.add_argument("msg_id", help="Message ID to reply to")
     p.add_argument("message", help="Reply text")
     p.set_defaults(func=cmd_reply)

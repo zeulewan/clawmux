@@ -45,9 +45,10 @@ class Message:
     last_retry_at: float = 0
     sender_name: str = ""
     recipient_name: str = ""
+    parent_id: str = ""  # for threaded replies
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "id": self.id,
             "sender": self.sender,
             "recipient": self.recipient,
@@ -62,6 +63,9 @@ class Message:
             "response_text": self.response_text if self.response_text else None,
             "retry_count": self.retry_count,
         }
+        if self.parent_id:
+            d["parent_id"] = self.parent_id
+        return d
 
 
 class MessageBroker:
@@ -98,6 +102,7 @@ class MessageBroker:
         recipient_name: str = "",
         expect_response: bool = False,
         skip_tmux: bool = False,
+        parent_id: str = "",
     ) -> Message:
         """Send a message. Injects into tmux unless skip_tmux=True (converse pipeline used instead)."""
         msg_id = self.generate_id(sender, recipient)
@@ -110,6 +115,7 @@ class MessageBroker:
             created_at=time.time(),
             sender_name=sender_name,
             recipient_name=recipient_name,
+            parent_id=parent_id,
         )
         self.messages[msg_id] = msg
 

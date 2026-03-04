@@ -11,6 +11,10 @@
 
 Quick check: open the browser console and look for `SyntaxError` before assuming the hub or network is broken.
 
+## Formatting Rules
+
+- **Always format URLs as clickable markdown links**: `[Link Text](https://url)` — never paste raw URLs in converse output.
+
 ## Hub Restart Policy
 
 **Only Manager 1 (Sky) may restart or reload the hub.** No other agent should run `clawmux reload`, `clawmux stop`, or otherwise restart the hub process. If your changes require a hub reload, message Manager 1 and ask them to do it.
