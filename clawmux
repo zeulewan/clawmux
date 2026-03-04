@@ -779,6 +779,34 @@ def get_pane_titles():
             panes[parts[1]] = parts[0]
     return panes
 
+def get_pane_order():
+    """Return list of (pane_id, title) in current tmux pane index order."""
+    r = subprocess.run(["tmux","list-panes","-t",MONITOR,"-F","#{{pane_id}} #{{pane_title}}"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return None
+    result = []
+    for line in r.stdout.strip().splitlines():
+        parts = line.split(" ", 1)
+        if len(parts) == 2:
+            result.append((parts[0], parts[1]))
+    return result
+
+def reorder_panes():
+    """Reorder panes alphabetically by title using swap-pane."""
+    pane_list = get_pane_order()
+    if not pane_list or len(pane_list) < 2:
+        return
+    # Sort by title (agent label) alphabetically
+    sorted_panes = sorted(pane_list, key=lambda p: p[1].lower())
+    # Swap panes into correct positions
+    for i, (desired_id, desired_title) in enumerate(sorted_panes):
+        if i < len(pane_list) and pane_list[i][0] != desired_id:
+            tmux("swap-pane", "-s", desired_id, "-t", pane_list[i][0])
+            # Update pane_list to reflect the swap
+            j = next(k for k, p in enumerate(pane_list) if p[0] == desired_id)
+            pane_list[i], pane_list[j] = pane_list[j], pane_list[i]
+
 def attach_cmd(session_name):
     return "while true; do TMUX= tmux attach -t " + session_name + " 2>/dev/null || sleep 2; done"
 
@@ -851,6 +879,7 @@ while True:
             changed = True
 
         if changed:
+            reorder_panes()
             tmux("select-layout", "-t", MONITOR, "tiled")
             log("Layout re-tiled")
 
