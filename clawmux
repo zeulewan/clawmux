@@ -1,12 +1,12 @@
-#!/home/zeul/GIT/voice-chat/.venv/bin/python3
+#!/home/zeul/GIT/clawmux/.venv/bin/python3
 """ClawMux CLI — voice converse and inter-agent messaging.
 
 Replaces the MCP server with simple shell commands that any agent runtime
 can call. Connect, do one thing, print the result, exit.
 
 Env vars:
-    VOICE_HUB_SESSION_ID — session ID (required for converse/send/ack/reply)
-    VOICE_CHAT_HUB_PORT  — hub port (default 3460)
+    CLAWMUX_SESSION_ID — session ID (required for converse/send/ack/reply)
+    CLAWMUX_PORT       — hub port (default 3460)
 """
 
 import argparse
@@ -18,9 +18,9 @@ import subprocess
 import sys
 import time
 
-HUB_PORT = int(os.environ.get("VOICE_CHAT_HUB_PORT", "3460"))
+HUB_PORT = int(os.environ.get("CLAWMUX_PORT", "3460"))
 HUB_BASE = f"http://127.0.0.1:{HUB_PORT}"
-SESSION_ID = os.environ.get("VOICE_HUB_SESSION_ID", "")
+SESSION_ID = os.environ.get("CLAWMUX_SESSION_ID", "")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -37,7 +37,7 @@ def hub_url(path: str) -> str:
 
 def require_session_id() -> str:
     if not SESSION_ID:
-        die("VOICE_HUB_SESSION_ID not set")
+        die("CLAWMUX_SESSION_ID not set")
     return SESSION_ID
 
 
@@ -191,7 +191,7 @@ def cmd_status(args):
             status = s.get("status", "?")
             area = s.get("project_area", "")
             work_dir = s.get("work_dir", "")
-            work_dir = work_dir.replace("/home/zeul/", "~/").replace("/tmp/voice-hub-sessions/", "~/sessions/")
+            work_dir = work_dir.replace("/home/zeul/", "~/").replace("/tmp/clawmux-sessions/", "~/sessions/")
             print(f"  {name:<10} {status:<8} {area:<22} {work_dir}")
         print()
 
@@ -241,7 +241,7 @@ def cmd_start(args):
     if not os.path.exists(hub_py):
         die(f"hub.py not found at {hub_py}")
 
-    log_file = "/tmp/voice-hub.log"
+    log_file = "/tmp/clawmux.log"
     print(f"Starting hub on port {HUB_PORT}...")
 
     with open(log_file, "a") as log:
@@ -263,7 +263,7 @@ def cmd_start(args):
         except SystemExit:
             continue
 
-    die("hub did not start within 30 seconds — check /tmp/voice-hub.log")
+    die("hub did not start within 30 seconds — check /tmp/clawmux.log")
 
 
 def cmd_stop(args):
@@ -462,7 +462,7 @@ def cmd_reload(args):
     hub_dir = os.path.dirname(os.path.realpath(__file__))
     venv_python = os.path.join(hub_dir, ".venv", "bin", "python")
     hub_py = os.path.join(hub_dir, "server", "hub.py")
-    log_file = "/tmp/voice-hub.log"
+    log_file = "/tmp/clawmux.log"
 
     with open(log_file, "a") as log:
         subprocess.Popen(
@@ -483,7 +483,7 @@ def cmd_reload(args):
         except SystemExit:
             continue
 
-    die("hub did not restart within 30 seconds — check /tmp/voice-hub.log")
+    die("hub did not restart within 30 seconds — check /tmp/clawmux.log")
 
 
 def cmd_messages(args):
@@ -586,8 +586,9 @@ def cmd_monitor(args):
         rows = math.ceil(n / cols)
 
     def attach_cmd(session_name):
-        """Build a command to interactively attach to an agent's tmux session."""
-        return f"TMUX= tmux attach -t {session_name}"
+        """Build a command to interactively attach to an agent's tmux session.
+        Uses a reconnect loop so the pane survives agent session restarts (e.g. hub reloads)."""
+        return f"while true; do TMUX= tmux attach -t {session_name} 2>/dev/null || sleep 2; done"
 
     def tmux_run(*cmd_args, **kwargs):
         return subprocess.run(["tmux"] + list(cmd_args),
@@ -653,6 +654,7 @@ def cmd_monitor(args):
 
     # Agent signature colors (tmux colour codes)
     AGENT_COLORS = {
+        # Project 1 (default/clawmux)
         "af_sky": "colour33",      # blue
         "af_alloy": "colour208",   # orange
         "af_sarah": "colour196",   # red
@@ -662,6 +664,26 @@ def cmd_monitor(args):
         "bm_fable": "colour220",   # yellow
         "af_nova": "colour213",    # pink
         "am_eric": "colour39",     # cyan
+        # Project 2 (hn-app)
+        "af_bella": "colour171",   # lavender
+        "af_jessica": "colour209",  # coral
+        "af_heart": "colour204",   # rose
+        "am_michael": "colour70",  # forest green
+        "am_liam": "colour67",     # steel blue
+        "am_fenrir": "colour130",  # brown
+        "bf_emma": "colour174",    # salmon
+        "bm_george": "colour109",  # teal
+        "bm_daniel": "colour137",  # tan
+        # Project 3
+        "af_aoede": "colour183",   # light purple
+        "af_jadzia": "colour117",  # light blue
+        "af_kore": "colour168",    # magenta
+        "af_nicole": "colour216",  # peach
+        "af_river": "colour73",    # aqua
+        "am_puck": "colour142",    # olive
+        "bf_alice": "colour182",   # mauve
+        "bf_lily": "colour223",    # cream
+        "bm_lewis": "colour101",   # khaki
     }
 
     # Launch agent attach in each pane, label it, and set status bar color
@@ -677,12 +699,27 @@ def cmd_monitor(args):
         if color:
             _apply_agent_status_bar(agent["tmux_session"], label, color)
 
-    # Configure monitor session appearance (no border labels — status bars show names)
+    # Get project display name for status bar
+    projects_data = http_get("/api/projects")
+    proj_info = projects_data.get("projects", {})
+    proj_display = proj_info.get(project_slug, {}).get("name", project_slug)
+
+    # Configure monitor session appearance
     for opt, val in [
         ("pane-border-status", "off"),
         ("pane-border-style", "fg=colour240"),
         ("pane-active-border-style", "fg=colour250"),
-        ("status", "off"),
+        ("status", "on"),
+        ("status-position", "bottom"),
+        ("status-style", "fg=colour255,bg=colour236"),
+        ("status-left", f"  {proj_display} "),
+        ("status-left-style", "fg=colour255,bg=colour236,bold"),
+        ("status-left-length", "30"),
+        ("status-right", f" {n} agents "),
+        ("status-right-style", "fg=colour245,bg=colour236"),
+        ("status-right-length", "20"),
+        ("window-status-current-format", ""),
+        ("window-status-format", ""),
     ]:
         tmux_run("set-option", "-t", MONITOR_SESSION, opt, val)
 
@@ -741,7 +778,7 @@ def get_pane_titles():
     return panes
 
 def attach_cmd(session_name):
-    return "TMUX= tmux attach -t " + session_name
+    return "while true; do TMUX= tmux attach -t " + session_name + " 2>/dev/null || sleep 2; done"
 
 def tmux(*args):
     r = subprocess.run(["tmux"] + list(args), capture_output=True, text=True)
