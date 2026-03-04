@@ -32,6 +32,8 @@
   --radius: 16px;
   --radius-sm: 10px;
   --radius-xs: 6px;
+  --hover-bg: rgba(255,255,255,0.05);
+  --selected-bg: rgba(255,255,255,0.08);
 }
 @media (prefers-color-scheme: light) {
   :root {
@@ -56,6 +58,8 @@
     --yellow-dim: rgba(255,204,0,0.12);
     --purple: #af52de;
     --teal: #5ac8fa;
+    --hover-bg: rgba(0,0,0,0.04);
+    --selected-bg: rgba(0,0,0,0.07);
   }
 }
 body {
@@ -111,7 +115,7 @@ body {
   border: none;
 }
 .sidebar-card:hover {
-  background: rgba(255,255,255,0.05);
+  background: var(--hover-bg, rgba(255,255,255,0.05));
 }
 .sidebar-card.dragging {
   opacity: 0.4;
@@ -121,7 +125,7 @@ body {
   margin-top: -2px;
 }
 .sidebar-card.selected {
-  background: rgba(255,255,255,0.08);
+  background: var(--selected-bg, rgba(255,255,255,0.08));
 }
 .sidebar-card .sb-icon {
   width: 34px;
@@ -247,9 +251,9 @@ body {
   font-size: 0.8rem;
   font-weight: 500;
 }
-.sidebar-focus-card:hover { background: var(--bg-hover); }
+.sidebar-focus-card:hover { background: var(--hover-bg); }
 .sidebar-focus-card.selected {
-  background: var(--bg-hover);
+  background: var(--hover-bg);
   border-color: var(--border);
 }
 .sidebar-focus-icon {
@@ -260,7 +264,7 @@ body {
   align-items: center;
   justify-content: center;
   font-size: 1rem;
-  background: #ffffff10;
+  background: var(--hover-bg, rgba(255,255,255,0.06));
   flex-shrink: 0;
 }
 
@@ -475,6 +479,50 @@ body {
   color: var(--text-tertiary);
   font-size: 0.75rem;
   padding: 4px 0;
+}
+
+/* Message threading */
+.thread-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 2px 0;
+}
+.thread-container .msg.system {
+  position: relative;
+}
+.thread-reply {
+  margin-left: 24px;
+  padding-left: 12px;
+  border-left: 2px solid var(--text-tertiary, #555);
+  opacity: 0.85;
+}
+.thread-reply .msg.system {
+  font-size: 0.72rem;
+}
+.thread-ack-badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 0.8rem;
+  vertical-align: middle;
+  opacity: 0.7;
+  cursor: default;
+  title: 'Acknowledged';
+}
+.thread-toggle {
+  align-self: center;
+  background: none;
+  border: 1px solid var(--text-tertiary, #555);
+  border-radius: 10px;
+  color: var(--text-tertiary, #999);
+  font-size: 0.65rem;
+  padding: 1px 8px;
+  cursor: pointer;
+  margin: 2px 0 2px 24px;
+}
+.thread-toggle:hover {
+  color: var(--text-primary, #fff);
+  border-color: var(--text-primary, #fff);
 }
 
 /* Voice grid (legacy - hidden, replaced by sidebar) */
@@ -759,7 +807,7 @@ body {
   transition: background 0.15s, border-color 0.15s;
 }
 .transport-btn:hover {
-  background: var(--bg-hover, rgba(128,128,128,0.15));
+  background: var(--hover-bg, rgba(128,128,128,0.15));
   border-color: var(--text-secondary);
 }
 /* mic-row removed — mic button is now directly in controls row */
@@ -1001,6 +1049,42 @@ body {
   .sidebar-card.thinking .sb-icon { border-color: var(--orange); box-shadow: 0 0 6px rgba(255,159,10,0.3); }
   .sidebar-card.speaking .sb-icon { border-color: var(--blue); box-shadow: 0 0 6px rgba(10,132,255,0.3); }
   .sidebar-card.unread .sb-icon { border-color: var(--red); box-shadow: 0 0 6px rgba(255,69,58,0.3); }
+
+  /* Focus card: icon-only on mobile, hide label text */
+  .sidebar-focus-card {
+    justify-content: center;
+    padding: 10px 4px;
+    margin: 0 4px 4px;
+  }
+  .sidebar-focus-card span { display: none; }
+  .sidebar-focus-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-size: 0.85rem;
+  }
+  .sidebar-focus-card.selected {
+    position: relative;
+    background: transparent !important;
+  }
+  .sidebar-focus-card.selected::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 24px;
+    border-radius: 0 3px 3px 0;
+    background: var(--blue);
+  }
+  /* Show focus label text in expanded sidebar */
+  #sidebar.expanded .sidebar-focus-card { justify-content: flex-start; padding: 8px 10px; margin: 0 8px 8px; }
+  #sidebar.expanded .sidebar-focus-card span {
+    display: inline;
+    animation: fadeSlideIn 0.2s ease-out 0.1s both;
+  }
+  #sidebar.expanded .sidebar-focus-icon { border-radius: 8px; }
 
   /* Chat messages: wider on mobile */
   .msg { max-width: 90%; }
@@ -2513,9 +2597,10 @@ function _renderMarkdown(text) {
   }
 }
 
-function createMsgEl(role, text, voiceColorHex, voiceId) {
+function createMsgEl(role, text, voiceColorHex, voiceId, msgObj = null) {
   const div = document.createElement('div');
   div.className = `msg ${role}`;
+  if (msgObj && msgObj.id) div.dataset.msgId = msgObj.id;
   if (role === 'assistant') {
     // Try markdown rendering first, fall back to karaoke word wrapping
     const mdEl = (typeof marked !== 'undefined') ? _renderMarkdown(text) : null;
@@ -2568,7 +2653,7 @@ function renderChat(forceScroll = false) {
   const displayMessages = s.messages.slice(-50);
   for (const msg of displayMessages) {
     if (!showAgentMessages && msg.role === 'system' && /^\[Agent msg (from|to) /.test(msg.text)) continue;
-    chatArea.appendChild(createMsgEl(msg.role, msg.text, vc, s.voice));
+    chatArea.appendChild(createMsgEl(msg.role, msg.text, vc, s.voice, msg));
   }
   // Re-show thinking indicator if session is thinking
   if (s.isThinking) {
@@ -2591,15 +2676,23 @@ function renderChat(forceScroll = false) {
 
 function _debugBanner(msg) { /* no-op */ }
 
-function addMessage(sessionId, role, text) {
+function addMessage(sessionId, role, text, opts = {}) {
   const s = sessions.get(sessionId);
   if (!s) return;
-  s.messages.push({ role, text, ts: Date.now() / 1000 });
+  const msgObj = { role, text, ts: Date.now() / 1000 };
+  if (opts.id) msgObj.id = opts.id;
+  if (opts.parentId) msgObj.parentId = opts.parentId;
+  if (opts.isBareAck) msgObj.isBareAck = true;
+  s.messages.push(msgObj);
   if (sessionId === activeSessionId) {
-    // Check scroll position BEFORE appending (avoids false negative for tall messages)
-    const wasNearBottom = chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150;
-    chatArea.appendChild(createMsgEl(role, text, voiceColor(s.voice), s.voice));
-    if (wasNearBottom) chatArea.scrollTop = chatArea.scrollHeight;
+    // For threaded messages, re-render to group properly
+    if (opts.parentId) {
+      renderChat();
+    } else {
+      const wasNearBottom = chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150;
+      chatArea.appendChild(createMsgEl(role, text, voiceColor(s.voice), s.voice, msgObj));
+      if (wasNearBottom) chatArea.scrollTop = chatArea.scrollHeight;
+    }
   }
 }
 
@@ -3564,9 +3657,11 @@ async function _refreshHistory(sessionId, voiceId) {
       (serverLen > 0 && (!lastLocal || lastServer.text !== lastLocal.text || lastServer.role !== lastLocal.role));
     if (needsSync) {
       console.log(`[historySync] ${sessionId}: syncing — server=${serverLen} local=${localLen}`, lastServer?.text?.slice(0,50), lastLocal?.text?.slice(0,50));
-      // Preserve system messages and merge with server messages
-      const systemMsgs = s.messages.filter(m => m.role === 'system');
-      s.messages = [...systemMsgs, ...serverMessages];
+      // Preserve local-only system messages (e.g. "Claude connected") but
+      // deduplicate ones already in server history (e.g. agent messages)
+      const serverSystemTexts = new Set(serverMessages.filter(m => m.role === 'system').map(m => m.text));
+      const uniqueLocalSystem = s.messages.filter(m => m.role === 'system' && !serverSystemTexts.has(m.text));
+      s.messages = [...uniqueLocalSystem, ...serverMessages];
       if (sessionId === activeSessionId) {
         // Save karaoke state before renderChat destroys DOM refs
         let savedKaraokeWords = null;
@@ -3781,13 +3876,17 @@ function handleMessage(data) {
       const recipName = (msg.recipient_name || msg.recipient || '?');
       const sName = senderName.charAt(0).toUpperCase() + senderName.slice(1);
       const rName = recipName.charAt(0).toUpperCase() + recipName.slice(1);
+      const isBareAck = msg.parent_id && !msg.content;
+      const threadOpts = { id: msg.id || null, parentId: msg.parent_id || null, isBareAck };
       // Show in recipient's chat
       if (showAgentMessages && sessions.has(msg.recipient)) {
-        addMessage(msg.recipient, 'system', `[Agent msg from ${sName}] ${msg.content || ''}`);
+        const text = isBareAck ? '' : `[Agent msg from ${sName}] ${msg.content || ''}`;
+        addMessage(msg.recipient, 'system', text, threadOpts);
       }
       // Show in sender's chat
       if (showAgentMessages && sessions.has(msg.sender)) {
-        addMessage(msg.sender, 'system', `[Agent msg to ${rName}] ${msg.content || ''}`);
+        const text = isBareAck ? '' : `[Agent msg to ${rName}] ${msg.content || ''}`;
+        addMessage(msg.sender, 'system', text, threadOpts);
       }
     }
     return;
