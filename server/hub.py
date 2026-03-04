@@ -1046,6 +1046,8 @@ async def spawn_session(request: Request):
         mode = body.get("mode", "mcp")  # "mcp" (default) or "cli"
         project = body.get("project")
         session = await session_mgr.spawn_session(label, voice, mode=mode, project=project)
+        # Notify browser of the new session so the sidebar updates immediately
+        await send_to_browser({"type": "session_spawned", "session": session.to_dict()})
         # Show thinking indicator while agent prepares its opening greeting
         session.processing = True
         await send_to_browser({"session_id": session.session_id, "type": "thinking"})
