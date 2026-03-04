@@ -3651,7 +3651,13 @@ async function _refreshHistory(sessionId, voiceId) {
     const resp = await fetch(`/api/history/${voiceId}?project=${currentProject}`);
     if (!resp.ok) return;
     const hist = await resp.json();
-    const serverMessages = (hist.messages || []).map(m => ({ role: m.role, text: m.text }));
+    const serverMessages = (hist.messages || []).map(m => {
+      const obj = { role: m.role, text: m.text };
+      if (m.id) obj.id = m.id;
+      if (m.parent_id) obj.parentId = m.parent_id;
+      if (m.bare_ack) obj.isBareAck = true;
+      return obj;
+    });
     // Mark trailing user messages as interjections if they haven't been seen by the model
     const pendingCount = hist.pending_interjections || 0;
     if (pendingCount > 0) {
@@ -3930,7 +3936,7 @@ function handleMessage(data) {
     }
     s.messages.forEach(m => { if (m.role === 'user interjection') m.role = 'user'; });
     if (data.text && data.text.trim()) {
-      addMessage(session_id, 'assistant', data.text);
+      addMessage(session_id, 'assistant', data.text, { id: data.msg_id || null });
     }
     if (session_id !== activeSessionId) {
       markSessionUnread(session_id);
@@ -3940,7 +3946,7 @@ function handleMessage(data) {
     }
   } else if (type === 'user_text') {
     if (!data.text || !data.text.trim()) return;  // Skip blank user messages
-    addMessage(session_id, data.interjection ? 'user interjection' : 'user', data.text);
+    addMessage(session_id, data.interjection ? 'user interjection' : 'user', data.text, { id: data.msg_id || null });
     showThinking(session_id);
     startThinkingSound(session_id);
     s.userSpokeThisCycle = true;

@@ -49,10 +49,17 @@ class HistoryStore:
     def load(self, voice_id: str, project: str | None = None) -> list[dict]:
         return self._load_data(voice_id, project).get("messages", [])
 
-    def append(self, voice_id: str, voice_name: str, role: str, text: str, project: str | None = None) -> None:
+    def append(self, voice_id: str, voice_name: str, role: str, text: str, project: str | None = None, *, msg_id: str | None = None, parent_id: str | None = None, bare_ack: bool = False) -> None:
         data = self._load_data(voice_id, project)
         messages = data.get("messages", [])
-        messages.append({"role": role, "text": text, "ts": time.time()})
+        entry: dict = {"role": role, "text": text, "ts": time.time()}
+        if msg_id:
+            entry["id"] = msg_id
+        if parent_id:
+            entry["parent_id"] = parent_id
+        if bare_ack:
+            entry["bare_ack"] = True
+        messages.append(entry)
         if len(messages) > MAX_MESSAGES:
             messages = messages[-MAX_MESSAGES:]
         data.update({"voice_id": voice_id, "voice_name": voice_name, "messages": messages})

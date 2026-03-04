@@ -60,6 +60,11 @@ def _hist_prefix(session) -> str | None:
     """Get the history prefix for a session's project."""
     return project_mgr.get_history_prefix(session.project_slug)
 
+
+def _gen_msg_id() -> str:
+    """Generate a short unique message ID for history tracking."""
+    return "msg-" + uuid.uuid4().hex[:8]
+
 # Browser WebSocket clients (multiple connections supported)
 browser_clients: set[WebSocket] = set()
 
@@ -465,10 +470,11 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
         log.info("[%s] Pre-speech interjection(s), skipping TTS: %s", session_id, text[:100])
         # Persist to history and show in browser (but don't speak it)
         if message:
-            history.append(session.voice, session.label, "assistant", message, _hist_prefix(session))
+            mid = _gen_msg_id()
+            history.append(session.voice, session.label, "assistant", message, _hist_prefix(session), msg_id=mid)
             if session_id != _browser_viewed_session:
                 session.unread_count += 1
-            await send_to_browser({"session_id": session_id, "type": "assistant_text", "text": message})
+            await send_to_browser({"session_id": session_id, "type": "assistant_text", "text": message, "msg_id": mid})
         session.status_text = ""
         session.processing = True  # Agent will process the interjection
         await send_to_browser({"session_id": session_id, "type": "done", "processing": True})
@@ -480,7 +486,8 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
 
     if not silent:
         # Persist to history FIRST so sync can recover if hub crashes mid-delivery
-        history.append(session.voice, session.label, "assistant", message, _hist_prefix(session))
+        mid = _gen_msg_id()
+        history.append(session.voice, session.label, "assistant", message, _hist_prefix(session), msg_id=mid)
 
         # Signal that Claude is about to speak (lets client show thinking indicator)
         await send_to_browser({"session_id": session_id, "type": "thinking"})
@@ -488,7 +495,7 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
         # Send assistant text to browser for chat display
         if session_id != _browser_viewed_session:
             session.unread_count += 1
-        await send_to_browser({"session_id": session_id, "type": "assistant_text", "text": message})
+        await send_to_browser({"session_id": session_id, "type": "assistant_text", "text": message, "msg_id": mid})
 
     # Skip TTS if silent, in text mode, or voice responses disabled
     skip_tts = silent or session.text_mode or not _load_settings().get("voice_responses", True)
@@ -661,8 +668,9 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
 
     # Send user's transcribed text to browser for chat display
     if text and not text_already_shown:
-        await send_to_browser({"session_id": session_id, "type": "user_text", "text": text})
-        history.append(session.voice, session.label, "user", text, _hist_prefix(session))
+        umid = _gen_msg_id()
+        await send_to_browser({"session_id": session_id, "type": "user_text", "text": text, "msg_id": umid})
+        history.append(session.voice, session.label, "user", text, _hist_prefix(session), msg_id=umid)
 
     session.status_text = ""
     session.processing = bool(text)  # Agent will process the user's response
@@ -820,8 +828,9 @@ async def handle_browser_message(data: dict) -> None:
         text = data.get("text", "").strip()
         if text:
             log.info("[%s] Text from browser: %s", session_id, text[:100])
-            await send_to_browser({"session_id": session_id, "type": "user_text", "text": text})
-            history.append(session.voice, session.label, "user", text, _hist_prefix(session))
+            umid = _gen_msg_id()
+            await send_to_browser({"session_id": session_id, "type": "user_text", "text": text, "msg_id": umid})
+            history.append(session.voice, session.label, "user", text, _hist_prefix(session), msg_id=umid)
             session.text_override = text
             await session.audio_queue.put(b"__text__")
 
@@ -842,8 +851,9 @@ async def handle_browser_message(data: dict) -> None:
         if text:
             session.interjections.append(text)
             history.save_interjections(session.voice, session.interjections, _hist_prefix(session))
-            await send_to_browser({"session_id": session_id, "type": "user_text", "text": text, "interjection": True})
-            history.append(session.voice, session.label, "user", text, _hist_prefix(session))
+            umid = _gen_msg_id()
+            await send_to_browser({"session_id": session_id, "type": "user_text", "text": text, "interjection": True, "msg_id": umid})
+            history.append(session.voice, session.label, "user", text, _hist_prefix(session), msg_id=umid)
 
             # If agent is in an active converse call waiting for audio, inject
             # the interjection as audio queue input so it gets picked up immediately
@@ -1570,12 +1580,15 @@ async def send_message(request: Request):
         log.info("[%s] Message %s queued as interjection (fallback)", recipient.session_id, msg.id)
 
     # Save to history so messages persist across browser reloads
+    is_bare_ack = bool(parent_id and not content)
     history.append(recipient.voice, recipient.label, "system",
                    f"[Agent msg from {sender_name.capitalize()}] {content}",
-                   _hist_prefix(recipient))
+                   _hist_prefix(recipient),
+                   msg_id=msg.id, parent_id=parent_id or None, bare_ack=is_bare_ack)
     history.append(sender.voice, sender.label, "system",
                    f"[Agent msg to {recip_name.capitalize()}] {content}",
-                   _hist_prefix(sender))
+                   _hist_prefix(sender),
+                   msg_id=msg.id, parent_id=parent_id or None, bare_ack=is_bare_ack)
 
     # Notify browser about the message
     await send_to_browser({
@@ -1621,12 +1634,13 @@ async def speak_to_user(request: Request):
     msg_id = f"msg-{uuid.uuid4().hex[:8]}"
 
     # Save to history
-    history.append(sender.voice, sender.label, "assistant", content, _hist_prefix(sender))
+    amid = _gen_msg_id()
+    history.append(sender.voice, sender.label, "assistant", content, _hist_prefix(sender), msg_id=amid)
     if sender_id != _browser_viewed_session:
         sender.unread_count += 1
 
     # Send text to browser chat
-    await send_to_browser({"session_id": sender_id, "type": "assistant_text", "text": content})
+    await send_to_browser({"session_id": sender_id, "type": "assistant_text", "text": content, "msg_id": amid})
 
     # TTS — strip non-speakable content and play
     skip_tts = sender.text_mode or not _load_settings().get("voice_responses", True)
