@@ -1645,7 +1645,13 @@ async function addSession(data, autoSwitch = false) {
     const resp = await fetch(`/api/history/${data.voice}`);
     if (resp.ok) {
       const hist = await resp.json();
-      serverMessages = (hist.messages || []).map(m => ({ role: m.role, text: m.text }));
+      serverMessages = (hist.messages || []).map(m => {
+        const obj = { role: m.role, text: m.text };
+        if (m.id) obj.id = m.id;
+        if (m.parent_id) obj.parentId = m.parent_id;
+        if (m.bare_ack) obj.isBareAck = true;
+        return obj;
+      });
       // Note: pending_interjections is NOT used here to mark messages as italic.
       // Interjection styling is applied in real-time when user_text arrives with
       // interjection: true, and removed when the agent acknowledges (inbox_update).
