@@ -504,8 +504,8 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
         log.info("[%s] Text mode, skipping TTS: %s", session_id, message[:80])
         if not wait_for_response:
             session.status_text = ""
-            session.processing = not goodbye
-            await send_to_browser({"session_id": session_id, "type": "done", "processing": not goodbye})
+            session.processing = False  # Fire-and-forget: agent won't call back
+            await send_to_browser({"session_id": session_id, "type": "done", "processing": False})
             if goodbye:
                 await send_to_browser({"session_id": session_id, "type": "session_ended"})
             return "Message delivered."
@@ -548,8 +548,8 @@ async def _do_converse(session_id, session, message, wait_for_response, voice, s
 
         if not wait_for_response:
             session.status_text = ""
-            session.processing = not goodbye
-            await send_to_browser({"session_id": session_id, "type": "done", "processing": not goodbye})
+            session.processing = False  # Fire-and-forget: agent won't call back
+            await send_to_browser({"session_id": session_id, "type": "done", "processing": False})
             if goodbye:
                 await send_to_browser({"session_id": session_id, "type": "session_ended"})
             return "Message delivered."
