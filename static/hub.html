@@ -1046,7 +1046,76 @@ body {
   }
   #sidebar-overlay.visible { opacity: 1; pointer-events: auto; }
 }
+/* --- Markdown message styles --- */
+.msg.assistant .md-content { line-height: 1.6; }
+.msg.assistant .md-content p { margin: 0.3em 0; }
+.msg.assistant .md-content p:first-child { margin-top: 0; }
+.msg.assistant .md-content p:last-child { margin-bottom: 0; }
+.msg.assistant .md-content h1, .msg.assistant .md-content h2, .msg.assistant .md-content h3,
+.msg.assistant .md-content h4, .msg.assistant .md-content h5, .msg.assistant .md-content h6 {
+  margin: 0.5em 0 0.3em; font-weight: 600;
+}
+.msg.assistant .md-content h1 { font-size: 1.2em; }
+.msg.assistant .md-content h2 { font-size: 1.1em; }
+.msg.assistant .md-content h3 { font-size: 1.0em; }
+.msg.assistant .md-content code {
+  background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 4px;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; font-size: 0.85em;
+}
+.msg.assistant .md-content pre {
+  background: rgba(0,0,0,0.4); border-radius: 8px; padding: 10px 14px;
+  margin: 0.4em 0; overflow-x: auto; position: relative;
+}
+.msg.assistant .md-content pre .code-copy-btn {
+  position: absolute; top: 6px; right: 6px; background: rgba(128,128,128,0.3);
+  border: none; border-radius: 4px; color: var(--text-secondary); font-size: 0.65rem;
+  padding: 2px 7px; cursor: pointer; opacity: 0; transition: opacity 0.15s;
+}
+.msg.assistant .md-content pre:hover .code-copy-btn { opacity: 1; }
+.msg.assistant .md-content pre .code-copy-btn:hover { background: rgba(128,128,128,0.5); }
+.msg.assistant .md-content code:not(pre code) { cursor: pointer; transition: background 0.15s; }
+.msg.assistant .md-content code:not(pre code):hover { background: rgba(255,255,255,0.15); }
+.msg.assistant .md-content code:not(pre code):active { background: rgba(255,255,255,0.25); }
+.msg.assistant .md-content pre code {
+  background: none; padding: 0; font-size: 0.82em; line-height: 1.5; color: #e0e0e0;
+}
+.msg.assistant .md-content ul, .msg.assistant .md-content ol {
+  margin: 0.3em 0; padding-left: 1.4em;
+}
+.msg.assistant .md-content li { margin: 0.15em 0; }
+.msg.assistant .md-content blockquote {
+  border-left: 3px solid var(--text-tertiary); padding-left: 10px;
+  margin: 0.4em 0; color: var(--text-secondary); font-style: italic;
+}
+.msg.assistant .md-content a { color: var(--blue); text-decoration: none; }
+.msg.assistant .md-content a:hover { text-decoration: underline; }
+.msg.assistant .md-content table {
+  border-collapse: collapse; margin: 0.4em 0; font-size: 0.85em;
+}
+.msg.assistant .md-content th, .msg.assistant .md-content td {
+  border: 1px solid var(--border); padding: 4px 8px;
+}
+.msg.assistant .md-content th { background: rgba(255,255,255,0.05); }
+.msg.assistant .md-content hr { border: none; border-top: 1px solid var(--border); margin: 0.5em 0; }
+.msg.assistant .md-content img { max-width: 100%; border-radius: 6px; }
+/* KaTeX overrides */
+.msg.assistant .md-content .katex { font-size: 0.95em; }
+.msg.assistant .md-content .katex-display { margin: 0.4em 0; overflow-x: auto; }
+/* Light mode overrides */
+@media (prefers-color-scheme: light) {
+  .msg.assistant .md-content code { background: rgba(0,0,0,0.06); }
+  .msg.assistant .md-content pre { background: rgba(0,0,0,0.06); }
+  .msg.assistant .md-content pre code { color: #1a1a1a; }
+}
 </style>
+<!-- Markdown rendering: marked.js + DOMPurify + highlight.js + KaTeX -->
+<script src="https://cdn.jsdelivr.net/npm/marked@15/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/highlight.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github-dark.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16/dist/contrib/auto-render.min.js"></script>
 </head>
 <body>
 
@@ -1176,6 +1245,10 @@ body {
         <div class="toggle-info"><span class="toggle-name">Silent Startup</span><span class="toggle-desc">Skip greeting when agents start up</span></div>
         <div class="toggle-indicator" id="toggle-silent_startup"></div>
       </div>
+      <div class="settings-toggle" onclick="toggleSetting('show_agent_messages')">
+        <div class="toggle-info"><span class="toggle-name">Show Agent Messages</span><span class="toggle-desc">Display inter-agent messages in chat</span></div>
+        <div class="toggle-indicator on" id="toggle-show_agent_messages"></div>
+      </div>
     </div>
   </div>
 
@@ -1189,6 +1262,41 @@ body {
       <div class="settings-toggle" onclick="toggleSetting('audio_cues')">
         <div class="toggle-info"><span class="toggle-name">Audio Cues</span><span class="toggle-desc">Chime when ready to record</span></div>
         <div class="toggle-indicator on" id="toggle-audio_cues"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <h3 class="settings-section-title">Deployment</h3>
+    <div class="settings-card">
+      <div class="settings-inline" style="padding:12px 16px;">
+        <div class="toggle-info"><span class="toggle-name">Mode</span></div>
+        <select id="deploy-mode-select" onchange="onDeployModeChange(this.value)" style="width:auto; padding:4px 8px; font-size:0.8rem;">
+          <option value="together">Together</option>
+          <option value="split">Split</option>
+        </select>
+      </div>
+      <div id="deploy-mode-desc" style="padding:4px 16px 10px; font-size:0.72rem; color:var(--text-tertiary); line-height:1.4;">Hub and audio services run on the same machine.</div>
+      <div id="deploy-remote-urls" style="display:none;">
+        <div class="settings-inline" style="padding:12px 16px;">
+          <span class="toggle-name">Remote TTS URL</span>
+          <input id="deploy-tts-url" type="text" placeholder="https://..." style="width:55%; padding:4px 8px; font-size:0.8rem; border:1px solid var(--border); border-radius:6px; background:var(--bg-card); color:var(--text); font-family:inherit;">
+        </div>
+        <div class="settings-inline" style="padding:12px 16px;">
+          <span class="toggle-name">Remote STT URL</span>
+          <input id="deploy-stt-url" type="text" placeholder="https://..." style="width:55%; padding:4px 8px; font-size:0.8rem; border:1px solid var(--border); border-radius:6px; background:var(--bg-card); color:var(--text); font-family:inherit;">
+        </div>
+      </div>
+      <div class="settings-inline" style="padding:12px 16px;">
+        <div class="toggle-info"><span class="toggle-name">Quality</span><span class="toggle-desc">Audio quality for voice processing</span></div>
+        <select id="deploy-quality-select" style="width:auto; padding:4px 8px; font-size:0.8rem;">
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+      </div>
+      <div style="padding:12px 16px; text-align:right;">
+        <button id="deploy-save-btn" onclick="saveDeploymentConfig()" style="padding:6px 16px; font-size:0.8rem; background:var(--voice-color, #4a9eff); color:white; border:none; border-radius:6px; cursor:pointer; font-family:inherit;">Save</button>
       </div>
     </div>
   </div>
@@ -1309,6 +1417,7 @@ const spawningVoices = new Set(); // voice IDs currently being spawned
 let thinkingSoundsEnabled = true; // thinking tick sounds
 let audioCuesEnabled = true; // listening/processing/ready cues
 let voiceResponsesEnabled = true; // show play buttons and voice features
+let showAgentMessages = true; // show inter-agent messages in chat
 let playbackPaused = false; // transport: is playback paused?
 let pausedBuffer = null; // transport: decoded AudioBuffer for resume
 let pauseOffset = 0; // transport: seconds into buffer when paused
@@ -1317,6 +1426,13 @@ let playbackStartTime = 0; // transport: audioCtx.currentTime when source starte
 
 // --- DOM refs ---
 const chatArea = document.getElementById('chat-area');
+/** Scroll chat to bottom only if user is already near the bottom (within 150px).
+ *  Pass force=true to always scroll (e.g. after renderChat or tab switch). */
+function chatScrollToBottom(force = false) {
+  if (force || chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150) {
+    chatArea.scrollTop = chatArea.scrollHeight;
+  }
+}
 const controls = document.getElementById('controls');
 const statusEl = document.getElementById('status');
 const micBtn = document.getElementById('mic');
@@ -1336,7 +1452,7 @@ function startWaveform(stream) {
   const topRow = document.getElementById('controls-top');
   if (topRow) topRow.style.display = 'flex';
   // Scroll chat to bottom since waveform takes space
-  requestAnimationFrame(() => { chatArea.scrollTop = chatArea.scrollHeight; });
+  requestAnimationFrame(() => { chatScrollToBottom(true); });
   const dpr = window.devicePixelRatio || 1;
   const rect = waveCanvas.getBoundingClientRect();
   waveCanvas.width = rect.width * dpr;
@@ -2095,9 +2211,7 @@ function switchTab(sessionId, manual = false) {
   startElapsedTimer();
 
   // Scroll to bottom after layout is applied
-  requestAnimationFrame(() => {
-    chatArea.scrollTop = chatArea.scrollHeight;
-  });
+  requestAnimationFrame(() => { chatScrollToBottom(true); });
 
   if (s) {
     setStatus(s.statusText || 'Ready');
@@ -2243,11 +2357,144 @@ function _wrapWordsInSpans(container, text) {
   container.appendChild(frag);
 }
 
+function _wrapTextNodesInKaraokeSpans(container) {
+  // Walk text nodes in rendered markdown and wrap words in karaoke-word spans
+  // Skip <pre>, <code>, <katex> elements
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const p = node.parentElement;
+      if (!p) return NodeFilter.FILTER_REJECT;
+      if (p.closest('pre, code, .katex, .katex-display')) return NodeFilter.FILTER_REJECT;
+      if (!node.textContent.trim()) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+  const textNodes = [];
+  while (walker.nextNode()) textNodes.push(walker.currentNode);
+  for (const tn of textNodes) {
+    const frag = document.createDocumentFragment();
+    const words = tn.textContent.split(/(\s+)/);
+    for (const part of words) {
+      if (/^\s+$/.test(part)) {
+        frag.appendChild(document.createTextNode(part));
+      } else if (part) {
+        const span = document.createElement('span');
+        span.className = 'karaoke-word';
+        span.textContent = part;
+        frag.appendChild(span);
+      }
+    }
+    tn.parentNode.replaceChild(frag, tn);
+  }
+}
+
+function _renderMarkdown(text) {
+  if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') return null;
+
+  try {
+    // Protect math blocks from marked.js processing
+    const mathBlocks = [];
+    let protectedText = text;
+    // Display math $$...$$
+    protectedText = protectedText.replace(/\$\$([\s\S]*?)\$\$/g, (m) => {
+      mathBlocks.push(m);
+      return `MATHBLOCK${mathBlocks.length - 1}ENDMATH`;
+    });
+    // Inline math $...$
+    protectedText = protectedText.replace(/\$([^\$\n]+?)\$/g, (m) => {
+      mathBlocks.push(m);
+      return `MATHBLOCK${mathBlocks.length - 1}ENDMATH`;
+    });
+
+    let html = marked.parse(protectedText, { breaks: true, gfm: true });
+
+    // Restore math blocks
+    html = html.replace(/MATHBLOCK(\d+)ENDMATH/g, (_, i) => mathBlocks[parseInt(i)]);
+
+    // Sanitize HTML
+    html = DOMPurify.sanitize(html, {
+      ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'code', 'pre', 'ul', 'ol', 'li',
+        'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'a', 'blockquote', 'table', 'thead',
+        'tbody', 'tr', 'th', 'td', 'hr', 'img', 'span', 'div', 'del', 'sup', 'sub'],
+      ALLOWED_ATTR: ['href', 'src', 'alt', 'class', 'style', 'target'],
+    });
+
+    // Create container
+    const container = document.createElement('div');
+    container.className = 'md-content';
+    container.innerHTML = html;
+
+    // Syntax-highlight code blocks with highlight.js
+    if (typeof hljs !== 'undefined') {
+      container.querySelectorAll('pre code').forEach(block => {
+        hljs.highlightElement(block);
+      });
+    }
+
+    // Make links open in new tab
+    container.querySelectorAll('a').forEach(a => { a.target = '_blank'; a.rel = 'noopener'; });
+
+    // Add copy button to code blocks
+    container.querySelectorAll('pre').forEach(pre => {
+      const btn = document.createElement('button');
+      btn.className = 'code-copy-btn';
+      btn.textContent = 'Copy';
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const code = pre.querySelector('code');
+        const text = code ? code.textContent : pre.textContent;
+        navigator.clipboard.writeText(text).then(() => {
+          btn.textContent = 'Copied!';
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        }).catch(() => { btn.textContent = 'Error'; setTimeout(() => { btn.textContent = 'Copy'; }, 1500); });
+      };
+      pre.appendChild(btn);
+    });
+
+    // Click-to-copy for inline code
+    container.querySelectorAll('code:not(pre code)').forEach(code => {
+      code.onclick = (e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(code.textContent).then(() => {
+          if (typeof showCopyToast === 'function') showCopyToast();
+        });
+      };
+    });
+
+    // Render KaTeX math ($$...$$ and $...$)
+    if (typeof renderMathInElement === 'function') {
+      renderMathInElement(container, {
+        delimiters: [
+          { left: '$$', right: '$$', display: true },
+          { left: '$', right: '$', display: false },
+          { left: '\\[', right: '\\]', display: true },
+          { left: '\\(', right: '\\)', display: false },
+        ],
+        throwOnError: false,
+      });
+    }
+
+    // Wrap text nodes in karaoke-word spans for TTS highlighting compatibility
+    _wrapTextNodesInKaraokeSpans(container);
+
+    return container;
+  } catch (e) {
+    console.warn('Markdown render error:', e);
+    return null;
+  }
+}
+
 function createMsgEl(role, text, voiceColorHex, voiceId) {
   const div = document.createElement('div');
   div.className = `msg ${role}`;
   if (role === 'assistant') {
-    _wrapWordsInSpans(div, text);
+    // Try markdown rendering first, fall back to karaoke word wrapping
+    const mdEl = (typeof marked !== 'undefined') ? _renderMarkdown(text) : null;
+    if (mdEl) {
+      div.appendChild(mdEl);
+    } else {
+      _wrapWordsInSpans(div, text);
+    }
   } else {
     div.textContent = text;
   }
@@ -2289,6 +2536,7 @@ function renderChat() {
   const vc = voiceColor(s.voice);
   const displayMessages = s.messages.slice(-50);
   for (const msg of displayMessages) {
+    if (!showAgentMessages && msg.role === 'system' && /^\[Agent msg (from|to) /.test(msg.text)) continue;
     chatArea.appendChild(createMsgEl(msg.role, msg.text, vc, s.voice));
   }
   // Re-show thinking indicator if session is thinking
@@ -2303,7 +2551,7 @@ function renderChat() {
     }
     chatArea.appendChild(div);
   }
-  chatArea.scrollTop = chatArea.scrollHeight;
+  chatScrollToBottom(true);
 }
 
 function _debugBanner(msg) { /* no-op */ }
@@ -2314,7 +2562,7 @@ function addMessage(sessionId, role, text) {
   s.messages.push({ role, text, ts: Date.now() / 1000 });
   if (sessionId === activeSessionId) {
     chatArea.appendChild(createMsgEl(role, text, voiceColor(s.voice), s.voice));
-    chatArea.scrollTop = chatArea.scrollHeight;
+    chatScrollToBottom();
   }
 }
 
@@ -2383,16 +2631,28 @@ async function addSession(data, autoSwitch = false) {
     console.warn('Failed to fetch history:', e);
   }
 
+  // Apply saved speed from localStorage so new sessions inherit the user's preference
+  const _savedSpd = localStorage.getItem('hub_speed');
+  const _initSpeed = _savedSpd ? parseFloat(_savedSpd) : (data.speed || 1.0);
   sessions.set(data.session_id, {
     ...data,
     tmux_session: data.tmux_session || data.session_id,
     voice: data.voice || 'af_sky',
-    speed: data.speed || 1.0,
+    speed: _initSpeed,
     messages: serverMessages,
     statusText: data.status_text || (isReady ? 'Ready' : 'Starting...'),
     sidebarState: (data.unread_count > 0) ? 'speaking' : (isReady ? 'ready' : 'starting'),
     unreadCount: data.unread_count || 0,
+    compacting: data.compacting ?? false,
   });
+  // Sync saved speed to server so first TTS uses the correct speed
+  if (_savedSpd && _initSpeed !== (data.speed || 1.0)) {
+    fetch(`/api/sessions/${data.session_id}/speed`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ speed: _initSpeed }),
+    }).catch(() => {});
+  }
   if (autoSwitch) switchTab(data.session_id);
   if (serverMessages.length === 0) {
     if (isReady) {
@@ -2647,6 +2907,8 @@ async function loadSettings() {
     voiceResponsesEnabled = s.voice_responses !== false;
     setToggle('voice_responses', voiceResponsesEnabled);
     setToggle('silent_startup', s.silent_startup || false);
+    showAgentMessages = s.show_agent_messages !== false;
+    setToggle('show_agent_messages', showAgentMessages);
     // Sync default model dropdown
     const dmSel = document.getElementById('default-model-select');
     if (dmSel) dmSel.value = s.model || 'opus';
@@ -2681,6 +2943,7 @@ async function toggleSetting(key) {
   if (key === 'thinking_sounds') { thinkingSoundsEnabled = isOn; if (!isOn) stopThinkingSound(); }
   if (key === 'audio_cues') { audioCuesEnabled = isOn; }
   if (key === 'voice_responses') { voiceResponsesEnabled = isOn; renderChat(); }
+  if (key === 'show_agent_messages') { showAgentMessages = isOn; renderChat(); }
   try {
     await fetch('/api/settings', {
       method: 'PUT',
@@ -2698,6 +2961,61 @@ async function updateSetting(key, value) {
       body: JSON.stringify({ [key]: value }),
     });
   } catch (e) { console.error('Failed to save setting:', e); }
+}
+
+// --- Deployment mode settings ---
+function onDeployModeChange(mode) {
+  const urlsDiv = document.getElementById('deploy-remote-urls');
+  const descEl = document.getElementById('deploy-mode-desc');
+  urlsDiv.style.display = (mode === 'split') ? '' : 'none';
+  if (descEl) {
+    descEl.textContent = mode === 'split'
+      ? 'Hub runs here, TTS/STT run on a remote GPU server.'
+      : 'Hub and audio services run on the same machine.';
+  }
+}
+
+async function loadDeploymentConfig() {
+  try {
+    const resp = await fetch('/api/settings');
+    if (!resp.ok) return;
+    const cfg = await resp.json();
+    const modeEl = document.getElementById('deploy-mode-select');
+    const ttsEl = document.getElementById('deploy-tts-url');
+    const sttEl = document.getElementById('deploy-stt-url');
+    const qualEl = document.getElementById('deploy-quality-select');
+    if (cfg.deployment_mode && modeEl) modeEl.value = cfg.deployment_mode;
+    if (cfg.tts_url && ttsEl) ttsEl.value = cfg.tts_url;
+    if (cfg.stt_url && sttEl) sttEl.value = cfg.stt_url;
+    if (cfg.quality_mode && qualEl) qualEl.value = cfg.quality_mode;
+    onDeployModeChange(cfg.deployment_mode || 'local');
+  } catch (e) { /* API may not exist yet */ }
+}
+
+async function saveDeploymentConfig() {
+  const btn = document.getElementById('deploy-save-btn');
+  const origText = btn.textContent;
+  btn.textContent = 'Saving...';
+  btn.disabled = true;
+  try {
+    const body = {
+      deployment_mode: document.getElementById('deploy-mode-select').value,
+      tts_url: document.getElementById('deploy-tts-url').value,
+      stt_url: document.getElementById('deploy-stt-url').value,
+      quality_mode: document.getElementById('deploy-quality-select').value,
+    };
+    const resp = await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    btn.textContent = resp.ok ? 'Saved!' : 'Error';
+    setTimeout(() => { btn.textContent = origText; btn.disabled = false; }, 1500);
+  } catch (e) {
+    console.error('Failed to save deployment config:', e);
+    btn.textContent = 'Error';
+    setTimeout(() => { btn.textContent = origText; btn.disabled = false; }, 1500);
+  }
 }
 
 // --- Per-session model ---
@@ -3068,7 +3386,7 @@ function showThinking(sessionId) {
       div.appendChild(dot);
     }
     chatArea.appendChild(div);
-    chatArea.scrollTop = chatArea.scrollHeight;
+    chatScrollToBottom();
   }
   s.isThinking = true;
 }
@@ -3157,6 +3475,9 @@ const _messageBuffer = [];
 async function _refreshHistory(sessionId, voiceId) {
   const s = sessions.get(sessionId);
   if (!s) return;
+  // Skip sync for the active session while audio is playing or karaoke is active
+  // to avoid DOM re-renders that break karaoke highlighting and cause visual flashes
+  if (sessionId === activeSessionId && (currentAudio || currentBufferedPlayer || _karaokeWords || playbackPaused)) return;
   try {
     const resp = await fetch(`/api/history/${voiceId}?project=${currentProject}`);
     if (!resp.ok) return;
@@ -3190,8 +3511,18 @@ async function _refreshHistory(sessionId, voiceId) {
       const systemMsgs = s.messages.filter(m => m.role === 'system');
       s.messages = [...systemMsgs, ...serverMessages];
       if (sessionId === activeSessionId) {
+        // Save karaoke state before renderChat destroys DOM refs
+        let savedKaraokeWords = null;
+        if (_karaokeWords && _karaokeWords.length > 0) {
+          savedKaraokeWords = _karaokeWords.map(w => ({ word: w.word, start_time: w.start_time, end_time: w.end_time }));
+        }
         renderChat();
-        requestAnimationFrame(() => { chatArea.scrollTop = chatArea.scrollHeight; });
+        // Restore karaoke spans after DOM rebuild
+        if (savedKaraokeWords && savedKaraokeWords.length > 0) {
+          const msgs = chatArea.querySelectorAll('.msg.assistant');
+          if (msgs.length) _applyKaraokeSpans(msgs[msgs.length - 1], savedKaraokeWords);
+        }
+        requestAnimationFrame(() => { chatScrollToBottom(); });
       }
     }
   } catch (e) { /* ignore */ }
@@ -3233,6 +3564,9 @@ function handleMessage(data) {
         const existing = sessions.get(s.session_id);
         if (existing) {
           existing.speed = s.speed || existing.speed;
+          existing.model = s.model || existing.model;
+          existing.project = s.project || existing.project || '';
+          existing.project_area = s.project_area || existing.project_area || '';
           existing.unreadCount = s.unread_count || 0;
           // Restore processing/thinking state
           if (s.processing && !existing.isThinking) {
@@ -3376,11 +3710,11 @@ function handleMessage(data) {
       const sName = senderName.charAt(0).toUpperCase() + senderName.slice(1);
       const rName = recipName.charAt(0).toUpperCase() + recipName.slice(1);
       // Show in recipient's chat
-      if (sessions.has(msg.recipient)) {
+      if (showAgentMessages && sessions.has(msg.recipient)) {
         addMessage(msg.recipient, 'system', `[Agent msg from ${sName}] ${msg.content || ''}`);
       }
       // Show in sender's chat
-      if (sessions.has(msg.sender)) {
+      if (showAgentMessages && sessions.has(msg.sender)) {
         addMessage(msg.sender, 'system', `[Agent msg to ${rName}] ${msg.content || ''}`);
       }
     }
@@ -3664,6 +3998,35 @@ function karaokeSetupMessage(sessionId, words) {
 }
 
 function _applyKaraokeSpans(msgEl, realWords) {
+  const mdContent = msgEl.querySelector('.md-content');
+
+  // If message has markdown-rendered content, apply timestamps to existing karaoke-word spans
+  if (mdContent) {
+    const existingSpans = mdContent.querySelectorAll('.karaoke-word');
+    if (existingSpans.length > 0) {
+      let wordIdx = 0;
+      for (const span of existingSpans) {
+        if (wordIdx >= realWords.length) break;
+        const spanText = span.textContent.toLowerCase().replace(/[^\w]/g, '');
+        if (!spanText) continue; // skip empty/punctuation spans
+        // Find matching word — look ahead up to 5 words to handle minor misalignments
+        const searchLimit = Math.min(wordIdx + 5, realWords.length);
+        for (let i = wordIdx; i < searchLimit; i++) {
+          const w = realWords[i];
+          const wText = w.word.toLowerCase().replace(/[^\w]/g, '');
+          if (spanText === wText || spanText.startsWith(wText) || wText.startsWith(spanText)) {
+            span.dataset.start = w.start_time;
+            w.el = span;
+            wordIdx = i + 1;
+            break;
+          }
+        }
+      }
+    }
+    return;
+  }
+
+  // Plain text fallback — original behavior
   const actionsEl = msgEl.querySelector('.msg-actions');
   // Get original text — prefer stored data attribute, fall back to DOM content
   const text = msgEl.dataset.text || Array.from(msgEl.childNodes)
@@ -4235,24 +4598,33 @@ function pttEnd(e) {
 // PTT is spacebar-only (see keydown/keyup handlers below).
 
 // Spacebar PTT: hold Space to record, release to send (works in voice mode)
+// Use capture phase to intercept Space before browser scrolls (critical for Firefox)
+function _isTextTarget(el) {
+  return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable;
+}
 document.addEventListener('keydown', (e) => {
-  if (e.code !== 'Space' || e.repeat) return;
-  // Don't capture Space if user is typing in text input or any input/textarea
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
-  // Always prevent default scroll on Space when not in a text field
+  if ((e.code !== 'Space' && e.key !== ' ') || e.repeat) return;
+  if (_isTextTarget(e.target)) return;
   e.preventDefault();
+  e.stopPropagation();
   if (inputMode !== 'voice') return;
-  // If auto-recording, stop it first so PTT takes over
   if (recording && !pttActive) { stopRecording(true); }
   pttStart(e);
-});
+}, true); // capture phase
 document.addEventListener('keyup', (e) => {
-  if (e.code !== 'Space') return;
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+  if (e.code !== 'Space' && e.key !== ' ') return;
+  if (_isTextTarget(e.target)) return;
   e.preventDefault();
+  e.stopPropagation();
   if (inputMode !== 'voice') return;
   pttEnd(e);
-});
+}, true); // capture phase
+// Also capture keypress for Firefox legacy scroll
+document.addEventListener('keypress', (e) => {
+  if ((e.key === ' ' || e.code === 'Space') && !_isTextTarget(e.target)) {
+    e.preventDefault();
+  }
+}, true); // capture phase
 
 // --- Debug panel ---
 let debugActive = false;
@@ -4486,6 +4858,9 @@ document.addEventListener('click', (e) => {
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
+    // Prevent browser from exiting fullscreen — Escape should pause/stop audio instead
+    e.preventDefault();
+    e.stopPropagation();
     hideContextMenu();
     // Stop any active playback
     if (currentAudio || currentBufferedPlayer) {
@@ -4507,6 +4882,39 @@ document.addEventListener('keydown', (e) => {
     if (currentAudio || currentBufferedPlayer || playbackPaused) {
       e.preventDefault();
       transportPause();
+    }
+  }
+
+  // Arrow keys: scrub karaoke highlight word-by-word while paused
+  if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') && playbackPaused && _karaokeWords && _karaokeWords.length > 0) {
+    if (document.activeElement === textInput) return; // don't capture when typing
+    e.preventDefault();
+    const oldIdx = _karaokeActiveIdx;
+    let newIdx;
+    if (e.key === 'ArrowLeft') {
+      newIdx = Math.max(0, oldIdx - 1);
+    } else if (e.key === 'ArrowRight') {
+      newIdx = Math.min(_karaokeWords.length - 1, oldIdx + 1);
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      // Jump by ~10 words (approximate line) for up/down
+      const jump = 10;
+      if (e.key === 'ArrowUp') {
+        newIdx = Math.max(0, oldIdx - jump);
+      } else {
+        newIdx = Math.min(_karaokeWords.length - 1, oldIdx + jump);
+      }
+    }
+    if (newIdx !== undefined && newIdx !== oldIdx) {
+      // Update highlight
+      if (oldIdx >= 0 && _karaokeWords[oldIdx]?.el) _karaokeWords[oldIdx].el.classList.remove('active');
+      if (_karaokeWords[newIdx]?.el) {
+        _karaokeWords[newIdx].el.classList.add('active');
+        _karaokeWords[newIdx].el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+      _karaokeActiveIdx = newIdx;
+      // Update pause offset so resume starts from this word
+      pauseOffset = _karaokeWords[newIdx].start_time;
+      updateTransportBar();
     }
   }
 
@@ -4569,7 +4977,7 @@ function applyInputMode() {
     controls.style.display = 'none';
     textInputBar.classList.add('active');
     textInput.focus();
-    requestAnimationFrame(() => { chatArea.scrollTop = chatArea.scrollHeight; });
+    requestAnimationFrame(() => { chatScrollToBottom(true); });
   } else {
     textInputBar.classList.remove('active');
     if (activeSessionId && sessions.has(activeSessionId)) {
@@ -4897,6 +5305,7 @@ renderSidebar();
 connect();
 loadSettings();
 loadProjects();
+loadDeploymentConfig();
 startUsagePolling();
 startStateSync();
 </script>
