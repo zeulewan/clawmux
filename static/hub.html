@@ -1855,7 +1855,7 @@ function _sidebarState(voiceId) {
       stateClass = 'starting'; statusLabel = 'Starting...';
     } else if (st === 'thinking') {
       stateClass = 'thinking';
-      statusLabel = session.toolStatusText || 'Thinking...';
+      statusLabel = session.toolStatusText || '';
     } else if (st === 'speaking') {
       const unreadN = session ? (session.unreadCount || 0) : 0;
       if (unreadN > 0) {
