@@ -800,7 +800,7 @@ function setSessionState(sessionId, newState) {
       chatArea.querySelectorAll('.msg.interjection').forEach(el => el.classList.remove('interjection'));
     }
     s.messages.forEach(m => { if (m.role === 'user interjection') m.role = 'user'; });
-    setSessionSidebarState(sessionId, 'listening');
+    setSessionSidebarState(sessionId, 'idle');  // listening is browser-only; sidebar shows idle
     if (sessionId === activeSessionId) {
       micBtn.disabled = false;
       updateMicUI();
