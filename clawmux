@@ -510,6 +510,20 @@ def cmd_kill_all(args):
     print(f"Hub stopped. Killed {killed} session(s).")
 
 
+def cmd_version(args):
+    """Show ClawMux version and git commit."""
+    repo_dir = _find_repo_dir()
+    # Get version from git describe (tag + commits since + short hash)
+    r = subprocess.run(["git", "describe", "--tags", "--always"],
+                       cwd=repo_dir, capture_output=True, text=True)
+    version = r.stdout.strip() if r.returncode == 0 else "unknown"
+    # Get full commit hash
+    r2 = subprocess.run(["git", "rev-parse", "HEAD"],
+                        cwd=repo_dir, capture_output=True, text=True)
+    commit = r2.stdout.strip()[:10] if r2.returncode == 0 else "unknown"
+    print(f"ClawMux {version} (commit {commit})")
+
+
 def cmd_update(args):
     """Pull latest code, reinstall deps, reinstall CLI, reload hub."""
     repo_dir = _find_repo_dir()
@@ -1227,6 +1241,11 @@ def main():
     spawn       Launch a new agent session
     project     Set project status in sidebar
 
+  System:
+    version     Show version and commit
+    update      Update to latest version
+    uninstall   Remove ClawMux
+
 examples:
     clawmux status
     clawmux status sky
@@ -1239,7 +1258,11 @@ examples:
     clawmux monitor
     clawmux monitor --agents sky adam echo""",
     )
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(dest="command", required=False)
+
+    # version
+    p = sub.add_parser("version", help="Show ClawMux version and commit")
+    p.set_defaults(func=cmd_version)
 
     # wait (NEW — push-based idle mode)
     p = sub.add_parser("wait", help="Block until a message arrives",
@@ -1374,6 +1397,9 @@ examples:
     p.set_defaults(func=cmd_project)
 
     args = parser.parse_args()
+    if not args.command:
+        parser.print_help()
+        sys.exit(0)
     args.func(args)
 
 
