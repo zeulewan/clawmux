@@ -1384,16 +1384,28 @@ def _save_settings(settings: dict) -> None:
     settings_path.write_text(json.dumps(settings, indent=2))
 
 
+_last_good_usage: dict | None = None
+
 @app.get("/api/usage")
 async def get_usage():
     """Return Claude usage stats from local cache."""
+    global _last_good_usage
     usage_path = Path.home() / ".claude" / "usage-cache.json"
     if not usage_path.exists():
+        if _last_good_usage:
+            return JSONResponse(_last_good_usage)
         return JSONResponse({"error": "No usage data"}, status_code=404)
     try:
         data = json.loads(usage_path.read_text())
+        if "error" in data or "five_hour" not in data:
+            if _last_good_usage:
+                return JSONResponse(_last_good_usage)
+            return JSONResponse({"error": "Usage data unavailable"}, status_code=503)
+        _last_good_usage = data
         return JSONResponse(data)
     except Exception as e:
+        if _last_good_usage:
+            return JSONResponse(_last_good_usage)
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
