@@ -211,7 +211,12 @@ function renderChat(forceScroll = false) {
       ctr.className = 'thread-container';
       const parentEl = createMsgEl(msg.role, msg.text, vc, s.voice, msg);
       const ac = bareAcks.get(msg.id) || 0;
-      if (ac > 0) { const b = document.createElement('span'); b.className = 'thread-ack-badge'; b.textContent = ac > 1 ? '\uD83D\uDC4D ' + ac : '\uD83D\uDC4D'; b.title = ac + ' ack'; parentEl.appendChild(b); }
+      if (ac > 0) {
+        const b = document.createElement('span'); b.className = 'thread-ack-badge'; b.textContent = ac > 1 ? '\uD83D\uDC4D ' + ac : '\uD83D\uDC4D'; b.title = ac + ' ack'; parentEl.appendChild(b);
+        // Hide the ack button since badge is showing
+        const ackBtn = parentEl.querySelector('.msg-ack-btn');
+        if (ackBtn) ackBtn.style.display = 'none';
+      }
       ctr.appendChild(parentEl);
       const reps = threadReplies.get(msg.id) || [];
       const collapse = reps.length >= 3;
