@@ -326,6 +326,7 @@ async def handle_browser_message(data: dict) -> None:
                     "from": "user",
                     "type": "voice",
                     "content": text,
+                    "msg_id": umid,
                 })
             await send_to_browser({"session_id": session_id, "type": "done", "processing": False})
         else:
@@ -344,6 +345,7 @@ async def handle_browser_message(data: dict) -> None:
                     "from": "user",
                     "type": "text",
                     "content": text,
+                    "msg_id": umid,
                 })
             await send_to_browser({"session_id": session_id, "type": "done", "processing": False})
 
@@ -380,6 +382,7 @@ async def handle_browser_message(data: dict) -> None:
                     "from": sender_name,
                     "type": "voice",
                     "content": combined,
+                    "msg_id": umid,
                 })
             elif session.work_dir:
                 # Agent not in wait — write to inbox for hook-based delivery
@@ -390,6 +393,7 @@ async def handle_browser_message(data: dict) -> None:
                     "from": sender_name,
                     "type": "voice",
                     "content": text,
+                    "msg_id": umid,
                 })
                 log.info("[%s] Voice interjection written to inbox for hook delivery", session_id)
                 # Signal browser that message was queued (not actively processing)
@@ -616,11 +620,11 @@ def _format_inbox_messages(messages: list[dict]) -> str:
         msg_type = msg.get("type", "system")
         sender = msg.get("from", "unknown")
         content = msg.get("content", "")
-        msg_id = msg.get("id", "")
+        msg_id = msg.get("msg_id") or msg.get("id", "")
         if msg_type == "agent":
             lines.append(f"[MSG id:{msg_id} from:{sender}] {content}")
         elif msg_type == "voice":
-            lines.append(f"[VOICE from:{sender}] {content}")
+            lines.append(f"[VOICE id:{msg_id} from:{sender}] {content}")
         else:
             lines.append(f"[SYSTEM] {content}")
     return "\n".join(lines)
