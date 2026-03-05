@@ -977,8 +977,8 @@ let _karaokeActiveIdx = -1;
 const _pendingKaraokeWords = new Map(); // sessionId -> words[]
 
 function karaokeSetupMessage(sessionId, words) {
-  // Filter to real (non-punctuation) words only
-  const realWords = words.filter(w => /\w/.test(w.word));
+  // Filter to real (non-punctuation/symbol) words only
+  const realWords = words.filter(w => /[\p{L}\p{N}]/u.test(w.word));
   if (realWords.length === 0) return;
   _pendingKaraokeWords.set(sessionId, realWords);
 
@@ -1000,14 +1000,16 @@ function _applyKaraokeSpans(msgEl, realWords) {
       let wordIdx = 0;
       for (const span of existingSpans) {
         if (wordIdx >= realWords.length) break;
-        const spanText = span.textContent.toLowerCase().replace(/[^\w]/g, '');
-        if (!spanText) continue; // skip empty/punctuation spans
-        // Find matching word — small look-ahead first, then wider search to skip code blocks
+        const spanText = span.textContent.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+        if (!spanText) continue; // skip empty/punctuation/symbol-only spans
+        // Find matching word — small look-ahead first, then wider search to skip
+        // code blocks and TTS-pronounced symbols (e.g. → read as "arrow")
         let matched = false;
         const searchLimit = Math.min(wordIdx + 5, realWords.length);
         for (let i = wordIdx; i < searchLimit; i++) {
           const w = realWords[i];
-          const wText = w.word.toLowerCase().replace(/[^\w]/g, '');
+          const wText = w.word.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+          if (!wText) continue;
           if (spanText === wText || spanText.startsWith(wText) || wText.startsWith(spanText)) {
             span.dataset.start = w.start_time;
             w.el = span;
@@ -1017,12 +1019,13 @@ function _applyKaraokeSpans(msgEl, realWords) {
           }
         }
         // If small look-ahead failed, scan further — TTS words from skipped code blocks
-        // create gaps between DOM spans and TTS word indices
+        // or symbols create gaps between DOM spans and TTS word indices
         if (!matched) {
           const wideLimit = Math.min(wordIdx + 200, realWords.length);
           for (let i = searchLimit; i < wideLimit; i++) {
             const w = realWords[i];
-            const wText = w.word.toLowerCase().replace(/[^\w]/g, '');
+            const wText = w.word.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+            if (!wText) continue;
             if (spanText === wText || spanText.startsWith(wText) || wText.startsWith(spanText)) {
               span.dataset.start = w.start_time;
               w.el = span;
@@ -1053,7 +1056,7 @@ function _applyKaraokeSpans(msgEl, realWords) {
   const frag = document.createDocumentFragment();
   const textLower = text.toLowerCase();
   let pos = 0;
-  const isWordChar = c => /\w/.test(c);
+  const isWordChar = c => /[\p{L}\p{N}]/u.test(c);
   for (const w of realWords) {
     const wordLower = w.word.toLowerCase();
     let idx = pos;
