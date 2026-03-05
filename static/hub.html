@@ -1249,6 +1249,8 @@ body {
   <div id="header-project-status" style="font-size:0.65rem; color:var(--text-tertiary); text-align:right; max-width:200px; line-height:1.4;"></div>
   <div id="usage-bar" style="display:none;align-items:center;gap:8px;padding:4px 12px;background:rgba(128,128,128,0.08);border-radius:12px;font-size:0.7rem;color:var(--text-secondary);cursor:pointer;" onclick="toggleUsageDetail()" title="Claude usage">
     <span id="usage-ctx" style="white-space:nowrap;"></span>
+    <span id="usage-5h" style="white-space:nowrap;"></span>
+    <span id="usage-7d" style="white-space:nowrap;"></span>
   </div>
   <div style="display:flex;align-items:center;gap:6px;padding:4px 12px;background:rgba(128,128,128,0.08);border-radius:12px;">
     <div id="dot" class="connecting"></div>
@@ -2577,9 +2579,14 @@ function formatReset(isoStr) {
 
 async function fetchUsage() {
   try {
-    const ctxResp = await fetch('/api/context');
+    const [usageResp, ctxResp] = await Promise.all([
+      fetch('/api/usage'),
+      fetch('/api/context')
+    ]);
     const bar = document.getElementById('usage-bar');
     const elCtx = document.getElementById('usage-ctx');
+    const el5h = document.getElementById('usage-5h');
+    const el7d = document.getElementById('usage-7d');
 
     let hasData = false;
 
@@ -2597,6 +2604,22 @@ async function fetchUsage() {
       } else {
         elCtx.style.display = 'none';
       }
+    }
+
+    if (usageResp.ok) {
+      const data = await usageResp.json();
+      const pct5h = data.five_hour?.utilization ?? null;
+      const pct7d = data.seven_day?.utilization ?? null;
+      if (pct5h !== null) {
+        el5h.innerHTML = '5h: <b style="color:' + usageColor(pct5h) + '">' + pct5h + '%</b>';
+        el5h.style.display = '';
+        hasData = true;
+      } else { el5h.style.display = 'none'; }
+      if (pct7d !== null) {
+        el7d.innerHTML = '7d: <b style="color:' + usageColor(pct7d) + '">' + pct7d + '%</b>';
+        el7d.style.display = '';
+        hasData = true;
+      } else { el7d.style.display = 'none'; }
     }
 
     bar.style.display = hasData ? 'flex' : 'none';
