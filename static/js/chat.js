@@ -165,12 +165,33 @@ function createMsgEl(role, text, voiceColorHex, voiceId, msgObj = null) {
     div.appendChild(actions);
   }
 
-  // Double-click to ack messages with an ID (not on user's own messages)
-  if (msgObj && msgObj.id && role !== 'system' && role !== 'thinking' && role !== 'user' && role !== 'user interjection') {
+  // Double-click to ack messages with an ID (not on user's own messages) — desktop only
+  if (!isMobile && msgObj && msgObj.id && role !== 'system' && role !== 'thinking' && role !== 'user' && role !== 'user interjection') {
     div.addEventListener('dblclick', (e) => {
       e.preventDefault();
       _sendUserAck(msgObj.id);
     });
+  }
+
+  // Mobile: attach long-press directly to each message (matches sidebar pattern)
+  if (isMobile && role !== 'thinking' && role !== 'system') {
+    let lpTimer = null, lpFired = false;
+    div.oncontextmenu = (e) => e.preventDefault();
+    div.addEventListener('touchstart', (e) => {
+      lpFired = false;
+      const touch = e.touches[0];
+      lpTimer = setTimeout(() => {
+        lpTimer = null; lpFired = true;
+        div.classList.add('long-press-active');
+        _showContextMenu(div, touch.clientX, touch.clientY);
+        setTimeout(() => div.classList.remove('long-press-active'), 200);
+      }, 500);
+    }, { passive: true });
+    div.addEventListener('touchend', (e) => {
+      if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+      if (lpFired) { e.preventDefault(); lpFired = false; }
+    });
+    div.addEventListener('touchmove', () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } });
   }
 
   return div;
@@ -457,36 +478,7 @@ function showCopyToast(msg) {
   copyToastTimer = setTimeout(() => toast.classList.remove('visible'), 1500);
 }
 
-// Mobile: use touchstart/touchend (matches working sidebar pattern)
-if (isMobile) {
-  chatArea.addEventListener('touchstart', (e) => {
-    const msgEl = e.target.closest('.msg');
-    if (!msgEl || msgEl.classList.contains('thinking') || msgEl.classList.contains('system')) return;
-    _longPressFired = false;
-    longPressTarget = msgEl;
-    const touch = e.touches[0];
-    const px = touch.clientX, py = touch.clientY;
-    longPressTimer = setTimeout(() => {
-      longPressTimer = null;
-      _longPressFired = true;
-      msgEl.classList.add('long-press-active');
-      _showContextMenu(msgEl, px, py);
-      setTimeout(() => msgEl.classList.remove('long-press-active'), 200);
-    }, 500);
-  }, { passive: true });
-  chatArea.addEventListener('touchend', (e) => {
-    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-    if (_longPressFired) { e.preventDefault(); _longPressFired = false; }
-    longPressTarget = null;
-  });
-  chatArea.addEventListener('touchmove', () => {
-    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-    longPressTarget = null;
-  });
-  chatArea.addEventListener('contextmenu', (e) => e.preventDefault());
-} else {
-  // Desktop: keep pointer events for hover-based actions (no long-press needed)
-}
+// Mobile long-press is now handled per-element in createMsgEl (matches sidebar pattern)
 
 // Persist input mode
 function saveInputMode() {
