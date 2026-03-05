@@ -481,6 +481,7 @@ async def wait_websocket(ws: WebSocket, session_id: str):
         return
 
     log.info("[%s] Wait WS connected", session_id)
+    session.status_text = "Waiting"
     session.set_state(AgentState.IDLE)
 
     # Tell browser agent is idle (so voice input isn't treated as interjection)
