@@ -302,7 +302,15 @@ async def lifespan(app: FastAPI):
     saved = _load_settings()
     import hub_config
     hub_config.CLAUDE_MODEL = saved.get("model", "opus")
-    log.info("Model: %s", hub_config.CLAUDE_MODEL)
+    if saved.get("deployment_mode") in ("local", "split", "remote"):
+        hub_config.DEPLOYMENT_MODE = saved["deployment_mode"]
+    if saved.get("tts_url"):
+        hub_config.KOKORO_URL = saved["tts_url"].rstrip("/")
+    if saved.get("stt_url"):
+        hub_config.WHISPER_URL = saved["stt_url"].rstrip("/")
+    log.info("Model: %s, Mode: %s, TTS: %s, STT: %s",
+             hub_config.CLAUDE_MODEL, hub_config.DEPLOYMENT_MODE,
+             hub_config.KOKORO_URL, hub_config.WHISPER_URL)
     await session_mgr.cleanup_stale_sessions()
     broker.start()
     timeout_task = asyncio.create_task(session_mgr.run_timeout_loop())
