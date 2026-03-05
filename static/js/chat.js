@@ -290,6 +290,13 @@ function renderChat(forceScroll = false) {
 
   for (const msg of displayMessages) {
     if (replySet.has(msg)) continue;
+    if (msg.role === 'activity') {
+      const line = document.createElement('div');
+      line.className = 'activity-line';
+      line.textContent = msg.text;
+      chatArea.appendChild(line);
+      continue;
+    }
     if (!showAgentMessages && msg.role === 'system' && /^\[Agent msg (from|to) /.test(msg.text)) continue;
     const hasThread = msg.id && (threadReplies.has(msg.id) || bareAcks.has(msg.id));
     if (hasThread) {
@@ -328,10 +335,9 @@ function renderChat(forceScroll = false) {
       chatArea.appendChild(createMsgEl(msg.role, msg.text, vc, s.voice, msg));
     }
   }
-  // Re-show activity log and status indicator based on session state
+  // Show status indicator at the bottom based on session state
   const curState = getSessionState(activeSessionId);
   if (curState === 'idle' || curState === 'processing') {
-    renderActivityLog(activeSessionId);
     showStatusIndicator(activeSessionId);
   }
   if (wasNearBottom) chatArea.scrollTop = chatArea.scrollHeight;
@@ -353,11 +359,18 @@ function addMessage(sessionId, role, text, opts = {}) {
       renderChat();
     } else {
       const wasNearBottom = chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150;
-      const msgEl = createMsgEl(role, text, voiceColor(s.voice), s.voice, msgObj);
-      // Insert before activity lines / status indicator so they stay at the bottom
-      const firstOverlay = chatArea.querySelector('.activity-line, [id^="status-indicator-"]');
-      if (firstOverlay) chatArea.insertBefore(msgEl, firstOverlay);
-      else chatArea.appendChild(msgEl);
+      let el;
+      if (role === 'activity') {
+        el = document.createElement('div');
+        el.className = 'activity-line';
+        el.textContent = text;
+      } else {
+        el = createMsgEl(role, text, voiceColor(s.voice), s.voice, msgObj);
+      }
+      // Insert before status indicator so it stays at the bottom
+      const indicator = document.getElementById(`status-indicator-${sessionId}`);
+      if (indicator) chatArea.insertBefore(el, indicator);
+      else chatArea.appendChild(el);
       if (wasNearBottom) chatArea.scrollTop = chatArea.scrollHeight;
     }
   }

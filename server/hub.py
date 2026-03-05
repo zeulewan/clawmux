@@ -65,6 +65,16 @@ def _gen_msg_id() -> str:
     """Generate a short unique message ID for history tracking."""
     return "msg-" + uuid.uuid4().hex[:8]
 
+
+_ACTIVITY_SKIP = {"Processing...", "Starting session...", ""}
+
+
+def _save_activity(session, text: str) -> None:
+    """Save a status_text as an activity entry in history (if worth logging)."""
+    if not text or text in _ACTIVITY_SKIP:
+        return
+    history.append(session.voice, session.label, "activity", text, _hist_prefix(session))
+
 # Browser WebSocket clients (multiple connections supported)
 browser_clients: set[WebSocket] = set()
 
@@ -482,6 +492,7 @@ async def wait_websocket(ws: WebSocket, session_id: str):
         return
 
     log.info("[%s] Wait WS connected", session_id)
+    _save_activity(session, session.status_text)
     session.status_text = "Waiting"
     session.set_state(AgentState.IDLE)
 
@@ -539,6 +550,7 @@ async def wait_websocket(ws: WebSocket, session_id: str):
     except Exception as e:
         log.warning("[%s] Wait WS error: %s", session_id, e)
     finally:
+        _save_activity(session, session.status_text)
         session.status_text = "Processing..."
         session.set_state(AgentState.PROCESSING)
         await send_to_browser({
@@ -692,7 +704,8 @@ async def hook_tool_status(request: Request):
     response_json = {}
 
     if event in ("PostToolUse", "PostToolUseFailure"):
-        # Reset status_text to generic 'Processing...' between tool calls
+        # Save tool name as activity before resetting
+        _save_activity(session, session.status_text)
         session.status_text = "Processing..."
         # Check inbox for pending messages — deliver via additionalContext
         if session.work_dir:

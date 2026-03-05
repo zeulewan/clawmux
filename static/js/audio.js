@@ -776,53 +776,9 @@ function hideThinking(sessionId) { hideStatusIndicator(sessionId); }
 function updateThinkingLabel(sessionId) { updateStatusIndicator(sessionId); }
 function showIdleStatus(sessionId) {
   if (sessionId !== activeSessionId) return;
-  renderActivityLog(sessionId);
   showStatusIndicator(sessionId);
 }
 function hideIdleStatus(sessionId) { hideStatusIndicator(sessionId); }
-
-// --- Activity log ---
-// Collapse the current status into a muted activity line
-function collapseThinkingToActivity(sessionId, text) {
-  if (sessionId !== activeSessionId) return;
-  if (!text) return;
-  const statusEl = document.getElementById(`status-indicator-${sessionId}`);
-  if (!statusEl) return;
-  const line = document.createElement('div');
-  line.className = 'activity-line';
-  line.textContent = text;
-  statusEl.parentNode.insertBefore(line, statusEl);
-}
-
-// Render accumulated activity log lines (used by renderChat and showIdleStatus)
-function renderActivityLog(sessionId) {
-  const s = sessions.get(sessionId);
-  if (!s || !s.activityLog || s.activityLog.length === 0) return;
-  if (sessionId !== activeSessionId) return;
-  if (chatArea.querySelector('.activity-line')) return;
-  for (const text of s.activityLog) {
-    const line = document.createElement('div');
-    line.className = 'activity-line';
-    line.textContent = text;
-    chatArea.appendChild(line);
-  }
-}
-
-// Clear activity log DOM elements and data
-function clearActivityLog(sessionId) {
-  const s = sessions.get(sessionId);
-  if (s) s.activityLog = [];
-  if (sessionId === activeSessionId) {
-    chatArea.querySelectorAll('.activity-line').forEach(el => el.remove());
-  }
-}
-
-// Cap activity log to last N entries to prevent unbounded growth
-function _capActivityLog(s) {
-  if (s.activityLog && s.activityLog.length > 30) {
-    s.activityLog = s.activityLog.slice(-30);
-  }
-}
 
 // --- Session state machine ---
 // States: 'idle' | 'listening' | 'processing' | 'speaking'

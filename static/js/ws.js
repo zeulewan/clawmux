@@ -257,13 +257,11 @@ function handleMessage(data) {
     if (s) {
       // Update status_text (last tool call description)
       if ('status_text' in data) {
+        const skipActivity = new Set(['Processing...', 'Starting session...', '']);
         if (data.status_text && data.status_text !== s.toolStatusText) {
-          // Previous tool finished — collapse it into activity log
-          const skipLog = new Set(['Processing...', 'Starting session...', '']);
-          if (s.toolStatusText && !skipLog.has(s.toolStatusText)) {
-            if (!s.activityLog) s.activityLog = [];
-            s.activityLog.push(s.toolStatusText);
-            collapseThinkingToActivity(data.session_id, s.toolStatusText);
+          // Previous tool finished — add it as an activity message in the timeline
+          if (s.toolStatusText && !skipActivity.has(s.toolStatusText)) {
+            addMessage(data.session_id, 'activity', s.toolStatusText);
           }
           s.toolStatusText = data.status_text;
         } else if (data.status_text) {
@@ -277,11 +275,10 @@ function handleMessage(data) {
         s.serverState = serverState;
         s.compacting = (serverState === 'compacting');
         if (serverState === 'idle') {
-          // Collapse last tool status into activity log before hiding thinking
-          const skip = new Set(['Processing...', '']);
-          if (s.toolStatusText && !skip.has(s.toolStatusText)) {
-            if (!s.activityLog) s.activityLog = [];
-            s.activityLog.push(s.toolStatusText);
+          // Add last tool status as activity message before transitioning
+          const skipActivity = new Set(['Processing...', '']);
+          if (s.toolStatusText && !skipActivity.has(s.toolStatusText)) {
+            addMessage(data.session_id, 'activity', s.toolStatusText);
           }
           setSessionState(data.session_id, 'idle');
         } else if (serverState === 'processing' || serverState === 'compacting') {
