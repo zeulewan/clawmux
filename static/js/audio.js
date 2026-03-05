@@ -718,34 +718,18 @@ function showStatusIndicator(sessionId) {
   if (!s) return;
   if (sessionId !== activeSessionId) return;
 
-  const state = s.sessionState || 'idle';
-  const isProcessing = (state === 'processing');
   const text = _statusLabelText(s);
 
   let el = document.getElementById(`status-indicator-${sessionId}`);
   if (el) {
-    // Update existing: toggle dots visibility and label text
-    el.querySelectorAll('.thinking-dot').forEach(d => d.style.display = isProcessing ? '' : 'none');
-    const label = el.querySelector('.thinking-label');
-    if (label) label.textContent = text;
-    // Switch class between thinking (card bg) and idle (muted)
-    el.className = isProcessing ? 'msg thinking' : 'status-idle';
+    el.textContent = text;
     return;
   }
 
   el = document.createElement('div');
-  el.className = isProcessing ? 'msg thinking' : 'status-idle';
+  el.className = 'activity-line';
   el.id = `status-indicator-${sessionId}`;
-  for (let i = 0; i < 3; i++) {
-    const dot = document.createElement('span');
-    dot.className = 'thinking-dot';
-    if (!isProcessing) dot.style.display = 'none';
-    el.appendChild(dot);
-  }
-  const label = document.createElement('span');
-  label.className = 'thinking-label';
-  label.textContent = text;
-  el.appendChild(label);
+  el.textContent = text;
   chatArea.appendChild(el);
   chatScrollToBottom();
 }
@@ -755,8 +739,7 @@ function updateStatusIndicator(sessionId) {
   if (!s) return;
   const el = document.getElementById(`status-indicator-${sessionId}`);
   if (!el) return;
-  const label = el.querySelector('.thinking-label');
-  if (label) label.textContent = _statusLabelText(s);
+  el.textContent = _statusLabelText(s);
 }
 
 function hideStatusIndicator(sessionId) {
