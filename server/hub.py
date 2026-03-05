@@ -599,6 +599,9 @@ async def wait_websocket(ws: WebSocket, session_id: str):
         while True:
             try:
                 msg = await asyncio.wait_for(session._wait_queue.get(), timeout=5)
+                # Clear inbox file to prevent duplicate delivery on next wait
+                if session.work_dir:
+                    inbox.read_and_clear(session.work_dir)
                 await ws.send_json({"type": "messages", "messages": [msg]})
                 return
             except asyncio.TimeoutError:
