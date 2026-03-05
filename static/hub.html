@@ -1418,6 +1418,8 @@ body {
           <option value="low">Low (base)</option>
         </select>
       </div>
+      <div id="deploy-service-warning" style="display:none; margin:8px 16px; padding:10px 14px; background:#3d3000; border:1px solid #665200; border-radius:8px; font-size:0.78rem; line-height:1.5; color:#ffd666;">
+      </div>
       <div style="padding:12px 16px; text-align:right;">
         <button id="deploy-save-btn" onclick="saveDeploymentConfig()" style="padding:6px 16px; font-size:0.8rem; background:var(--voice-color, #4a9eff); color:white; border:none; border-radius:6px; cursor:pointer; font-family:inherit;">Save</button>
       </div>
@@ -2144,6 +2146,8 @@ function onDeployModeChange(mode) {
       ? 'Hub runs here, TTS/STT run on a remote GPU server.'
       : 'Hub and audio services run on the same machine.';
   }
+  const warn = document.getElementById('deploy-service-warning');
+  if (warn && mode !== 'local') warn.style.display = 'none';
 }
 
 async function loadDeploymentConfig() {
@@ -2160,6 +2164,7 @@ async function loadDeploymentConfig() {
     if (cfg.stt_url && sttEl) sttEl.value = cfg.stt_url;
     if (cfg.quality_mode && qualEl) qualEl.value = cfg.quality_mode;
     onDeployModeChange(cfg.deployment_mode || 'local');
+    if ((cfg.deployment_mode || 'local') === 'local') checkServiceStatus();
   } catch (e) { /* API may not exist yet */ }
 }
 
@@ -2182,10 +2187,41 @@ async function saveDeploymentConfig() {
     });
     btn.textContent = resp.ok ? 'Saved!' : 'Error';
     setTimeout(() => { btn.textContent = origText; btn.disabled = false; }, 1500);
+    // Check service availability when mode is "together" (local)
+    if (body.deployment_mode === 'local') {
+      checkServiceStatus();
+    } else {
+      document.getElementById('deploy-service-warning').style.display = 'none';
+    }
   } catch (e) {
     console.error('Failed to save deployment config:', e);
     btn.textContent = 'Error';
     setTimeout(() => { btn.textContent = origText; btn.disabled = false; }, 1500);
+  }
+}
+
+async function checkServiceStatus() {
+  const warn = document.getElementById('deploy-service-warning');
+  try {
+    const resp = await fetch('/api/services/status');
+    if (!resp.ok) return;
+    const status = await resp.json();
+    const missing = [];
+    if (!status.tts) missing.push('TTS (Kokoro)');
+    if (!status.stt) missing.push('STT (Whisper)');
+    if (missing.length === 0) {
+      warn.style.display = 'none';
+      return;
+    }
+    const isMac = navigator.platform.startsWith('Mac') || navigator.userAgent.includes('Mac');
+    const installCmds = isMac
+      ? '<b>Mac:</b><br><code>pip install mlx-audio</code><br><code>brew install whisper-cpp</code>'
+      : '<b>Linux:</b><br><code>pip install voicemode && voicemode whisper install && voicemode kokoro install</code>';
+    warn.innerHTML = '\u26a0\ufe0f <b>Missing services:</b> ' + missing.join(', ') +
+      '<br><br>' + installCmds;
+    warn.style.display = '';
+  } catch (e) {
+    // Endpoint may not exist on older hub versions
   }
 }
 

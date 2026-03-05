@@ -1614,6 +1614,25 @@ def _save_settings(settings: dict) -> None:
     settings_path.write_text(json.dumps(settings, indent=2))
 
 
+
+@app.get("/api/services/status")
+async def services_status():
+    tts_ok = False
+    stt_ok = False
+    async with httpx.AsyncClient(timeout=3) as client:
+        try:
+            await client.get(f"{hub_config.KOKORO_URL}/v1/audio/speech")
+            tts_ok = True
+        except Exception:
+            pass
+        try:
+            await client.get(f"{hub_config.WHISPER_URL}/v1/audio/transcriptions")
+            stt_ok = True
+        except Exception:
+            pass
+    return JSONResponse({"tts": tts_ok, "stt": stt_ok})
+
+
 _last_good_usage: dict | None = None
 _USAGE_SIDECAR = Path("data/usage-last-good.json")
 
