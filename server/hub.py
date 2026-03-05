@@ -485,10 +485,8 @@ async def handle_browser_message(data: dict) -> None:
                 combined = " ... ".join(session.interjections)
                 session.interjections.clear()
                 history.clear_interjections(session.voice, _hist_prefix(session))
-                sender_name = data.get("voice", session.voice or "user")
-                sender_name = sender_name.replace("af_", "").replace("am_", "").replace("bm_", "")
                 await _inbox_write_and_notify(session, {
-                    "from": sender_name,
+                    "from": "user",
                     "type": "voice",
                     "content": combined,
                     "msg_id": umid,
@@ -496,10 +494,8 @@ async def handle_browser_message(data: dict) -> None:
             elif session.work_dir:
                 # Agent not in wait — write to inbox for hook-based delivery
                 # (PostToolUse/PreToolUse will pick it up via additionalContext)
-                sender_name = data.get("voice", session.voice or "user")
-                sender_name = sender_name.replace("af_", "").replace("am_", "").replace("bm_", "")
                 await _inbox_write_and_notify(session, {
-                    "from": sender_name,
+                    "from": "user",
                     "type": "voice",
                     "content": text,
                     "msg_id": umid,
