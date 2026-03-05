@@ -765,6 +765,30 @@ function hideThinking(sessionId) {
   if (el) el.remove();
 }
 
+function showIdleStatus(sessionId) {
+  if (sessionId !== activeSessionId) return;
+  const s = sessions.get(sessionId);
+  if (!s) return;
+  const text = s.toolStatusText || '';
+  if (!text) { hideIdleStatus(sessionId); return; }
+  let el = document.getElementById(`idle-status-${sessionId}`);
+  if (el) {
+    el.textContent = text;
+    return;
+  }
+  el = document.createElement('div');
+  el.className = 'idle-status';
+  el.id = `idle-status-${sessionId}`;
+  el.textContent = text;
+  chatArea.appendChild(el);
+  chatScrollToBottom();
+}
+
+function hideIdleStatus(sessionId) {
+  const el = document.getElementById(`idle-status-${sessionId}`);
+  if (el) el.remove();
+}
+
 // --- Session state machine ---
 // States: 'idle' | 'listening' | 'processing' | 'speaking'
 // Replaces overlapping booleans: awaitingInput, isThinking, userSpokeThisCycle
@@ -785,6 +809,7 @@ function setSessionState(sessionId, newState) {
     hideThinking(sessionId);
     stopThinkingSound();
     stopThinkingVAD();
+    showIdleStatus(sessionId);
     setSessionSidebarState(sessionId, 'idle');
     if (sessionId === activeSessionId) {
       setStatus('Ready', sessionId);
@@ -806,6 +831,7 @@ function setSessionState(sessionId, newState) {
       updateMicUI();
     }
   } else if (newState === 'processing') {
+    hideIdleStatus(sessionId);
     showThinking(sessionId);
     startThinkingSound(sessionId);
     setSessionSidebarState(sessionId, 'working');
@@ -814,6 +840,7 @@ function setSessionState(sessionId, newState) {
       startThinkingVAD(sessionId);
     }
   } else if (newState === 'speaking') {
+    hideIdleStatus(sessionId);
     hideThinking(sessionId);
     stopThinkingSound();
     stopThinkingVAD();

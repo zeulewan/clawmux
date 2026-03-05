@@ -920,6 +920,14 @@ body {
 }
 .thinking-dot:nth-child(2) { animation-delay: 0.2s; }
 .thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+.idle-status {
+  align-self: flex-start;
+  padding: 8px 18px;
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  opacity: 0.5;
+  animation: msgAppear 0.2s ease-out;
+}
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }

@@ -275,8 +275,10 @@ function renderChat(forceScroll = false) {
       chatArea.appendChild(createMsgEl(msg.role, msg.text, vc, s.voice, msg));
     }
   }
-  // Re-show thinking indicator if session is processing
-  if (getSessionState(activeSessionId) === 'processing') {
+  // Re-show idle status or thinking indicator based on session state
+  if (getSessionState(activeSessionId) === 'idle') {
+    showIdleStatus(activeSessionId);
+  } else if (getSessionState(activeSessionId) === 'processing') {
     const div = document.createElement('div');
     div.className = 'msg thinking';
     div.id = `thinking-${activeSessionId}`;
