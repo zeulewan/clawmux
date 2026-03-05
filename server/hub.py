@@ -743,8 +743,7 @@ async def hook_tool_status(request: Request):
                     "count": 0,
                 })
     elif event == "SessionStart":
-        # SessionStart hook — mark session active, inject any pending inbox
-        session.set_state(AgentState.PROCESSING)
+        # SessionStart hook — agent stays STARTING until first wait WS connects
         session.status_text = "Starting session..."
         if session.work_dir:
             messages = inbox.read_and_clear(session.work_dir)
@@ -796,8 +795,7 @@ async def spawn_session(request: Request):
         session = await session_mgr.spawn_session(label, voice, project=project)
         # Notify browser of the new session so the sidebar updates immediately
         await send_to_browser({"type": "session_spawned", "session": session.to_dict()})
-        # Show thinking indicator while agent prepares its opening greeting
-        session.set_state(AgentState.PROCESSING)
+        # Show thinking indicator while agent boots (state stays STARTING)
         await send_to_browser({"session_id": session.session_id, "type": "thinking"})
         return JSONResponse(session.to_dict())
     except RuntimeError as e:
@@ -830,7 +828,6 @@ async def restart_session(session_id: str):
     # Respawn with the same voice and project
     new_session = await session_mgr.spawn_session(voice=voice, project=project_slug)
     await send_to_browser({"type": "session_spawned", "session": new_session.to_dict()})
-    new_session.set_state(AgentState.PROCESSING)
     await send_to_browser({"session_id": new_session.session_id, "type": "thinking"})
     return JSONResponse({"status": "restarted", "session_id": new_session.session_id})
 

@@ -654,7 +654,8 @@ class SessionManager:
             # Small extra delay for input buffer to be ready
             await asyncio.sleep(1)
 
-            session.set_state(AgentState.IDLE)
+            # State stays STARTING — transitions to IDLE when wait WS connects
+            session.status = "ready"  # legacy compat: browser checks this for mic enable
             session.touch()
             log.info("Session %s ready", session_id)
             return session
@@ -770,7 +771,8 @@ class SessionManager:
         await asyncio.sleep(1)
 
         session.restarting = False
-        session.set_state(AgentState.IDLE)
+        # State stays STARTING — transitions to IDLE when wait WS connects
+        session.status = "ready"  # legacy compat
         session.touch()
         log.info("[%s] Model restart complete", session_id)
 
