@@ -1240,12 +1240,10 @@ body {
     <option value="haiku">Haiku</option>
   </select>
   <span id="model-label" style="display:none; font-size:0.7rem; color:var(--text-secondary); cursor:pointer;" onclick="toggleModelPopup(event)"></span>
-  <div id="model-popup" style="display:none; position:fixed; background:#1a1a1a; border:1px solid #333; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.6); z-index:9999; min-width:100px; overflow:hidden;"></div>
   <select id="project-selector" style="display:none;" onchange="switchProject(this.value)">
     <option value="default">Default</option>
   </select>
   <span id="project-label" style="display:none; font-size:0.7rem; color:var(--text-secondary); cursor:pointer; font-weight:500;" onclick="toggleProjectPopup(event)"></span>
-  <div id="project-popup" style="display:none; position:fixed; background:#1a1a1a; border:1px solid #333; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.6); z-index:9999; min-width:120px; overflow:hidden;"></div>
   <div style="flex:1;"></div>
   <div id="header-project-status" style="font-size:0.65rem; color:var(--text-tertiary); text-align:right; max-width:200px; line-height:1.4;"></div>
   <div id="usage-bar" style="display:none;align-items:center;gap:8px;padding:4px 12px;background:rgba(128,128,128,0.08);border-radius:12px;font-size:0.7rem;color:var(--text-secondary);cursor:pointer;" onclick="toggleUsageDetail()" title="Claude usage">
@@ -1258,6 +1256,8 @@ body {
   <span id="settings-link" onclick="showSettingsPage()">Settings</span>
   <!-- Debug link removed — accessible from Settings page -->
 </div>
+<div id="model-popup" style="display:none; position:fixed; background:#1a1a1a; border:1px solid #333; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.6); z-index:9999; min-width:100px; overflow:hidden;"></div>
+<div id="project-popup" style="display:none; position:fixed; background:#1a1a1a; border:1px solid #333; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.6); z-index:9999; min-width:120px; overflow:hidden;"></div>
 
 <div id="app-body">
 
