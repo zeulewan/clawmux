@@ -926,6 +926,7 @@ class SessionManager:
         if not color:
             return
         for opt, val in [
+            ("status", "on"),
             ("status-style", f"fg=#ffffff,bg={color}"),
             ("status-left", f" {label} "),
             ("status-left-style", f"fg=#ffffff,bg={color},bold"),

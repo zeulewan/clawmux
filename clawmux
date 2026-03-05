@@ -844,6 +844,7 @@ def cmd_messages(args):
 def _apply_agent_status_bar(tmux_session, label, color):
     """Set a clean status bar on an agent's tmux session: white text on agent color."""
     for opt, val in [
+        ("status", "on"),
         ("status-style", f"fg=#ffffff,bg={color}"),
         ("status-left", f" {label} "),
         ("status-left-style", f"fg=#ffffff,bg={color},bold"),
