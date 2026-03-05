@@ -569,3 +569,79 @@ function restoreInputMode() {
   } catch(e) {}
 }
 
+// --- Drag-and-drop file upload (desktop only) ---
+function initDragDrop() {
+  if (isMobile) return;
+
+  let dragCounter = 0;
+  let overlay = null;
+
+  function getOverlay() {
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'drop-overlay';
+      overlay.style.cssText = 'display:none;position:absolute;inset:0;background:rgba(58,134,255,0.08);border:2px dashed rgba(58,134,255,0.5);border-radius:12px;z-index:100;pointer-events:none;align-items:center;justify-content:center;font-size:1.1em;color:var(--text-secondary,#aaa);';
+      overlay.textContent = 'Drop file to upload';
+      chatArea.style.position = 'relative';
+      chatArea.appendChild(overlay);
+    }
+    return overlay;
+  }
+
+  chatArea.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    if (!activeSessionId) return;
+    dragCounter++;
+    const s = sessions.get(activeSessionId);
+    const name = s ? (s.label || voiceDisplayName(s.voice)) : 'agent';
+    const ol = getOverlay();
+    ol.textContent = `Drop file to send to ${name}`;
+    ol.style.display = 'flex';
+  });
+
+  chatArea.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  });
+
+  chatArea.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter <= 0) {
+      dragCounter = 0;
+      if (overlay) overlay.style.display = 'none';
+    }
+  });
+
+  chatArea.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    dragCounter = 0;
+    if (overlay) overlay.style.display = 'none';
+    if (!activeSessionId) return;
+
+    const files = e.dataTransfer.files;
+    if (!files || files.length === 0) return;
+
+    for (const file of files) {
+      if (file.size > 50 * 1024 * 1024) {
+        addMessage(activeSessionId, 'system', `File too large: ${file.name} (50MB max)`);
+        continue;
+      }
+      const form = new FormData();
+      form.append('file', file);
+      try {
+        const resp = await fetch(`/api/sessions/${activeSessionId}/upload`, {
+          method: 'POST',
+          body: form,
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          addMessage(activeSessionId, 'system', `Upload failed: ${err.error || resp.statusText}`);
+        }
+      } catch (err) {
+        addMessage(activeSessionId, 'system', `Upload error: ${err.message}`);
+      }
+    }
+  });
+}
+

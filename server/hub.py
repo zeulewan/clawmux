@@ -26,7 +26,7 @@ from pathlib import Path
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 
 from history_store import HistoryStore
@@ -943,6 +943,64 @@ async def restart_session(session_id: str):
     await send_to_browser({"type": "session_spawned", "session": new_session.to_dict()})
     await send_to_browser({"session_id": new_session.session_id, "type": "thinking"})
     return JSONResponse({"status": "restarted", "session_id": new_session.session_id})
+
+
+_MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
+
+@app.post("/api/sessions/{session_id}/upload")
+async def upload_file(session_id: str, file: UploadFile):
+    """Accept a file upload and deliver it to the agent's work directory."""
+    session = session_mgr.sessions.get(session_id)
+    if not session:
+        return JSONResponse({"error": "session not found"}, status_code=404)
+    if not session.work_dir:
+        return JSONResponse({"error": "session has no work directory"}, status_code=400)
+    if not file.filename:
+        return JSONResponse({"error": "no filename"}, status_code=400)
+
+    # Read file with size limit
+    contents = await file.read()
+    if len(contents) > _MAX_UPLOAD_SIZE:
+        return JSONResponse({"error": "file too large (50MB max)"}, status_code=413)
+
+    # Save to uploads/ in the agent's work dir
+    safe_name = Path(file.filename).name  # strip directory components
+    uploads_dir = Path(session.work_dir) / "uploads"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    dest = uploads_dir / safe_name
+    dest.write_bytes(contents)
+
+    # Format size for display
+    size = len(contents)
+    if size >= 1024 * 1024:
+        size_str = f"{size / (1024 * 1024):.1f} MB"
+    elif size >= 1024:
+        size_str = f"{size / 1024:.1f} KB"
+    else:
+        size_str = f"{size} B"
+
+    # Notify the agent via inbox
+    umid = _gen_msg_id()
+    await _inbox_write_and_notify(session, {
+        "from": "user",
+        "type": "file_upload",
+        "content": f"User uploaded a file: uploads/{safe_name}",
+        "msg_id": umid,
+    })
+
+    # Show in chat
+    await send_to_browser({
+        "session_id": session_id,
+        "type": "user_text",
+        "text": f"\U0001F4CE Uploaded {safe_name} ({size_str})",
+        "msg_id": umid,
+    })
+    history.append(session.voice, session.label, "user",
+                   f"\U0001F4CE Uploaded {safe_name} ({size_str})",
+                   _hist_prefix(session), msg_id=umid)
+
+    log.info("[%s] File uploaded: %s (%s)", session_id, safe_name, size_str)
+    return JSONResponse({"status": "ok", "path": f"uploads/{safe_name}", "size": size_str})
 
 
 @app.post("/api/shutdown")
