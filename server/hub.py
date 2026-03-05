@@ -1486,8 +1486,10 @@ async def _inbox_write_and_notify(session, msg_dict: dict) -> dict:
             "preview": msg_dict.get("content", "")[:100],
         },
     })
-    # Push to wait WS if connected (for clawmux wait)
-    if hasattr(session, "_wait_queue"):
+    # Push to wait WS only if agent is IDLE (in wait mode).
+    # When not IDLE, hooks will deliver from the inbox file — pushing to
+    # the queue too would cause duplicate delivery.
+    if session.state == AgentState.IDLE and hasattr(session, "_wait_queue"):
         try:
             session._wait_queue.put_nowait(written)
         except Exception:
