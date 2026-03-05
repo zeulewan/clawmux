@@ -546,51 +546,93 @@ def cmd_update(args):
         else:
             print("Warning: could not update CLI (needs sudo)")
 
-    # Stop hub and kill agent tmux sessions
-    print("Stopping hub and agents...")
-    _shutdown_hub("full")
-    time.sleep(2)
-    # Kill agent tmux sessions
-    result = subprocess.run(["tmux", "list-sessions", "-F", "#{session_name}"],
-                           capture_output=True, text=True)
-    if result.returncode == 0:
-        for name in result.stdout.strip().splitlines():
-            if name.startswith("voice-") or name.startswith("clawmux"):
-                subprocess.run(["tmux", "kill-session", "-t", name], capture_output=True)
+    # Check if hub is running
+    hub_running = False
+    try:
+        http_get("/api/sessions")
+        hub_running = True
+    except SystemExit:
+        pass
 
-    # Wait for hub process to die
-    for _ in range(10):
-        check = subprocess.run(["pgrep", "-f", "python.*hub\\.py"],
+    if not hub_running:
+        print("Hub is not running. Update complete.")
+        return
+
+    if getattr(args, "full", False):
+        # Full restart: kill agents + hub, restart everything
+        print("Stopping hub and agents...")
+        _shutdown_hub("full")
+        time.sleep(2)
+        result = subprocess.run(["tmux", "list-sessions", "-F", "#{session_name}"],
                                capture_output=True, text=True)
-        if not check.stdout.strip():
-            break
-        time.sleep(0.5)
+        if result.returncode == 0:
+            for name in result.stdout.strip().splitlines():
+                if name.startswith("voice-") or name.startswith("clawmux"):
+                    subprocess.run(["tmux", "kill-session", "-t", name], capture_output=True)
 
-    # Restart hub
-    venv_python = os.path.join(repo_dir, ".venv", "bin", "python")
-    hub_py = os.path.join(repo_dir, "server", "hub.py")
-    if os.path.exists(venv_python) and os.path.exists(hub_py):
-        print("Starting hub...")
-        log_file = "/tmp/clawmux.log"
-        with open(log_file, "a") as log:
-            subprocess.Popen(
-                [venv_python, hub_py],
-                cwd=repo_dir,
-                stdout=log,
-                stderr=log,
-                start_new_session=True,
-            )
-        # Wait for hub to come up
-        for i in range(15):
-            time.sleep(1)
-            try:
-                http_get("/api/sessions")
-                print("Hub restarted.")
+        for _ in range(10):
+            check = subprocess.run(["pgrep", "-f", "python.*hub\\.py"],
+                                   capture_output=True, text=True)
+            if not check.stdout.strip():
                 break
-            except SystemExit:
-                continue
-        else:
-            print("Warning: hub did not restart within 15 seconds — check /tmp/clawmux.log")
+            time.sleep(0.5)
+
+        venv_python = os.path.join(repo_dir, ".venv", "bin", "python")
+        hub_py = os.path.join(repo_dir, "server", "hub.py")
+        if os.path.exists(venv_python) and os.path.exists(hub_py):
+            print("Starting hub...")
+            log_file = "/tmp/clawmux.log"
+            with open(log_file, "a") as log:
+                subprocess.Popen(
+                    [venv_python, hub_py],
+                    cwd=repo_dir,
+                    stdout=log,
+                    stderr=log,
+                    start_new_session=True,
+                )
+            for i in range(15):
+                time.sleep(1)
+                try:
+                    http_get("/api/sessions")
+                    print("Hub restarted.")
+                    break
+                except SystemExit:
+                    continue
+            else:
+                print("Warning: hub did not restart within 15 seconds — check /tmp/clawmux.log")
+    else:
+        # Graceful: reload hub only, agents auto-reconnect
+        print("Reloading hub (agents will reconnect)...")
+        _shutdown_hub("reload")
+        for _ in range(20):
+            time.sleep(0.5)
+            check = subprocess.run(["pgrep", "-f", "python.*hub\\.py"],
+                                   capture_output=True, text=True)
+            if not check.stdout.strip():
+                break
+
+        venv_python = os.path.join(repo_dir, ".venv", "bin", "python")
+        hub_py = os.path.join(repo_dir, "server", "hub.py")
+        if os.path.exists(venv_python) and os.path.exists(hub_py):
+            log_file = "/tmp/clawmux.log"
+            with open(log_file, "a") as log:
+                subprocess.Popen(
+                    [venv_python, hub_py],
+                    cwd=repo_dir,
+                    stdout=log,
+                    stderr=log,
+                    start_new_session=True,
+                )
+            for i in range(30):
+                time.sleep(1)
+                try:
+                    http_get("/api/sessions")
+                    print("Hub reloaded. Agents will reconnect automatically.")
+                    break
+                except SystemExit:
+                    continue
+            else:
+                print("Warning: hub did not restart within 30 seconds — check /tmp/clawmux.log")
 
     print("Update complete.")
 
@@ -1304,7 +1346,8 @@ examples:
 
     # update
     p = sub.add_parser("update", help="Update ClawMux to latest version",
-                       description="Pull latest code, reinstall deps, reinstall CLI, and reload hub if running.")
+                       description="Pull latest code, reinstall deps, reinstall CLI, and reload hub. Use --full to also kill and respawn all agents.")
+    p.add_argument("--full", action="store_true", help="Kill all agents and restart everything (default: graceful hub reload)")
     p.set_defaults(func=cmd_update)
 
     # uninstall
