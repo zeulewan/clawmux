@@ -817,7 +817,7 @@ function setSessionState(sessionId, newState) {
     hideThinking(sessionId);
     stopThinkingSound();
     stopThinkingVAD();
-    setSessionSidebarState(sessionId, 'speaking');
+    // Sidebar reflects server state only — don't set 'speaking' on sidebar
     if (sessionId === activeSessionId) {
       setStatus('Speaking...', sessionId);
     }

@@ -86,10 +86,7 @@ function setStatus(text, sessionId) {
     const s = sessions.get(sid);
     if (s) {
       s.statusText = text;
-      // Derive sidebar state from status text for the active session
-      if (text === 'Speaking...' || text === 'Playing...' || text === 'Playing buffered audio...') {
-        setSessionSidebarState(sid, 'speaking');
-      }
+      // Sidebar reflects server state only — speaking indicator not shown on sidebar
     }
   }
   renderSidebar();
@@ -209,7 +206,7 @@ function collapseSidebar() {
 }
 
 // --- Centralized session state machine ---
-// Valid states: 'idle', 'working', 'speaking', 'listening', 'offline', 'starting'
+// Valid states: 'idle', 'working', 'starting', 'offline' (server state only — no speaking/listening)
 function setSessionSidebarState(sessionId, newState) {
   const s = sessions.get(sessionId);
   if (!s) return;
@@ -260,12 +257,9 @@ function _sidebarState(voiceId) {
     } else if (st === 'working') {
       stateClass = 'working';
       statusLabel = session.toolStatusText || 'Working...';
-    } else if (st === 'speaking') {
-      stateClass = 'speaking';
-      statusLabel = 'Speaking...';
-    } else if (st === 'listening') {
-      stateClass = 'listening';
-      statusLabel = 'Listening...';
+    } else if (st === 'speaking' || st === 'listening') {
+      // Speaking/listening are browser-only — sidebar shows idle
+      stateClass = 'idle'; statusLabel = 'Idle';
     } else {
       // idle
       stateClass = 'idle'; statusLabel = 'Idle';
@@ -285,7 +279,7 @@ function _sidebarState(voiceId) {
 function _updateSidebarCard(card, voiceId, state) {
   const { session, isSpawning, stateClass, statusLabel, isSelected, projectText, projectArea, hasUnread, isCompacting } = state;
   // Update state class only if changed
-  const stateClasses = ['starting', 'working', 'speaking', 'listening', 'unread', 'idle', 'offline'];
+  const stateClasses = ['starting', 'working', 'unread', 'idle', 'offline'];
   const curState = stateClasses.find(c => card.classList.contains(c)) || '';
   if (curState !== stateClass) {
     stateClasses.forEach(c => card.classList.remove(c));

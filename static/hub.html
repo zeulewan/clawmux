@@ -1733,7 +1733,7 @@ async function addSession(data, autoSwitch = false) {
     statusText: data.status_text || (isReady ? 'Ready' : 'Starting...'),
     toolStatusText: data.status_text || '',
     serverState: data.state || (data.in_wait ? 'idle' : (isReady ? 'idle' : 'starting')),
-    sidebarState: (data.unread_count > 0) ? 'speaking' : (data.state === 'idle' || data.in_wait ? 'idle' : (data.state === 'processing' || data.state === 'compacting' ? 'working' : (isReady ? 'idle' : 'starting'))),
+    sidebarState: (data.state === 'idle' || data.in_wait ? 'idle' : (data.state === 'processing' || data.state === 'compacting' ? 'working' : (isReady ? 'idle' : 'starting'))),
     unreadCount: data.unread_count || 0,
     compacting: (data.state === 'compacting') || (data.compacting ?? false),
   });
@@ -2405,7 +2405,6 @@ document.getElementById('ctx-mark-unread').addEventListener('click', () => {
       // Switch away first if this is the active session
       if (sid === activeSessionId) showWelcome();
       s.unreadCount = (s.unreadCount || 0) + 1;
-      setSessionSidebarState(sid, 'speaking');
       renderSidebar();
     }
   }
