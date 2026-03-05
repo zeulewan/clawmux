@@ -1114,8 +1114,12 @@ body {
     display: block !important;
     animation: fadeSlideIn 0.2s ease-out 0.1s both;
   }
-  #sidebar.expanded .sidebar-card { justify-content: flex-start; padding: 8px 10px; }
-  #sidebar.expanded .sidebar-card .sb-icon { margin: 0; }
+  #sidebar.expanded .sidebar-card { justify-content: flex-start; padding: 4px 10px; gap: 8px; }
+  #sidebar.expanded .sidebar-card .sb-icon { margin: 0; width: 26px; height: 26px; font-size: 0.85rem; }
+  #sidebar.expanded .sidebar-card .sb-name { font-size: 0.72rem; line-height: 1.2; }
+  #sidebar.expanded .sidebar-card .sb-status { display: none; }
+  #sidebar.expanded .sidebar-card .sb-project { font-size: 0.55rem; margin-top: 0; line-height: 1.2; }
+  #sidebar.expanded .sidebar-card .sb-compacting { font-size: 0.5rem; margin-top: 0; }
   @keyframes fadeSlideIn {
     from { opacity: 0; transform: translateX(-8px); }
     to { opacity: 1; transform: translateX(0); }
