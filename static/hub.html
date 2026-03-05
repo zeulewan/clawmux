@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>ClawMux App</title>
+<title>ClawMux</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%233a86ff'/><path d='M32 12a6 6 0 0 1 6 6v14a6 6 0 0 1-12 0V18a6 6 0 0 1 6-6z' fill='white'/><path d='M20 30a12 12 0 0 0 24 0' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/><line x1='32' y1='42' x2='32' y2='50' stroke='white' stroke-width='3' stroke-linecap='round'/><line x1='25' y1='50' x2='39' y2='50' stroke='white' stroke-width='3' stroke-linecap='round'/></svg>">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -1088,8 +1088,8 @@ body {
   /* Chat messages: wider on mobile, disable text selection for long-press menu */
   .msg { max-width: 90%; }
   .msg, .msg * { -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; touch-action: pan-y; }
-  /* Disable karaoke word hover/click on mobile — long-press menu handles interaction */
-  .karaoke-word { cursor: default; pointer-events: none; }
+  /* Karaoke words: disable hover effect on mobile but allow tap for playback */
+  .karaoke-word { cursor: default; }
 
   /* Controls: mobile size overrides */
   #controls { padding: 6px 12px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
@@ -1238,7 +1238,7 @@ body {
 <body>
 
 <div id="header">
-  <h1><a href="https://clawmux.com" target="_blank" style="color: inherit; text-decoration: none;">ClawMux App</a></h1>
+  <h1><a href="https://clawmux.com" target="_blank" style="color: inherit; text-decoration: none;">ClawMux</a></h1>
   <select id="project-selector" style="font-size:0.7rem; padding:2px 8px; border-radius:6px; border:1px solid var(--border); background:var(--bg-card); color:var(--text-secondary); cursor:pointer; display:none;" onchange="switchProject(this.value)">
     <option value="default">Default</option>
   </select>
@@ -1252,8 +1252,6 @@ body {
   <div id="header-project-status" style="font-size:0.65rem; color:var(--text-tertiary); text-align:right; max-width:200px; line-height:1.4;"></div>
   <div id="usage-bar" style="display:none;align-items:center;gap:8px;padding:4px 12px;background:rgba(128,128,128,0.08);border-radius:12px;font-size:0.7rem;color:var(--text-secondary);cursor:pointer;" onclick="toggleUsageDetail()" title="Claude usage">
     <span id="usage-ctx" style="white-space:nowrap;"></span>
-    <span id="usage-5h" style="white-space:nowrap;"></span>
-    <span id="usage-7d" style="white-space:nowrap;"></span>
   </div>
   <div style="display:flex;align-items:center;gap:6px;padding:4px 12px;background:rgba(128,128,128,0.08);border-radius:12px;">
     <div id="dot" class="connecting"></div>
@@ -2502,14 +2500,9 @@ function formatReset(isoStr) {
 
 async function fetchUsage() {
   try {
-    const [resp, ctxResp] = await Promise.all([
-      fetch('/api/usage'),
-      fetch('/api/context')
-    ]);
+    const ctxResp = await fetch('/api/context');
     const bar = document.getElementById('usage-bar');
     const elCtx = document.getElementById('usage-ctx');
-    const el5h = document.getElementById('usage-5h');
-    const el7d = document.getElementById('usage-7d');
 
     let hasData = false;
 
@@ -2526,21 +2519,6 @@ async function fetchUsage() {
         hasData = true;
       } else {
         elCtx.style.display = 'none';
-      }
-    }
-
-    if (resp.ok) {
-      const data = await resp.json();
-      const pct5h = data.five_hour?.utilization ?? null;
-      const pct7d = data.seven_day?.utilization ?? null;
-
-      if (pct5h !== null) {
-        el5h.innerHTML = '5h: <b style="color:' + usageColor(pct5h) + '">' + pct5h + '%</b>';
-        hasData = true;
-      }
-      if (pct7d !== null) {
-        el7d.innerHTML = '7d: <b style="color:' + usageColor(pct7d) + '">' + pct7d + '%</b>';
-        hasData = true;
       }
     }
 
