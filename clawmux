@@ -765,8 +765,12 @@ def cmd_monitor(args):
     """Open a tmux session with a grid of panes showing all agent sessions."""
     import math
 
-    # Determine project slug to monitor (default if not specified)
-    project_slug = args.project or "default"
+    # Determine project slug to monitor (active project if not specified)
+    if args.project:
+        project_slug = args.project
+    else:
+        projects_data = http_get("/api/projects")
+        project_slug = projects_data.get("active_project") or "default"
     suffix = f"-{project_slug}" if project_slug != "default" else ""
     MONITOR_SESSION = f"clawmux-monitor{suffix}"
 
