@@ -147,8 +147,8 @@ async def compaction_monitor_loop() -> None:
             session = session_mgr.sessions.get(session_id)
             if not session or session.status == "dead":
                 continue
-            # Only check when context usage is >= 80%
-            usage = session_mgr.get_context_usage(session_id)
+            # Only check when context usage is >= 80% (use cached data)
+            usage = _context_cache.get(session_id)
             if not usage or usage["percent"] < 80:
                 if session.compacting:
                     # Context dropped below 80% (post-compaction reset)
@@ -196,6 +196,25 @@ async def compaction_monitor_loop() -> None:
 from voice import router as voice_router, tts, tts_captioned, stt, strip_non_speakable
 
 
+# --- Context usage cache ---
+_context_cache: dict = {}  # session_id -> {total_context_tokens, output_tokens, context_limit, percent}
+
+async def context_poll_loop() -> None:
+    """Poll context usage for all sessions every 30s, cache results."""
+    while True:
+        for sid in list(session_mgr.sessions):
+            session = session_mgr.sessions.get(sid)
+            if not session or session.status == "dead":
+                continue
+            try:
+                usage = await asyncio.to_thread(session_mgr.get_context_usage, sid)
+                if usage:
+                    _context_cache[sid] = usage
+            except Exception:
+                pass
+        await asyncio.sleep(30)
+
+
 # --- FastAPI app ---
 
 @asynccontextmanager
@@ -211,6 +230,7 @@ async def lifespan(app: FastAPI):
     timeout_task = asyncio.create_task(session_mgr.run_timeout_loop())
     hb_task = asyncio.create_task(heartbeat_loop())
     compaction_task = asyncio.create_task(compaction_monitor_loop())
+    context_task = asyncio.create_task(context_poll_loop())
     try:
         yield
     finally:
@@ -218,6 +238,7 @@ async def lifespan(app: FastAPI):
         timeout_task.cancel()
         hb_task.cancel()
         compaction_task.cancel()
+        context_task.cancel()
         if _shutdown_mode == "reload":
             log.info("Hub reloading — keeping tmux sessions alive for re-adoption")
             # Save any pending interjections before shutdown
@@ -1374,13 +1395,10 @@ async def get_usage():
 
 @app.get("/api/context")
 async def get_context():
-    """Return context window usage for all active sessions."""
-    result = {}
-    for sid in session_mgr.sessions:
-        usage = session_mgr.get_context_usage(sid)
-        if usage:
-            result[sid] = usage
-    return JSONResponse(result)
+    """Return cached context window usage for all active sessions."""
+    # Clean out entries for sessions that no longer exist
+    active = set(session_mgr.sessions.keys())
+    return JSONResponse({sid: v for sid, v in _context_cache.items() if sid in active})
 
 
 @app.get("/api/debug")
