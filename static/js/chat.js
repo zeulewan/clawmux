@@ -482,8 +482,17 @@ function showCopyToast(msg) {
 chatArea.addEventListener('pointerdown', handleMsgPointerDown);
 chatArea.addEventListener('pointerup', handleMsgPointerUp);
 chatArea.addEventListener('pointercancel', handleMsgPointerUp);
-// Prevent native context menu on mobile to allow our custom long-press menu
-if (isMobile) chatArea.addEventListener('contextmenu', (e) => e.preventDefault());
+// On mobile/iOS: use touchstart with passive:false to block native long-press copy
+if (isMobile) {
+  chatArea.addEventListener('touchstart', (e) => {
+    const msgEl = e.target.closest('.msg');
+    if (msgEl && !msgEl.classList.contains('thinking') && !msgEl.classList.contains('system')) {
+      // Don't preventDefault immediately — let short taps work normally
+      // The pointerdown handler sets up the long-press timer
+    }
+  }, { passive: true });
+  chatArea.addEventListener('contextmenu', (e) => e.preventDefault());
+}
 chatArea.addEventListener('pointermove', (e) => {
   // Cancel long-press if user moves finger too much
   if (longPressTimer && longPressTarget) {

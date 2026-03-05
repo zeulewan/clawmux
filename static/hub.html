@@ -1086,7 +1086,7 @@ body {
   #sidebar.expanded .sidebar-focus-icon { border-radius: 8px; }
 
   /* Chat messages: wider on mobile, disable text selection for long-press menu */
-  .msg { max-width: 90%; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  .msg, .msg * { max-width: 90%; -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; touch-action: pan-y; }
 
   /* Controls: mobile size overrides */
   #controls { padding: 6px 12px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
