@@ -243,7 +243,7 @@ function _sidebarState(voiceId) {
     if (s.voice === voiceId && (!s.project_slug || s.project_slug === currentProject)) { session = s; break; }
   }
   const isSpawning = spawningVoices.has(voiceId);
-  const hasUnread = session && ((session.unreadCount || 0) > 0 || (session.inboxCount || 0) > 0);
+  const hasUnread = session && (session.unreadCount || 0) > 0;
   let stateClass = 'offline', statusLabel = 'Offline';
   if (isSpawning) {
     stateClass = 'starting'; statusLabel = 'Starting...';
