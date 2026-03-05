@@ -170,17 +170,16 @@ function handleMessage(data) {
           if (s.status_text) {
             existing.toolStatusText = s.status_text;
           }
-          // Restore session state from server
-          if (s.in_wait) {
+          // Restore session state from server's canonical state field
+          const serverState = s.state || (s.in_wait ? 'idle' : (s.processing ? 'processing' : 'idle'));
+          if (serverState === 'idle') {
             setSessionState(s.session_id, 'idle');
-            setSessionSidebarState(s.session_id, 'idle');
-          } else if (s.processing && existing.sessionState !== 'processing') {
+          } else if (serverState === 'processing' || serverState === 'compacting') {
             setSessionState(s.session_id, 'processing');
-          } else if (!s.processing && existing.sessionState === 'processing') {
-            setSessionState(s.session_id, 'idle');
+          } else if (serverState === 'starting') {
+            setSessionState(s.session_id, 'idle');  // starting shows as idle in chat
           }
-          // Restore compacting state
-          existing.compacting = !!s.compacting;
+          existing.compacting = (serverState === 'compacting');
         }
       }
     }
@@ -256,38 +255,43 @@ function handleMessage(data) {
   if (type === 'session_status') {
     const s = sessions.get(data.session_id);
     if (s) {
-      // Tool status updates from Claude Code hooks (status_text without status field)
-      if ('status_text' in data && !data.status) {
-        // Stop hook signals agent finished processing → transition to idle
-        if (data.agent_idle) {
-          s.toolStatusText = '';
-          setSessionSidebarState(data.session_id, 'idle');
+      // Update status_text (last tool call description)
+      if ('status_text' in data) {
+        if (data.status_text) {
+          s.toolStatusText = data.status_text;
+        }
+        // Keep previous toolStatusText between tools (avoid flash)
+      }
+      // Use canonical state field if present
+      const serverState = data.state;
+      if (serverState) {
+        s.serverState = serverState;
+        s.compacting = (serverState === 'compacting');
+        if (serverState === 'idle') {
           setSessionState(data.session_id, 'idle');
           hideThinking(data.session_id);
           stopThinkingSound();
-        } else if (data.status_text) {
-          // Agent is actively using a tool → working state
-          s.toolStatusText = data.status_text;
-          setSessionSidebarState(data.session_id, 'working');
+        } else if (serverState === 'processing' || serverState === 'compacting') {
+          setSessionState(data.session_id, 'processing');
+        } else if (serverState === 'starting') {
+          // Starting state — don't override if already processing
         }
-        // When status_text is empty but not agent_idle (PostToolUse between tools),
-        // keep the previous toolStatusText to avoid flashing "Working..." briefly
-        updateThinkingLabel(data.session_id);
-        renderSidebar();
-        return;
-      }
-      s.status = data.status;
-      if (data.status === 'ready') {
+      } else if (data.agent_idle) {
+        // Legacy fallback: Stop hook without state field
         s.toolStatusText = '';
-        setSessionSidebarState(data.session_id, 'idle');
-        if (!data.silent) {
+        setSessionState(data.session_id, 'idle');
+        hideThinking(data.session_id);
+        stopThinkingSound();
+      }
+      // Legacy status field (ready/starting)
+      if (data.status) {
+        s.status = data.status;
+        if (data.status === 'ready' && !data.silent) {
           cueSessionReady();
           addMessage(data.session_id, 'system', 'Claude connected.');
-          // Don't auto-switch — let user stay where they are
         }
-      } else if (data.status === 'starting') {
-        setSessionSidebarState(data.session_id, 'starting');
       }
+      updateThinkingLabel(data.session_id);
     }
     renderSidebar();
     return;
@@ -306,6 +310,7 @@ function handleMessage(data) {
     const s = sessions.get(data.session_id);
     if (s) {
       s.compacting = data.compacting;
+      s.serverState = data.compacting ? 'compacting' : 'processing';
       renderSidebar();
     }
     return;

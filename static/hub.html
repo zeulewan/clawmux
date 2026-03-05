@@ -2731,16 +2731,19 @@ async function syncProcessingState() {
       const s = sessions.get(srv.session_id);
       if (!s) continue;
       const st = s.sessionState || 'idle';
-      // Fix drift: server says processing but browser doesn't show thinking
-      if (srv.processing && st !== 'processing' && st !== 'listening' && st !== 'speaking') {
-        console.log('[state-sync] Restoring processing state for', srv.session_id);
+      const serverState = srv.state || (srv.in_wait ? 'idle' : (srv.processing ? 'processing' : 'idle'));
+      // Fix drift: server says processing/compacting but browser doesn't show it
+      if ((serverState === 'processing' || serverState === 'compacting') && st !== 'processing' && st !== 'listening' && st !== 'speaking') {
+        console.log('[state-sync] Restoring processing for', srv.session_id, '(server:', serverState, ')');
         setSessionState(srv.session_id, 'processing');
       }
-      // Fix drift: server says NOT processing but browser stuck in processing
-      if (!srv.processing && !srv.in_wait && st === 'processing') {
-        console.log('[state-sync] Clearing stale processing state for', srv.session_id);
+      // Fix drift: server says idle but browser stuck in processing
+      if (serverState === 'idle' && st === 'processing') {
+        console.log('[state-sync] Clearing stale processing for', srv.session_id);
         setSessionState(srv.session_id, 'idle');
       }
+      s.compacting = (serverState === 'compacting');
+      if (srv.status_text) s.toolStatusText = srv.status_text;
     }
   } catch (e) { /* network error — ignore */ }
 }
