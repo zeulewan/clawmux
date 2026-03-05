@@ -538,7 +538,7 @@ async def wait_websocket(ws: WebSocket, session_id: str):
     except Exception as e:
         log.warning("[%s] Wait WS error: %s", session_id, e)
     finally:
-        session.status_text = ""
+        session.status_text = "Processing..."
         session.set_state(AgentState.PROCESSING)
         await send_to_browser({
             "type": "session_status",
