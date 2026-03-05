@@ -259,7 +259,7 @@ function handleMessage(data) {
       if ('status_text' in data) {
         if (data.status_text && data.status_text !== s.toolStatusText) {
           // Previous tool finished — collapse it into activity log
-          const skipLog = new Set(['Processing...', 'Waiting', 'Running clawmux wait', 'Starting session...', '']);
+          const skipLog = new Set(['Processing...', 'Starting session...', '']);
           if (s.toolStatusText && !skipLog.has(s.toolStatusText)) {
             if (!s.activityLog) s.activityLog = [];
             s.activityLog.push(s.toolStatusText);
@@ -278,7 +278,7 @@ function handleMessage(data) {
         s.compacting = (serverState === 'compacting');
         if (serverState === 'idle') {
           // Collapse last tool status into activity log before hiding thinking
-          const skip = new Set(['Processing...', 'Waiting', 'Running clawmux wait', '']);
+          const skip = new Set(['Processing...', '']);
           if (s.toolStatusText && !skip.has(s.toolStatusText)) {
             if (!s.activityLog) s.activityLog = [];
             s.activityLog.push(s.toolStatusText);
