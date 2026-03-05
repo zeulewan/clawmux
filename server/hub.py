@@ -815,15 +815,18 @@ async def hook_tool_status(request: Request):
     else:
         return JSONResponse({})
 
-    msg = {
-        "type": "session_status",
-        "session_id": session.session_id,
-        "state": session.state.value,
-        "status_text": session.status_text,
-    }
-    if event == "Stop":
-        msg["agent_idle"] = True
-    await send_to_browser(msg)
+    # PostToolUse doesn't broadcast — "Processing..." is transient; the next
+    # PreToolUse or wait WS connect will broadcast the real state.
+    if event not in ("PostToolUse", "PostToolUseFailure"):
+        msg = {
+            "type": "session_status",
+            "session_id": session.session_id,
+            "state": session.state.value,
+            "status_text": session.status_text,
+        }
+        if event == "Stop":
+            msg["agent_idle"] = True
+        await send_to_browser(msg)
     return JSONResponse(response_json)
 
 
