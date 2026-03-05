@@ -1114,6 +1114,14 @@ body {
     transition: opacity 0.25s ease;
   }
   #sidebar-overlay.visible { opacity: 1; pointer-events: auto; }
+
+  /* Message actions: always visible on touch (no hover) */
+  .msg .msg-actions { opacity: 0.6; }
+  .msg .msg-action-btn { padding: 4px 10px; font-size: 0.65rem; }
+  .msg .msg-ack-btn { font-size: 0.9rem; padding: 2px 6px; }
+
+  /* Ack badge: ensure visible on mobile */
+  .thread-ack-badge { font-size: 0.7rem; bottom: 1px; right: 6px; }
 }
 /* --- Markdown message styles --- */
 .msg.assistant .md-content { line-height: 1.6; color: var(--text); }
