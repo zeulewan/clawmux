@@ -765,6 +765,16 @@ body {
   box-shadow: none;
   cursor: wait;
 }
+#mic.connecting {
+  background: var(--yellow, #ffd60a);
+  box-shadow: 0 4px 20px rgba(255,214,10,0.35);
+  animation: micConnecting 0.8s infinite ease-in-out;
+  cursor: wait;
+}
+@keyframes micConnecting {
+  0%, 100% { opacity: 1; box-shadow: 0 4px 20px rgba(255,214,10,0.35); }
+  50% { opacity: 0.6; box-shadow: 0 4px 28px rgba(255,214,10,0.55), 0 0 0 8px rgba(255,214,10,0.15); }
+}
 #mic:disabled { opacity: 0.3; cursor: not-allowed; box-shadow: none; transform: none; }
 .transport-btn {
   width: 36px;

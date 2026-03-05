@@ -1383,7 +1383,7 @@ function updateMicUI() {
   const isPlaying = !!(currentAudio || currentBufferedPlayer);
   updateTransportBar();
 
-  micBtn.classList.remove('recording', 'interruptable', 'processing');
+  micBtn.classList.remove('recording', 'interruptable', 'processing', 'connecting');
 
   if (isPlaying) {
     // During playback: mic = interrupt/stop
@@ -1432,6 +1432,11 @@ async function startRecording(sessionId) {
   if (currentAudio || currentBufferedPlayer) {
     interruptPlayback(sessionId);
   }
+  // Show connecting state immediately (before async mic permission on iOS)
+  micBtn.classList.remove('recording', 'interruptable', 'processing', 'connecting');
+  micBtn.classList.add('connecting');
+  micBtn.disabled = true;
+  setStatus('Connecting mic...');
   try {
     const stream = await getMicStream();
     mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
@@ -1452,6 +1457,9 @@ async function startRecording(sessionId) {
     setStatus('Recording...');
     if (vadEnabled) startVAD(stream);
   } catch (err) {
+    micBtn.classList.remove('connecting');
+    micBtn.disabled = false;
+    updateMicUI();
     setStatus('Microphone access denied');
   }
 }
