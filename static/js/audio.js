@@ -1270,7 +1270,8 @@ async function karaokePlayFromWord(msgEl, startTime, fetchId, clickedWord = fals
 // Event delegation — click on assistant message to TTS from that word (or beginning)
 let _karaokeFetchId = 0; // incremented on each new click to cancel stale async fetches
 chatArea.addEventListener('click', async (e) => {
-  if (isMobile) return; // mobile uses long-press context menu instead
+  // On mobile, skip if a long-press context menu just fired
+  if (isMobile && _longPressFired) { _longPressFired = false; return; }
   const msgEl = e.target.closest('.msg.assistant');
   if (!msgEl) return;
   if (e.target.closest('.msg-actions')) return; // let action buttons handle themselves

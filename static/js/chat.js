@@ -182,6 +182,7 @@ function createMsgEl(role, text, voiceColorHex, voiceId, msgObj = null) {
       const touch = e.touches[0];
       lpTimer = setTimeout(() => {
         lpTimer = null; lpFired = true;
+        _longPressFired = true;
         div.classList.add('long-press-active');
         _showContextMenu(div, touch.clientX, touch.clientY);
         setTimeout(() => div.classList.remove('long-press-active'), 200);
@@ -466,8 +467,6 @@ function _showContextMenu(msgEl, x, y) {
     });
   }, 50);
 }
-
-let _longPressFired = false;
 
 let copyToastTimer = null;
 function showCopyToast(msg) {

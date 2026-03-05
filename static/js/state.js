@@ -33,3 +33,4 @@ let pausedBuffer = null; // transport: decoded AudioBuffer for resume
 let pauseOffset = 0; // transport: seconds into buffer when paused
 let pausedSessionId = null; // transport: session that was paused
 let playbackStartTime = 0; // transport: audioCtx.currentTime when source started
+let _longPressFired = false; // mobile: set by long-press handler, cleared by click handler
