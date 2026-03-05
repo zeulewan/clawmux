@@ -451,8 +451,9 @@ function handleMsgPointerDown(e) {
   if (!msgEl || msgEl.classList.contains('thinking') || msgEl.classList.contains('system')) return;
   // Only use long-press context menu on mobile/touch
   if (!isMobile) return;
+  e.preventDefault();
   longPressTarget = msgEl;
-  const px = e.clientX, py = e.clientY;
+  const px = e.clientX || e.pageX, py = e.clientY || e.pageY;
   longPressTimer = setTimeout(() => {
     if (!longPressTarget) return;
     longPressTarget.classList.add('long-press-active');
@@ -481,6 +482,8 @@ function showCopyToast(msg) {
 chatArea.addEventListener('pointerdown', handleMsgPointerDown);
 chatArea.addEventListener('pointerup', handleMsgPointerUp);
 chatArea.addEventListener('pointercancel', handleMsgPointerUp);
+// Prevent native context menu on mobile to allow our custom long-press menu
+if (isMobile) chatArea.addEventListener('contextmenu', (e) => e.preventDefault());
 chatArea.addEventListener('pointermove', (e) => {
   // Cancel long-press if user moves finger too much
   if (longPressTimer && longPressTarget) {
