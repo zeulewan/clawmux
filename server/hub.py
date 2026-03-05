@@ -66,16 +66,14 @@ def _gen_msg_id() -> str:
     return "msg-" + uuid.uuid4().hex[:8]
 
 
-_ACTIVITY_INDICATOR_ONLY = {"Waiting", "Processing..."}
-
-
 async def _save_activity(session, text: str) -> None:
-    """Save a status_text change as an activity entry in history and broadcast to browser.
+    """Save a completed activity entry in history and broadcast to browser.
 
-    Skips generic states (Waiting, Processing...) since the live status
-    indicator already displays those — saving them would duplicate.
+    Called at the END of a state/activity — logs what just finished:
+    - Wait WS disconnect → logs 'Waiting' (agent was waiting, now processing)
+    - PostToolUse → logs the tool name (tool just completed)
     """
-    if not text or text in _ACTIVITY_INDICATOR_ONLY:
+    if not text:
         return
     history.append(session.voice, session.label, "activity", text, _hist_prefix(session))
     await send_to_browser({
@@ -501,10 +499,11 @@ async def wait_websocket(ws: WebSocket, session_id: str):
         return
 
     log.info("[%s] Wait WS connected", session_id)
-    await _save_activity(session, session.status_text)
+    # Log the state that just ended (entering IDLE = end of processing)
+    if session.state == AgentState.PROCESSING:
+        await _save_activity(session, "Processing")
     session.status_text = "Waiting"
     session.set_state(AgentState.IDLE)
-    await _save_activity(session, session.status_text)  # save "Waiting" now so it appears before any user messages
 
     # Tell browser agent is idle (so voice input isn't treated as interjection)
     await send_to_browser({"session_id": session_id, "type": "listening", "state": "idle"})
@@ -560,9 +559,10 @@ async def wait_websocket(ws: WebSocket, session_id: str):
     except Exception as e:
         log.warning("[%s] Wait WS error: %s", session_id, e)
     finally:
+        # Log the state that just ended (leaving IDLE = end of waiting)
+        await _save_activity(session, "Waiting")
         session.status_text = "Processing..."
         session.set_state(AgentState.PROCESSING)
-        await _save_activity(session, session.status_text)
         await send_to_browser({
             "type": "session_status",
             "session_id": session_id,
@@ -717,8 +717,9 @@ async def hook_tool_status(request: Request):
         # Skip status_text updates while IDLE — wait WS is the sole authority
         if session.state == AgentState.IDLE:
             return JSONResponse(response_json)
-        # Save tool name as activity before resetting
-        await _save_activity(session, session.status_text)
+        # Save tool name (the activity that just completed) before resetting
+        if session.status_text != "Processing...":
+            await _save_activity(session, session.status_text)
         session.status_text = "Processing..."
         # Check inbox for pending messages — deliver via additionalContext
         if session.work_dir:
