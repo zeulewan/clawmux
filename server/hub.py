@@ -717,6 +717,11 @@ async def hook_tool_status(request: Request):
         # Skip status_text updates while IDLE — wait WS is the sole authority
         if session.state == AgentState.IDLE:
             return JSONResponse(response_json)
+        # Skip entirely for clawmux wait — wait WS handles all state transitions
+        tool_name = data.get("tool_name", "")
+        tool_input = data.get("tool_input", {})
+        if tool_name == "Bash" and "clawmux wait" in tool_input.get("command", ""):
+            return JSONResponse(response_json)
         # Save tool name (the activity that just completed) before resetting
         if session.status_text != "Processing...":
             await _save_activity(session, session.status_text)
