@@ -1228,9 +1228,11 @@ body {
 
 <div id="header">
   <h1><a href="https://clawmux.com" target="_blank" style="color: inherit; text-decoration: none;">ClawMux</a></h1>
-  <select id="project-selector" style="font-size:0.7rem; padding:2px 8px; border-radius:6px; border:1px solid var(--border); background:var(--bg-card); color:var(--text-secondary); cursor:pointer; display:none;" onchange="switchProject(this.value)">
+  <select id="project-selector" style="display:none;" onchange="switchProject(this.value)">
     <option value="default">Default</option>
   </select>
+  <span id="project-label" style="display:none; font-size:0.7rem; color:var(--text-secondary); cursor:pointer; font-weight:500;" onclick="toggleProjectPopup(event)"></span>
+  <div id="project-popup" style="display:none; position:fixed; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.3); z-index:1000; min-width:120px; overflow:hidden;"></div>
   <span id="active-voice" style="display:none; font-size:1.1rem; font-weight:700;"></span>
   <select id="session-model" style="display:none; font-size:0.65rem; padding:2px 4px; border-radius:6px; border:1px solid var(--border); background:var(--bg-card); color:var(--text-secondary); cursor:pointer;" onchange="setSessionModel(this.value)">
     <option value="opus">Opus</option>
@@ -1238,7 +1240,7 @@ body {
     <option value="haiku">Haiku</option>
   </select>
   <span id="model-label" style="display:none; font-size:0.6rem; color:var(--text-tertiary); cursor:pointer; position:relative;" onclick="toggleModelPopup(event)"></span>
-  <div id="model-popup" style="display:none; position:absolute; top:100%; right:auto; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.3); z-index:200; min-width:100px; overflow:hidden;"></div>
+  <div id="model-popup" style="display:none; position:fixed; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.3); z-index:1000; min-width:100px; overflow:hidden;"></div>
   <div style="flex:1;"></div>
   <div id="header-project-status" style="font-size:0.65rem; color:var(--text-tertiary); text-align:right; max-width:200px; line-height:1.4;"></div>
   <div id="usage-bar" style="display:none;align-items:center;gap:8px;padding:4px 12px;background:rgba(128,128,128,0.08);border-radius:12px;font-size:0.7rem;color:var(--text-secondary);cursor:pointer;" onclick="toggleUsageDetail()" title="Claude usage">
@@ -1876,12 +1878,11 @@ async function loadProjects() {
     const activeProj = projectList.find(p => p.slug === currentProject);
     currentProjectVoices = activeProj && activeProj.voices ? activeProj.voices : null;
     renderSidebar();
-    // Always show selector so users can discover project management
-    sel.style.display = 'inline-block';
+    updateProjectLabel();
     renderProjectSettings();
   } catch (e) {
-    // Projects API not available — hide selector
-    sel.style.display = 'none';
+    // Projects API not available — hide label
+    document.getElementById('project-label').style.display = 'none';
   }
 }
 
@@ -1950,6 +1951,40 @@ async function switchProject(slug) {
   } catch (e) {
     console.error('Project switch error:', e);
   }
+}
+
+function updateProjectLabel() {
+  const label = document.getElementById('project-label');
+  const sel = document.getElementById('project-selector');
+  if (!label || !sel) return;
+  const opt = sel.options[sel.selectedIndex];
+  if (opt) {
+    label.textContent = (opt.textContent || 'Default') + ' ▾';
+    label.style.display = 'inline';
+  }
+}
+
+function toggleProjectPopup(e) {
+  e.stopPropagation();
+  const popup = document.getElementById('project-popup');
+  if (popup.style.display !== 'none') { popup.style.display = 'none'; return; }
+  const sel = document.getElementById('project-selector');
+  popup.innerHTML = '';
+  for (const opt of sel.options) {
+    const isCurrent = opt.value === currentProject;
+    const div = document.createElement('div');
+    div.style.cssText = 'padding:8px 16px;cursor:pointer;' + (isCurrent ? 'font-weight:700;color:var(--blue);' : '');
+    div.textContent = opt.textContent + (isCurrent ? ' ✓' : '');
+    div.onmousedown = div.ontouchstart = () => { popup.style.display = 'none'; switchProject(opt.value); };
+    popup.appendChild(div);
+  }
+  const label = document.getElementById('project-label');
+  const rect = label.getBoundingClientRect();
+  popup.style.top = rect.bottom + 4 + 'px';
+  popup.style.left = rect.left + 'px';
+  popup.style.display = 'block';
+  const close = () => { popup.style.display = 'none'; document.removeEventListener('click', close); };
+  setTimeout(() => document.addEventListener('click', close), 0);
 }
 
 async function loadSettings() {
@@ -2111,7 +2146,7 @@ function updateModelLabel() {
   if (!label) return;
   const s = activeSessionId ? sessions.get(activeSessionId) : null;
   const model = s?.model || 'opus';
-  label.textContent = model.charAt(0).toUpperCase() + model.slice(1);
+  label.textContent = model.charAt(0).toUpperCase() + model.slice(1) + ' ▾';
 }
 
 function toggleModelPopup(e) {
