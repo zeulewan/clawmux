@@ -463,10 +463,10 @@ function _showContextMenu(msgEl, x, y) {
     menu.appendChild(ackBtn);
   }
 
-  // Position near the touch point
+  // Position near the touch point (account for scroll in chatArea)
   const chatRect = chatArea.getBoundingClientRect();
   menu.style.left = Math.min(x - chatRect.left, chatRect.width - 120) + 'px';
-  menu.style.top = (y - chatRect.top - 44) + 'px';
+  menu.style.top = (y - chatRect.top + chatArea.scrollTop - 44) + 'px';
   chatArea.style.position = 'relative';
   chatArea.appendChild(menu);
   _activeContextMenu = menu;
