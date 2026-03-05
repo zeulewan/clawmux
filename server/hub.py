@@ -35,7 +35,8 @@ from hub_config import HUB_PORT, HUB_START_TIME
 import inbox
 from message_broker import MessageBroker
 from project_manager import ProjectManager
-from session_manager import AgentState, SessionManager
+from session_manager import SessionManager
+from state_machine import AgentState
 
 # Logging
 logging.basicConfig(
