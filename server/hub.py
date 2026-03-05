@@ -691,7 +691,8 @@ async def hook_tool_status(request: Request):
     response_json = {}
 
     if event in ("PostToolUse", "PostToolUseFailure"):
-        # status_text persists (shows last tool call) — not cleared here
+        # Reset status_text to generic 'Processing...' between tool calls
+        session.status_text = "Processing..."
         # Check inbox for pending messages — deliver via additionalContext
         if session.work_dir:
             messages = inbox.read_and_clear(session.work_dir)
