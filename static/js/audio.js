@@ -977,6 +977,7 @@ let _karaokeActiveIdx = -1;
 const _pendingKaraokeWords = new Map(); // sessionId -> words[]
 
 function karaokeSetupMessage(sessionId, words) {
+  if (!voiceResponsesEnabled) return;
   // Filter to real (non-punctuation/symbol) words only
   const realWords = words.filter(w => /[\p{L}\p{N}]/u.test(w.word));
   if (realWords.length === 0) return;
@@ -1090,6 +1091,7 @@ function _applyKaraokeSpans(msgEl, realWords) {
 
 function karaokeStart(audioRef, words) {
   karaokeStop();
+  if (!voiceResponsesEnabled) return;
   if (!words || !words.length) return;
   const activeWords = words.filter(w => w.el);
   if (!activeWords.length) return;
