@@ -27,11 +27,12 @@ SESSION_DIR_BASE = Path("/tmp/clawmux-sessions")
 
 
 class AgentState(str, enum.Enum):
-    """Canonical agent lifecycle state — single source of truth."""
+    """Canonical agent lifecycle state — single source of truth.
+    Note: SPEAKING is browser-only (TTS playback is independent of agent state).
+    """
     STARTING   = "starting"    # Claude Code launching, not yet ready
     IDLE       = "idle"        # In clawmux wait, ready for input
     PROCESSING = "processing"  # Making tool calls (reading, writing, running)
-    SPEAKING   = "speaking"    # TTS playback in progress
     COMPACTING = "compacting"  # Context window compaction
     DEAD       = "dead"        # Session terminated
 
@@ -79,7 +80,7 @@ class Session:
             self.status = "starting"
         elif new_state == AgentState.DEAD:
             self.status = "dead"
-        elif new_state in (AgentState.IDLE, AgentState.SPEAKING):
+        elif new_state == AgentState.IDLE:
             self.status = "ready"
         else:
             self.status = "active"
