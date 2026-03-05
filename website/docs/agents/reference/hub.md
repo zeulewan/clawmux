@@ -108,12 +108,15 @@ ls /tmp/clawmux-sessions/
 
 ## Session Lifecycle
 
+See [Agent State Machine](state-machine.md) for the full state enum, transitions, and display behavior.
+
 | State | Description |
 |-------|-------------|
-| `starting` | tmux created, Claude booting, MCP server connecting |
-| `ready` | MCP connected to hub, Claude in voice mode |
-| `active` | `converse()` call in progress |
-| `dead` | tmux died or session timed out |
+| `starting` | tmux created, Claude booting, waiting for first `clawmux wait` |
+| `idle` | Agent in `clawmux wait`, blocked waiting for a message |
+| `processing` | Agent actively working (reading files, running commands) |
+| `compacting` | Claude compacting context window |
+| `dead` | Session terminated or timed out |
 
 Sessions auto-terminate after 30 minutes of inactivity (configurable via `VOICE_CHAT_TIMEOUT` env var on the hub).
 
