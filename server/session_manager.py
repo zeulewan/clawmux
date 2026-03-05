@@ -236,6 +236,8 @@ class SessionManager:
             adopted += 1
             log.info("Adopted orphaned session: %s (voice=%s, tmux=%s, model=%s)",
                      old_session_id, voice_id, old_session_id, session.model)
+            # Apply agent-colored status bar to adopted session
+            await self._apply_agent_status_bar(old_session_id, voice_name, voice_id)
 
         if adopted:
             log.info("Adopted %d orphaned session(s)", adopted)
