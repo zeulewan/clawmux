@@ -446,29 +446,7 @@ function _showContextMenu(msgEl, x, y) {
   }, 50);
 }
 
-function handleMsgPointerDown(e) {
-  const msgEl = e.target.closest('.msg');
-  if (!msgEl || msgEl.classList.contains('thinking') || msgEl.classList.contains('system')) return;
-  // Only use long-press context menu on mobile/touch
-  if (!isMobile) return;
-  e.preventDefault();
-  longPressTarget = msgEl;
-  const px = e.clientX || e.pageX, py = e.clientY || e.pageY;
-  longPressTimer = setTimeout(() => {
-    if (!longPressTarget) return;
-    longPressTarget.classList.add('long-press-active');
-    _showContextMenu(longPressTarget, px, py);
-  }, 500);
-}
-
-function handleMsgPointerUp() {
-  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-  // Don't dismiss target highlight immediately if context menu is showing
-  if (!_activeContextMenu && longPressTarget) {
-    longPressTarget.classList.remove('long-press-active');
-    longPressTarget = null;
-  }
-}
+let _longPressFired = false;
 
 let copyToastTimer = null;
 function showCopyToast(msg) {
@@ -479,28 +457,36 @@ function showCopyToast(msg) {
   copyToastTimer = setTimeout(() => toast.classList.remove('visible'), 1500);
 }
 
-chatArea.addEventListener('pointerdown', handleMsgPointerDown);
-chatArea.addEventListener('pointerup', handleMsgPointerUp);
-chatArea.addEventListener('pointercancel', handleMsgPointerUp);
-// On mobile/iOS: use touchstart with passive:false to block native long-press copy
+// Mobile: use touchstart/touchend (matches working sidebar pattern)
 if (isMobile) {
   chatArea.addEventListener('touchstart', (e) => {
     const msgEl = e.target.closest('.msg');
-    if (msgEl && !msgEl.classList.contains('thinking') && !msgEl.classList.contains('system')) {
-      // Don't preventDefault immediately — let short taps work normally
-      // The pointerdown handler sets up the long-press timer
-    }
+    if (!msgEl || msgEl.classList.contains('thinking') || msgEl.classList.contains('system')) return;
+    _longPressFired = false;
+    longPressTarget = msgEl;
+    const touch = e.touches[0];
+    const px = touch.clientX, py = touch.clientY;
+    longPressTimer = setTimeout(() => {
+      longPressTimer = null;
+      _longPressFired = true;
+      msgEl.classList.add('long-press-active');
+      _showContextMenu(msgEl, px, py);
+      setTimeout(() => msgEl.classList.remove('long-press-active'), 200);
+    }, 500);
   }, { passive: true });
-  chatArea.addEventListener('contextmenu', (e) => e.preventDefault());
-}
-chatArea.addEventListener('pointermove', (e) => {
-  // Cancel long-press if user moves finger too much
-  if (longPressTimer && longPressTarget) {
-    longPressTimer && clearTimeout(longPressTimer);
-    longPressTimer = null;
+  chatArea.addEventListener('touchend', (e) => {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    if (_longPressFired) { e.preventDefault(); _longPressFired = false; }
     longPressTarget = null;
-  }
-});
+  });
+  chatArea.addEventListener('touchmove', () => {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    longPressTarget = null;
+  });
+  chatArea.addEventListener('contextmenu', (e) => e.preventDefault());
+} else {
+  // Desktop: keep pointer events for hover-based actions (no long-press needed)
+}
 
 // Persist input mode
 function saveInputMode() {
