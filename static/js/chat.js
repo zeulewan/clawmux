@@ -298,8 +298,9 @@ function renderChat(forceScroll = false) {
       continue;
     }
     if (!showAgentMessages && msg.role === 'system' && /^\[Agent msg (from|to) /.test(msg.text)) continue;
-    const hasThread = msg.id && (threadReplies.has(msg.id) || bareAcks.has(msg.id));
-    if (hasThread) {
+    const hasReplies = msg.id && threadReplies.has(msg.id);
+    const hasAcksOnly = msg.id && !hasReplies && bareAcks.has(msg.id);
+    if (hasReplies) {
       const ctr = document.createElement('div');
       ctr.className = 'thread-container';
       const parentEl = createMsgEl(msg.role, msg.text, vc, s.voice, msg);
@@ -332,7 +333,14 @@ function renderChat(forceScroll = false) {
       }
       chatArea.appendChild(ctr);
     } else {
-      chatArea.appendChild(createMsgEl(msg.role, msg.text, vc, s.voice, msg));
+      const el = createMsgEl(msg.role, msg.text, vc, s.voice, msg);
+      if (hasAcksOnly) {
+        const ac = bareAcks.get(msg.id) || 0;
+        const b = document.createElement('span'); b.className = 'thread-ack-badge'; b.textContent = ac > 1 ? '\uD83D\uDC4D ' + ac : '\uD83D\uDC4D'; b.title = ac + ' ack'; el.appendChild(b);
+        const ackBtn = el.querySelector('.msg-ack-btn');
+        if (ackBtn) ackBtn.style.display = 'none';
+      }
+      chatArea.appendChild(el);
     }
   }
   // Show status indicator at the bottom based on session state
