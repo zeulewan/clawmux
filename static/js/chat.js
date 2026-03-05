@@ -275,10 +275,11 @@ function renderChat(forceScroll = false) {
       chatArea.appendChild(createMsgEl(msg.role, msg.text, vc, s.voice, msg));
     }
   }
-  // Re-show idle status or thinking indicator based on session state
+  // Re-show activity log and idle status or thinking indicator based on session state
   if (getSessionState(activeSessionId) === 'idle') {
     showIdleStatus(activeSessionId);
   } else if (getSessionState(activeSessionId) === 'processing') {
+    renderActivityLog(activeSessionId);
     const div = document.createElement('div');
     div.className = 'msg thinking';
     div.id = `thinking-${activeSessionId}`;

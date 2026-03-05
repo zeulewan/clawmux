@@ -257,7 +257,16 @@ function handleMessage(data) {
     if (s) {
       // Update status_text (last tool call description)
       if ('status_text' in data) {
-        if (data.status_text) {
+        if (data.status_text && data.status_text !== s.toolStatusText) {
+          // Previous tool finished — collapse it into activity log
+          const skipLog = new Set(['Processing...', 'Waiting', 'Running clawmux wait', 'Starting session...', '']);
+          if (s.toolStatusText && !skipLog.has(s.toolStatusText)) {
+            if (!s.activityLog) s.activityLog = [];
+            s.activityLog.push(s.toolStatusText);
+            collapseThinkingToActivity(data.session_id, s.toolStatusText);
+          }
+          s.toolStatusText = data.status_text;
+        } else if (data.status_text) {
           s.toolStatusText = data.status_text;
         }
         // Keep previous toolStatusText between tools (avoid flash)
@@ -268,6 +277,12 @@ function handleMessage(data) {
         s.serverState = serverState;
         s.compacting = (serverState === 'compacting');
         if (serverState === 'idle') {
+          // Collapse last tool status into activity log before hiding thinking
+          const skip = new Set(['Processing...', 'Waiting', 'Running clawmux wait', '']);
+          if (s.toolStatusText && !skip.has(s.toolStatusText)) {
+            if (!s.activityLog) s.activityLog = [];
+            s.activityLog.push(s.toolStatusText);
+          }
           setSessionState(data.session_id, 'idle');
           hideThinking(data.session_id);
           stopThinkingSound();

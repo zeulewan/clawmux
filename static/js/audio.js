@@ -769,6 +769,9 @@ function showIdleStatus(sessionId) {
   if (sessionId !== activeSessionId) return;
   const s = sessions.get(sessionId);
   if (!s) return;
+  // Show activity log lines first
+  renderActivityLog(sessionId);
+  // Then show current idle status
   const text = s.toolStatusText || '';
   if (!text) { hideIdleStatus(sessionId); return; }
   let el = document.getElementById(`idle-status-${sessionId}`);
@@ -787,6 +790,45 @@ function showIdleStatus(sessionId) {
 function hideIdleStatus(sessionId) {
   const el = document.getElementById(`idle-status-${sessionId}`);
   if (el) el.remove();
+}
+
+// --- Activity log ---
+// Collapse the current thinking bubble into a muted activity line
+function collapseThinkingToActivity(sessionId, text) {
+  if (sessionId !== activeSessionId) return;
+  if (!text) return;
+  const thinkingEl = document.getElementById(`thinking-${sessionId}`);
+  if (!thinkingEl) return;
+  // Insert activity line before the thinking bubble
+  const line = document.createElement('div');
+  line.className = 'activity-line';
+  line.textContent = text;
+  thinkingEl.parentNode.insertBefore(line, thinkingEl);
+  // Update thinking label to new status (will be updated by updateThinkingLabel)
+}
+
+// Render all accumulated activity log lines (used by renderChat and showIdleStatus)
+function renderActivityLog(sessionId) {
+  const s = sessions.get(sessionId);
+  if (!s || !s.activityLog || s.activityLog.length === 0) return;
+  if (sessionId !== activeSessionId) return;
+  // Don't duplicate — check if already rendered
+  if (chatArea.querySelector('.activity-line')) return;
+  for (const text of s.activityLog) {
+    const line = document.createElement('div');
+    line.className = 'activity-line';
+    line.textContent = text;
+    chatArea.appendChild(line);
+  }
+}
+
+// Clear activity log and DOM elements
+function clearActivityLog(sessionId) {
+  const s = sessions.get(sessionId);
+  if (s) s.activityLog = [];
+  if (sessionId === activeSessionId) {
+    chatArea.querySelectorAll('.activity-line').forEach(el => el.remove());
+  }
 }
 
 // --- Session state machine ---
@@ -832,6 +874,7 @@ function setSessionState(sessionId, newState) {
     }
   } else if (newState === 'processing') {
     hideIdleStatus(sessionId);
+    clearActivityLog(sessionId);
     showThinking(sessionId);
     startThinkingSound(sessionId);
     setSessionSidebarState(sessionId, 'working');
