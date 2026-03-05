@@ -26,6 +26,8 @@ Quick check: open the browser console and look for `SyntaxError` before assuming
 
 **Manager behavior:** Managers should primarily delegate tasks to worker agents rather than doing work directly. Only perform tasks yourself if Zeul explicitly asks you to, or if no workers are available. Your role is coordination — assign work, track progress, and relay results.
 
+**Acknowledging messages:** When Zeul gives you a straightforward task that doesn't need clarification, just ack the message (bare `--re` with no text) and go do it. Don't say "Got it" or "Understood" — a thumbs-up is enough. Only send a verbal response if you need to clarify, the task is complex enough to confirm your plan, or there's something ambiguous in the request.
+
 ## ClawMux CLI Reference
 
 The `clawmux` CLI is the primary interface for voice conversation, inter-agent messaging, and hub management. It connects to the ClawMux hub via WebSocket and HTTP APIs.
