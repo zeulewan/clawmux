@@ -534,6 +534,7 @@ class SessionManager:
                     "`clawmux` is already in your PATH at `/usr/local/bin/clawmux`. "
                     "Environment variables (`CLAWMUX_SESSION_ID`, `CLAWMUX_PORT`) are automatically set. "
                     "Never `cd` into the repo directory or manually export these variables — just run `clawmux` directly.\n\n"
+                    "Run `clawmux --help` to see all available commands (spawn, monitor, projects, version, update, etc.).\n\n"
                     "# Hub Management\n"
                     "NEVER use `pkill`, `kill`, or any signal-based commands to restart the hub. "
                     "Use the built-in CLI commands instead:\n"
