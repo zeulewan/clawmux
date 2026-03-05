@@ -455,13 +455,13 @@ class SessionManager:
                 identity = (
                     f"Your name is {voice_name}. "
                     f"You have an ongoing conversation with this user. "
-                    f"Greet them with: clawmux send --to user \"Hi, I'm back!\"\n"
+                    f"Greet them with: clawmux send --to user 'Hi, I am back!'\n"
                     f"Then run: clawmux wait\n"
                 )
             else:
                 identity = (
                     f"Your name is {voice_name}. "
-                    f"Greet the user by running: clawmux send --to user \"Hi, I'm {voice_name}! How can I help?\"\n"
+                    f"Greet the user by running: clawmux send --to user 'Hi, I am {voice_name}. How can I help?'\n"
                     f"Then run: clawmux wait\n"
                 )
 
@@ -491,16 +491,19 @@ class SessionManager:
                     "You are running in CLI mode. All communication uses the unified `clawmux send` and `clawmux wait` commands.\n\n"
                     "## Speaking to the user (TTS)\n"
                     "```bash\n"
-                    "clawmux send --to user \"Your message here\"\n"
+                    "clawmux send --to user 'Your message here'\n"
                     "```\n"
                     "This triggers TTS and returns immediately. Do NOT block waiting for a response.\n\n"
+                    "**IMPORTANT: Always use single quotes** for `clawmux send` messages. "
+                    "Double quotes cause shell escaping issues — backslashes (in LaTeX, file paths) "
+                    "and `!` get mangled by the shell before Python receives them.\n\n"
                     "## Sending a message to another agent\n"
                     "```bash\n"
-                    "clawmux send --to echo \"Check the auth module\"\n"
+                    "clawmux send --to echo 'Check the auth module'\n"
                     "```\n\n"
                     "## Replying to a specific message (threading)\n"
                     "```bash\n"
-                    "clawmux send --to sky --re msg-xxx \"Here's the answer\"\n"
+                    "clawmux send --to sky --re msg-xxx 'Here is the answer'\n"
                     "```\n\n"
                     "## Acknowledging a message (thumbs up)\n"
                     "```bash\n"
@@ -514,7 +517,7 @@ class SessionManager:
                     "Always call this when you have no active work.\n\n"
                     "## Setting your project status\n"
                     "```bash\n"
-                    "clawmux project \"project-name\" --area \"frontend\"\n"
+                    "clawmux project 'project-name' --area 'frontend'\n"
                     "```\n\n"
                     "IMPORTANT: Always use `clawmux send --to user` for ALL output to the user. "
                     "Never just print text to the terminal. Text printed directly to Claude Code "
@@ -548,7 +551,7 @@ class SessionManager:
                 "When you receive an inter-agent message:\n"
                 "1. Process the message content\n"
                 "2. Do NOT speak the response out loud to the user\n"
-                "3. Reply using: `clawmux send --to <sender_name> \"your reply\"`\n"
+                "3. Reply using: `clawmux send --to <sender_name> 'your reply'`\n"
                 "4. Or acknowledge with: `clawmux send --to <sender_name> --re <msg_id>`\n"
             )
 
