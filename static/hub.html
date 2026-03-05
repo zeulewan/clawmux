@@ -1972,6 +1972,7 @@ function updateProjectLabel() {
 
 function toggleProjectPopup(e) {
   e.stopPropagation();
+  document.getElementById('model-popup').style.display = 'none';
   const popup = document.getElementById('project-popup');
   if (popup.style.display !== 'none') { popup.style.display = 'none'; return; }
   const sel = document.getElementById('project-selector');
@@ -2157,6 +2158,7 @@ function updateModelLabel() {
 
 function toggleModelPopup(e) {
   e.stopPropagation();
+  document.getElementById('project-popup').style.display = 'none';
   const popup = document.getElementById('model-popup');
   if (popup.style.display !== 'none') { popup.style.display = 'none'; return; }
   const s = activeSessionId ? sessions.get(activeSessionId) : null;
