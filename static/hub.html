@@ -1407,7 +1407,7 @@ body {
   <div class="ctx-item" id="ctx-mark-unread">Mark as Unread</div>
   <div class="ctx-item" id="ctx-mark-read">Mark as Read</div>
   <div class="ctx-item" id="ctx-restart">Restart Agent</div>
-  <div class="ctx-item" id="ctx-reset">Reset History</div>
+  <div class="ctx-item" id="ctx-reset">Reset</div>
   <div class="ctx-item" id="ctx-terminate" style="color:#e63946;">Terminate Session</div>
 </div>
 
@@ -2304,24 +2304,23 @@ document.getElementById('ctx-reset').addEventListener('click', async () => {
   const vid = contextMenuVoiceId;
   const sid = contextMenuSessionId;
   if (!vid) { hideContextMenu(); return; }
-  if (!confirm(`Clear all history for ${voiceDisplayName(vid)}?`)) {
+  if (!confirm(`Reset ${voiceDisplayName(vid)}? This will clear history and restart the agent.`)) {
     hideContextMenu();
     return;
   }
+  hideContextMenu();
   try {
+    // Clear history
     await fetch(`/api/history/${vid}`, { method: 'DELETE' });
+    // Restart agent if session is active
+    if (sid) {
+      const s = sessions.get(sid);
+      if (s) { s.messages = []; if (sid === activeSessionId) renderChat(); }
+      await fetch(`/api/sessions/${sid}/restart`, { method: 'POST' });
+    }
   } catch (e) {
     console.error('Reset error:', e);
   }
-  // Clear local messages if session is active
-  if (sid) {
-    const s = sessions.get(sid);
-    if (s) {
-      s.messages = [];
-      if (sid === activeSessionId) renderChat();
-    }
-  }
-  hideContextMenu();
 });
 
 // --- Close menus on outside click / Escape ---
