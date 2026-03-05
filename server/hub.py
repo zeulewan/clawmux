@@ -35,7 +35,7 @@ from hub_config import HUB_PORT, HUB_START_TIME
 import inbox
 from message_broker import MessageBroker
 from project_manager import ProjectManager
-from session_manager import SessionManager
+from session_manager import AgentState, SessionManager
 
 # Logging
 logging.basicConfig(
@@ -145,14 +145,14 @@ async def compaction_monitor_loop() -> None:
         await asyncio.sleep(3)
         for session_id in list(session_mgr.sessions):
             session = session_mgr.sessions.get(session_id)
-            if not session or session.status == "dead":
+            if not session or session.state == AgentState.DEAD:
                 continue
             # Only check when context usage is >= 80% (use cached data)
             usage = _context_cache.get(session_id)
             if not usage or usage["percent"] < 80:
-                if session.compacting:
+                if session.state == AgentState.COMPACTING:
                     # Context dropped below 80% (post-compaction reset)
-                    session.compacting = False
+                    session.set_state(AgentState.PROCESSING)
                     await send_to_browser({
                         "type": "compaction_status",
                         "session_id": session_id,
@@ -182,8 +182,12 @@ async def compaction_monitor_loop() -> None:
                 if "compacted" in ll:
                     # Most recent compaction-related line says "compacted" (done)
                     break
-            if is_compacting != session.compacting:
-                session.compacting = is_compacting
+            was_compacting = session.state == AgentState.COMPACTING
+            if is_compacting != was_compacting:
+                if is_compacting:
+                    session.set_state(AgentState.COMPACTING)
+                else:
+                    session.set_state(AgentState.PROCESSING)
                 await send_to_browser({
                     "type": "compaction_status",
                     "session_id": session_id,
@@ -204,7 +208,7 @@ async def context_poll_loop() -> None:
     while True:
         for sid in list(session_mgr.sessions):
             session = session_mgr.sessions.get(sid)
-            if not session or session.status == "dead":
+            if not session or session.state == AgentState.DEAD:
                 continue
             try:
                 usage = await asyncio.to_thread(session_mgr.get_context_usage, sid)
@@ -392,7 +396,7 @@ async def handle_browser_message(data: dict) -> None:
             history.append(session.voice, session.label, "user", text, _hist_prefix(session), msg_id=umid)
 
             # If agent is in wait mode, push via inbox for immediate pickup by wait WS
-            if session.in_wait and session.work_dir:
+            if session.state == AgentState.IDLE and session.work_dir:
                 log.info("[%s] Agent in wait, pushing voice message via inbox", session_id)
                 combined = " ... ".join(session.interjections)
                 session.interjections.clear()
@@ -477,11 +481,10 @@ async def wait_websocket(ws: WebSocket, session_id: str):
         return
 
     log.info("[%s] Wait WS connected", session_id)
-    session.in_wait = True  # Agent is idle and ready for input
-    session.processing = False  # Clear processing state — agent is idle now
+    session.set_state(AgentState.IDLE)
 
-    # Tell browser agent is listening (so voice input isn't treated as interjection)
-    await send_to_browser({"session_id": session_id, "type": "listening"})
+    # Tell browser agent is idle (so voice input isn't treated as interjection)
+    await send_to_browser({"session_id": session_id, "type": "listening", "state": "idle"})
 
     # Register this WS for push notifications
     if not hasattr(session, "_wait_queue"):
@@ -528,7 +531,7 @@ async def wait_websocket(ws: WebSocket, session_id: str):
     except Exception as e:
         log.warning("[%s] Wait WS error: %s", session_id, e)
     finally:
-        session.in_wait = False
+        session.set_state(AgentState.PROCESSING)
         if hasattr(session, "_wait_queue"):
             del session._wait_queue
 
@@ -674,7 +677,7 @@ async def hook_tool_status(request: Request):
     response_json = {}
 
     if event in ("PostToolUse", "PostToolUseFailure"):
-        session.status_text = ""
+        # status_text persists (shows last tool call) — not cleared here
         # Check inbox for pending messages — deliver via additionalContext
         if session.work_dir:
             messages = inbox.read_and_clear(session.work_dir)
@@ -693,13 +696,12 @@ async def hook_tool_status(request: Request):
                     "count": 0,
                 })
     elif event == "Stop":
-        session.status_text = ""
-        session.processing = False
+        # State does NOT change here — PROCESSING → IDLE only when wait WS connects
+        pass
     elif event == "PreToolUse":
         tool_name = data.get("tool_name", "")
         tool_input = data.get("tool_input", {})
         session.status_text = _tool_status_text(tool_name, tool_input)
-        session.processing = True
         # Check inbox for urgent messages — deliver via additionalContext
         if session.work_dir:
             messages = inbox.read_and_clear(session.work_dir)
@@ -742,7 +744,7 @@ async def hook_tool_status(request: Request):
                 })
     elif event == "SessionStart":
         # SessionStart hook — mark session active, inject any pending inbox
-        session.processing = True
+        session.set_state(AgentState.PROCESSING)
         session.status_text = "Starting session..."
         if session.work_dir:
             messages = inbox.read_and_clear(session.work_dir)
@@ -760,6 +762,7 @@ async def hook_tool_status(request: Request):
                     "count": 0,
                 })
     elif event == "PreCompact":
+        session.set_state(AgentState.COMPACTING)
         session.status_text = "Compacting context..."
     else:
         return JSONResponse({})
@@ -767,6 +770,7 @@ async def hook_tool_status(request: Request):
     msg = {
         "type": "session_status",
         "session_id": session.session_id,
+        "state": session.state.value,
         "status_text": session.status_text,
     }
     if event == "Stop":
@@ -793,7 +797,7 @@ async def spawn_session(request: Request):
         # Notify browser of the new session so the sidebar updates immediately
         await send_to_browser({"type": "session_spawned", "session": session.to_dict()})
         # Show thinking indicator while agent prepares its opening greeting
-        session.processing = True
+        session.set_state(AgentState.PROCESSING)
         await send_to_browser({"session_id": session.session_id, "type": "thinking"})
         return JSONResponse(session.to_dict())
     except RuntimeError as e:
@@ -826,7 +830,7 @@ async def restart_session(session_id: str):
     # Respawn with the same voice and project
     new_session = await session_mgr.spawn_session(voice=voice, project=project_slug)
     await send_to_browser({"type": "session_spawned", "session": new_session.to_dict()})
-    new_session.processing = True
+    new_session.set_state(AgentState.PROCESSING)
     await send_to_browser({"session_id": new_session.session_id, "type": "thinking"})
     return JSONResponse({"status": "restarted", "session_id": new_session.session_id})
 
@@ -1083,7 +1087,7 @@ async def send_message(request: Request):
     # Deliver via exactly ONE path to avoid duplicate delivery:
     # - In wait → inbox + wait queue push (immediate, agent sees it now)
     # - Not in wait → inbox (hooks deliver via additionalContext)
-    if recipient.in_wait and recipient.work_dir:
+    if recipient.state == AgentState.IDLE and recipient.work_dir:
         # Wait mode — push via inbox + wait queue for immediate delivery
         await _inbox_write_and_notify(recipient, {
             "id": msg.id,

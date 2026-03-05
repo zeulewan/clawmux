@@ -1,6 +1,7 @@
 """Session lifecycle manager — tmux + Claude Code spawning, health checks, timeout."""
 
 import asyncio
+import enum
 import json
 import logging
 import os
@@ -25,18 +26,29 @@ log = logging.getLogger("hub.sessions")
 SESSION_DIR_BASE = Path("/tmp/clawmux-sessions")
 
 
+class AgentState(str, enum.Enum):
+    """Canonical agent lifecycle state — single source of truth."""
+    STARTING   = "starting"    # Claude Code launching, not yet ready
+    IDLE       = "idle"        # In clawmux wait, ready for input
+    PROCESSING = "processing"  # Making tool calls (reading, writing, running)
+    SPEAKING   = "speaking"    # TTS playback in progress
+    COMPACTING = "compacting"  # Context window compaction
+    DEAD       = "dead"        # Session terminated
+
+
 @dataclass
 class Session:
     session_id: str
     tmux_session: str
     work_dir: str = ""
-    status: str = "starting"  # starting | ready | active | dead
+    state: AgentState = AgentState.STARTING  # canonical lifecycle state
+    status: str = "starting"  # DEPRECATED — kept for backward compat during migration
     created_at: float = field(default_factory=time.time)
     last_activity: float = field(default_factory=time.time)
     label: str = ""
     voice: str = "af_sky"
     speed: float = 1.0
-    status_text: str = ""  # last status sent to browser (e.g. "Speaking...", "Transcribing...")
+    status_text: str = ""  # last tool call description (orthogonal to state)
     project: str = ""  # current project/repo name (set by agent via set_project_status)
     project_area: str = ""  # current sub-area (e.g. "frontend", "docs")
     text_mode: bool = False  # when True, skip TTS and just send text
@@ -44,9 +56,9 @@ class Session:
     model: str = ""  # per-session Claude model override (opus/sonnet/haiku); empty = use global default
     pending_model_restart: bool = False  # True when model was changed and needs restart after current turn
     restarting: bool = False  # True while model restart is in progress (skip health checks)
-    processing: bool = False  # True when agent is actively working
-    in_wait: bool = False  # True while connected to wait WS (ready for input)
-    compacting: bool = False  # True when Claude Code is compacting context
+    processing: bool = False  # DEPRECATED — derived from state during migration
+    in_wait: bool = False  # DEPRECATED — derived from state during migration
+    compacting: bool = False  # DEPRECATED — derived from state during migration
     unread_count: int = 0  # server-tracked unread message count
     # Per-session bridge state (set by hub after creation)
     playback_done: asyncio.Event | None = field(default=None, repr=False)
@@ -55,11 +67,34 @@ class Session:
     reinject_attempts: int = 0  # number of voice-mode re-injection attempts
     max_reinject_attempts: int = 3  # max re-injection attempts before giving up
 
+    def set_state(self, new_state: AgentState) -> None:
+        """Transition to a new state, syncing deprecated boolean flags."""
+        self.state = new_state
+        # Sync legacy booleans for backward compat
+        self.processing = new_state == AgentState.PROCESSING
+        self.in_wait = new_state == AgentState.IDLE
+        self.compacting = new_state == AgentState.COMPACTING
+        # Sync legacy status string
+        if new_state == AgentState.STARTING:
+            self.status = "starting"
+        elif new_state == AgentState.DEAD:
+            self.status = "dead"
+        elif new_state in (AgentState.IDLE, AgentState.SPEAKING):
+            self.status = "ready"
+        else:
+            self.status = "active"
+
     def to_dict(self) -> dict:
         return {
             "session_id": self.session_id,
             "tmux_session": self.tmux_session,
+            "state": self.state.value,
+            # Backward compat — browser reads these until migrated (step 4)
             "status": self.status,
+            "processing": self.processing,
+            "in_wait": self.in_wait,
+            "compacting": self.compacting,
+            # Standard fields
             "created_at": self.created_at,
             "last_activity": self.last_activity,
             "label": self.label,
@@ -69,9 +104,6 @@ class Session:
             "project": self.project,
             "project_area": self.project_area,
             "model": self.model,
-            "processing": self.processing,
-            "in_wait": self.in_wait,
-            "compacting": self.compacting,
             "unread_count": self.unread_count,
             "work_dir": self.work_dir,
             "project_slug": self.project_slug,
@@ -202,7 +234,7 @@ class SessionManager:
                 saved = self.history_store.load_interjections(voice_id)
                 if saved:
                     session.interjections = saved
-                    session.processing = True
+                    session.set_state(AgentState.PROCESSING)
                     log.info("Restored %d interjection(s) for %s", len(saved), voice_id)
             # Set model to hub default if not already set
             if not session.model:
@@ -621,7 +653,7 @@ class SessionManager:
             # Small extra delay for input buffer to be ready
             await asyncio.sleep(1)
 
-            session.status = "ready"
+            session.set_state(AgentState.IDLE)
             session.touch()
             log.info("Session %s ready", session_id)
             return session
@@ -640,7 +672,7 @@ class SessionManager:
             return
 
         log.info("Terminating session %s", session_id)
-        session.status = "dead"
+        session.set_state(AgentState.DEAD)
         await self._cleanup_tmux(session.tmux_session)
         self._cleanup_workdir(session)
         del self.sessions[session_id]
@@ -660,7 +692,7 @@ class SessionManager:
         log.info("[%s] Restarting Claude with model %s", session_id, session_model)
         session.pending_model_restart = False
         session.restarting = True
-        session.status = "starting"
+        session.set_state(AgentState.STARTING)
 
         # Kill the entire tmux session (cleanly kills all processes inside)
         await self._cleanup_tmux(tmux_name)
@@ -737,7 +769,7 @@ class SessionManager:
         await asyncio.sleep(1)
 
         session.restarting = False
-        session.status = "ready"
+        session.set_state(AgentState.IDLE)
         session.touch()
         log.info("[%s] Model restart complete", session_id)
 
@@ -781,8 +813,8 @@ class SessionManager:
 
     async def _voice_watchdog(self, session_id: str, session: Session, now: float) -> None:
         """Detect agents that dropped out of voice mode and re-inject the wait command."""
-        # Skip sessions that aren't ready, are actively waiting, processing, or restarting
-        if session.status != "ready":
+        # Skip sessions that aren't in a watchdog-relevant state
+        if session.state not in (AgentState.IDLE, AgentState.PROCESSING):
             return
         if session.in_wait or session.processing or session.restarting or session.compacting:
             return
