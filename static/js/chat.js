@@ -343,11 +343,6 @@ function renderChat(forceScroll = false) {
       chatArea.appendChild(el);
     }
   }
-  // Show status indicator at the bottom based on session state
-  const curState = getSessionState(activeSessionId);
-  if (curState === 'idle' || curState === 'processing') {
-    showStatusIndicator(activeSessionId);
-  }
   if (wasNearBottom) chatArea.scrollTop = chatArea.scrollHeight;
 }
 
@@ -375,10 +370,7 @@ function addMessage(sessionId, role, text, opts = {}) {
       } else {
         el = createMsgEl(role, text, voiceColor(s.voice), s.voice, msgObj);
       }
-      // Insert before status indicator so it stays at the bottom
-      const indicator = document.getElementById(`status-indicator-${sessionId}`);
-      if (indicator) chatArea.insertBefore(el, indicator);
-      else chatArea.appendChild(el);
+      chatArea.appendChild(el);
       if (wasNearBottom) chatArea.scrollTop = chatArea.scrollHeight;
     }
   }

@@ -559,6 +559,7 @@ async def wait_websocket(ws: WebSocket, session_id: str):
     finally:
         session.status_text = "Processing..."
         session.set_state(AgentState.PROCESSING)
+        await _save_activity(session, "Processing")
         await send_to_browser({
             "type": "session_status",
             "session_id": session_id,

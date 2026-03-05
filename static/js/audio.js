@@ -703,65 +703,17 @@ function stopThinkingVAD() {
   thinkingVadSessionId = null;
 }
 
-// --- Unified status indicator ---
-// Single element for both processing (with dots) and idle (without dots).
-// Shows whatever status_text the server provides, regardless of state.
-
-function _statusLabelText(s) {
-  if (s.toolStatusText) return s.toolStatusText;
-  if (s.compacting) return 'Compacting...';
-  return 'Thinking...';
-}
-
-function showStatusIndicator(sessionId) {
-  const s = sessions.get(sessionId);
-  if (!s) return;
-  if (sessionId !== activeSessionId) return;
-
-  const text = _statusLabelText(s);
-
-  let el = document.getElementById(`status-indicator-${sessionId}`);
-  if (el) {
-    el.textContent = text;
-    return;
-  }
-
-  el = document.createElement('div');
-  el.className = 'activity-line';
-  el.id = `status-indicator-${sessionId}`;
-  el.textContent = text;
-  chatArea.appendChild(el);
-  chatScrollToBottom();
-}
-
-function updateStatusIndicator(sessionId) {
-  const s = sessions.get(sessionId);
-  if (!s) return;
-  const el = document.getElementById(`status-indicator-${sessionId}`);
-  if (!el) return;
-  el.textContent = _statusLabelText(s);
-}
-
-function hideStatusIndicator(sessionId) {
-  const s = sessions.get(sessionId);
-  if (s) s.isThinking = false;
-  const el = document.getElementById(`status-indicator-${sessionId}`);
-  if (el) el.remove();
-}
-
-// Backward-compat aliases used by other modules
-function showThinking(sessionId) {
-  const s = sessions.get(sessionId);
-  if (s) s.isThinking = true;
-  showStatusIndicator(sessionId);
-}
-function hideThinking(sessionId) { hideStatusIndicator(sessionId); }
-function updateThinkingLabel(sessionId) { updateStatusIndicator(sessionId); }
-function showIdleStatus(sessionId) {
-  if (sessionId !== activeSessionId) return;
-  showStatusIndicator(sessionId);
-}
-function hideIdleStatus(sessionId) { hideStatusIndicator(sessionId); }
+// --- Status indicator stubs ---
+// Live status indicator removed — activity log entries are the only display.
+// These no-ops remain so callers don't need updating.
+function showStatusIndicator() {}
+function updateStatusIndicator() {}
+function hideStatusIndicator() {}
+function showThinking(sessionId) { const s = sessions.get(sessionId); if (s) s.isThinking = true; }
+function hideThinking(sessionId) { const s = sessions.get(sessionId); if (s) s.isThinking = false; }
+function updateThinkingLabel() {}
+function showIdleStatus() {}
+function hideIdleStatus() {}
 
 // --- Session state machine ---
 // States: 'idle' | 'listening' | 'processing' | 'speaking'
