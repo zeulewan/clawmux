@@ -920,13 +920,18 @@ body {
 }
 .thinking-dot:nth-child(2) { animation-delay: 0.2s; }
 .thinking-dot:nth-child(3) { animation-delay: 0.4s; }
-.idle-status {
+.status-idle {
   align-self: flex-start;
   padding: 8px 18px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  animation: msgAppear 0.2s ease-out;
+}
+.status-idle .thinking-label {
   font-size: 0.7rem;
   color: var(--text-tertiary);
   opacity: 0.5;
-  animation: msgAppear 0.2s ease-out;
 }
 .activity-line {
   align-self: flex-start;

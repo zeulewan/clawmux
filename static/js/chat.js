@@ -328,24 +328,11 @@ function renderChat(forceScroll = false) {
       chatArea.appendChild(createMsgEl(msg.role, msg.text, vc, s.voice, msg));
     }
   }
-  // Re-show activity log and idle status or thinking indicator based on session state
-  if (getSessionState(activeSessionId) === 'idle') {
-    showIdleStatus(activeSessionId);
-  } else if (getSessionState(activeSessionId) === 'processing') {
+  // Re-show activity log and status indicator based on session state
+  const curState = getSessionState(activeSessionId);
+  if (curState === 'idle' || curState === 'processing') {
     renderActivityLog(activeSessionId);
-    const div = document.createElement('div');
-    div.className = 'msg thinking';
-    div.id = `thinking-${activeSessionId}`;
-    for (let i = 0; i < 3; i++) {
-      const dot = document.createElement('span');
-      dot.className = 'thinking-dot';
-      div.appendChild(dot);
-    }
-    const label = document.createElement('span');
-    label.className = 'thinking-label';
-    label.textContent = s.toolStatusText || '';
-    div.appendChild(label);
-    chatArea.appendChild(div);
+    showStatusIndicator(activeSessionId);
   }
   if (wasNearBottom) chatArea.scrollTop = chatArea.scrollHeight;
 }

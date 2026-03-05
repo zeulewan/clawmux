@@ -703,116 +703,102 @@ function stopThinkingVAD() {
   thinkingVadSessionId = null;
 }
 
-// --- Thinking indicator ---
-function _thinkingLabelText(s) {
-  // Most specific status wins: tool name > compacting > waiting > generic thinking
+// --- Unified status indicator ---
+// Single element for both processing (with dots) and idle (without dots).
+// Shows whatever status_text the server provides, regardless of state.
+
+function _statusLabelText(s) {
   if (s.toolStatusText) return s.toolStatusText;
   if (s.compacting) return 'Compacting...';
-  if (s.in_wait) return 'Waiting for response';
   return 'Thinking...';
 }
 
-function showThinking(sessionId) {
+function showStatusIndicator(sessionId) {
   const s = sessions.get(sessionId);
   if (!s) return;
-  s.isThinking = true;
-
   if (sessionId !== activeSessionId) return;
 
-  // Don't recreate if already showing — preserves hook-driven tool activity label
-  const existing = document.getElementById(`thinking-${sessionId}`);
-  if (existing) {
-    // Just update label text in case toolStatusText changed
-    const label = existing.querySelector('.thinking-label');
-    if (label) label.textContent = _thinkingLabelText(s);
+  const state = s.sessionState || 'idle';
+  const isProcessing = (state === 'processing');
+  const text = _statusLabelText(s);
+
+  let el = document.getElementById(`status-indicator-${sessionId}`);
+  if (el) {
+    // Update existing: toggle dots visibility and label text
+    el.querySelectorAll('.thinking-dot').forEach(d => d.style.display = isProcessing ? '' : 'none');
+    const label = el.querySelector('.thinking-label');
+    if (label) label.textContent = text;
+    // Switch class between thinking (card bg) and idle (muted)
+    el.className = isProcessing ? 'msg thinking' : 'status-idle';
     return;
   }
 
-  const div = document.createElement('div');
-  div.className = 'msg thinking';
-  div.id = `thinking-${sessionId}`;
+  el = document.createElement('div');
+  el.className = isProcessing ? 'msg thinking' : 'status-idle';
+  el.id = `status-indicator-${sessionId}`;
   for (let i = 0; i < 3; i++) {
     const dot = document.createElement('span');
     dot.className = 'thinking-dot';
-    div.appendChild(dot);
+    if (!isProcessing) dot.style.display = 'none';
+    el.appendChild(dot);
   }
   const label = document.createElement('span');
   label.className = 'thinking-label';
-  label.textContent = _thinkingLabelText(s);
-  div.appendChild(label);
-  chatArea.appendChild(div);
-  chatScrollToBottom();
-}
-
-function updateThinkingLabel(sessionId) {
-  const s = sessions.get(sessionId);
-  if (!s) return;
-  const el = document.getElementById(`thinking-${sessionId}`);
-  if (!el) return;
-  let label = el.querySelector('.thinking-label');
-  if (!label) {
-    label = document.createElement('span');
-    label.className = 'thinking-label';
-    el.appendChild(label);
-  }
-  label.textContent = _thinkingLabelText(s);
-}
-
-function hideThinking(sessionId) {
-  const s = sessions.get(sessionId);
-  if (s) s.isThinking = false;
-  const el = document.getElementById(`thinking-${sessionId}`);
-  if (el) el.remove();
-}
-
-function showIdleStatus(sessionId) {
-  if (sessionId !== activeSessionId) return;
-  const s = sessions.get(sessionId);
-  if (!s) return;
-  // Show activity log lines first
-  renderActivityLog(sessionId);
-  // Then show current idle status
-  const text = s.toolStatusText || '';
-  if (!text) { hideIdleStatus(sessionId); return; }
-  let el = document.getElementById(`idle-status-${sessionId}`);
-  if (el) {
-    el.textContent = text;
-    return;
-  }
-  el = document.createElement('div');
-  el.className = 'idle-status';
-  el.id = `idle-status-${sessionId}`;
-  el.textContent = text;
+  label.textContent = text;
+  el.appendChild(label);
   chatArea.appendChild(el);
   chatScrollToBottom();
 }
 
-function hideIdleStatus(sessionId) {
-  const el = document.getElementById(`idle-status-${sessionId}`);
+function updateStatusIndicator(sessionId) {
+  const s = sessions.get(sessionId);
+  if (!s) return;
+  const el = document.getElementById(`status-indicator-${sessionId}`);
+  if (!el) return;
+  const label = el.querySelector('.thinking-label');
+  if (label) label.textContent = _statusLabelText(s);
+}
+
+function hideStatusIndicator(sessionId) {
+  const s = sessions.get(sessionId);
+  if (s) s.isThinking = false;
+  const el = document.getElementById(`status-indicator-${sessionId}`);
   if (el) el.remove();
 }
 
+// Backward-compat aliases used by other modules
+function showThinking(sessionId) {
+  const s = sessions.get(sessionId);
+  if (s) s.isThinking = true;
+  showStatusIndicator(sessionId);
+}
+function hideThinking(sessionId) { hideStatusIndicator(sessionId); }
+function updateThinkingLabel(sessionId) { updateStatusIndicator(sessionId); }
+function showIdleStatus(sessionId) {
+  if (sessionId !== activeSessionId) return;
+  renderActivityLog(sessionId);
+  showStatusIndicator(sessionId);
+}
+function hideIdleStatus(sessionId) { hideStatusIndicator(sessionId); }
+
 // --- Activity log ---
-// Collapse the current thinking bubble into a muted activity line
+// Collapse the current status into a muted activity line
 function collapseThinkingToActivity(sessionId, text) {
   if (sessionId !== activeSessionId) return;
   if (!text) return;
-  const thinkingEl = document.getElementById(`thinking-${sessionId}`);
-  if (!thinkingEl) return;
-  // Insert activity line before the thinking bubble
+  const statusEl = document.getElementById(`status-indicator-${sessionId}`);
+  if (!statusEl) return;
   const line = document.createElement('div');
   line.className = 'activity-line';
   line.textContent = text;
-  thinkingEl.parentNode.insertBefore(line, thinkingEl);
-  // Update thinking label to new status (will be updated by updateThinkingLabel)
+  statusEl.parentNode.insertBefore(line, statusEl);
 }
 
-// Render all accumulated activity log lines (used by renderChat and showIdleStatus)
+// Render accumulated activity log lines (used by renderChat and showIdleStatus)
 function renderActivityLog(sessionId) {
   const s = sessions.get(sessionId);
   if (!s || !s.activityLog || s.activityLog.length === 0) return;
   if (sessionId !== activeSessionId) return;
-  // Don't duplicate — check if already rendered
   if (chatArea.querySelector('.activity-line')) return;
   for (const text of s.activityLog) {
     const line = document.createElement('div');
@@ -822,7 +808,7 @@ function renderActivityLog(sessionId) {
   }
 }
 
-// Clear activity log and DOM elements
+// Clear activity log (called when agent speaks — natural break point)
 function clearActivityLog(sessionId) {
   const s = sessions.get(sessionId);
   if (s) s.activityLog = [];
@@ -848,10 +834,9 @@ function setSessionState(sessionId, newState) {
 
   // Side effects per state
   if (newState === 'idle') {
-    hideThinking(sessionId);
     stopThinkingSound();
     stopThinkingVAD();
-    showIdleStatus(sessionId);
+    showIdleStatus(sessionId);  // renders activity log + idle status indicator
     setSessionSidebarState(sessionId, 'idle');
     if (sessionId === activeSessionId) {
       setStatus('Ready', sessionId);
@@ -859,7 +844,7 @@ function setSessionState(sessionId, newState) {
       updateMicUI();
     }
   } else if (newState === 'listening') {
-    hideThinking(sessionId);
+    hideStatusIndicator(sessionId);
     stopThinkingSound();
     stopThinkingVAD();
     // Promote interjection messages (agent is now listening = acknowledged them)
@@ -873,9 +858,7 @@ function setSessionState(sessionId, newState) {
       updateMicUI();
     }
   } else if (newState === 'processing') {
-    hideIdleStatus(sessionId);
-    clearActivityLog(sessionId);
-    showThinking(sessionId);
+    showThinking(sessionId);  // reuses status indicator, switches to processing style
     startThinkingSound(sessionId);
     setSessionSidebarState(sessionId, 'working');
     if (sessionId === activeSessionId) {
@@ -883,10 +866,11 @@ function setSessionState(sessionId, newState) {
       startThinkingVAD(sessionId);
     }
   } else if (newState === 'speaking') {
-    hideIdleStatus(sessionId);
-    hideThinking(sessionId);
+    hideStatusIndicator(sessionId);
     stopThinkingSound();
     stopThinkingVAD();
+    // Clear activity log when agent speaks — natural break point
+    clearActivityLog(sessionId);
     // Sidebar reflects server state only — don't set 'speaking' on sidebar
     if (sessionId === activeSessionId) {
       setStatus('Speaking...', sessionId);

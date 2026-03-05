@@ -284,8 +284,6 @@ function handleMessage(data) {
             s.activityLog.push(s.toolStatusText);
           }
           setSessionState(data.session_id, 'idle');
-          hideThinking(data.session_id);
-          stopThinkingSound();
         } else if (serverState === 'processing' || serverState === 'compacting') {
           setSessionState(data.session_id, 'processing');
         } else if (serverState === 'starting') {
@@ -295,8 +293,6 @@ function handleMessage(data) {
         // Legacy fallback: Stop hook without state field
         s.toolStatusText = '';
         setSessionState(data.session_id, 'idle');
-        hideThinking(data.session_id);
-        stopThinkingSound();
       }
       // Legacy status field (ready/starting)
       if (data.status) {
