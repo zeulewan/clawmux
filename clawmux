@@ -464,6 +464,124 @@ def cmd_kill_all(args):
     print(f"Hub stopped. Killed {killed} session(s).")
 
 
+def cmd_update(args):
+    """Pull latest code, reinstall deps, reinstall CLI, reload hub."""
+    # Find repo dir — this script lives in repo root or /usr/local/bin
+    script_path = os.path.realpath(__file__)
+    if script_path.startswith("/usr/local/bin"):
+        # Installed CLI — find repo via common locations
+        for candidate in [os.path.expanduser("~/GIT/clawmux"), os.path.expanduser("~/clawmux")]:
+            if os.path.isdir(os.path.join(candidate, "server")):
+                repo_dir = candidate
+                break
+        else:
+            die("Cannot find ClawMux repo. Expected ~/GIT/clawmux or ~/clawmux")
+            return
+    else:
+        repo_dir = os.path.dirname(script_path)
+
+    print(f"Updating ClawMux in {repo_dir}...")
+
+    # Git pull
+    r = subprocess.run(["git", "pull"], cwd=repo_dir, capture_output=True, text=True)
+    if r.returncode != 0:
+        die(f"git pull failed: {r.stderr.strip()}")
+        return
+    print(r.stdout.strip())
+
+    # Reinstall deps
+    venv_pip = os.path.join(repo_dir, ".venv", "bin", "pip")
+    if os.path.exists(venv_pip):
+        print("Installing dependencies...")
+        subprocess.run([venv_pip, "install", "-q", "-r", os.path.join(repo_dir, "requirements.txt")])
+    else:
+        print("Warning: venv not found, skipping pip install")
+
+    # Reinstall CLI
+    cli_src = os.path.join(repo_dir, "clawmux")
+    cli_dest = "/usr/local/bin/clawmux"
+    if os.path.exists(cli_src):
+        venv_python = os.path.join(repo_dir, ".venv", "bin", "python3")
+        r = subprocess.run(["sudo", "cp", cli_src, cli_dest], capture_output=True, text=True)
+        if r.returncode == 0:
+            subprocess.run(["sudo", "chmod", "+x", cli_dest], capture_output=True)
+            # Rewrite shebang to venv python
+            if os.path.exists(venv_python):
+                subprocess.run(["sudo", "sed", "-i", "", f"1s|.*|#!{venv_python}|", cli_dest],
+                              capture_output=True)
+            print("CLI updated.")
+        else:
+            print("Warning: could not update CLI (needs sudo)")
+
+    # Reload hub if running
+    try:
+        import httpx
+        resp = httpx.post(f"{HUB_BASE}/api/shutdown", json={"mode": "reload"}, timeout=5)
+        if resp.status_code == 200:
+            print("Hub reloading...")
+    except Exception:
+        print("Hub not running — no reload needed.")
+
+    print("Update complete.")
+
+
+def cmd_uninstall(args):
+    """Uninstall ClawMux — stop hub, remove CLI, data, and repo."""
+    if not args.yes:
+        answer = input("This will remove ClawMux (hub, CLI, data, repo). Continue? [y/N] ")
+        if answer.lower() not in ("y", "yes"):
+            print("Cancelled.")
+            return
+
+    # Stop hub
+    print("Stopping hub...")
+    try:
+        import httpx
+        httpx.post(f"{HUB_BASE}/api/shutdown", json={"mode": "full"}, timeout=5)
+        time.sleep(2)
+    except Exception:
+        pass
+
+    # Kill tmux sessions
+    result = subprocess.run(["tmux", "list-sessions", "-F", "#{session_name}"],
+                           capture_output=True, text=True)
+    if result.returncode == 0:
+        for name in result.stdout.strip().splitlines():
+            if name.startswith("voice-") or name.startswith("clawmux"):
+                subprocess.run(["tmux", "kill-session", "-t", name], capture_output=True)
+
+    # Remove CLI
+    cli_dest = "/usr/local/bin/clawmux"
+    if os.path.exists(cli_dest):
+        subprocess.run(["sudo", "rm", cli_dest], capture_output=True)
+        print("CLI removed.")
+
+    # Remove data
+    data_dir = os.path.expanduser("~/.clawmux")
+    if os.path.isdir(data_dir):
+        import shutil
+        shutil.rmtree(data_dir)
+        print(f"Data removed ({data_dir}).")
+
+    # Find and remove repo
+    script_path = os.path.realpath(__file__)
+    if not script_path.startswith("/usr/local/bin"):
+        repo_dir = os.path.dirname(script_path)
+    else:
+        repo_dir = None
+        for candidate in [os.path.expanduser("~/GIT/clawmux"), os.path.expanduser("~/clawmux")]:
+            if os.path.isdir(os.path.join(candidate, "server")):
+                repo_dir = candidate
+                break
+
+    if repo_dir and os.path.isdir(repo_dir):
+        import shutil
+        shutil.rmtree(repo_dir)
+        print(f"Repo removed ({repo_dir}).")
+
+    print("ClawMux uninstalled.")
+
+
 def _shutdown_hub(mode: str = "reload") -> bool:
     """Ask hub to shut down via API. Returns True if request was sent."""
     import urllib.request, urllib.error
@@ -1114,6 +1232,17 @@ examples:
     p = sub.add_parser("kill-all", help="Stop hub and kill all agent sessions",
                        description="Stop the hub AND kill all voice-* tmux sessions. Use for full teardown.")
     p.set_defaults(func=cmd_kill_all)
+
+    # update
+    p = sub.add_parser("update", help="Update ClawMux to latest version",
+                       description="Pull latest code, reinstall deps, reinstall CLI, and reload hub if running.")
+    p.set_defaults(func=cmd_update)
+
+    # uninstall
+    p = sub.add_parser("uninstall", help="Uninstall ClawMux",
+                       description="Stop hub, remove CLI, data, and repo. Prompts for confirmation.")
+    p.add_argument("--yes", action="store_true", help="Skip confirmation prompt")
+    p.set_defaults(func=cmd_uninstall)
 
     # messages
     p = sub.add_parser("messages", help="List inter-agent messages",
