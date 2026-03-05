@@ -9,6 +9,18 @@
 //               updateLayout, VOICE_NAMES
 //   hub.html: chatArea, chatScrollToBottom, controls, textInputBar
 
+// --- Agent message helpers ---
+const _AGENT_MSG_RE = /^\[Agent msg (from|to) (\w+)\] ([\s\S]*)$/;
+
+/** Look up a voice color by display name (e.g. "Sky" → "#3A86FF"). */
+function _voiceColorByName(name) {
+  const lower = name.toLowerCase();
+  for (const [id, dname] of Object.entries(VOICE_NAMES)) {
+    if (dname.toLowerCase() === lower) return voiceColor(id);
+  }
+  return '#888';
+}
+
 // --- Message Rendering ---
 function _renderMarkdown(text) {
   if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') return null;
@@ -110,6 +122,47 @@ function createMsgEl(role, text, voiceColorHex, voiceId, msgObj = null) {
   const div = document.createElement('div');
   div.className = `msg ${role}`;
   if (msgObj && msgObj.id) div.dataset.msgId = msgObj.id;
+
+  // --- Inter-agent messages: collapsed one-liner with click-to-expand ---
+  const agentMatch = (role === 'system') ? _AGENT_MSG_RE.exec(text) : null;
+  if (agentMatch) {
+    const [, direction, agentName, content] = agentMatch;
+    const color = _voiceColorByName(agentName);
+    div.className = 'msg agent-msg';
+    div.style.cssText = 'padding:3px 10px;margin:2px 0;font-size:0.82em;opacity:0.7;cursor:pointer;';
+
+    // One-liner header: "→ Sky" or "← Echo"
+    const arrow = direction === 'from' ? '\u2190' : '\u2192';
+    const header = document.createElement('span');
+    header.className = 'agent-msg-header';
+    const nameSpan = document.createElement('span');
+    nameSpan.style.cssText = `color:${color};font-weight:600`;
+    nameSpan.textContent = `${arrow} ${agentName}`;
+    header.appendChild(nameSpan);
+
+    // Expandable body
+    const body = document.createElement('div');
+    body.className = 'agent-msg-body';
+    body.style.cssText = 'display:none;margin-top:4px;opacity:0.9;font-size:0.95em;white-space:pre-wrap;';
+    const mdEl = (typeof marked !== 'undefined') ? _renderMarkdown(content) : null;
+    if (mdEl) body.appendChild(mdEl);
+    else body.textContent = content;
+
+    div.appendChild(header);
+    div.appendChild(body);
+
+    div.addEventListener('click', (e) => {
+      if (e.target.closest('.msg-actions')) return;
+      const showing = body.style.display !== 'none';
+      body.style.display = showing ? 'none' : 'block';
+      div.style.opacity = showing ? '0.7' : '1';
+    });
+
+    if (voiceId) div.dataset.voice = voiceId;
+    if (text) div.dataset.text = text;
+    return div;
+  }
+
   if (role === 'assistant') {
     // Try markdown rendering first, fall back to karaoke word wrapping
     const mdEl = (typeof marked !== 'undefined') ? _renderMarkdown(text) : null;
