@@ -894,11 +894,16 @@ body {
 }
 .activity-line {
   align-self: flex-start;
-  padding: 2px 18px;
+  padding: 0 18px;
+  margin-top: -6px;
+  margin-bottom: -6px;
   font-size: 0.7rem;
   color: var(--text-tertiary);
   opacity: 0.5;
-  line-height: 1.4;
+  line-height: 1.3;
+}
+.activity-line + .activity-line {
+  margin-top: -4px;
 }
 @keyframes spin {
   from { transform: rotate(0deg); }
