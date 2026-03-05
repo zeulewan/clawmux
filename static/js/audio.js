@@ -1002,7 +1002,8 @@ function _applyKaraokeSpans(msgEl, realWords) {
         if (wordIdx >= realWords.length) break;
         const spanText = span.textContent.toLowerCase().replace(/[^\w]/g, '');
         if (!spanText) continue; // skip empty/punctuation spans
-        // Find matching word — look ahead up to 5 words to handle minor misalignments
+        // Find matching word — small look-ahead first, then wider search to skip code blocks
+        let matched = false;
         const searchLimit = Math.min(wordIdx + 5, realWords.length);
         for (let i = wordIdx; i < searchLimit; i++) {
           const w = realWords[i];
@@ -1011,7 +1012,23 @@ function _applyKaraokeSpans(msgEl, realWords) {
             span.dataset.start = w.start_time;
             w.el = span;
             wordIdx = i + 1;
+            matched = true;
             break;
+          }
+        }
+        // If small look-ahead failed, scan further — TTS words from skipped code blocks
+        // create gaps between DOM spans and TTS word indices
+        if (!matched) {
+          const wideLimit = Math.min(wordIdx + 200, realWords.length);
+          for (let i = searchLimit; i < wideLimit; i++) {
+            const w = realWords[i];
+            const wText = w.word.toLowerCase().replace(/[^\w]/g, '');
+            if (spanText === wText || spanText.startsWith(wText) || wText.startsWith(spanText)) {
+              span.dataset.start = w.start_time;
+              w.el = span;
+              wordIdx = i + 1;
+              break;
+            }
           }
         }
       }
