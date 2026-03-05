@@ -986,6 +986,9 @@ body {
 /* Mobile optimizations */
 @media (max-width: 600px) {
   /* Header: declutter for mobile */
+  /* Global: disable text selection everywhere on mobile (except text input) */
+  *, *::before, *::after { -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; }
+  input, textarea { -webkit-user-select: text !important; user-select: text !important; }
   #header { padding: 6px 10px; gap: 6px; flex-wrap: wrap; }
   #header h1 { font-size: 0.85rem; }
   #header-project-status { display: none; }
@@ -1087,7 +1090,7 @@ body {
 
   /* Chat messages: wider on mobile, disable text selection for long-press menu */
   .msg { max-width: 90%; }
-  .msg, .msg * { -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; touch-action: pan-y; }
+  .msg { touch-action: pan-y; }
   /* Karaoke words: disable hover effect on mobile but allow tap for playback */
   .karaoke-word { cursor: default; }
 
