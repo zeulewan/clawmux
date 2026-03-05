@@ -147,8 +147,8 @@ function createMsgEl(role, text, voiceColorHex, voiceId, msgObj = null) {
     };
     actions.appendChild(copyBtn);
 
-    // Thumbs-up (ack) button — only on messages with an ID
-    if (msgObj && msgObj.id) {
+    // Thumbs-up (ack) button — only on non-user messages with an ID
+    if (msgObj && msgObj.id && role !== 'user' && role !== 'user interjection') {
       const ackBtn = document.createElement('button');
       ackBtn.className = 'msg-action-btn msg-ack-btn';
       ackBtn.textContent = '\uD83D\uDC4D';
@@ -163,8 +163,8 @@ function createMsgEl(role, text, voiceColorHex, voiceId, msgObj = null) {
     div.appendChild(actions);
   }
 
-  // Double-click to ack messages with an ID
-  if (msgObj && msgObj.id && role !== 'system' && role !== 'thinking') {
+  // Double-click to ack messages with an ID (not on user's own messages)
+  if (msgObj && msgObj.id && role !== 'system' && role !== 'thinking' && role !== 'user' && role !== 'user interjection') {
     div.addEventListener('dblclick', (e) => {
       e.preventDefault();
       _sendUserAck(msgObj.id);
