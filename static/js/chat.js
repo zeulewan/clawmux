@@ -175,24 +175,35 @@ function createMsgEl(role, text, voiceColorHex, voiceId, msgObj = null) {
 
   // Mobile: attach long-press directly to each message (matches sidebar pattern)
   if (isMobile && role !== 'thinking' && role !== 'system') {
-    let lpTimer = null, lpFired = false;
+    let lpTimer = null, lpFired = false, startX = 0, startY = 0;
     div.oncontextmenu = (e) => e.preventDefault();
     div.addEventListener('touchstart', (e) => {
       lpFired = false;
       const touch = e.touches[0];
+      startX = touch.clientX; startY = touch.clientY;
       lpTimer = setTimeout(() => {
         lpTimer = null; lpFired = true;
         _longPressFired = true;
         div.classList.add('long-press-active');
+        // Programmatically clear any native text selection
+        const sel = window.getSelection();
+        if (sel) sel.removeAllRanges();
         _showContextMenu(div, touch.clientX, touch.clientY);
         setTimeout(() => div.classList.remove('long-press-active'), 200);
-      }, 500);
-    }, { passive: true });
+      }, 400);
+    }, { passive: false });
     div.addEventListener('touchend', (e) => {
       if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
       if (lpFired) { e.preventDefault(); lpFired = false; }
     });
-    div.addEventListener('touchmove', () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } });
+    div.addEventListener('touchmove', (e) => {
+      if (lpTimer) {
+        const t = e.touches[0];
+        if (Math.abs(t.clientX - startX) > 10 || Math.abs(t.clientY - startY) > 10) {
+          clearTimeout(lpTimer); lpTimer = null;
+        }
+      }
+    }, { passive: true });
   }
 
   return div;
