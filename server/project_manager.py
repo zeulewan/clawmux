@@ -154,6 +154,15 @@ class ProjectManager:
         log.info("Created project: %s (%s) with voices: %s", slug, name, voices)
         return {"slug": slug, **project}
 
+    def rename_project(self, slug: str, new_name: str) -> dict:
+        """Rename a project (display name only, slug stays the same)."""
+        if slug not in self.projects:
+            raise ValueError(f"Project '{slug}' not found")
+        self._data["projects"][slug]["name"] = new_name
+        self._save()
+        log.info("Renamed project %s to: %s", slug, new_name)
+        return {"slug": slug, **self._data["projects"][slug]}
+
     def delete_project(self, slug: str) -> None:
         """Remove a project from the registry. Does NOT delete session directories."""
         if slug == "default":

@@ -235,6 +235,10 @@ function handleMessage(data) {
     removeSession(data.session_id);
     return;
   }
+  if (type === 'project_deleted' || type === 'project_renamed') {
+    loadProjects();
+    return;
+  }
   if (type === 'project_switched') {
     currentProject = data.project || 'default';
     const sel = document.getElementById('project-selector');

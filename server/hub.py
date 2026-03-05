@@ -1143,6 +1143,20 @@ async def reorder_voices(slug: str, request: Request):
         return JSONResponse({"error": str(e)}, status_code=404)
 
 
+@app.put("/api/projects/{slug}")
+async def rename_project(slug: str, request: Request):
+    data = await request.json()
+    new_name = data.get("name", "").strip()
+    if not new_name:
+        return JSONResponse({"error": "name is required"}, status_code=400)
+    try:
+        result = project_mgr.rename_project(slug, new_name)
+        await send_to_browser({"type": "project_renamed", "slug": slug, "name": new_name})
+        return JSONResponse(result)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
+
 @app.delete("/api/projects/{slug}")
 async def delete_project(slug: str):
     try:
@@ -1153,7 +1167,12 @@ async def delete_project(slug: str):
         ]
         for sid in to_terminate:
             await session_mgr.terminate_session(sid)
+        was_active = project_mgr.active_project == slug
         project_mgr.delete_project(slug)
+        # Notify browser so sidebar/header refresh immediately
+        await send_to_browser({"type": "project_deleted", "slug": slug})
+        if was_active:
+            await send_to_browser({"type": "project_switched", "project": project_mgr.active_project})
         return JSONResponse({"status": "deleted", "slug": slug, "terminated_sessions": len(to_terminate)})
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)

@@ -1927,15 +1927,40 @@ function renderProjectSettings() {
     nameSpan.style.color = opt.value === currentProject ? 'var(--voice-color, #4a9eff)' : 'var(--text)';
     if (opt.value === currentProject) nameSpan.style.fontWeight = '600';
     div.appendChild(nameSpan);
+    const btns = document.createElement('span');
+    btns.style.cssText = 'display:flex;gap:6px;';
+    if (opt.value !== 'default') {
+      const renBtn = document.createElement('button');
+      renBtn.textContent = 'Rename';
+      renBtn.style.cssText = 'font-size:0.7rem;padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:none;color:var(--text-secondary);cursor:pointer;font-family:inherit;';
+      renBtn.onclick = () => renameProject(opt.value, opt.textContent);
+      btns.appendChild(renBtn);
+    }
     if (opt.value !== currentProject && opt.value !== 'default') {
       const delBtn = document.createElement('button');
       delBtn.textContent = 'Delete';
       delBtn.style.cssText = 'font-size:0.7rem;padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:none;color:#e63946;cursor:pointer;font-family:inherit;';
       delBtn.onclick = () => deleteProject(opt.value);
-      div.appendChild(delBtn);
+      btns.appendChild(delBtn);
     }
+    div.appendChild(btns);
     list.appendChild(div);
   }
+}
+
+async function renameProject(slug, currentName) {
+  const newName = prompt('New name:', currentName);
+  if (!newName || !newName.trim() || newName.trim() === currentName) return;
+  try {
+    const resp = await fetch(`/api/projects/${slug}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newName.trim() }),
+    });
+    if (!resp.ok) { const err = await resp.json(); alert(err.error || 'Failed'); return; }
+    await loadProjects();
+    renderProjectSettings();
+  } catch (e) { console.error('Rename project error:', e); }
 }
 
 async function deleteProject(slug) {
