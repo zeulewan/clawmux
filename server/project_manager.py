@@ -45,19 +45,10 @@ class ProjectManager:
                 return data
             except Exception as e:
                 log.error("Failed to load projects.json: %s", e)
-        # Bootstrap: implicit default project with flat layout and original voices
-        # Sorted alphabetically by display name for predictable sidebar positions
-        default_voices = sorted([v[0] for v in VOICES], key=lambda vid: dict(VOICES).get(vid, vid).lower())
+        # Fresh install: no projects — user creates their first one
         return {
-            "projects": {
-                "default": {
-                    "name": "Default",
-                    "created": time.time(),
-                    "flat_layout": True,
-                    "voices": default_voices,
-                }
-            },
-            "active_project": "default",
+            "projects": {},
+            "active_project": None,
         }
 
     def _save(self) -> None:
