@@ -497,6 +497,7 @@ async def wait_websocket(ws: WebSocket, session_id: str):
     await _save_activity(session, session.status_text)
     session.status_text = "Waiting"
     session.set_state(AgentState.IDLE)
+    await _save_activity(session, session.status_text)  # save "Waiting" now so it appears before any user messages
 
     # Tell browser agent is idle (so voice input isn't treated as interjection)
     await send_to_browser({"session_id": session_id, "type": "listening", "state": "idle"})
@@ -552,9 +553,9 @@ async def wait_websocket(ws: WebSocket, session_id: str):
     except Exception as e:
         log.warning("[%s] Wait WS error: %s", session_id, e)
     finally:
-        await _save_activity(session, session.status_text)
         session.status_text = "Processing..."
         session.set_state(AgentState.PROCESSING)
+        await _save_activity(session, session.status_text)
         await send_to_browser({
             "type": "session_status",
             "session_id": session_id,
