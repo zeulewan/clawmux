@@ -194,6 +194,29 @@ if command -v claude &>/dev/null; then
     fi
 fi
 
+# --- Install Claude Code Hooks ---
+
+if command -v claude &>/dev/null; then
+    info "Configuring Claude Code hooks..."
+    python3 -c "
+import json, os
+settings_path = os.path.expanduser('~/.claude/settings.json')
+os.makedirs(os.path.dirname(settings_path), exist_ok=True)
+try:
+    with open(settings_path) as f:
+        d = json.load(f)
+except (FileNotFoundError, json.JSONDecodeError):
+    d = {}
+
+hook = {'hooks': [{'type': 'http', 'url': 'http://localhost:${HUB_PORT}/api/hooks/tool-status', 'timeout': 5, 'headers': {'X-ClawMux-Session': '\$CLAWMUX_SESSION_ID'}, 'allowedEnvVars': ['CLAWMUX_SESSION_ID']}]}
+stop_hook = {'hooks': [{'type': 'command', 'command': '${INSTALL_DIR}/hooks/stop-check-inbox.sh', 'timeout': 10, 'allowedEnvVars': ['CLAWMUX_SESSION_ID', 'CLAWMUX_PORT']}]}
+d['hooks'] = {'PreToolUse': [hook], 'PostToolUse': [hook], 'PostToolUseFailure': [hook], 'PreCompact': [hook], 'Stop': [stop_hook]}
+with open(settings_path, 'w') as f:
+    json.dump(d, f, indent=2)
+print('done')
+" && ok "Claude Code hooks configured" || warn "Could not configure hooks"
+fi
+
 # --- Tailscale HTTPS (optional) ---
 
 if command -v tailscale &>/dev/null; then

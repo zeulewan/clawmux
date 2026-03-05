@@ -70,6 +70,43 @@ def require_session_id() -> str:
 
 
 
+def _install_hooks(repo_dir: str) -> None:
+    """Ensure Claude Code hooks are configured in ~/.claude/settings.json."""
+    settings_path = os.path.join(os.path.expanduser("~"), ".claude", "settings.json")
+    os.makedirs(os.path.dirname(settings_path), exist_ok=True)
+    try:
+        with open(settings_path) as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        data = {}
+
+    hook_entry = {"hooks": [{
+        "type": "http",
+        "url": f"http://localhost:{HUB_PORT}/api/hooks/tool-status",
+        "timeout": 5,
+        "headers": {"X-ClawMux-Session": "$CLAWMUX_SESSION_ID"},
+        "allowedEnvVars": ["CLAWMUX_SESSION_ID"],
+    }]}
+    stop_entry = {"hooks": [{
+        "type": "command",
+        "command": os.path.join(repo_dir, "hooks", "stop-check-inbox.sh"),
+        "timeout": 10,
+        "allowedEnvVars": ["CLAWMUX_SESSION_ID", "CLAWMUX_PORT"],
+    }]}
+
+    data["hooks"] = {
+        "PreToolUse": [hook_entry],
+        "PostToolUse": [hook_entry],
+        "PostToolUseFailure": [hook_entry],
+        "PreCompact": [hook_entry],
+        "Stop": [stop_entry],
+    }
+
+    with open(settings_path, "w") as f:
+        json.dump(data, f, indent=2)
+    print("Hooks configured.")
+
+
 def _rewrite_shebang(filepath: str, python_path: str) -> None:
     """Rewrite the shebang line of a file (cross-platform, no sed)."""
     import tempfile
@@ -559,6 +596,9 @@ def cmd_update(args):
             print("CLI updated.")
         else:
             print("Warning: could not update CLI (needs sudo)")
+
+    # Ensure Claude Code hooks are configured
+    _install_hooks(repo_dir)
 
     # Check if hub is running
     hub_running = False
