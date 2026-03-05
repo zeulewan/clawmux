@@ -308,6 +308,8 @@ async def lifespan(app: FastAPI):
         hub_config.KOKORO_URL = saved["tts_url"].rstrip("/")
     if saved.get("stt_url"):
         hub_config.WHISPER_URL = saved["stt_url"].rstrip("/")
+    if saved.get("quality_mode") in ("high", "medium", "low"):
+        hub_config.QUALITY_MODE = saved["quality_mode"]
     log.info("Model: %s, Mode: %s, TTS: %s, STT: %s",
              hub_config.CLAUDE_MODEL, hub_config.DEPLOYMENT_MODE,
              hub_config.KOKORO_URL, hub_config.WHISPER_URL)
@@ -318,6 +320,10 @@ async def lifespan(app: FastAPI):
     compaction_task = asyncio.create_task(compaction_monitor_loop())
     context_task = asyncio.create_task(context_poll_loop())
     usage_task = asyncio.create_task(usage_poll_loop())
+    # Load saved Whisper model quality on startup
+    startup_model = hub_config.QUALITY_MODEL_MAP.get(hub_config.QUALITY_MODE)
+    if startup_model:
+        asyncio.create_task(_load_whisper_model(startup_model))
     try:
         yield
     finally:
@@ -1518,6 +1524,26 @@ async def _inbox_write_and_notify(session, msg_dict: dict) -> dict:
 
 # /api/transcribe, /api/tts, /api/tts-captioned → voice_router
 
+async def _load_whisper_model(model_name: str) -> None:
+    """Dynamically load a Whisper model via the server's /load endpoint."""
+    model_path = os.path.join(hub_config.WHISPER_MODEL_DIR, f"ggml-{model_name}.bin")
+    if not os.path.isfile(model_path):
+        log.warning("Whisper model file not found: %s", model_path)
+        return
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                f"{hub_config.WHISPER_URL}/load",
+                data={"model": model_path},
+            )
+            if resp.status_code == 200:
+                log.info("Whisper model loaded: %s", model_name)
+            else:
+                log.error("Whisper /load failed (%d): %s", resp.status_code, resp.text)
+    except Exception as e:
+        log.error("Whisper model load error: %s", e)
+
+
 @app.get("/api/settings")
 async def get_settings():
     return JSONResponse(_load_settings())
@@ -1542,8 +1568,10 @@ async def update_settings(request: Request):
         log.info("STT URL changed to: %s", hub_config.WHISPER_URL)
     if "quality_mode" in data and data["quality_mode"] in ("high", "medium", "low"):
         hub_config.QUALITY_MODE = data["quality_mode"]
-        log.info("Quality mode changed to: %s (model: %s)", data["quality_mode"],
-                 hub_config.QUALITY_MODEL_MAP.get(data["quality_mode"]))
+        model_name = hub_config.QUALITY_MODEL_MAP.get(data["quality_mode"], "base")
+        log.info("Quality mode changed to: %s (model: %s)", data["quality_mode"], model_name)
+        # Dynamically load the Whisper model via /load endpoint
+        asyncio.create_task(_load_whisper_model(model_name))
     _save_settings(settings)
     log.info("Settings updated: %s", data)
     return JSONResponse(settings)

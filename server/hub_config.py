@@ -17,13 +17,17 @@ KOKORO_URL = "http://127.0.0.1:8880"
 # "remote" (thin client — hub, TTS, STT all remote)
 DEPLOYMENT_MODE = "local"
 
-# Quality mode maps to Whisper model sizes: "high" = large-v3, "medium" = medium, "low" = tiny
+# Quality mode maps to Whisper model sizes: "high" = large-v3, "medium" = medium, "low" = base
 QUALITY_MODE = "high"
 QUALITY_MODEL_MAP = {
     "high": "large-v3",
     "medium": "medium",
-    "low": "tiny",
+    "low": "base",
 }
+
+# Whisper model file paths (for dynamic loading via /load endpoint)
+# Resolved at runtime based on common install locations
+WHISPER_MODEL_DIR = os.path.expanduser("~/.voicemode/services/whisper/models")
 
 # Default project voices (9 agents)
 VOICES = [
