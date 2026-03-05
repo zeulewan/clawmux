@@ -1248,6 +1248,8 @@ body {
     <option value="sonnet">Sonnet</option>
     <option value="haiku">Haiku</option>
   </select>
+  <span id="model-label" style="display:none; font-size:0.6rem; color:var(--text-tertiary); cursor:pointer; position:relative;" onclick="toggleModelPopup(event)"></span>
+  <div id="model-popup" style="display:none; position:absolute; top:100%; right:auto; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.3); z-index:200; min-width:100px; overflow:hidden;"></div>
   <div style="flex:1;"></div>
   <div id="header-project-status" style="font-size:0.65rem; color:var(--text-tertiary); text-align:right; max-width:200px; line-height:1.4;"></div>
   <div id="usage-bar" style="display:none;align-items:center;gap:8px;padding:4px 12px;background:rgba(128,128,128,0.08);border-radius:12px;font-size:0.7rem;color:var(--text-secondary);cursor:pointer;" onclick="toggleUsageDetail()" title="Claude usage">
