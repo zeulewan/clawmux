@@ -166,16 +166,18 @@ esac
 
 # --- Install CLI ---
 
-CLI_SRC="$INSTALL_DIR/cli/clawmux"
+CLI_SRC="$INSTALL_DIR/clawmux"
 CLI_DEST="/usr/local/bin/clawmux"
 
 if [ -f "$CLI_SRC" ]; then
     info "Installing clawmux CLI..."
     sudo cp "$CLI_SRC" "$CLI_DEST" 2>/dev/null || {
         warn "Could not install to $CLI_DEST (no sudo). Adding to PATH instead."
-        export PATH="$INSTALL_DIR/cli:$PATH"
+        export PATH="$INSTALL_DIR:$PATH"
     }
     sudo chmod +x "$CLI_DEST" 2>/dev/null || true
+    # Rewrite shebang to use project venv python
+    sudo sed -i'' -e "1s|.*|#!${INSTALL_DIR}/.venv/bin/python3|" "$CLI_DEST" 2>/dev/null || true
     ok "clawmux CLI installed"
 else
     warn "CLI not found at $CLI_SRC — skipping CLI install"

@@ -21,7 +21,7 @@ Install ClawMux — an open-source voice interface for managing multiple Claude 
    If no GPU, skip this — I'll use Split mode with a remote GPU server later.
 
 4. Install the CLI:
-   sudo cp cli/clawmux /usr/local/bin/clawmux && sudo chmod +x /usr/local/bin/clawmux
+   sudo cp clawmux /usr/local/bin/clawmux && sudo chmod +x /usr/local/bin/clawmux
 
 5. Start the hub:
    cd ~/GIT/clawmux && ./start-hub.sh
@@ -47,7 +47,7 @@ Install ClawMux — an open-source voice interface for managing multiple Claude 
    cd ~/GIT/clawmux && python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
 
 3. Install the CLI:
-   sudo cp cli/clawmux /usr/local/bin/clawmux && sudo chmod +x /usr/local/bin/clawmux
+   sudo cp clawmux /usr/local/bin/clawmux && sudo chmod +x /usr/local/bin/clawmux
 
 4. Start the hub:
    cd ~/GIT/clawmux && ./start-hub.sh
@@ -80,7 +80,7 @@ Install ClawMux — an open-source voice interface for managing multiple Claude 
    Install whisper.cpp for STT: brew install whisper-cpp
 
 4. Install the CLI:
-   sudo cp cli/clawmux /usr/local/bin/clawmux && sudo chmod +x /usr/local/bin/clawmux
+   sudo cp clawmux /usr/local/bin/clawmux && sudo chmod +x /usr/local/bin/clawmux
 
 5. Start the hub:
    cd ~/GIT/clawmux && ./start-hub.sh

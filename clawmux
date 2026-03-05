@@ -1,4 +1,4 @@
-#!/home/zeul/GIT/clawmux/.venv/bin/python3
+#!/usr/bin/env python3
 """ClawMux CLI — voice and inter-agent messaging.
 
 Simple shell commands that any agent runtime can call.
