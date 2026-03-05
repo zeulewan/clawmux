@@ -426,7 +426,13 @@ async def handle_browser_message(data: dict) -> None:
         session.playback_done.set()
 
     elif msg_type == "audio":
-        audio_bytes = base64.b64decode(data["data"])
+        payload = data.get("data", "")
+        if not payload:
+            # Empty audio (e.g. cancel recording) — skip transcription
+            log.info("[%s] Empty audio from browser, skipping", session_id)
+            await send_to_browser({"session_id": session_id, "type": "done", "processing": False})
+            return
+        audio_bytes = base64.b64decode(payload)
         log.info("[%s] Audio from browser: %d bytes", session_id, len(audio_bytes))
         # Transcribe and deliver via inbox (CLI mode — no converse loop)
         await send_to_browser({"session_id": session_id, "type": "status", "text": "Transcribing..."})
