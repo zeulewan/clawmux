@@ -22,6 +22,34 @@ HUB_PORT = int(os.environ.get("CLAWMUX_PORT", "3460"))
 HUB_BASE = f"http://127.0.0.1:{HUB_PORT}"
 SESSION_ID = os.environ.get("CLAWMUX_SESSION_ID", "")
 
+
+def _find_repo_dir() -> str:
+    """Find the ClawMux repo directory reliably.
+
+    Strategy: use sys.executable (the venv python from the shebang) to derive
+    the repo root.  Falls back to __file__ location, then common paths.
+    """
+    # 1. sys.executable points to .venv/bin/python inside the repo
+    exe = os.path.realpath(sys.executable)
+    venv_bin = os.path.dirname(exe)  # .../repo/.venv/bin
+    if os.path.basename(os.path.dirname(venv_bin)) == ".venv":
+        candidate = os.path.dirname(os.path.dirname(venv_bin))
+        if os.path.isdir(os.path.join(candidate, "server")):
+            return candidate
+
+    # 2. __file__ — works when running from repo directly
+    script_dir = os.path.dirname(os.path.realpath(__file__))
+    if os.path.isdir(os.path.join(script_dir, "server")):
+        return script_dir
+
+    # 3. Common install paths
+    for candidate in [os.path.expanduser("~/GIT/clawmux"), os.path.expanduser("~/clawmux")]:
+        if os.path.isdir(os.path.join(candidate, "server")):
+            return candidate
+
+    die("Cannot find ClawMux repo directory")
+    return ""  # unreachable
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -40,6 +68,24 @@ def require_session_id() -> str:
         die("CLAWMUX_SESSION_ID not set")
     return SESSION_ID
 
+
+
+def _rewrite_shebang(filepath: str, python_path: str) -> None:
+    """Rewrite the shebang line of a file (cross-platform, no sed)."""
+    import tempfile
+    try:
+        with open(filepath, "r") as f:
+            lines = f.readlines()
+        if lines:
+            lines[0] = f"#!{python_path}\n"
+        tmp = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".tmp")
+        tmp.writelines(lines)
+        tmp.close()
+        subprocess.run(["sudo", "cp", tmp.name, filepath], capture_output=True)
+        subprocess.run(["sudo", "chmod", "+x", filepath], capture_output=True)
+        os.unlink(tmp.name)
+    except Exception as e:
+        print(f"Warning: could not rewrite shebang: {e}")
 
 
 def http_get(path: str) -> dict:
@@ -262,7 +308,7 @@ def cmd_start(args):
     except SystemExit:
         pass  # Not running, proceed
 
-    hub_dir = os.path.dirname(os.path.realpath(__file__))
+    hub_dir = _find_repo_dir()
     venv_python = os.path.join(hub_dir, ".venv", "bin", "python")
     hub_py = os.path.join(hub_dir, "server", "hub.py")
 
@@ -466,19 +512,7 @@ def cmd_kill_all(args):
 
 def cmd_update(args):
     """Pull latest code, reinstall deps, reinstall CLI, reload hub."""
-    # Find repo dir — this script lives in repo root or /usr/local/bin
-    script_path = os.path.realpath(__file__)
-    if script_path.startswith("/usr/local/bin"):
-        # Installed CLI — find repo via common locations
-        for candidate in [os.path.expanduser("~/GIT/clawmux"), os.path.expanduser("~/clawmux")]:
-            if os.path.isdir(os.path.join(candidate, "server")):
-                repo_dir = candidate
-                break
-        else:
-            die("Cannot find ClawMux repo. Expected ~/GIT/clawmux or ~/clawmux")
-            return
-    else:
-        repo_dir = os.path.dirname(script_path)
+    repo_dir = _find_repo_dir()
 
     print(f"Updating ClawMux in {repo_dir}...")
 
@@ -507,13 +541,58 @@ def cmd_update(args):
             subprocess.run(["sudo", "chmod", "+x", cli_dest], capture_output=True)
             # Rewrite shebang to venv python
             if os.path.exists(venv_python):
-                subprocess.run(["sudo", "sed", "-i", "", f"1s|.*|#!{venv_python}|", cli_dest],
-                              capture_output=True)
+                _rewrite_shebang(cli_dest, venv_python)
             print("CLI updated.")
         else:
             print("Warning: could not update CLI (needs sudo)")
 
-    print("Update complete. Run 'clawmux reload' if the hub is running.")
+    # Stop hub and kill agent tmux sessions
+    print("Stopping hub and agents...")
+    _shutdown_hub("full")
+    time.sleep(2)
+    # Kill agent tmux sessions
+    result = subprocess.run(["tmux", "list-sessions", "-F", "#{session_name}"],
+                           capture_output=True, text=True)
+    if result.returncode == 0:
+        for name in result.stdout.strip().splitlines():
+            if name.startswith("voice-") or name.startswith("clawmux"):
+                subprocess.run(["tmux", "kill-session", "-t", name], capture_output=True)
+
+    # Wait for hub process to die
+    for _ in range(10):
+        check = subprocess.run(["pgrep", "-f", "python.*hub\\.py"],
+                               capture_output=True, text=True)
+        if not check.stdout.strip():
+            break
+        time.sleep(0.5)
+
+    # Restart hub
+    venv_python = os.path.join(repo_dir, ".venv", "bin", "python")
+    hub_py = os.path.join(repo_dir, "server", "hub.py")
+    if os.path.exists(venv_python) and os.path.exists(hub_py):
+        print("Starting hub...")
+        log_file = "/tmp/clawmux.log"
+        with open(log_file, "a") as log:
+            subprocess.Popen(
+                [venv_python, hub_py],
+                cwd=repo_dir,
+                stdout=log,
+                stderr=log,
+                start_new_session=True,
+            )
+        # Wait for hub to come up
+        for i in range(15):
+            time.sleep(1)
+            try:
+                http_get("/api/sessions")
+                print("Hub restarted.")
+                break
+            except SystemExit:
+                continue
+        else:
+            print("Warning: hub did not restart within 15 seconds — check /tmp/clawmux.log")
+
+    print("Update complete.")
 
 
 def cmd_uninstall(args):
@@ -555,15 +634,10 @@ def cmd_uninstall(args):
         print(f"Data removed ({data_dir}).")
 
     # Find and remove repo
-    script_path = os.path.realpath(__file__)
-    if not script_path.startswith("/usr/local/bin"):
-        repo_dir = os.path.dirname(script_path)
-    else:
+    try:
+        repo_dir = _find_repo_dir()
+    except SystemExit:
         repo_dir = None
-        for candidate in [os.path.expanduser("~/GIT/clawmux"), os.path.expanduser("~/clawmux")]:
-            if os.path.isdir(os.path.join(candidate, "server")):
-                repo_dir = candidate
-                break
 
     if repo_dir and os.path.isdir(repo_dir):
         import shutil
@@ -624,7 +698,7 @@ def cmd_reload(args):
             break
 
     # Start it back up
-    hub_dir = os.path.dirname(os.path.realpath(__file__))
+    hub_dir = _find_repo_dir()
     venv_python = os.path.join(hub_dir, ".venv", "bin", "python")
     hub_py = os.path.join(hub_dir, "server", "hub.py")
     log_file = "/tmp/clawmux.log"
