@@ -438,7 +438,10 @@ body {
 }
 .msg .msg-action-btn:hover { background: rgba(128,128,128,0.4); }
 .msg .msg-ack-btn { font-size: 0.7rem; padding: 1px 4px; }
+.msg .msg-ack-btn.acked { opacity: 0.4; pointer-events: none; }
 .msg .msg-ack-btn:active { opacity: 0.6; }
+/* Mirror action buttons: bottom-left on user messages */
+.msg.user .msg-actions, .msg.interjection .msg-actions { right: auto; left: 6px; }
 .msg .msg-action-btn.playing { color: var(--green); }
 #chat-area { overflow-x: hidden; }
 @keyframes msgAppear {
@@ -487,6 +490,7 @@ body {
 .thread-reply { margin-left: 24px; padding-left: 12px; border-left: 2px solid var(--text-tertiary, #555); opacity: 0.85; }
 .thread-reply .msg.system { font-size: 0.72rem; }
 .thread-ack-badge { position: absolute; bottom: 2px; right: 8px; font-size: 0.75rem; opacity: 0.7; pointer-events: none; }
+.msg.user .thread-ack-badge { right: auto; left: 8px; }
 .thread-toggle {
   align-self: flex-start; background: none; border: 1px solid var(--text-tertiary, #555);
   border-radius: 10px; color: var(--text-tertiary, #999); font-size: 0.65rem;

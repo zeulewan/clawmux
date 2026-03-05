@@ -156,6 +156,8 @@ function createMsgEl(role, text, voiceColorHex, voiceId, msgObj = null) {
       ackBtn.onclick = (e) => {
         e.stopPropagation();
         _sendUserAck(msgObj.id);
+        ackBtn.classList.add('acked');
+        ackBtn.textContent = '\u2705';
       };
       actions.appendChild(ackBtn);
     }
