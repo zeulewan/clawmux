@@ -485,6 +485,12 @@ async def wait_websocket(ws: WebSocket, session_id: str):
 
     # Tell browser agent is idle (so voice input isn't treated as interjection)
     await send_to_browser({"session_id": session_id, "type": "listening", "state": "idle"})
+    await send_to_browser({
+        "type": "session_status",
+        "session_id": session_id,
+        "state": session.state.value,
+        "status_text": session.status_text,
+    })
 
     # Register this WS for push notifications
     if not hasattr(session, "_wait_queue"):
@@ -531,7 +537,14 @@ async def wait_websocket(ws: WebSocket, session_id: str):
     except Exception as e:
         log.warning("[%s] Wait WS error: %s", session_id, e)
     finally:
+        session.status_text = ""
         session.set_state(AgentState.PROCESSING)
+        await send_to_browser({
+            "type": "session_status",
+            "session_id": session_id,
+            "state": session.state.value,
+            "status_text": session.status_text,
+        })
         if hasattr(session, "_wait_queue"):
             del session._wait_queue
 
