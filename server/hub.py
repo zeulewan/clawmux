@@ -706,6 +706,9 @@ async def hook_tool_status(request: Request):
     response_json = {}
 
     if event in ("PostToolUse", "PostToolUseFailure"):
+        # Skip status_text updates while IDLE — wait WS is the sole authority
+        if session.state == AgentState.IDLE:
+            return JSONResponse(response_json)
         # Save tool name as activity before resetting
         await _save_activity(session, session.status_text)
         session.status_text = "Processing..."
@@ -730,6 +733,9 @@ async def hook_tool_status(request: Request):
         # State does NOT change here — PROCESSING → IDLE only when wait WS connects
         pass
     elif event == "PreToolUse":
+        # Skip status_text updates while IDLE — wait WS is the sole authority
+        if session.state == AgentState.IDLE:
+            return JSONResponse(response_json)
         tool_name = data.get("tool_name", "")
         tool_input = data.get("tool_input", {})
         session.status_text = _tool_status_text(tool_name, tool_input)
