@@ -1090,7 +1090,9 @@ body {
 
   /* Chat messages: wider on mobile, disable text selection for long-press menu */
   .msg { max-width: 90%; }
-  .msg { touch-action: pan-y; }
+  .msg, .msg * { touch-action: pan-y; }
+  #sidebar, #sidebar * { touch-action: manipulation; }
+  #controls, #controls * { touch-action: manipulation; }
   /* Karaoke words: disable hover effect on mobile but allow tap for playback */
   .karaoke-word { cursor: default; }
 
@@ -1730,9 +1732,10 @@ async function addSession(data, autoSwitch = false) {
     messages: serverMessages,
     statusText: data.status_text || (isReady ? 'Ready' : 'Starting...'),
     toolStatusText: data.status_text || '',
-    sidebarState: (data.unread_count > 0) ? 'speaking' : (data.in_wait ? 'idle' : (isReady ? 'idle' : 'starting')),
+    serverState: data.state || (data.in_wait ? 'idle' : (isReady ? 'idle' : 'starting')),
+    sidebarState: (data.unread_count > 0) ? 'speaking' : (data.state === 'idle' || data.in_wait ? 'idle' : (data.state === 'processing' || data.state === 'compacting' ? 'working' : (isReady ? 'idle' : 'starting'))),
     unreadCount: data.unread_count || 0,
-    compacting: data.compacting ?? false,
+    compacting: (data.state === 'compacting') || (data.compacting ?? false),
   });
   // Sync saved speed to server so first TTS uses the correct speed
   if (_savedSpd && _initSpeed !== (data.speed || 1.0)) {
@@ -1753,22 +1756,19 @@ async function addSession(data, autoSwitch = false) {
     addMessage(data.session_id, 'system', 'Waiting for Claude...');
   }
 
-  // Restore session state from server
-  if (data.in_wait) {
-    // Agent is in wait mode — idle and ready for input
+  // Restore session state from server's canonical state field
+  const serverState = data.state || (data.in_wait ? 'idle' : (data.processing ? 'processing' : (isReady ? 'idle' : 'starting')));
+  if (serverState === 'idle') {
     const sess = sessions.get(data.session_id);
-    if (sess) {
-      sess.sessionState = 'idle';
-      sess.sidebarState = 'idle';
-    }
-  } else if (data.processing) {
+    if (sess) { sess.sessionState = 'idle'; sess.sidebarState = 'idle'; }
+  } else if (serverState === 'processing' || serverState === 'compacting') {
     const sess = sessions.get(data.session_id);
-    if (sess) sess.sidebarState = 'working';
+    if (sess) { sess.sessionState = 'processing'; sess.sidebarState = 'working'; }
     showThinking(data.session_id);
     startThinkingSound(data.session_id);
-  } else if (isReady) {
+  } else if (serverState === 'starting') {
     const sess = sessions.get(data.session_id);
-    if (sess && !sess.sessionState) sess.sessionState = 'idle';
+    if (sess && !sess.sessionState) { sess.sessionState = 'idle'; sess.sidebarState = 'starting'; }
   }
 }
 
