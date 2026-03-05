@@ -257,17 +257,9 @@ function handleMessage(data) {
     if (s) {
       // Update status_text (last tool call description)
       if ('status_text' in data) {
-        const skipActivity = new Set(['Processing...', 'Starting session...', '']);
-        if (data.status_text && data.status_text !== s.toolStatusText) {
-          // Previous tool finished — add it as an activity message in the timeline
-          if (s.toolStatusText && !skipActivity.has(s.toolStatusText)) {
-            addMessage(data.session_id, 'activity', s.toolStatusText);
-          }
-          s.toolStatusText = data.status_text;
-        } else if (data.status_text) {
+        if (data.status_text) {
           s.toolStatusText = data.status_text;
         }
-        // Keep previous toolStatusText between tools (avoid flash)
       }
       // Use canonical state field if present
       const serverState = data.state;
@@ -275,11 +267,6 @@ function handleMessage(data) {
         s.serverState = serverState;
         s.compacting = (serverState === 'compacting');
         if (serverState === 'idle') {
-          // Add last tool status as activity message before transitioning
-          const skipActivity = new Set(['Processing...', '']);
-          if (s.toolStatusText && !skipActivity.has(s.toolStatusText)) {
-            addMessage(data.session_id, 'activity', s.toolStatusText);
-          }
           setSessionState(data.session_id, 'idle');
         } else if (serverState === 'processing' || serverState === 'compacting') {
           setSessionState(data.session_id, 'processing');
@@ -366,6 +353,10 @@ function handleMessage(data) {
   const s = sessions.get(session_id);
   if (!s) return;
 
+  if (type === 'activity_text') {
+    addMessage(session_id, 'activity', data.text);
+    return;
+  }
   if (type === 'assistant_text') {
     if (data.fire_and_forget) {
       // Fire-and-forget speak: just add message to chat, don't change state
