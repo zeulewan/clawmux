@@ -808,12 +808,19 @@ function renderActivityLog(sessionId) {
   }
 }
 
-// Clear activity log (called when agent speaks — natural break point)
+// Clear activity log DOM elements and data
 function clearActivityLog(sessionId) {
   const s = sessions.get(sessionId);
   if (s) s.activityLog = [];
   if (sessionId === activeSessionId) {
     chatArea.querySelectorAll('.activity-line').forEach(el => el.remove());
+  }
+}
+
+// Cap activity log to last N entries to prevent unbounded growth
+function _capActivityLog(s) {
+  if (s.activityLog && s.activityLog.length > 30) {
+    s.activityLog = s.activityLog.slice(-30);
   }
 }
 
@@ -869,8 +876,6 @@ function setSessionState(sessionId, newState) {
     hideStatusIndicator(sessionId);
     stopThinkingSound();
     stopThinkingVAD();
-    // Clear activity log when agent speaks — natural break point
-    clearActivityLog(sessionId);
     // Sidebar reflects server state only — don't set 'speaking' on sidebar
     if (sessionId === activeSessionId) {
       setStatus('Speaking...', sessionId);

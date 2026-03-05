@@ -353,7 +353,11 @@ function addMessage(sessionId, role, text, opts = {}) {
       renderChat();
     } else {
       const wasNearBottom = chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150;
-      chatArea.appendChild(createMsgEl(role, text, voiceColor(s.voice), s.voice, msgObj));
+      const msgEl = createMsgEl(role, text, voiceColor(s.voice), s.voice, msgObj);
+      // Insert before activity lines / status indicator so they stay at the bottom
+      const firstOverlay = chatArea.querySelector('.activity-line, [id^="status-indicator-"]');
+      if (firstOverlay) chatArea.insertBefore(msgEl, firstOverlay);
+      else chatArea.appendChild(msgEl);
       if (wasNearBottom) chatArea.scrollTop = chatArea.scrollHeight;
     }
   }
