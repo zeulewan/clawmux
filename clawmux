@@ -872,12 +872,12 @@ def cmd_monitor(args):
 
     # Kill existing monitor session if --restart
     if args.restart:
-        subprocess.run(["tmux", "kill-session", "-t", MONITOR_SESSION],
+        subprocess.run(["tmux", "kill-session", "-t", f"={MONITOR_SESSION}"],
                        capture_output=True)
 
-    # Check if monitor session already exists
+    # Check if monitor session already exists (= prefix forces exact match)
     check = subprocess.run(
-        ["tmux", "has-session", "-t", MONITOR_SESSION],
+        ["tmux", "has-session", "-t", f"={MONITOR_SESSION}"],
         capture_output=True,
     )
     if check.returncode == 0:
@@ -885,7 +885,7 @@ def cmd_monitor(args):
             print(f"Monitor session '{MONITOR_SESSION}' already exists.")
         else:
             print(f"Attaching to existing monitor session...")
-            os.execlp("tmux", "tmux", "attach", "-t", MONITOR_SESSION)
+            os.execlp("tmux", "tmux", "attach", "-t", f"={MONITOR_SESSION}")
         return
 
     # Get active sessions from hub, filtered by project

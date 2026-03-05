@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from hub_config import (
+    AGENT_COLORS,
     CLAUDE_BASE_COMMAND,
     HEALTH_CHECK_INTERVAL_SECONDS,
     HUB_PORT,
@@ -576,6 +577,9 @@ class SessionManager:
                 f"tmux new-session -d -s {tmux_name} -x 200 -y 50 -c {work_dir}"
             )
 
+            # Apply agent-colored status bar
+            await self._apply_agent_status_bar(tmux_name, voice_name, voice_id)
+
             # Unset CLAUDECODE so nested Claude Code sessions don't get blocked
             # Export session ID so clawmux CLI can identify this session
             await self._run(
@@ -698,6 +702,10 @@ class SessionManager:
         await self._run(
             f"tmux new-session -d -s {tmux_name} -x 200 -y 50 -c {work_dir}"
         )
+
+        # Re-apply agent-colored status bar
+        await self._apply_agent_status_bar(tmux_name, session.label, session.voice)
+
         await self._run(
             f'tmux send-keys -t {tmux_name} "unset CLAUDECODE && export CLAWMUX_SESSION_ID={session_id} && export CLAWMUX_PORT={HUB_PORT}" Enter'
         )
@@ -909,6 +917,23 @@ class SessionManager:
             stderr=asyncio.subprocess.PIPE,
         )
         await proc.communicate()
+
+    async def _apply_agent_status_bar(self, tmux_session: str, label: str, voice_id: str) -> None:
+        """Set a colored status bar on an agent's tmux session."""
+        color = AGENT_COLORS.get(voice_id)
+        if not color:
+            return
+        for opt, val in [
+            ("status-style", f"fg=#ffffff,bg={color}"),
+            ("status-left", f" {label} "),
+            ("status-left-style", f"fg=#ffffff,bg={color},bold"),
+            ("status-left-length", "20"),
+            ("status-right", ""),
+            ("status-right-length", "0"),
+            ("window-status-current-format", ""),
+            ("window-status-format", ""),
+        ]:
+            await self._run(f"tmux set-option -t {tmux_session} {opt} '{val}'")
 
     async def _run(self, cmd: str) -> str:
         proc = await asyncio.create_subprocess_shell(

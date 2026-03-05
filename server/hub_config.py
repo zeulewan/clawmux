@@ -78,3 +78,37 @@ VOICE_POOL = [
     ("bf_lily", "Lily"),
     ("bm_lewis", "Lewis"),
 ]
+
+# Tmux status bar colors per voice (used for agent session styling)
+AGENT_COLORS = {
+    # Project 1 (default)
+    "af_sky": "colour211",     # pink
+    "af_alloy": "colour75",    # blue
+    "af_sarah": "colour180",   # warm gold
+    "am_adam": "colour78",     # green
+    "am_echo": "colour134",    # purple
+    "am_onyx": "colour245",    # grey
+    "bm_fable": "colour220",   # yellow
+    "af_nova": "colour213",    # pink
+    "am_eric": "colour39",     # cyan
+    # Project 2
+    "af_bella": "colour171",   # lavender
+    "af_jessica": "colour209", # coral
+    "af_heart": "colour204",   # rose
+    "am_michael": "colour70",  # forest green
+    "am_liam": "colour67",     # steel blue
+    "am_fenrir": "colour130",  # brown
+    "bf_emma": "colour174",    # salmon
+    "bm_george": "colour109",  # teal
+    "bm_daniel": "colour137",  # tan
+    # Project 3
+    "af_aoede": "colour183",   # light purple
+    "af_jadzia": "colour117",  # light blue
+    "af_kore": "colour168",    # magenta
+    "af_nicole": "colour216",  # peach
+    "af_river": "colour73",    # aqua
+    "am_puck": "colour142",    # olive
+    "bf_alice": "colour182",   # mauve
+    "bf_lily": "colour223",    # cream
+    "bm_lewis": "colour101",   # khaki
+}
