@@ -1389,7 +1389,7 @@ body {
       <div class="settings-inline" style="padding:12px 16px;">
         <div class="toggle-info"><span class="toggle-name">Mode</span></div>
         <select id="deploy-mode-select" onchange="onDeployModeChange(this.value)" style="width:auto; padding:4px 8px; font-size:0.8rem;">
-          <option value="together">Together</option>
+          <option value="local">Together</option>
           <option value="split">Split</option>
         </select>
       </div>
@@ -1882,8 +1882,8 @@ async function loadProjects() {
     updateProjectLabel();
     renderProjectSettings();
   } catch (e) {
-    // Projects API not available — hide label
-    document.getElementById('project-label').style.display = 'none';
+    // Projects API not available — still show label as fallback
+    updateProjectLabel();
   }
 }
 
@@ -1959,10 +1959,12 @@ function updateProjectLabel() {
   const sel = document.getElementById('project-selector');
   if (!label || !sel) return;
   const opt = sel.options[sel.selectedIndex];
-  if (opt) {
-    label.textContent = (opt.textContent || 'Default') + ' ▾';
-    label.style.display = 'inline';
+  if (opt && currentProject !== 'default') {
+    label.textContent = (opt.textContent || 'Project') + ' \u25BE';
+  } else {
+    label.textContent = 'No Project \u25BE';
   }
+  label.style.display = 'inline';
 }
 
 function toggleProjectPopup(e) {
@@ -1976,10 +1978,24 @@ function toggleProjectPopup(e) {
     const isCurrent = opt.value === currentProject;
     const div = document.createElement('div');
     div.style.cssText = 'padding:8px 16px;cursor:pointer;' + (isCurrent ? 'font-weight:700;color:#4a9eff;' : 'color:#e0e0e0;');
-    div.textContent = opt.textContent + (isCurrent ? ' ✓' : '');
+    div.textContent = opt.textContent + (isCurrent ? ' \u2713' : '');
     div.onmousedown = div.ontouchstart = () => { popup.style.display = 'none'; switchProject(opt.value); };
     popup.appendChild(div);
   }
+  // "+ New Project" option
+  const sep = document.createElement('div');
+  sep.style.cssText = 'border-top:1px solid #333;margin:4px 0;';
+  popup.appendChild(sep);
+  const newDiv = document.createElement('div');
+  newDiv.style.cssText = 'padding:8px 16px;cursor:pointer;color:#4a9eff;font-size:0.9em;';
+  newDiv.textContent = '+ New Project';
+  newDiv.onmousedown = newDiv.ontouchstart = (ev) => {
+    ev.stopPropagation();
+    popup.style.display = 'none';
+    _promptNewProject();
+  };
+  popup.appendChild(newDiv);
+
   const label = document.getElementById('project-label');
   const rect = label.getBoundingClientRect();
   popup.style.top = rect.bottom + 4 + 'px';
@@ -1987,6 +2003,23 @@ function toggleProjectPopup(e) {
   popup.style.display = 'block';
   const close = () => { popup.style.display = 'none'; document.removeEventListener('click', close); };
   setTimeout(() => document.addEventListener('click', close), 0);
+}
+
+async function _promptNewProject() {
+  const name = prompt('Project name:');
+  if (!name || !name.trim()) return;
+  const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  if (!slug) return;
+  try {
+    const resp = await fetch('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug, name: name.trim() }),
+    });
+    if (!resp.ok) { const err = await resp.json(); alert(err.error || 'Failed'); return; }
+    await loadProjects();
+    switchProject(slug);
+  } catch (e) { console.error('Create project error:', e); }
 }
 
 async function loadSettings() {

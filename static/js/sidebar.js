@@ -356,16 +356,41 @@ function _updateSidebarCard(card, voiceId, state) {
 
 function renderSidebar() {
   const list = document.getElementById('sidebar-list');
-  // Use project-scoped voice list if available and non-empty, otherwise show all
-  // Voice ordering: use persisted project order (stable across restarts),
-  // falling back to alphabetical-by-display-name for predictable default positions
-  const allVoices = currentProjectVoices && currentProjectVoices.length > 0
-    ? currentProjectVoices.map(v => [v, VOICE_NAMES[v] || v.replace(/^[a-z]{2}_/, '').replace(/^./, c => c.toUpperCase())])
-    : Object.entries(VOICE_NAMES).sort((a, b) => a[1].localeCompare(b[1]));
+
+  // When no project is selected (default only, no voices configured),
+  // show only agents that have active sessions — not all 27 voices
+  const hasProject = currentProject !== 'default' || (currentProjectVoices && currentProjectVoices.length > 0);
+
+  let allVoices;
+  if (hasProject && currentProjectVoices && currentProjectVoices.length > 0) {
+    allVoices = currentProjectVoices.map(v => [v, VOICE_NAMES[v] || v.replace(/^[a-z]{2}_/, '').replace(/^./, c => c.toUpperCase())]);
+  } else if (!hasProject) {
+    // No project — show only voices that have active sessions
+    const activeVoices = new Set();
+    for (const [, s] of sessions) {
+      if (s.voice) activeVoices.add(s.voice);
+    }
+    if (activeVoices.size === 0) {
+      // No sessions at all — show welcome state
+      list.innerHTML = '';
+      const welcome = document.createElement('div');
+      welcome.style.cssText = 'padding:24px 16px;text-align:center;color:var(--text-secondary,#888);font-size:0.9em;';
+      welcome.innerHTML = '<div style="font-size:1.3em;margin-bottom:8px;">Welcome to ClawMux</div>'
+        + '<div style="margin-bottom:16px;">Create a project to get started</div>'
+        + '<button style="padding:8px 20px;border-radius:8px;border:1px solid #4a9eff;background:none;color:#4a9eff;cursor:pointer;font-family:inherit;font-size:0.95em;" onclick="_promptNewProject()">+ New Project</button>';
+      list.appendChild(welcome);
+      return;
+    }
+    allVoices = [...activeVoices].map(v => [v, VOICE_NAMES[v] || v.replace(/^[a-z]{2}_/, '').replace(/^./, c => c.toUpperCase())]);
+    allVoices.sort((a, b) => a[1].localeCompare(b[1]));
+  } else {
+    allVoices = Object.entries(VOICE_NAMES).sort((a, b) => a[1].localeCompare(b[1]));
+  }
+
   const currentVoiceIds = new Set(allVoices.map(([id]) => id));
-  // Remove stale cards
+  // Remove stale cards (including welcome message)
   for (const card of [...list.children]) {
-    if (!currentVoiceIds.has(card.dataset.voiceId)) card.remove();
+    if (!card.dataset.voiceId || !currentVoiceIds.has(card.dataset.voiceId)) card.remove();
   }
   // Map existing cards
   const existingCards = new Map();
