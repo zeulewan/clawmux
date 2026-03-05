@@ -499,11 +499,9 @@ async def wait_websocket(ws: WebSocket, session_id: str):
         return
 
     log.info("[%s] Wait WS connected", session_id)
-    # Log the state that just ended (entering IDLE = end of processing)
-    if session.state == AgentState.PROCESSING:
-        await _save_activity(session, "Processing")
     session.status_text = "Waiting"
     session.set_state(AgentState.IDLE)
+    await _save_activity(session, "Waiting")
 
     # Tell browser agent is idle (so voice input isn't treated as interjection)
     await send_to_browser({"session_id": session_id, "type": "listening", "state": "idle"})
@@ -559,8 +557,6 @@ async def wait_websocket(ws: WebSocket, session_id: str):
     except Exception as e:
         log.warning("[%s] Wait WS error: %s", session_id, e)
     finally:
-        # Log the state that just ended (leaving IDLE = end of waiting)
-        await _save_activity(session, "Waiting")
         session.status_text = "Processing..."
         session.set_state(AgentState.PROCESSING)
         await send_to_browser({
@@ -722,9 +718,6 @@ async def hook_tool_status(request: Request):
         tool_input = data.get("tool_input", {})
         if tool_name == "Bash" and "clawmux wait" in tool_input.get("command", ""):
             return JSONResponse(response_json)
-        # Save tool name (the activity that just completed) before resetting
-        if session.status_text != "Processing...":
-            await _save_activity(session, session.status_text)
         session.status_text = "Processing..."
         # Check inbox for pending messages — deliver via additionalContext
         if session.work_dir:
@@ -753,6 +746,8 @@ async def hook_tool_status(request: Request):
         tool_name = data.get("tool_name", "")
         tool_input = data.get("tool_input", {})
         session.status_text = _tool_status_text(tool_name, tool_input)
+        # Log beginning of tool use
+        await _save_activity(session, session.status_text)
         # Catch end of compaction — first tool call after PreCompact
         if session.state == AgentState.COMPACTING:
             session.set_state(AgentState.PROCESSING)
@@ -799,6 +794,7 @@ async def hook_tool_status(request: Request):
     elif event == "SessionStart":
         # SessionStart hook — agent stays STARTING until first wait WS connects
         session.status_text = "Starting session..."
+        await _save_activity(session, "Starting")
         if session.work_dir:
             messages = inbox.read_and_clear(session.work_dir)
             if messages:
@@ -817,6 +813,7 @@ async def hook_tool_status(request: Request):
     elif event == "PreCompact":
         session.set_state(AgentState.COMPACTING)
         session.status_text = "Compacting context..."
+        await _save_activity(session, "Compacting")
     else:
         return JSONResponse({})
 
