@@ -66,9 +66,16 @@ def _gen_msg_id() -> str:
     return "msg-" + uuid.uuid4().hex[:8]
 
 
+_ACTIVITY_INDICATOR_ONLY = {"Waiting", "Processing..."}
+
+
 async def _save_activity(session, text: str) -> None:
-    """Save a status_text change as an activity entry in history and broadcast to browser."""
-    if not text:
+    """Save a status_text change as an activity entry in history and broadcast to browser.
+
+    Skips generic states (Waiting, Processing...) since the live status
+    indicator already displays those — saving them would duplicate.
+    """
+    if not text or text in _ACTIVITY_INDICATOR_ONLY:
         return
     history.append(session.voice, session.label, "activity", text, _hist_prefix(session))
     await send_to_browser({
