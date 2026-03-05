@@ -704,6 +704,14 @@ function stopThinkingVAD() {
 }
 
 // --- Thinking indicator ---
+function _thinkingLabelText(s) {
+  // Most specific status wins: tool name > compacting > waiting > generic thinking
+  if (s.toolStatusText) return s.toolStatusText;
+  if (s.compacting) return 'Compacting...';
+  if (s.in_wait) return 'Waiting for response';
+  return 'Thinking...';
+}
+
 function showThinking(sessionId) {
   const s = sessions.get(sessionId);
   if (!s) return;
@@ -716,7 +724,7 @@ function showThinking(sessionId) {
   if (existing) {
     // Just update label text in case toolStatusText changed
     const label = existing.querySelector('.thinking-label');
-    if (label) label.textContent = s.toolStatusText || '';
+    if (label) label.textContent = _thinkingLabelText(s);
     return;
   }
 
@@ -730,7 +738,7 @@ function showThinking(sessionId) {
   }
   const label = document.createElement('span');
   label.className = 'thinking-label';
-  label.textContent = s.toolStatusText || '';
+  label.textContent = _thinkingLabelText(s);
   div.appendChild(label);
   chatArea.appendChild(div);
   chatScrollToBottom();
@@ -747,7 +755,7 @@ function updateThinkingLabel(sessionId) {
     label.className = 'thinking-label';
     el.appendChild(label);
   }
-  label.textContent = s.toolStatusText || '';
+  label.textContent = _thinkingLabelText(s);
 }
 
 function hideThinking(sessionId) {
@@ -1262,6 +1270,7 @@ async function karaokePlayFromWord(msgEl, startTime, fetchId, clickedWord = fals
 // Event delegation — click on assistant message to TTS from that word (or beginning)
 let _karaokeFetchId = 0; // incremented on each new click to cancel stale async fetches
 chatArea.addEventListener('click', async (e) => {
+  if (isMobile) return; // mobile uses long-press context menu instead
   const msgEl = e.target.closest('.msg.assistant');
   if (!msgEl) return;
   if (e.target.closest('.msg-actions')) return; // let action buttons handle themselves

@@ -1087,6 +1087,8 @@ body {
 
   /* Chat messages: wider on mobile, disable text selection for long-press menu */
   .msg, .msg * { max-width: 90%; -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; touch-action: pan-y; }
+  /* Disable karaoke word hover/click on mobile — long-press menu handles interaction */
+  .karaoke-word { cursor: default; pointer-events: none; }
 
   /* Controls: mobile size overrides */
   #controls { padding: 6px 12px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
@@ -1149,7 +1151,8 @@ body {
   .msg:hover .msg-actions { display: none !important; }
 
   /* Ack badge: ensure visible on mobile */
-  .thread-ack-badge { font-size: 0.7rem; bottom: 1px; right: 6px; }
+  .thread-ack-badge { font-size: 0.7rem; bottom: 1px; }
+  .msg.user .thread-ack-badge { right: auto; left: 6px; }
 }
 /* --- Markdown message styles --- */
 .msg.assistant .md-content { line-height: 1.6; color: var(--text); }
