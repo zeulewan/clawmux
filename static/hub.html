@@ -851,6 +851,30 @@ body {
 .msg.long-press-active {
   background: rgba(128,128,128,0.15) !important;
 }
+/* Long-press context menu */
+.msg-context-menu {
+  position: absolute;
+  z-index: 100;
+  background: var(--bg-card, #2a2a2e);
+  border: 1px solid rgba(128,128,128,0.3);
+  border-radius: 12px;
+  padding: 4px;
+  display: flex;
+  gap: 2px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  animation: msgAppear 0.15s ease-out;
+}
+.msg-context-menu button {
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 0.8rem;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.msg-context-menu button:active { background: rgba(128,128,128,0.3); }
 @keyframes pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(74,144,255,0.3); }
   50% { box-shadow: 0 0 0 14px rgba(74,144,255,0); }
@@ -1119,10 +1143,9 @@ body {
   }
   #sidebar-overlay.visible { opacity: 1; pointer-events: auto; }
 
-  /* Message actions: always visible on touch (no hover) */
-  .msg .msg-actions { opacity: 0.6; }
-  .msg .msg-action-btn { padding: 4px 10px; font-size: 0.65rem; }
-  .msg .msg-ack-btn { font-size: 0.9rem; padding: 2px 6px; }
+  /* Message actions: hidden on mobile — use long-press context menu instead */
+  .msg .msg-actions { display: none !important; }
+  .msg:hover .msg-actions { display: none !important; }
 
   /* Ack badge: ensure visible on mobile */
   .thread-ack-badge { font-size: 0.7rem; bottom: 1px; right: 6px; }

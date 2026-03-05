@@ -384,42 +384,86 @@ async function pasteFromClipboard() {
 function startElapsedTimer() {}
 function stopElapsedTimer() {}
 
-// --- Copy on long-press ---
+// --- Long-press context menu (mobile) ---
 let longPressTimer = null;
 let longPressTarget = null;
+let _activeContextMenu = null;
+
+function _dismissContextMenu() {
+  if (_activeContextMenu) { _activeContextMenu.remove(); _activeContextMenu = null; }
+  if (longPressTarget) { longPressTarget.classList.remove('long-press-active'); longPressTarget = null; }
+}
+
+function _showContextMenu(msgEl, x, y) {
+  _dismissContextMenu();
+  const menu = document.createElement('div');
+  menu.className = 'msg-context-menu';
+
+  // Copy button
+  const copyBtn = document.createElement('button');
+  copyBtn.textContent = 'Copy';
+  copyBtn.onclick = (e) => {
+    e.stopPropagation();
+    const text = msgEl.dataset.text || msgEl.textContent;
+    navigator.clipboard.writeText(text).then(() => showCopyToast()).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+      showCopyToast();
+    });
+    _dismissContextMenu();
+  };
+  menu.appendChild(copyBtn);
+
+  // Thumbs-up button — only for non-user messages with an ID
+  const msgId = msgEl.dataset.msgId;
+  const role = msgEl.className.match(/\b(user|assistant|system)\b/)?.[0];
+  if (msgId && role !== 'user') {
+    const ackBtn = document.createElement('button');
+    ackBtn.textContent = '\uD83D\uDC4D';
+    ackBtn.onclick = (e) => {
+      e.stopPropagation();
+      _sendUserAck(msgId);
+      _dismissContextMenu();
+      showCopyToast('Ack sent');
+    };
+    menu.appendChild(ackBtn);
+  }
+
+  // Position near the touch point
+  const chatRect = chatArea.getBoundingClientRect();
+  menu.style.left = Math.min(x - chatRect.left, chatRect.width - 120) + 'px';
+  menu.style.top = (y - chatRect.top - 44) + 'px';
+  chatArea.style.position = 'relative';
+  chatArea.appendChild(menu);
+  _activeContextMenu = menu;
+
+  // Dismiss on tap outside
+  setTimeout(() => {
+    document.addEventListener('pointerdown', function _dismiss(ev) {
+      if (!menu.contains(ev.target)) { _dismissContextMenu(); document.removeEventListener('pointerdown', _dismiss); }
+    });
+  }, 50);
+}
 
 function handleMsgPointerDown(e) {
   const msgEl = e.target.closest('.msg');
   if (!msgEl || msgEl.classList.contains('thinking') || msgEl.classList.contains('system')) return;
+  // Only use long-press context menu on mobile/touch
+  if (!isMobile) return;
   longPressTarget = msgEl;
+  const px = e.clientX, py = e.clientY;
   longPressTimer = setTimeout(() => {
     if (!longPressTarget) return;
     longPressTarget.classList.add('long-press-active');
-    const text = longPressTarget.textContent;
-    navigator.clipboard.writeText(text).then(() => {
-      showCopyToast();
-    }).catch(() => {
-      // Fallback for older browsers
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-      showCopyToast();
-    });
-    setTimeout(() => {
-      if (longPressTarget) longPressTarget.classList.remove('long-press-active');
-    }, 200);
-    longPressTarget = null;
+    _showContextMenu(longPressTarget, px, py);
   }, 500);
 }
 
 function handleMsgPointerUp() {
   if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-  if (longPressTarget) {
+  // Don't dismiss target highlight immediately if context menu is showing
+  if (!_activeContextMenu && longPressTarget) {
     longPressTarget.classList.remove('long-press-active');
     longPressTarget = null;
   }
