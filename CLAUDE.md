@@ -24,6 +24,8 @@ Quick check: open the browser console and look for `SyntaxError` before assuming
 - **Manager 1 (Primary):** Sky — primary communication with Zeul, coordinates all agents, sole authority to restart the hub
 - **Manager 2 (Secondary):** Sarah — can delegate tasks, spin up agents, and communicate with Zeul if Manager 1 is unavailable
 
+**Manager behavior:** Managers should primarily delegate tasks to worker agents rather than doing work directly. Only perform tasks yourself if Zeul explicitly asks you to, or if no workers are available. Your role is coordination — assign work, track progress, and relay results.
+
 ## ClawMux CLI Reference
 
 The `clawmux` CLI is the primary interface for voice conversation, inter-agent messaging, and hub management. It connects to the ClawMux hub via WebSocket and HTTP APIs.
