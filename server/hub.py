@@ -237,6 +237,62 @@ async def context_poll_loop() -> None:
         await asyncio.sleep(30)
 
 
+# --- Usage poller (replaces per-session statusline polling) ---
+_USAGE_POLL_INTERVAL = 300  # 5 minutes
+_USAGE_CACHE_PATH = Path.home() / ".claude" / "usage-cache.json"
+_CREDENTIALS_PATH = Path.home() / ".claude" / ".credentials.json"
+_USAGE_API_URL = "https://api.anthropic.com/api/oauth/usage"
+
+async def _fetch_usage_from_api() -> dict | None:
+    """Fetch usage stats from Anthropic OAuth endpoint."""
+    if not _CREDENTIALS_PATH.exists():
+        log.debug("No credentials file for usage polling")
+        return None
+    try:
+        creds = json.loads(_CREDENTIALS_PATH.read_text())
+        token = creds.get("claudeAiOauth", {}).get("accessToken")
+        if not token:
+            return None
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                _USAGE_API_URL,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "anthropic-beta": "oauth-2025-04-20",
+                },
+            )
+            if resp.status_code == 429:
+                log.warning("Usage API rate limited, keeping last good data")
+                return None
+            resp.raise_for_status()
+            data = resp.json()
+            if "five_hour" not in data or "error" in data:
+                log.warning("Usage API returned unexpected data: %s", list(data.keys()))
+                return None
+            return data
+    except Exception as e:
+        log.warning("Usage poll failed: %s", e)
+        return None
+
+async def usage_poll_loop() -> None:
+    """Poll Anthropic usage API every 5 minutes, update cache + sidecar."""
+    global _last_good_usage
+    await asyncio.sleep(5)  # initial delay to let hub finish starting
+    while True:
+        data = await _fetch_usage_from_api()
+        if data:
+            _last_good_usage = data
+            try:
+                _USAGE_CACHE_PATH.write_text(json.dumps(data, indent=2))
+            except Exception:
+                pass
+            _save_usage_sidecar(data)
+            log.debug("Usage cache refreshed (5h: %.0f%%, 7d: %.0f%%)",
+                      data.get("five_hour", {}).get("utilization", 0),
+                      data.get("seven_day", {}).get("utilization", 0))
+        await asyncio.sleep(_USAGE_POLL_INTERVAL)
+
+
 # --- FastAPI app ---
 
 @asynccontextmanager
@@ -253,6 +309,7 @@ async def lifespan(app: FastAPI):
     hb_task = asyncio.create_task(heartbeat_loop())
     compaction_task = asyncio.create_task(compaction_monitor_loop())
     context_task = asyncio.create_task(context_poll_loop())
+    usage_task = asyncio.create_task(usage_poll_loop())
     try:
         yield
     finally:
@@ -261,6 +318,7 @@ async def lifespan(app: FastAPI):
         hb_task.cancel()
         compaction_task.cancel()
         context_task.cancel()
+        usage_task.cancel()
         if _shutdown_mode == "reload":
             log.info("Hub reloading — keeping tmux sessions alive for re-adoption")
             # Save any pending interjections before shutdown
