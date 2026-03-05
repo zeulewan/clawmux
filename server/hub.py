@@ -702,6 +702,9 @@ async def hook_tool_status(request: Request):
         tool_name = data.get("tool_name", "")
         tool_input = data.get("tool_input", {})
         session.status_text = _tool_status_text(tool_name, tool_input)
+        # Catch end of compaction — first tool call after PreCompact
+        if session.state == AgentState.COMPACTING:
+            session.set_state(AgentState.PROCESSING)
         # Check inbox for urgent messages — deliver via additionalContext
         if session.work_dir:
             messages = inbox.read_and_clear(session.work_dir)
