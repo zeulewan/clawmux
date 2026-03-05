@@ -922,6 +922,8 @@ body {
 .thinking-dot:nth-child(3) { animation-delay: 0.4s; }
 .status-idle {
   align-self: flex-start;
+  background: var(--bg-card);
+  border-bottom-left-radius: 6px;
   padding: 14px 18px;
   display: flex;
   align-items: center;
@@ -934,10 +936,13 @@ body {
 }
 .activity-line {
   align-self: flex-start;
-  padding: 4px 18px;
+  background: var(--bg-card);
+  border-bottom-left-radius: 6px;
+  padding: 14px 18px;
   font-size: 0.75rem;
   color: var(--text-tertiary);
   line-height: 1.4;
+  animation: msgAppear 0.2s ease-out;
 }
 @keyframes spin {
   from { transform: rotate(0deg); }
