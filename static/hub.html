@@ -1050,41 +1050,29 @@ body {
   .sidebar-card.speaking .sb-icon { border-color: var(--blue); box-shadow: 0 0 6px rgba(10,132,255,0.3); }
   .sidebar-card.unread .sb-icon { border-color: var(--red); box-shadow: 0 0 6px rgba(255,69,58,0.3); }
 
-  /* Focus card: icon-only on mobile, hide label text */
-  .sidebar-focus-card {
-    justify-content: center;
-    padding: 10px 4px;
-    margin: 0 4px 4px;
-  }
-  .sidebar-focus-card span { display: none; }
-  .sidebar-focus-icon {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    font-size: 0.85rem;
-  }
-  .sidebar-focus-card.selected {
-    position: relative;
-    background: transparent !important;
-  }
-  .sidebar-focus-card.selected::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 3px;
-    height: 24px;
-    border-radius: 0 3px 3px 0;
-    background: var(--blue);
-  }
-  /* Show focus label text in expanded sidebar */
-  #sidebar.expanded .sidebar-focus-card { justify-content: flex-start; padding: 8px 10px; margin: 0 8px 8px; }
-  #sidebar.expanded .sidebar-focus-card span {
-    display: inline;
+  /* Hide focus card on mobile */
+  .sidebar-focus-card { display: none !important; }
+  /* Hide settings gear from header on mobile — settings is in the sidebar drawer */
+  #settings-link { display: none !important; }
+  /* Settings button in sidebar drawer */
+  #sidebar-settings-btn { display: none; }
+  #sidebar.expanded #sidebar-settings-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    margin: 0 8px 8px;
+    border-radius: 10px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 500;
+    border: none;
+    background: none;
+    width: calc(100% - 16px);
     animation: fadeSlideIn 0.2s ease-out 0.1s both;
   }
-  #sidebar.expanded .sidebar-focus-icon { border-radius: 8px; }
+  #sidebar.expanded #sidebar-settings-btn:hover { background: var(--hover-bg); }
 
   /* Chat messages: wider on mobile, disable text selection for long-press menu */
   .msg { max-width: 90%; }
@@ -1272,6 +1260,10 @@ body {
     <div class="sidebar-focus-icon"><svg viewBox="0 0 24 24" fill="currentColor" style="width:1em;height:1em"><path fill-rule="evenodd" d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm0 3a7 7 0 1 1 0 14A7 7 0 0 1 12 5zm0 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/></svg></div>
     <span>Focus</span>
   </div>
+  <button id="sidebar-settings-btn" onclick="collapseSidebar(); showSettingsPage();">
+    <span style="font-size:1rem;">⚙</span>
+    <span>Settings</span>
+  </button>
   <div id="sidebar-expand-btn" style="display:none; align-items:center; justify-content:center; padding:8px; cursor:pointer; border-top:1px solid var(--border); color:var(--text-tertiary); font-size:0.7rem;" onclick="toggleSidebarExpand()">&#9776;</div>
 </div>
 <div id="sidebar-overlay" onclick="collapseSidebar()"></div>
