@@ -2,19 +2,18 @@
 
 Reference for AI agents installing, maintaining, or extending ClawMux. If you're a human, see the [human guide](../humans/index.md).
 
-## Entry Points
+## Guides
 
-Start here depending on what you're working on:
-
-| Role | Document | Description |
-|------|----------|-------------|
-| **iOS Dev** | [iOS Development](ios-dev.md) | Building the native iOS app. What to read, what to implement, what files to watch |
-| **Web Dev** | [Web Development](web-dev.md) | Building browser features. What docs to keep updated, conventions, testing |
+| Document | Description |
+|----------|-------------|
+| [Install](guides/install.md) | Automated installation steps for AI agents |
+| [iOS Development](guides/ios-dev.md) | Building the native iOS app |
+| [iOS Backlog](guides/ios-backlog.md) | iOS feature parity work items |
+| [Web Development](guides/web-dev.md) | Building browser features |
 
 ## Roadmap
 
 - [Roadmap](roadmap/index.md) — release history, current work, and upcoming plans
-- [Vision](roadmap/vision.md) — long-term phases for federation, trust, and VCS
 
 ## Vision
 
@@ -22,9 +21,9 @@ Long-term architecture for federation, trust, and next-gen version control:
 
 | Document | Description |
 |----------|-------------|
-| [Agent Federation](federation.md) | Decentralized agent-to-agent communication via A2A protocol |
-| [Trust & Reputation](trust.md) | Trust tiers, dynamic scoring, cryptographic verification |
-| [Next-Gen Version Control](vcs.md) | CRDT-based real-time collaborative editing, checkpoint model |
+| [Agent Federation](vision/federation.md) | Decentralized agent-to-agent communication via A2A protocol |
+| [Trust & Reputation](vision/trust.md) | Trust tiers, dynamic scoring, cryptographic verification |
+| [Next-Gen Version Control](vision/vcs.md) | CRDT-based real-time collaborative editing, checkpoint model |
 
 ## Reference
 

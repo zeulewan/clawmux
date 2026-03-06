@@ -8,10 +8,10 @@ When you add or change a feature, update these docs to match:
 
 | Document | What to update |
 |----------|---------------|
-| [UI Behavior](reference/ui-behavior.md) | Any new states, buttons, toggles, audio behaviors, or state transitions |
-| [WebSocket Protocol](reference/protocol.md) | Any new or changed WebSocket messages, REST endpoints, or session fields |
-| [Agent Reference](reference/agent-reference.md) | New state variables, config changes, file map changes |
-| [Roadmap](../roadmap/v0.3.0.md) | Check off completed features, move items between versions |
+| [UI Behavior](../reference/ui-behavior.md) | Any new states, buttons, toggles, audio behaviors, or state transitions |
+| [WebSocket Protocol](../reference/protocol.md) | Any new or changed WebSocket messages, REST endpoints, or session fields |
+| [Agent Reference](../reference/agent-reference.md) | New state variables, config changes, file map changes |
+| [Roadmap](../roadmap/history.md) | Check off completed features, move items between versions |
 
 Other clients (iOS app, future desktop app) are built from these docs. If you change behavior without updating the docs, those clients will be out of sync.
 

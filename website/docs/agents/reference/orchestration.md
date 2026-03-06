@@ -1,6 +1,6 @@
 # Orchestration Reference
 
-Implementation details for sub-agent orchestration. For the high-level design, see the [v0.6.0 roadmap](../../roadmap/v0.6.0/sub-agent-orchestration.md).
+Implementation details for sub-agent orchestration. For the high-level design, see the [v0.6.0 roadmap](../reference/orchestration.md).
 
 ## Session Model
 

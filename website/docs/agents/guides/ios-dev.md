@@ -12,9 +12,9 @@ Read these before writing any code:
 
 | Document | What you'll learn |
 |----------|-------------------|
-| [WebSocket Protocol](reference/protocol.md) | Every message type, the converse flow sequence, session object schema, REST API |
-| [UI Behavior](reference/ui-behavior.md) | All states, button behaviors, toggles, audio handling |
-| [Hub Architecture](reference/hub.md) | How the hub works, what it expects from clients |
+| [WebSocket Protocol](../reference/protocol.md) | Every message type, the converse flow sequence, session object schema, REST API |
+| [UI Behavior](../reference/ui-behavior.md) | All states, button behaviors, toggles, audio handling |
+| [Hub Architecture](../reference/hub.md) | How the hub works, what it expects from clients |
 
 ## Key Files
 
