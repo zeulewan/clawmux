@@ -268,6 +268,7 @@ function _sendUserAck(msgId) {
 }
 
 const _CHAT_BATCH = 50;
+const _CHAT_MAX_DOM = 150; // max messages in DOM — triggers unload when exceeded
 const _chatRenderLimit = new Map(); // session_id → max messages to display
 
 function _getChatLimit(sid) {
@@ -380,11 +381,12 @@ function _loadMoreMessages() {
   chatArea.scrollTop = newHeight - oldHeight;
 }
 
-// Scroll-to-top listener for lazy loading
+// Scroll-to-top listener for lazy loading + scroll-to-bottom unloading
 let _scrollLoadPending = false;
 function _initChatScroll() {
   chatArea.addEventListener('scroll', () => {
     if (_scrollLoadPending) return;
+    // Load more when scrolling near top
     if (chatArea.scrollTop < 100 && activeSessionId) {
       const s = sessions.get(activeSessionId);
       const limit = _getChatLimit(activeSessionId);
@@ -392,6 +394,20 @@ function _initChatScroll() {
         _scrollLoadPending = true;
         requestAnimationFrame(() => {
           _loadMoreMessages();
+          _scrollLoadPending = false;
+        });
+      }
+    }
+    // Unload old messages when scrolling back to bottom
+    if (activeSessionId) {
+      const limit = _getChatLimit(activeSessionId);
+      const nearBottom = chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150;
+      if (nearBottom && limit > _CHAT_MAX_DOM) {
+        _scrollLoadPending = true;
+        requestAnimationFrame(() => {
+          _chatRenderLimit.set(activeSessionId, _CHAT_BATCH);
+          renderChat();
+          chatArea.scrollTop = chatArea.scrollHeight;
           _scrollLoadPending = false;
         });
       }
@@ -441,8 +457,7 @@ const modeToggleText = document.getElementById('mode-toggle-text');
   const controlsRight = document.getElementById('controls-right');
   // Move status to the right side
   controlsRight.appendChild(document.getElementById('status'));
-  // Move mode toggle and cancel button to left side
-  controlsLeft.appendChild(modeToggle);
+  // Move cancel button to left side (mode toggle is now in header)
   controlsLeft.appendChild(document.getElementById('mic-cancel'));
   // Create a top row for waveform
   const topRow = document.createElement('div');

@@ -602,18 +602,19 @@ body {
   align-items: center;
   font-weight: 600;
   color: var(--text-secondary);
-  background: var(--bg-card);
+  background: rgba(128,128,128,0.08);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 4px 14px;
+  border-radius: 10px;
+  padding: 2px 10px;
   cursor: pointer;
   user-select: none;
   transition: all 0.15s;
-  line-height: 1.2;
+  line-height: 1.1;
+  flex-shrink: 0;
 }
-#mode-toggle .mode-label { font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.7; }
-#mode-toggle .mode-value { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.05em; }
-#mode-toggle:hover { color: var(--text); background: var(--bg-card-hover); border-color: var(--border-light); }
+#mode-toggle .mode-label { font-size: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.7; }
+#mode-toggle .mode-value { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.05em; }
+#mode-toggle:hover { color: var(--text); background: rgba(128,128,128,0.15); border-color: var(--border-light); }
 
 /* Text input bar */
 #text-input-bar {
@@ -840,6 +841,32 @@ body {
   transition: all 0.1s;
 }
 #context-menu .ctx-item:hover { background: rgba(128,128,128,0.1); }
+#context-menu .ctx-has-submenu { position: relative; }
+#context-menu .ctx-submenu {
+  display: none;
+  position: absolute;
+  left: 100%;
+  top: -4px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 4px 0;
+  min-width: 160px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  backdrop-filter: blur(16px);
+}
+#context-menu .ctx-has-submenu:hover > .ctx-submenu { display: block; }
+#context-menu .ctx-submenu .ctx-sub-item {
+  padding: 8px 16px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.1s;
+  white-space: nowrap;
+}
+#context-menu .ctx-submenu .ctx-sub-item:hover { background: rgba(128,128,128,0.1); }
+#context-menu .ctx-submenu .ctx-sub-item.active { color: var(--voice-color, #4a9eff); font-weight: 600; }
 /* Copy toast */
 #copy-toast {
   position: fixed;
@@ -1091,7 +1118,7 @@ body {
   .transport-btn { width: 28px; height: 28px; font-size: 0.85rem; }
   #waveform { height: 12px !important; }
   #status { font-size: 0.6rem; }
-  #mode-toggle { font-size: 0.6rem !important; padding: 3px 8px !important; }
+  #mode-toggle { font-size: 0.55rem !important; padding: 2px 8px !important; }
   /* Text input bar: two rows on mobile — buttons on top, text field below */
   #text-input-bar.active {
     flex-wrap: wrap;
@@ -1237,6 +1264,7 @@ body {
 
 <div id="header">
   <h1><a href="https://clawmux.com" target="_blank" style="color: inherit; text-decoration: none;">ClawMux</a></h1>
+  <button id="mode-toggle" onclick="cycleInputMode()"><span class="mode-value">Voice</span><span class="mode-label">Mode</span></button>
   <span id="active-voice" style="display:none; font-size:1.1rem; font-weight:700;"></span>
   <select id="session-model" style="display:none;" onchange="setSessionModel(this.value)">
     <option value="opus">Opus</option>
@@ -1298,7 +1326,6 @@ body {
 <div id="controls" style="display:none;">
   <div id="controls-left">
     <canvas id="waveform" width="200" height="30" style="display:none;"></canvas>
-    <button id="mode-toggle" onclick="cycleInputMode()"><span class="mode-value">Voice</span><span class="mode-label">Mode</span></button>
     <div id="status"></div>
   </div>
   <div id="mic-wrapper">
@@ -1454,6 +1481,9 @@ body {
   <div class="ctx-item" id="ctx-launch">Launch Session</div>
   <div class="ctx-item" id="ctx-mark-unread">Mark as Unread</div>
   <div class="ctx-item" id="ctx-mark-read">Mark as Read</div>
+  <div class="ctx-item ctx-has-submenu" id="ctx-move-project">Move to Project ▸
+    <div class="ctx-submenu" id="ctx-project-list"></div>
+  </div>
   <div class="ctx-item" id="ctx-reset" style="color:#e63946;">Reset</div>
   <div class="ctx-item" id="ctx-terminate">Terminate Session</div>
 </div>
@@ -1700,13 +1730,12 @@ async function addSession(data, autoSwitch = false) {
         if (m.bare_ack) obj.isBareAck = true;
         return obj;
       });
-      // Note: pending_interjections is NOT used here to mark messages as italic.
-      // Interjection styling is applied in real-time when user_text arrives with
-      // interjection: true, and removed when the agent acknowledges (inbox_update).
-      // Re-marking from history would cause stale italics after page/hub reload.
+      console.log(`[addSession] ${data.voice}: loaded ${serverMessages.length} messages`);
+    } else {
+      console.warn(`[addSession] ${data.voice}: fetch failed with status ${resp.status}`);
     }
   } catch (e) {
-    console.warn('Failed to fetch history:', e);
+    console.warn(`[addSession] ${data.voice}: fetch error:`, e);
   }
 
   // Apply saved speed from localStorage so new sessions inherit the user's preference
@@ -2456,9 +2485,45 @@ function showContextMenu(e, sessionId, voiceId) {
   const hasUnread = sess && (sess.unreadCount || 0) > 0;
   document.getElementById('ctx-mark-unread').style.display = (hasSession && !hasUnread) ? 'block' : 'none';
   document.getElementById('ctx-mark-read').style.display = (hasSession && hasUnread) ? 'block' : 'none';
+  // Populate Move to Project submenu
+  const moveItem = document.getElementById('ctx-move-project');
+  moveItem.style.display = hasSession ? 'block' : 'none';
+  if (hasSession) {
+    const subList = document.getElementById('ctx-project-list');
+    subList.innerHTML = '';
+    const sel = document.getElementById('project-selector');
+    if (sel) {
+      for (const opt of sel.options) {
+        const div = document.createElement('div');
+        div.className = 'ctx-sub-item';
+        div.textContent = opt.textContent;
+        if (sess && sess.project === opt.textContent) div.classList.add('active');
+        const projName = opt.textContent;
+        div.addEventListener('click', () => {
+          _moveToProject(contextMenuSessionId, projName);
+          hideContextMenu();
+        });
+        subList.appendChild(div);
+      }
+    }
+  }
   menu.style.left = e.clientX + 'px';
   menu.style.top = e.clientY + 'px';
   menu.classList.add('visible');
+}
+
+async function _moveToProject(sessionId, projectName) {
+  if (!sessionId) return;
+  const sess = sessions.get(sessionId);
+  try {
+    await fetch(`/api/project-status/${sessionId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project: projectName, area: sess ? (sess.project_area || '') : '' }),
+    });
+  } catch (e) {
+    console.error('Failed to move to project:', e);
+  }
 }
 
 function hideContextMenu() {
