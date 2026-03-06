@@ -4,7 +4,8 @@ Detailed release history and upcoming work. Each version page includes checklist
 
 ## Current
 
-- [v0.7.2 — Flat Architecture & Centralized State](v0.7.2.md): Flat agent directories, centralized `agents.json`, template-based CLAUDE.md, simplified tmux names.
+- [v0.7.3 — Flat Architecture & Centralized State](v0.7.3.md): Flat agent directories, centralized `agents.json`, template-based CLAUDE.md, simplified tmux names.
+  - [Implementation Roadmap](v0.7.3-implementation.md): Phased checklist with test plans and rollback points.
 - [v0.7.0 — Architecture Refactor & Mobile Polish](v0.7.0/index.md): MCP removal, state machine, code extraction, mobile UX overhaul, deployment settings, activity logging.
 
 ## Upcoming
