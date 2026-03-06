@@ -267,6 +267,13 @@ function _sendUserAck(msgId) {
   ws.send(JSON.stringify({ session_id: activeSessionId, type: 'user_ack', msg_id: msgId }));
 }
 
+const _CHAT_BATCH = 50;
+const _chatRenderLimit = new Map(); // session_id → max messages to display
+
+function _getChatLimit(sid) {
+  return _chatRenderLimit.get(sid) || _CHAT_BATCH;
+}
+
 function renderChat(forceScroll = false) {
   // Check if user is near bottom BEFORE clearing DOM (scrollHeight resets after innerHTML='')
   const wasNearBottom = forceScroll || chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150;
@@ -274,7 +281,8 @@ function renderChat(forceScroll = false) {
   const s = sessions.get(activeSessionId);
   if (!s) return;
   const vc = voiceColor(s.voice);
-  const displayMessages = s.messages.slice(-50);
+  const limit = _getChatLimit(activeSessionId);
+  const displayMessages = s.messages.slice(-limit);
 
   // Build thread index
   const threadReplies = new Map();
@@ -286,6 +294,17 @@ function renderChat(forceScroll = false) {
       if (m.isBareAck) bareAcks.set(m.parentId, (bareAcks.get(m.parentId) || 0) + 1);
       else { if (!threadReplies.has(m.parentId)) threadReplies.set(m.parentId, []); threadReplies.get(m.parentId).push(m); }
     }
+  }
+
+  // Show "load more" indicator if there are older messages
+  const hasMore = s.messages.length > limit;
+  if (hasMore) {
+    const loader = document.createElement('div');
+    loader.id = 'chat-load-more';
+    loader.style.cssText = 'text-align:center;padding:8px;font-size:0.8em;color:var(--text-tertiary,#666);cursor:pointer;';
+    loader.textContent = '\u25B2 Load older messages';
+    loader.onclick = () => _loadMoreMessages();
+    chatArea.appendChild(loader);
   }
 
   for (const msg of displayMessages) {
@@ -344,6 +363,40 @@ function renderChat(forceScroll = false) {
     }
   }
   if (wasNearBottom) chatArea.scrollTop = chatArea.scrollHeight;
+}
+
+function _loadMoreMessages() {
+  if (!activeSessionId) return;
+  const s = sessions.get(activeSessionId);
+  if (!s) return;
+  const currentLimit = _getChatLimit(activeSessionId);
+  if (currentLimit >= s.messages.length) return; // all loaded
+  // Save scroll position relative to content height
+  const oldHeight = chatArea.scrollHeight;
+  _chatRenderLimit.set(activeSessionId, currentLimit + _CHAT_BATCH);
+  renderChat();
+  // Restore scroll position — keep user at the same content
+  const newHeight = chatArea.scrollHeight;
+  chatArea.scrollTop = newHeight - oldHeight;
+}
+
+// Scroll-to-top listener for lazy loading
+let _scrollLoadPending = false;
+function _initChatScroll() {
+  chatArea.addEventListener('scroll', () => {
+    if (_scrollLoadPending) return;
+    if (chatArea.scrollTop < 100 && activeSessionId) {
+      const s = sessions.get(activeSessionId);
+      const limit = _getChatLimit(activeSessionId);
+      if (s && s.messages.length > limit) {
+        _scrollLoadPending = true;
+        requestAnimationFrame(() => {
+          _loadMoreMessages();
+          _scrollLoadPending = false;
+        });
+      }
+    }
+  });
 }
 
 function _debugBanner(msg) { /* no-op */ }
