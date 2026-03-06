@@ -561,6 +561,41 @@ def cmd_version(args):
     print(f"ClawMux {version} (commit {commit})")
 
 
+def _check_system_deps():
+    """Check for and install missing system dependencies (tmux, python3-venv)."""
+    import platform
+    import shutil
+    is_mac = platform.system() == "Darwin"
+    installed = []
+
+    # Check tmux
+    if shutil.which("tmux") is None:
+        print("tmux not found, installing...")
+        if is_mac:
+            r = subprocess.run(["brew", "install", "tmux"], capture_output=True, text=True)
+        else:
+            r = subprocess.run(["sudo", "apt", "install", "-y", "tmux"], capture_output=True, text=True)
+        if r.returncode == 0:
+            installed.append("tmux")
+        else:
+            print(f"Warning: failed to install tmux: {r.stderr.strip()}")
+
+    # Check python3-venv (Linux only)
+    if not is_mac:
+        # Test if venv module is available
+        r = subprocess.run(["python3", "-c", "import venv"], capture_output=True, text=True)
+        if r.returncode != 0:
+            print("python3-venv not found, installing...")
+            r = subprocess.run(["sudo", "apt", "install", "-y", "python3-venv"], capture_output=True, text=True)
+            if r.returncode == 0:
+                installed.append("python3-venv")
+            else:
+                print(f"Warning: failed to install python3-venv: {r.stderr.strip()}")
+
+    if installed:
+        print(f"Installed: {', '.join(installed)}")
+
+
 def cmd_update(args):
     """Pull latest code, reinstall deps, reinstall CLI, reload hub."""
     repo_dir = _find_repo_dir()
@@ -573,6 +608,9 @@ def cmd_update(args):
         die(f"git pull failed: {r.stderr.strip()}")
         return
     print(r.stdout.strip())
+
+    # Check system dependencies
+    _check_system_deps()
 
     # Reinstall deps
     venv_pip = os.path.join(repo_dir, ".venv", "bin", "pip")
@@ -844,7 +882,6 @@ def cmd_messages(args):
 def _apply_agent_status_bar(tmux_session, label, color):
     """Set a clean status bar on an agent's tmux session: white text on agent color."""
     for opt, val in [
-        ("status", "on"),
         ("status-style", f"fg=#ffffff,bg={color}"),
         ("status-left", f" {label} "),
         ("status-left-style", f"fg=#ffffff,bg={color},bold"),
