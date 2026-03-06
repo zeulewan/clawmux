@@ -391,7 +391,7 @@ function handleMessage(data) {
     }
   } else if (type === 'user_text') {
     if (!data.text || !data.text.trim()) return;  // Skip blank user messages
-    addMessage(session_id, data.interjection ? 'user interjection' : 'user', data.text, { id: data.msg_id || null });
+    addMessage(session_id, 'user', data.text, { id: data.msg_id || null });
     setSessionState(session_id, 'processing');
   } else if (type === 'audio') {
     s.status = 'active';
@@ -444,13 +444,6 @@ function handleMessage(data) {
     // v0.6.0: inbox message count update
     s.inboxCount = data.count || 0;
     s.inboxPreview = data.latest ? data.latest.preview : '';
-    // When inbox is cleared (hook delivered messages), promote interjections to normal messages
-    if (data.count === 0) {
-      if (session_id === activeSessionId) {
-        chatArea.querySelectorAll('.msg.interjection').forEach(el => el.classList.remove('interjection'));
-      }
-      s.messages.forEach(m => { if (m.role === 'user interjection') m.role = 'user'; });
-    }
     renderSidebar();
   }
 }

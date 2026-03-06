@@ -1395,7 +1395,8 @@ async def speak_to_user(request: Request):
     await asyncio.to_thread(history.append, sender.voice, sender.label, "assistant", content, _hist_prefix(sender), msg_id=msg_id)
 
     # TTS — strip non-speakable content and play
-    skip_tts = sender.text_mode or not _load_settings().get("voice_responses", True)
+    settings = _load_settings()
+    skip_tts = sender.text_mode or settings.get("text_only", False) or not settings.get("voice_responses", True)
     if not skip_tts:
         tts_message = strip_non_speakable(content)
         if tts_message.strip():
@@ -1606,6 +1607,7 @@ def _load_settings() -> dict:
         "tts_url": hub_config.KOKORO_URL,
         "stt_url": hub_config.WHISPER_URL,
         "quality_mode": "high",
+        "text_only": False,
     }
     if settings_path.exists():
         try:

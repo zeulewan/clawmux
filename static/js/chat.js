@@ -471,6 +471,9 @@ const textInput = document.getElementById('text-input');
 const textSendBtn = document.getElementById('text-send');
 
 function cycleInputMode() {
+  // Block switching to voice when text-only mode is enabled
+  const textOnlyToggle = document.getElementById('toggle-text_only');
+  if (textOnlyToggle && textOnlyToggle.classList.contains('on')) return;
   inputMode = inputMode === 'voice' ? 'typing' : 'voice';
   applyInputMode();
   saveInputMode();

@@ -745,11 +745,6 @@ function setSessionState(sessionId, newState) {
     hideStatusIndicator(sessionId);
     stopThinkingSound();
     stopThinkingVAD();
-    // Promote interjection messages (agent is now listening = acknowledged them)
-    if (sessionId === activeSessionId) {
-      chatArea.querySelectorAll('.msg.interjection').forEach(el => el.classList.remove('interjection'));
-    }
-    s.messages.forEach(m => { if (m.role === 'user interjection') m.role = 'user'; });
     setSessionSidebarState(sessionId, 'idle');  // listening is browser-only; sidebar shows idle
     if (sessionId === activeSessionId) {
       micBtn.disabled = false;
@@ -977,7 +972,7 @@ let _karaokeActiveIdx = -1;
 const _pendingKaraokeWords = new Map(); // sessionId -> words[]
 
 function karaokeSetupMessage(sessionId, words) {
-  if (!voiceResponsesEnabled) return;
+  if (!voiceResponsesEnabled || textOnlyEnabled) return;
   // Filter to real (non-punctuation/symbol) words only
   const realWords = words.filter(w => /[\p{L}\p{N}]/u.test(w.word));
   if (realWords.length === 0) return;
@@ -992,6 +987,7 @@ function karaokeSetupMessage(sessionId, words) {
 }
 
 function _applyKaraokeSpans(msgEl, realWords) {
+  if (textOnlyEnabled) return;
   const mdContent = msgEl.querySelector('.md-content');
 
   // If message has markdown-rendered content, apply timestamps to existing karaoke-word spans
@@ -1244,6 +1240,7 @@ let _karaokeFetchId = 0; // incremented on each new click to cancel stale async 
 chatArea.addEventListener('click', async (e) => {
   // On mobile, skip if a long-press context menu just fired
   if (isMobile && _longPressFired) { _longPressFired = false; return; }
+  if (textOnlyEnabled) return; // no audio in text-only mode
   const msgEl = e.target.closest('.msg.assistant');
   if (!msgEl) return;
   if (e.target.closest('.msg-actions')) return; // let action buttons handle themselves

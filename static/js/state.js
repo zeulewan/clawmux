@@ -27,6 +27,7 @@ const spawningVoices = new Set(); // voice IDs currently being spawned
 let thinkingSoundsEnabled = true; // thinking tick sounds
 let audioCuesEnabled = true; // listening/processing/ready cues
 let voiceResponsesEnabled = true; // show play buttons and voice features
+let textOnlyEnabled = false; // text-only mode — no TTS/STT at all
 let showAgentMessages = true; // show inter-agent messages in chat
 let playbackPaused = false; // transport: is playback paused?
 let pausedBuffer = null; // transport: decoded AudioBuffer for resume

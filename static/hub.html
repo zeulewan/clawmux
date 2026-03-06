@@ -443,7 +443,7 @@ body {
 .msg .msg-ack-btn.acked { opacity: 0.4; pointer-events: none; }
 .msg .msg-ack-btn:active { opacity: 0.6; }
 /* Mirror action buttons: bottom-left on user messages */
-.msg.user .msg-actions, .msg.interjection .msg-actions { right: auto; left: 6px; }
+.msg.user .msg-actions { right: auto; left: 6px; }
 .msg .msg-action-btn.playing { color: var(--green); }
 #chat-area { overflow-x: hidden; }
 @keyframes msgAppear {
@@ -456,11 +456,7 @@ body {
   color: #fff;
   border-bottom-right-radius: 6px;
 }
-.msg.interjection {
-  opacity: 0.75;
-  border: 1px dashed var(--border-light);
-  font-style: italic;
-}
+/* interjection styling removed — all user messages look the same */
 .msg.assistant {
   align-self: flex-start;
   cursor: pointer;
@@ -480,6 +476,11 @@ body {
   border-radius: 3px;
   text-shadow: 0 0 0.6px currentColor, 0 0 0.6px currentColor;
 }
+body.text-only-mode .msg.assistant { cursor: default; }
+body.text-only-mode .msg.assistant .md-content code:not(pre code) { cursor: default; }
+body.text-only-mode .karaoke-word { cursor: default; }
+body.text-only-mode .karaoke-word:hover { background: transparent; text-shadow: none; transform: none; }
+body.text-only-mode .karaoke-word.active { background: transparent; text-shadow: none; }
 .msg.system {
   align-self: center;
   background: none;
@@ -672,7 +673,7 @@ body {
   color: var(--text-secondary);
   font-size: 0.85rem;
   cursor: pointer;
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
@@ -1119,6 +1120,7 @@ body {
   #waveform { height: 12px !important; }
   #status { font-size: 0.6rem; }
   #mode-toggle { font-size: 0.45rem !important; padding: 1px 5px !important; }
+  #text-paste { display: flex; }
   /* Text input bar: two rows on mobile — buttons on top, text field below */
   #text-input-bar.active {
     flex-wrap: wrap;
@@ -1349,6 +1351,16 @@ body {
   <h2>Settings</h2>
 
   <div class="settings-section">
+    <h3 class="settings-section-title">Mode</h3>
+    <div class="settings-card">
+      <div class="settings-toggle" onclick="toggleSetting('text_only')">
+        <div class="toggle-info"><span class="toggle-name">Text Only</span><span class="toggle-desc">Disable TTS and STT — text chat only, no mic or audio</span></div>
+        <div class="toggle-indicator" id="toggle-text_only"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-section" id="voice-settings-section">
     <h3 class="settings-section-title">Voice</h3>
     <div class="settings-card">
       <div class="settings-toggle" onclick="toggleSetting('voice_responses')">
@@ -1403,7 +1415,7 @@ body {
     </div>
   </div>
 
-  <div class="settings-section">
+  <div class="settings-section" id="sounds-settings-section">
     <h3 class="settings-section-title">Sounds</h3>
     <div class="settings-card">
       <div class="settings-toggle" onclick="toggleSetting('thinking_sounds')">
@@ -1417,7 +1429,7 @@ body {
     </div>
   </div>
 
-  <div class="settings-section">
+  <div class="settings-section" id="deployment-settings-section">
     <h3 class="settings-section-title">Deployment</h3>
     <div class="settings-card">
       <div class="settings-inline" style="padding:12px 16px;">
@@ -2109,6 +2121,9 @@ async function loadSettings() {
     setToggle('audio_cues', audioCuesEnabled);
     voiceResponsesEnabled = s.voice_responses !== false;
     setToggle('voice_responses', voiceResponsesEnabled);
+    const textOnly = s.text_only || false;
+    setToggle('text_only', textOnly);
+    applyTextOnlyMode(textOnly);
     setToggle('silent_startup', s.silent_startup || false);
     showAgentMessages = s.show_agent_messages !== false;
     setToggle('show_agent_messages', showAgentMessages);
@@ -2146,6 +2161,7 @@ async function toggleSetting(key) {
   if (key === 'thinking_sounds') { thinkingSoundsEnabled = isOn; if (!isOn) stopThinkingSound(); }
   if (key === 'audio_cues') { audioCuesEnabled = isOn; }
   if (key === 'voice_responses') { voiceResponsesEnabled = isOn; renderChat(); }
+  if (key === 'text_only') { applyTextOnlyMode(isOn); }
   if (key === 'show_agent_messages') { showAgentMessages = isOn; renderChat(); }
   try {
     await fetch('/api/settings', {
@@ -2154,6 +2170,32 @@ async function toggleSetting(key) {
       body: JSON.stringify({ [key]: isOn }),
     });
   } catch (e) { console.error('Failed to save setting:', e); }
+}
+
+function applyTextOnlyMode(on) {
+  textOnlyEnabled = on;
+  document.body.classList.toggle('text-only-mode', on);
+  // Hide/show voice-related settings sections
+  ['voice-settings-section', 'sounds-settings-section', 'deployment-settings-section'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = on ? 'none' : '';
+  });
+  // Hide/show mode toggle in header and text-input-bar
+  const modeToggleEl = document.getElementById('mode-toggle');
+  if (modeToggleEl) modeToggleEl.style.display = on ? 'none' : '';
+  const modeToggleTextEl = document.getElementById('mode-toggle-text');
+  if (modeToggleTextEl) modeToggleTextEl.style.display = on ? 'none' : '';
+  if (on) {
+    // Force typing mode (but don't show text bar if we're on settings page)
+    if (typeof inputMode !== 'undefined') {
+      inputMode = 'typing';
+      if (typeof saveInputMode === 'function') saveInputMode();
+      // Only show text bar if an active session is displayed
+      if (activeSessionId && document.getElementById('settings-page').style.display !== 'block') {
+        if (typeof applyInputMode === 'function') applyInputMode();
+      }
+    }
+  }
 }
 
 async function updateSetting(key, value) {
