@@ -5,6 +5,7 @@ Extracted from hub.py Phase 5a refactor.
 
 import asyncio
 import base64
+import json
 import logging
 import os
 import re
@@ -25,6 +26,39 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # Text cleanup
 # ---------------------------------------------------------------------------
+
+def _load_pronunciation_rules() -> tuple[dict, list]:
+    """Load pronunciation overrides and patterns from pronunciation.json."""
+    path = os.path.join(os.path.dirname(__file__), "pronunciation.json")
+    try:
+        with open(path) as f:
+            data = json.load(f)
+            overrides = data.get("overrides", {})
+            patterns = data.get("patterns", [])
+            return overrides, patterns
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        log.warning("Could not load pronunciation.json: %s", e)
+        return {}, []
+
+_pronunciation_overrides, _pronunciation_patterns = _load_pronunciation_rules()
+
+
+def reload_pronunciation_overrides():
+    """Reload overrides from disk (call after editing pronunciation.json)."""
+    global _pronunciation_overrides, _pronunciation_patterns
+    _pronunciation_overrides, _pronunciation_patterns = _load_pronunciation_rules()
+    log.info("Reloaded %d overrides, %d patterns",
+             len(_pronunciation_overrides), len(_pronunciation_patterns))
+
+
+def apply_pronunciation_overrides(text: str) -> str:
+    """Apply pronunciation overrides and regex patterns before TTS."""
+    for word, replacement in _pronunciation_overrides.items():
+        text = re.sub(re.escape(word), replacement, text, flags=re.IGNORECASE)
+    for pattern in _pronunciation_patterns:
+        text = re.sub(pattern["find"], pattern["replace"], text)
+    return text
+
 
 def strip_non_speakable(text: str) -> str:
     """Convert markdown to plain text suitable for speech synthesis.
@@ -72,6 +106,7 @@ def strip_non_speakable(text: str) -> str:
     text = re.sub(r'^[\s]*\d+\.\s+', '', text, flags=re.MULTILINE)
     # Collapse multiple blank lines into one
     text = re.sub(r'\n{3,}', '\n\n', text)
+    text = apply_pronunciation_overrides(text)
     return text.strip()
 
 
