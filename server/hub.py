@@ -366,7 +366,10 @@ async def index():
 async def static_file(filename: str):
     path = STATIC_DIR / filename
     if path.is_file():
-        return FileResponse(path)
+        return FileResponse(path, headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+        })
     return JSONResponse({"error": "not found"}, status_code=404)
 
 
@@ -486,9 +489,10 @@ async def handle_browser_message(data: dict) -> None:
             log.info("[%s] Interjection STT: %s", session_id, text[:100] if text else "(empty)")
         if text:
             session.interjections.append(text)
-            await asyncio.to_thread(history.save_interjections, session.voice, session.interjections, _hist_prefix(session))
             umid = _gen_msg_id()
+            # Send to browser FIRST for instant display, then persist
             await send_to_browser({"session_id": session_id, "type": "user_text", "text": text, "interjection": True, "msg_id": umid})
+            await asyncio.to_thread(history.save_interjections, session.voice, session.interjections, _hist_prefix(session))
             await asyncio.to_thread(history.append, session.voice, session.label, "user", text, _hist_prefix(session), msg_id=umid)
 
             # If agent is in wait mode, push via inbox for immediate pickup by wait WS
@@ -1202,7 +1206,10 @@ async def get_history(voice_id: str, request: Request):
         if s.voice == voice_id and s.interjections:
             pending_count = len(s.interjections)
             break
-    return JSONResponse({"voice_id": voice_id, "messages": messages, "pending_interjections": pending_count})
+    return JSONResponse(
+        {"voice_id": voice_id, "messages": messages, "pending_interjections": pending_count},
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
 
 
 @app.delete("/api/history/{voice_id}")

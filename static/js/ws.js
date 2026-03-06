@@ -222,6 +222,11 @@ function handleMessage(data) {
           }
         } catch(e) {}
       }
+    }).catch((e) => {
+      console.error('[session_list] Promise.all failed:', e);
+      _sessionsLoading = false;
+      _flushMessageBuffer();
+      renderSidebar();
     });
     return;
   }
