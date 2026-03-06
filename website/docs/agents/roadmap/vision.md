@@ -4,7 +4,7 @@ Long-term phases for federation, trust, and next-gen version control. These buil
 
 ## Phase 1 — Foundation
 
-- [ ] REST messaging unification on voice hub (all clients use same API)
+- [x] REST messaging unification on voice hub — unified `send`/`wait` commands (v0.6.0)
 - [ ] A2A-compatible endpoints on the hub
 - [ ] Agent Manifests for discovery
 

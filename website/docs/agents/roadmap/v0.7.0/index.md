@@ -1,35 +1,59 @@
-# v0.7.0 — Direct API & Multi-Provider
+# v0.7.0 — Architecture Refactor & Mobile Polish
 
-Migrate from Claude Code CLI to direct Anthropic API access. Add pluggable backend support for multiple AI providers.
+Major architecture cleanup (MCP removal, code extraction, state machine), mobile UX overhaul, deployment settings, and activity logging.
 
-## Direct API Migration
+## Architecture
 
-Replace the Claude Code process layer with direct `@anthropic-ai/sdk` streaming. Adopt OpenClaw-style architecture:
+- [x] Remove MCP mode entirely from the codebase — CLI-only communication
+- [x] Agent state machine — unified `AgentState` enum with proper lifecycle transitions
+- [x] Extract modules from monolithic hub.html — `audio.js`, `state.js`, `ws.js`, `sidebar.js`, `chat.js`
+- [x] Extract `voice.py` from `hub.py` — TTS/STT handling separated
+- [x] Remove old converse pipeline remnants and audio queue
+- [x] Force `clawmux wait` on startup via `--prompt` flag
 
-- [ ] Direct `client.messages.stream()` calls instead of Claude Code CLI
-- [ ] Session lane + global lane concurrency control for multi-agent coordination
-- [ ] JSONL session files for conversation persistence and resume
-- [ ] Block reply pipeline adapted for TTS segment delivery
-- [ ] Native tool definitions (read, write, exec, send, converse) registered via API
-- [ ] Context window management with auto-compaction
+## Deployment Settings
 
-## Multi-Provider Backend
+- [x] Configurable STT/TTS URLs — Together/Split mode selector in settings UI
+- [x] Apply saved TTS/STT URLs and deployment mode on hub startup
+- [x] Dynamic Whisper model switching via quality toggle (high/medium/low)
 
-Pluggable backend interface so the hub can run sessions through different AI providers:
+## Mobile UX
 
-- [ ] Backend interface — abstract spawn, terminate, send, and status behind a common interface
-- [ ] Claude Code backend — current tmux-based session management (legacy, for migration period)
-- [ ] Anthropic API backend — direct streaming via SDK
-- [ ] OpenClaw backend — spawn and manage sessions via Gateway WebSocket
-- [ ] OpenAI-compatible backend — support OpenAI and compatible agents
+- [x] Long-press context menu replacing hover buttons on mobile
+- [x] Larger mic button on mobile (52px → 80px)
+- [x] Fix chat bubble text not using full width on mobile
+- [x] Disable pinch-to-zoom on sidebar and controls bar
+- [x] Disable text selection on mobile for clean long-press
+- [x] Fix iOS native copy callout on messages
+- [x] Compact expanded sidebar agent cards on mobile
+- [x] Move settings into sidebar drawer on mobile
+- [x] Replace model dropdown with tappable label + popup on mobile
+- [x] Fix popup transparency and z-index issues on mobile
+- [x] Connecting state on record button for iOS mic delay
 
-## Decentralized Hub
+## Activity & Status
 
-- [ ] Configurable STT/TTS URLs — run agents on a local machine, use Kokoro and Whisper from a remote workstation
-- [ ] Streaming TTS — stream audio chunks to reduce time-to-first-audio
+- [x] Activity log in chat — tool calls collapse into muted lines
+- [x] Persist activity entries as timeline messages in history
+- [x] Status text tracking — show current tool call in chat and sidebar
+- [x] Centralized usage poller in hub instead of per-session polling
+
+## Messages & Acks
+
+- [x] Thumbs-up (ack) UI for browser messages with persistence
+- [x] Deliver browser thumbs-up acks to agent inbox
+- [x] Agent bare ack persistence in history
+- [x] Inter-agent message redesign — collapsed one-liners with click-to-expand
+- [x] Message threading with persistent thread containers
+- [x] Fix ack badge positioning and visibility
 
 ## Other
 
-- [ ] One-command setup — single install script
-- [ ] Code block rendering — render code blocks in agent responses
-- [ ] Hold-aware timeout — exempt sessions with pending calls from inactivity timeout
+- [x] Drag-and-drop file upload for desktop
+- [x] Chat history limit increased from 500 to 2000 messages
+- [x] Code block rendering — markdown in agent responses
+- [x] Karaoke highlighting fixes (code blocks, unicode)
+- [x] Declutter top bar — rename to ClawMux, move usage stats
+- [x] `clawmux update`, `clawmux uninstall`, `clawmux version` commands
+- [x] Project management improvements (rename, delete fixes)
+- [x] Manager delegation and ack-over-verbal-response guidance in CLAUDE.md

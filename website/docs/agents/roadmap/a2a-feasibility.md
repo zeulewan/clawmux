@@ -37,8 +37,8 @@ A2A (Agent2Agent) is an open protocol from Google, now hosted by the Linux Found
 | `POST /api/messages/send` | Send message between local agents |
 | `MessageBroker` | In-memory tracking with ack/reply/retry |
 | Agent discovery | CLAUDE.md "Active Agents" section, rebuilt on spawn |
-| Message format | `[MSG id:xxx from:name] content` injected via tmux |
-| Transport | REST API + tmux send-keys + MCP WebSocket |
+| Message format | `[MSG id:xxx from:name] content` delivered via hook `additionalContext` |
+| Transport | REST API + file-based inbox + Claude Code hooks (v0.6.0+) |
 
 **Key insight:** Our messaging is already structured (IDs, states, ack/reply lifecycle). The gap is that it's internal-only and uses a custom format.
 

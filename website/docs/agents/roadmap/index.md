@@ -4,10 +4,12 @@ Detailed release history and upcoming work. Each version page includes checklist
 
 ## Current
 
-- [v0.6.0 — Hook-Based Agent Communication](v0.6.0.md): Replace tmux-injection messaging with Claude Code hooks for reliable, event-driven delivery. Unified `send`/`wait` commands, message threading, inbox-based architecture.
+- [v0.8.0 — Direct API & Multi-Provider](v0.8.0.md): Direct Anthropic API migration, pluggable backends, streaming TTS.
 
 ## History
 
+- [v0.7.0 — Architecture Refactor & Mobile Polish](v0.7.0/index.md): MCP removal, state machine, code extraction, mobile UX overhaul, deployment settings, activity logging.
+- [v0.6.0 — Hook-Based Agent Communication](v0.6.0.md): Replaced tmux-injection messaging with Claude Code hooks for reliable, event-driven delivery. Unified `send`/`wait` commands, message threading, inbox-based architecture.
 - [v0.5.0 — Polish & Reliability](v0.5.0/index.md): Inter-agent messaging, hub stability, browser bug fixes, UX polish. ClawMux CLI.
   - [ClawMux CLI](v0.5.0/cli.md): CLI tool for voice converse and inter-agent messaging.
 - [v0.4.0 — iOS App](v0.4.0.md)
