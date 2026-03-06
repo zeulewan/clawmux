@@ -32,14 +32,14 @@ Automated installation guide for AI agents. Select your platform and deployment 
     # OS
     uname -s  # Must be Linux
 
+    # System dependencies (Debian/Ubuntu)
+    sudo apt install -y python3-venv tmux
+
     # NVIDIA GPU (required for Together mode)
     nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null
 
     # Python
     python3 --version  # Must be 3.10+
-
-    # tmux
-    which tmux || sudo apt-get update && sudo apt-get install -y tmux
 
     # Claude Code
     claude --version  # Must be installed and authenticated
@@ -51,15 +51,15 @@ Automated installation guide for AI agents. Select your platform and deployment 
     # Verify WSL2
     cat /proc/version  # Should show "microsoft" or "WSL"
 
+    # System dependencies
+    sudo apt install -y python3-venv tmux
+
     # NVIDIA GPU passthrough (required for Together mode)
     nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null
     # If this fails: https://developer.nvidia.com/cuda/wsl
 
     # Python
     python3 --version  # Must be 3.10+
-
-    # tmux
-    which tmux || sudo apt-get update && sudo apt-get install -y tmux
 
     # Claude Code
     claude --version  # Must be installed and authenticated
@@ -257,7 +257,17 @@ cp "$HOME/GIT/clawmux/.claude/commands/clawmux.md" ~/.claude/commands/clawmux.md
 ## 8. Install CLI
 
 ```bash
-sudo cp "$HOME/GIT/clawmux/cli/clawmux" /usr/local/bin/clawmux
+## Review the CLI script before installing
+cat "$HOME/GIT/clawmux/clawmux" | head -20
+
+## Option A: User-local install (no sudo needed)
+mkdir -p ~/.local/bin
+cp "$HOME/GIT/clawmux/clawmux" ~/.local/bin/clawmux
+chmod +x ~/.local/bin/clawmux
+# Ensure ~/.local/bin is in your PATH
+
+## Option B: System-wide install
+sudo cp "$HOME/GIT/clawmux/clawmux" /usr/local/bin/clawmux
 sudo chmod +x /usr/local/bin/clawmux
 ```
 

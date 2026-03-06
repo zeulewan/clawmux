@@ -13,8 +13,8 @@ cat /proc/version  # Should show "microsoft" or "WSL"
 # Python
 python3 --version  # Must be 3.10+
 
-# tmux
-which tmux || sudo apt-get update && sudo apt-get install -y tmux
+# System dependencies
+sudo apt install -y python3-venv tmux
 
 # Claude Code
 claude --version  # Must be installed and authenticated
@@ -108,7 +108,17 @@ cp "$HOME/GIT/clawmux/.claude/commands/clawmux.md" ~/.claude/commands/clawmux.md
 ## 8. Install CLI
 
 ```bash
-sudo cp "$HOME/GIT/clawmux/cli/clawmux" /usr/local/bin/clawmux
+# Review the script first
+cat "$HOME/GIT/clawmux/clawmux" | head -20
+
+# Option A: User-local install (no sudo needed)
+mkdir -p ~/.local/bin
+cp "$HOME/GIT/clawmux/clawmux" ~/.local/bin/clawmux
+chmod +x ~/.local/bin/clawmux
+# Ensure ~/.local/bin is in your PATH
+
+# Option B: System-wide install
+sudo cp "$HOME/GIT/clawmux/clawmux" /usr/local/bin/clawmux
 sudo chmod +x /usr/local/bin/clawmux
 ```
 

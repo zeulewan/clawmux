@@ -313,6 +313,73 @@ Phases 3 and 4 can run **in parallel** once Phase 2 is complete.
 
 ---
 
+## Phase 7: Migration Support (`clawmux update`)
+
+**Goal:** `clawmux update` handles the v0.7.2 → v0.7.3 transition transparently. Users run one command and the system migrates in place without disrupting live sessions.
+
+### Steps
+
+- [ ] **7.1** Add migration detection to `clawmux update`
+  - After pulling latest code, check for old layout indicators:
+    - `/tmp/clawmux-sessions/` exists with nested project dirs
+    - No `~/.clawmux/` directory present
+  - If detected, run migration automatically (with summary output)
+
+- [ ] **7.2** Create `~/.clawmux/` directory structure
+  - `~/.clawmux/sessions/` — flat agent directories
+  - `~/.clawmux/data/` — `agents.json`, `project-defaults.json`
+  - `~/.clawmux/history/` — message and activity logs
+  - `~/.clawmux/settings/` — user preferences
+  - Skip creation if directories already exist (idempotent)
+
+- [ ] **7.3** Generate `agents.json` from existing state files
+  - Scan `/tmp/clawmux-sessions/` for all `.session.json` files
+  - Scan for all `.project_status.json` files
+  - Merge into a single `agents.json` at `~/.clawmux/data/agents.json`
+  - Preserve session IDs, project assignments, roles, and areas
+  - Handle conflicts: if an agent has state in multiple project dirs, use the most recent `last_activity`
+
+- [ ] **7.4** Migrate history and settings
+  - Copy history files from old locations to `~/.clawmux/history/`
+  - Copy settings/config from old locations to `~/.clawmux/settings/`
+  - Preserve file timestamps
+
+- [ ] **7.5** Leave live sessions untouched
+  - **CRITICAL:** Do NOT move, rename, or delete any directory under `/tmp/clawmux-sessions/` that has a live tmux session
+  - Record old work_dir paths in `agents.json` — hub will continue using them for live sessions
+  - Only new spawns (after migration) use `~/.clawmux/sessions/{voice_id}/`
+
+- [ ] **7.6** Print migration summary
+  - Number of agents migrated to `agents.json`
+  - Number of live sessions left in old location
+  - Number of projects detected
+  - Path to new `CLAWMUX_HOME`
+  - Any warnings (stale files, conflicts)
+
+- [ ] **7.7** Add `clawmux migrate` standalone command
+  - Same logic as auto-migration in `clawmux update`, but can be run independently
+  - `clawmux migrate --dry-run` — show what would happen without making changes
+  - `clawmux migrate --force` — re-run migration even if `~/.clawmux/` already exists
+
+### Test Checklist
+
+- [ ] `clawmux update` on a fresh v0.7.2 install creates `~/.clawmux/` and populates `agents.json`
+- [ ] `agents.json` contains correct data from all old `.session.json` and `.project_status.json` files
+- [ ] Live sessions in `/tmp/clawmux-sessions/` continue working during and after migration
+- [ ] New agents spawn into `~/.clawmux/sessions/{voice_id}/` after migration
+- [ ] `clawmux migrate --dry-run` shows plan without making changes
+- [ ] Running migration twice is idempotent (no duplicates, no data loss)
+- [ ] History and settings files are copied (not moved) to new location
+- [ ] Migration summary prints clearly with agent/project counts
+
+### Rollback
+
+- Delete `~/.clawmux/` directory — old layout in `/tmp/clawmux-sessions/` is untouched
+- Revert `clawmux update` to skip migration logic
+- No data loss possible — migration copies data, never moves or deletes originals
+
+---
+
 ## Updated Phase Dependencies
 
 ```
@@ -321,6 +388,8 @@ Phase 2 (Cut Over)          ─── must complete before ──→ Phase 3 (Fl
 Phase 2 (Cut Over)          ─── must complete before ──→ Phase 4 (Templates)
 Phase 3 + 4                 ─── must complete before ──→ Phase 5 (Project Mgmt)
 Phase 2 (Cut Over)          ─── must complete before ──→ Phase 6 (Backend Abstraction)
+Phase 3 (Flat Layout)       ─── must complete before ──→ Phase 7 (Migration Support)
 ```
 
 Phases 3, 4, and 6 can run **in parallel** once Phase 2 is complete.
+Phase 7 depends on Phase 3 (new layout must be ready before migration can target it).
