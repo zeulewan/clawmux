@@ -75,7 +75,7 @@ async def _save_activity(session, text: str) -> None:
     """
     if not text:
         return
-    history.append(session.voice, session.label, "activity", text, _hist_prefix(session))
+    await asyncio.to_thread(history.append, session.voice, session.label, "activity", text, _hist_prefix(session))
     await send_to_browser({
         "type": "activity_text",
         "session_id": session.session_id,
@@ -441,7 +441,7 @@ async def handle_browser_message(data: dict) -> None:
             log.info("[%s] Audio STT: %s", session_id, text[:100])
             umid = _gen_msg_id()
             await send_to_browser({"session_id": session_id, "type": "user_text", "text": text, "msg_id": umid})
-            history.append(session.voice, session.label, "user", text, _hist_prefix(session), msg_id=umid)
+            await asyncio.to_thread(history.append, session.voice, session.label, "user", text, _hist_prefix(session), msg_id=umid)
             if session.work_dir:
                 await _inbox_write_and_notify(session, {
                     "from": "user",
@@ -460,7 +460,7 @@ async def handle_browser_message(data: dict) -> None:
             log.info("[%s] Text from browser: %s", session_id, text[:100])
             umid = _gen_msg_id()
             await send_to_browser({"session_id": session_id, "type": "user_text", "text": text, "msg_id": umid})
-            history.append(session.voice, session.label, "user", text, _hist_prefix(session), msg_id=umid)
+            await asyncio.to_thread(history.append, session.voice, session.label, "user", text, _hist_prefix(session), msg_id=umid)
             if session.work_dir:
                 await _inbox_write_and_notify(session, {
                     "from": "user",
@@ -486,17 +486,17 @@ async def handle_browser_message(data: dict) -> None:
             log.info("[%s] Interjection STT: %s", session_id, text[:100] if text else "(empty)")
         if text:
             session.interjections.append(text)
-            history.save_interjections(session.voice, session.interjections, _hist_prefix(session))
+            await asyncio.to_thread(history.save_interjections, session.voice, session.interjections, _hist_prefix(session))
             umid = _gen_msg_id()
             await send_to_browser({"session_id": session_id, "type": "user_text", "text": text, "interjection": True, "msg_id": umid})
-            history.append(session.voice, session.label, "user", text, _hist_prefix(session), msg_id=umid)
+            await asyncio.to_thread(history.append, session.voice, session.label, "user", text, _hist_prefix(session), msg_id=umid)
 
             # If agent is in wait mode, push via inbox for immediate pickup by wait WS
             if session.state == AgentState.IDLE and session.work_dir:
                 log.info("[%s] Agent in wait, pushing voice message via inbox", session_id)
                 combined = " ... ".join(session.interjections)
                 session.interjections.clear()
-                history.clear_interjections(session.voice, _hist_prefix(session))
+                await asyncio.to_thread(history.clear_interjections, session.voice, _hist_prefix(session))
                 await _inbox_write_and_notify(session, {
                     "from": "user",
                     "type": "voice",
@@ -542,7 +542,7 @@ async def handle_browser_message(data: dict) -> None:
             ack_id = _gen_msg_id()
             log.info("[%s] User ack on %s", session_id, msg_id)
             # Save to history so acks persist across reloads
-            history.append(session.voice, session.label, "user", "",
+            await asyncio.to_thread(history.append, session.voice, session.label, "user", "",
                            _hist_prefix(session), msg_id=ack_id,
                            parent_id=msg_id, bare_ack=True)
             await send_to_browser({
@@ -593,7 +593,7 @@ async def wait_websocket(ws: WebSocket, session_id: str):
     try:
         # First, check if there are already pending inbox messages
         if session.work_dir:
-            messages = inbox.read_and_clear(session.work_dir)
+            messages = await asyncio.to_thread(inbox.read_and_clear, session.work_dir)
             if messages:
                 await ws.send_json({"type": "messages", "messages": messages})
                 await send_to_browser({
@@ -609,13 +609,13 @@ async def wait_websocket(ws: WebSocket, session_id: str):
                 msg = await asyncio.wait_for(session._wait_queue.get(), timeout=5)
                 # Clear inbox file to prevent duplicate delivery on next wait
                 if session.work_dir:
-                    inbox.read_and_clear(session.work_dir)
+                    await asyncio.to_thread(inbox.read_and_clear, session.work_dir)
                 await ws.send_json({"type": "messages", "messages": [msg]})
                 return
             except asyncio.TimeoutError:
                 # Check inbox file as fallback (in case message was written directly)
                 if session.work_dir:
-                    messages = inbox.read_and_clear(session.work_dir)
+                    messages = await asyncio.to_thread(inbox.read_and_clear, session.work_dir)
                     if messages:
                         await ws.send_json({"type": "messages", "messages": messages})
                         await send_to_browser({
@@ -799,7 +799,7 @@ async def hook_tool_status(request: Request):
         session.status_text = "Processing..."
         # Check inbox for pending messages — deliver via additionalContext
         if session.work_dir:
-            messages = inbox.read_and_clear(session.work_dir)
+            messages = await asyncio.to_thread(inbox.read_and_clear, session.work_dir)
             if messages:
                 formatted = _format_inbox_messages(messages)
                 response_json = {
@@ -831,7 +831,7 @@ async def hook_tool_status(request: Request):
             session.set_state(AgentState.PROCESSING)
         # Check inbox for urgent messages — deliver via additionalContext
         if session.work_dir:
-            messages = inbox.read_and_clear(session.work_dir)
+            messages = await asyncio.to_thread(inbox.read_and_clear, session.work_dir)
             if messages:
                 formatted = _format_inbox_messages(messages)
                 response_json = {
@@ -855,7 +855,7 @@ async def hook_tool_status(request: Request):
         })
         # Also deliver any pending inbox messages
         if session.work_dir:
-            messages = inbox.read_and_clear(session.work_dir)
+            messages = await asyncio.to_thread(inbox.read_and_clear, session.work_dir)
             if messages:
                 formatted = _format_inbox_messages(messages)
                 response_json = {
@@ -874,7 +874,7 @@ async def hook_tool_status(request: Request):
         session.status_text = "Starting session..."
         await _save_activity(session, "Starting")
         if session.work_dir:
-            messages = inbox.read_and_clear(session.work_dir)
+            messages = await asyncio.to_thread(inbox.read_and_clear, session.work_dir)
             if messages:
                 formatted = _format_inbox_messages(messages)
                 response_json = {
@@ -1014,7 +1014,7 @@ async def upload_file(session_id: str, file: UploadFile):
         "text": f"\U0001F4CE Uploaded {safe_name} ({size_str})",
         "msg_id": umid,
     })
-    history.append(session.voice, session.label, "user",
+    await asyncio.to_thread(history.append, session.voice, session.label, "user",
                    f"\U0001F4CE Uploaded {safe_name} ({size_str})",
                    _hist_prefix(session), msg_id=umid)
 
@@ -1195,7 +1195,7 @@ async def get_history(voice_id: str, request: Request):
     # Use project from query param or active project
     project = request.query_params.get("project", project_mgr.active_project)
     prefix = project_mgr.get_history_prefix(project)
-    messages = history.load(voice_id, prefix)
+    messages = await asyncio.to_thread(history.load, voice_id, prefix)
     # Include count of pending interjections so browser can style unseen messages
     pending_count = 0
     for s in session_mgr.sessions.values():
@@ -1209,7 +1209,7 @@ async def get_history(voice_id: str, request: Request):
 async def clear_history(voice_id: str, request: Request):
     project = request.query_params.get("project", project_mgr.active_project)
     prefix = project_mgr.get_history_prefix(project)
-    history.clear(voice_id, prefix)
+    await asyncio.to_thread(history.clear, voice_id, prefix)
     return JSONResponse({"status": "cleared", "voice_id": voice_id})
 
 
@@ -1318,11 +1318,11 @@ async def send_message(request: Request):
 
     # Save to history so messages persist across browser reloads
     is_bare_ack = bool(parent_id and not content)
-    history.append(recipient.voice, recipient.label, "system",
+    await asyncio.to_thread(history.append, recipient.voice, recipient.label, "system",
                    f"[Agent msg from {sender_name.capitalize()}] {content}",
                    _hist_prefix(recipient),
                    msg_id=msg.id, parent_id=parent_id or None, bare_ack=is_bare_ack)
-    history.append(sender.voice, sender.label, "system",
+    await asyncio.to_thread(history.append, sender.voice, sender.label, "system",
                    f"[Agent msg to {recip_name.capitalize()}] {content}",
                    _hist_prefix(sender),
                    msg_id=msg.id, parent_id=parent_id or None, bare_ack=is_bare_ack)
@@ -1354,7 +1354,7 @@ async def speak_to_user(request: Request):
         msg_id = _gen_msg_id()
         sender_name = sender.voice.replace("af_", "").replace("am_", "").replace("bm_", "")
         # Save to history so ack persists across reloads
-        history.append(sender.voice, sender.label, "assistant", "",
+        await asyncio.to_thread(history.append, sender.voice, sender.label, "assistant", "",
                        _hist_prefix(sender), msg_id=msg_id,
                        parent_id=parent_id, bare_ack=True)
         await send_to_browser({
@@ -1378,13 +1378,14 @@ async def speak_to_user(request: Request):
     sender_name = sender.voice.replace("af_", "").replace("am_", "").replace("bm_", "")
     msg_id = _gen_msg_id()
 
-    # Save to history
-    history.append(sender.voice, sender.label, "assistant", content, _hist_prefix(sender), msg_id=msg_id)
     if sender_id != _browser_viewed_session:
         sender.unread_count += 1
 
-    # Send text to browser chat (fire_and_forget prevents auto-record trigger)
+    # Send text to browser chat FIRST (fire_and_forget prevents auto-record trigger)
     await send_to_browser({"session_id": sender_id, "type": "assistant_text", "text": content, "msg_id": msg_id, "fire_and_forget": True})
+
+    # Save to history (in thread to avoid blocking event loop)
+    await asyncio.to_thread(history.append, sender.voice, sender.label, "assistant", content, _hist_prefix(sender), msg_id=msg_id)
 
     # TTS — strip non-speakable content and play
     skip_tts = sender.text_mode or not _load_settings().get("voice_responses", True)
@@ -1470,7 +1471,7 @@ async def get_inbox(session_id: str):
     session = session_mgr.sessions.get(session_id)
     if not session or not session.work_dir:
         return JSONResponse({"messages": []})
-    messages = inbox.read_and_clear(session.work_dir)
+    messages = await asyncio.to_thread(inbox.read_and_clear, session.work_dir)
     if messages:
         # Notify browser that inbox was cleared
         await send_to_browser({
@@ -1487,8 +1488,8 @@ async def peek_inbox(session_id: str):
     session = session_mgr.sessions.get(session_id)
     if not session or not session.work_dir:
         return JSONResponse({"count": 0})
-    count = inbox.peek(session.work_dir)
-    latest = inbox.peek_latest(session.work_dir) if count > 0 else None
+    count = await asyncio.to_thread(inbox.peek, session.work_dir)
+    latest = await asyncio.to_thread(inbox.peek_latest, session.work_dir) if count > 0 else None
     result = {"count": count}
     if latest:
         result["latest"] = {
@@ -1501,8 +1502,8 @@ async def peek_inbox(session_id: str):
 
 async def _inbox_write_and_notify(session, msg_dict: dict) -> dict:
     """Write to inbox and notify browser + wait WS."""
-    written = inbox.write(session.work_dir, msg_dict)
-    count = inbox.peek(session.work_dir)
+    written = await asyncio.to_thread(inbox.write, session.work_dir, msg_dict)
+    count = await asyncio.to_thread(inbox.peek, session.work_dir)
     await send_to_browser({
         "type": "inbox_update",
         "session_id": session.session_id,
