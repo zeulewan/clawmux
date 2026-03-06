@@ -1541,7 +1541,7 @@ async def _load_whisper_model(model_name: str) -> None:
         async with httpx.AsyncClient(timeout=60) as client:
             resp = await client.post(
                 f"{hub_config.WHISPER_URL}/load",
-                data={"model": model_path},
+                files={"model": (None, model_path)},
             )
             if resp.status_code == 200:
                 log.info("Whisper model loaded: %s", model_name)
