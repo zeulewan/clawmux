@@ -1,38 +1,28 @@
 # Roadmap
 
-Detailed release history and upcoming work. Each version page includes checklists, implementation notes, and agent attribution.
+## In Progress
 
-## Current
-
-- [v0.7.3 — Flat Architecture & Centralized State](v0.7.3.md): Flat agent directories, centralized `agents.json`, template-based CLAUDE.md, simplified tmux names.
-  - [Implementation Roadmap](v0.7.3-implementation.md): Phased checklist with test plans and rollback points.
-- [v0.7.0 — Architecture Refactor & Mobile Polish](v0.7.0/index.md): MCP removal, state machine, code extraction, mobile UX overhaul, deployment settings, activity logging.
+- [v0.7.3 — Flat Architecture & Centralized State](v0.7.3/index.md)
+  - [Brief](v0.7.3/brief.md) — decisions, scope, and open questions
+  - [Implementation Plan](v0.7.3/implementation.md) — phased checklist with test plans and rollback points
 
 ## Upcoming
 
-- [v0.8.0 — Direct API & Multi-Provider](v0.8.0.md): Direct Anthropic API migration, pluggable backends, streaming TTS.
+- [v0.8.0 — New Backends & Provider Support](v0.8.0.md)
 
-## History
+## Releases
 
-- [v0.6.0 — Hook-Based Agent Communication](v0.6.0.md): Replaced tmux-injection messaging with Claude Code hooks for reliable, event-driven delivery. Unified `send`/`wait` commands, message threading, inbox-based architecture.
-- [v0.5.0 — Polish & Reliability](v0.5.0/index.md): Inter-agent messaging, hub stability, browser bug fixes, UX polish. ClawMux CLI.
-  - [ClawMux CLI](v0.5.0/cli.md): CLI tool for voice converse and inter-agent messaging.
-- [v0.4.0 — iOS App](v0.4.0.md)
-- [v0.3.0 — Multi-Session](v0.3.0.md)
-- [v0.2.0 — Voice Modes](v0.2.0.md)
-- [v0.1.0 — MCP Rewrite](v0.1.0.md)
-- [v0.0.1 — Initial Release](v0.0.1.md)
+| Version | Title | Highlights |
+|---|---|---|
+| [v0.7.0](releases/v0.7.0/index.md) | Architecture Refactor & Mobile Polish | MCP removal, state machine, code extraction, mobile UX, deployment settings |
+| [v0.6.0](releases/v0.6.0.md) | Hook-Based Agent Communication | Replaced tmux injection with hooks. Unified `send`/`wait` commands |
+| [v0.5.0](releases/v0.5.0/index.md) | Polish & Reliability | Inter-agent messaging, hub stability, browser fixes. [CLI spec](releases/v0.5.0/cli.md) |
+| [v0.4.0](releases/v0.4.0.md) | iOS App | Native Swift app, browser UI overhaul, hub reliability |
+| [v0.3.0](releases/v0.3.0.md) | Multi-Session | Multi-session hub, voice grid, mobile controls |
+| [v0.2.0](releases/v0.2.0.md) | Voice Modes | Voice mode features |
+| [v0.1.0](releases/v0.1.0.md) | MCP Rewrite | Architecture rewrite to MCP + WebSocket |
+| [v0.0.1](releases/v0.0.1.md) | Initial Release | Standalone FastAPI server with Claude API |
 
-## Vision
+## Long-Term
 
-- [Vision Roadmap](vision.md): Long-term phases for federation, trust, and next-gen version control.
-
-## Research
-
-- [A2A Protocol Feasibility Study](a2a-feasibility.md): Assessment of integrating the Agent2Agent protocol for hub federation and external agent interop.
-
-## Reference
-
-- [Project Folders Spec](v0.6.0-projects.md): Multi-project architecture (shipped in v0.5.x).
-- [CLI Messaging Design](../reference/cli-messaging.md): Full technical spec for the ClawMux CLI.
-- [Orchestration Reference](../reference/orchestration.md): Session model, spawn flow, worker template, message routing, resource limits.
+- [Vision](vision.md) — federation, trust layers, and next-gen version control

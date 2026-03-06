@@ -304,7 +304,7 @@ Created → Spawning → Ready → Active → Idle → Suspended
 
 **CRITICAL:** Never move a live session directory. Claude Code sessions are tied to their exact working directory path. Moving a directory breaks bash, tools, and context permanently.
 
-See the [safe migration plan](../../../docs/project-folders-migration-plan.md) for the full blue-green deployment strategy.
+
 
 ## Recovery Plan
 
