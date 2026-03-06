@@ -10,12 +10,15 @@ Major architecture cleanup (MCP removal, code extraction, state machine), mobile
 - [x] Extract `voice.py` from `hub.py` — TTS/STT handling separated
 - [x] Remove old converse pipeline remnants and audio queue
 - [x] Force `clawmux wait` on startup via `--prompt` flag
+- [x] Move sync file I/O to thread pool to unblock asyncio event loop
 
 ## Deployment Settings
 
 - [x] Configurable STT/TTS URLs — Together/Split mode selector in settings UI
 - [x] Apply saved TTS/STT URLs and deployment mode on hub startup
 - [x] Dynamic Whisper model switching via quality toggle (high/medium/low)
+- [x] Service status endpoint — `GET /api/services/status` pings TTS/STT and returns availability
+- [x] Deployment mode validation — warning banner with platform-specific install instructions when services are missing
 
 ## Mobile UX
 
@@ -46,6 +49,11 @@ Major architecture cleanup (MCP removal, code extraction, state machine), mobile
 - [x] Inter-agent message redesign — collapsed one-liners with click-to-expand
 - [x] Message threading with persistent thread containers
 - [x] Fix ack badge positioning and visibility
+
+## Agent UX
+
+- [x] Agent-colored tmux status bars — applied at spawn time and on reload
+- [x] ClawMux-aware statusline — Claude Code statusline shows only context usage in ClawMux sessions
 
 ## Other
 
