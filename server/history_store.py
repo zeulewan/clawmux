@@ -5,30 +5,23 @@ import logging
 import time
 from pathlib import Path
 
-log = logging.getLogger("hub.history")
+from hub_config import SESSIONS_DIR
 
-HISTORY_DIR = Path(__file__).parent.parent / "data" / "history"
+log = logging.getLogger("hub.history")
 MAX_MESSAGES = 2000
 CLAUDE_CONTEXT_MESSAGES = 100
 
 
 class HistoryStore:
     def __init__(self):
-        HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+        SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 
     def _path(self, voice_id: str, project: str | None = None) -> Path:
-        """Get path for a voice's history file, optionally within a project.
-
-        project=None or "default" uses the root history dir (backward compatible).
-        project="some-project" uses HISTORY_DIR/{project}/{voice_id}.json.
-        """
+        """Get path for a voice's history file inside its session directory."""
         safe = voice_id.replace("/", "").replace("..", "")
-        if project and project != "default":
-            safe_proj = project.replace("/", "").replace("..", "")
-            proj_dir = HISTORY_DIR / safe_proj
-            proj_dir.mkdir(parents=True, exist_ok=True)
-            return proj_dir / f"{safe}.json"
-        return HISTORY_DIR / f"{safe}.json"
+        agent_dir = SESSIONS_DIR / safe
+        agent_dir.mkdir(parents=True, exist_ok=True)
+        return agent_dir / "history.json"
 
     def _load_data(self, voice_id: str, project: str | None = None) -> dict:
         path = self._path(voice_id, project)

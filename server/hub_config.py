@@ -8,7 +8,7 @@ from pathlib import Path
 CLAWMUX_HOME = Path(os.environ.get("CLAWMUX_HOME", os.path.expanduser("~/.clawmux")))
 SESSIONS_DIR = CLAWMUX_HOME / "sessions"
 DATA_DIR = CLAWMUX_HOME / "data"
-HISTORY_DIR = CLAWMUX_HOME / "history"
+
 
 # Legacy session directory (pre-v0.7.3) — scanned for orphan adoption
 LEGACY_SESSION_DIR = Path("/tmp/clawmux-sessions")
