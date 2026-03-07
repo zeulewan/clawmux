@@ -118,23 +118,15 @@ ok "Python dependencies installed"
 
 install_nvidia_services() {
     info "Setting up TTS/STT for NVIDIA GPU..."
-
-    # Check if voicemode is available
-    if ! command -v voicemode &>/dev/null && ! pip show voicemode &>/dev/null; then
-        info "Installing VoiceMode for TTS/STT service management..."
-        pip install -q voicemode || pipx install voicemode || {
-            warn "Could not install voicemode. Install TTS/STT manually."
-            return
-        }
-    fi
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
     # Whisper STT
     if curl -s "http://127.0.0.1:$WHISPER_PORT/v1/models" &>/dev/null; then
         ok "Whisper STT already running on port $WHISPER_PORT"
     else
         info "Installing Whisper STT..."
-        voicemode whisper install 2>/dev/null || warn "Whisper install failed — install manually"
-        voicemode whisper start 2>/dev/null || warn "Whisper start failed — start manually"
+        bash "$SCRIPT_DIR/services/whisper/install.sh" || warn "Whisper install failed — install manually"
+        bash "$SCRIPT_DIR/services/whisper/start.sh" || warn "Whisper start failed — start manually"
     fi
 
     # Kokoro TTS
@@ -142,8 +134,8 @@ install_nvidia_services() {
         ok "Kokoro TTS already running on port $KOKORO_PORT"
     else
         info "Installing Kokoro TTS..."
-        voicemode kokoro install 2>/dev/null || warn "Kokoro install failed — install manually"
-        voicemode kokoro start 2>/dev/null || warn "Kokoro start failed — start manually"
+        bash "$SCRIPT_DIR/services/kokoro/install.sh" || warn "Kokoro install failed — install manually"
+        bash "$SCRIPT_DIR/services/kokoro/start.sh" || warn "Kokoro start failed — start manually"
     fi
 }
 

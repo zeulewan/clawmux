@@ -112,13 +112,15 @@ class Session:
 
 class SessionManager:
     def __init__(self, history_store=None, project_mgr: ProjectManager | None = None,
-                 agents_store: AgentsStore | None = None, backend=None) -> None:
+                 agents_store: AgentsStore | None = None, backend=None,
+                 on_session_death=None) -> None:
         self.sessions: dict[str, Session] = {}
         self._counter = 0
         self.history_store = history_store
         self.project_mgr = project_mgr or ProjectManager()
         self.agents_store = agents_store
         self.backend = backend  # AgentBackend instance
+        self._on_session_death = on_session_death  # async callback(session_id)
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
         if LEGACY_SESSION_DIR.exists():
             log.info("Legacy session dir found at %s — will scan for orphans", LEGACY_SESSION_DIR)
@@ -134,7 +136,7 @@ class SessionManager:
             session_id=session.session_id,
             project=session.project or None,
             area=session.project_area or "",
-            role=session.role or "worker",
+            role=session.role or "",
             task=session.task or "",
             last_active=session.last_activity,
             model=session.model or "opus",
@@ -676,6 +678,12 @@ class SessionManager:
                     del self.sessions[session_id]
                     # Dual-write: mark agent as dead in agents.json
                     await self._sync_agent_store(voice_id)
+                    # Notify browser of session death
+                    if self._on_session_death:
+                        try:
+                            await self._on_session_death(session_id)
+                        except Exception as e:
+                            log.warning("on_session_death callback failed: %s", e)
                     continue
 
                 # Voice mode watchdog: detect agents that dropped out of wait loop

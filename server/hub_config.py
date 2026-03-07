@@ -37,7 +37,9 @@ QUALITY_MODEL_MAP = {
 
 # Whisper model file paths (for dynamic loading via /load endpoint)
 # Resolved at runtime based on common install locations
-WHISPER_MODEL_DIR = os.path.expanduser("~/.voicemode/services/whisper/models")
+WHISPER_MODEL_DIR = os.path.expanduser(
+    os.environ.get("CLAWMUX_WHISPER_MODEL_DIR", str(CLAWMUX_HOME / "services" / "whisper" / "models"))
+)
 
 # Default project voices (9 agents)
 VOICES = [

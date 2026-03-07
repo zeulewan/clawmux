@@ -95,7 +95,6 @@ class TemplateRenderer:
         area = entry.area or ""
 
         managers_section = self._build_managers_section(entry.project)
-        role_rules = self._load_rules(role)
 
         rendered = self._template.format(
             name=name,
@@ -103,7 +102,6 @@ class TemplateRenderer:
             project=project,
             area=area,
             managers_section=managers_section,
-            role_specific_rules=role_rules,
         )
 
         # Clean up trailing whitespace from empty substitutions
@@ -121,6 +119,31 @@ class TemplateRenderer:
         claude_md = work_dir / "CLAUDE.md"
         claude_md.write_text(content)
         log.info("Rendered CLAUDE.md for %s at %s", voice_id, claude_md)
+
+        # Also write role rules to .claude/CLAUDE.md
+        await self.render_role_to_file(voice_id, work_dir)
+        return True
+
+    async def render_role_to_file(self, voice_id: str, work_dir: Path) -> bool:
+        """Write role-specific rules to {work_dir}/.claude/rules/role.md."""
+        entry = await self._store.get(voice_id)
+        if entry is None:
+            return False
+
+        role = entry.role or ""
+        role_file = work_dir / ".claude" / "rules" / "role.md"
+
+        if not role:
+            # No role assigned — remove the role file if it exists
+            if role_file.exists():
+                role_file.unlink()
+                log.info("Removed .claude/rules/role.md for %s (no role)", voice_id)
+            return True
+
+        role_rules = self._load_rules(role)
+        role_file.parent.mkdir(parents=True, exist_ok=True)
+        role_file.write_text(role_rules + "\n" if role_rules else "")
+        log.info("Rendered .claude/rules/role.md (role=%s) for %s", role, voice_id)
         return True
 
     async def render_all(self, sessions: dict | None = None) -> int:

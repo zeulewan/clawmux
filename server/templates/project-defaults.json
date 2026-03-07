@@ -1,6 +1,1 @@
-{
-  "default_agents": {
-    "managers": ["af_sky", "af_sarah"],
-    "workers": ["af_alloy", "am_adam", "am_echo", "am_onyx"]
-  }
-}
+{}

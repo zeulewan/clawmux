@@ -36,7 +36,7 @@ AGENTS_FILE = DATA_DIR / "agents.json"
 class AgentEntry:
     session_id: str | None = None
     project: str | None = None
-    role: str = "worker"          # display role (e.g. "Manager", "Frontend", "Researcher")
+    role: str = ""                # display role (e.g. "Manager", "Frontend", "Researcher")
     area: str = ""                # e.g. "frontend", "backend", "devops"
     task: str = ""                # current task description (~5 words)
     backend: str = "claude-code"  # backend type
