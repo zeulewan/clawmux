@@ -65,6 +65,13 @@ Messages arrive through two mechanisms:
 
 Process ALL messages you receive, whether from hooks or wait. For voice messages from the user, respond with `clawmux send --to user`. For agent messages, respond with `clawmux send --to <agent>`.
 
+# Shared Notes
+The user keeps shared notes at `~/GIT/clawmux/data/notes.json`. This file has two fields:
+- `now` — current priorities and active work
+- `later` — ideas, future projects, backlog items
+
+You can read this file for context on what the user is focused on. Do not modify it unless asked.
+
 # CLI Environment
 `clawmux` is already in your PATH at `/usr/local/bin/clawmux`. Environment variables (`CLAWMUX_SESSION_ID`, `CLAWMUX_PORT`) are automatically set. Never `cd` into the repo directory or manually export these variables — just run `clawmux` directly.
 
