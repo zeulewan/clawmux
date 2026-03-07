@@ -38,6 +38,8 @@ from project_manager import ProjectManager
 from session_manager import SessionManager
 from state_machine import AgentState
 
+from agents_store import AgentsStore
+
 # Logging
 logging.basicConfig(
     level=logging.INFO,
@@ -54,6 +56,7 @@ history = HistoryStore()
 project_mgr = ProjectManager()
 session_mgr = SessionManager(history_store=history, project_mgr=project_mgr)
 broker = MessageBroker()
+agents_store = AgentsStore()
 
 
 def _hist_prefix(session) -> str | None:
@@ -313,6 +316,7 @@ async def lifespan(app: FastAPI):
     log.info("Model: %s, Mode: %s, TTS: %s, STT: %s",
              hub_config.CLAUDE_MODEL, hub_config.DEPLOYMENT_MODE,
              hub_config.KOKORO_URL, hub_config.WHISPER_URL)
+    await agents_store.load()
     await session_mgr.cleanup_stale_sessions()
     broker.start()
     timeout_task = asyncio.create_task(session_mgr.run_timeout_loop())
@@ -1076,6 +1080,51 @@ async def set_session_speed(session_id: str, request: Request):
     session.speed = speed
     log.info("[%s] Speed changed to %s", session_id, speed)
     return JSONResponse({"speed": speed})
+
+
+# --- Agent Metadata (v0.7.3 centralized agents.json) ---
+
+
+@app.get("/api/agents")
+async def list_agents():
+    """Return all agents from agents.json."""
+    agents = await agents_store.all_agents()
+    return JSONResponse({vid: entry.to_dict() for vid, entry in agents.items()})
+
+
+@app.get("/api/agents/{voice_id}")
+async def get_agent(voice_id: str):
+    """Return a single agent's metadata from agents.json."""
+    agent = await agents_store.get(voice_id)
+    if agent is None:
+        return JSONResponse({"error": "Agent not found"}, status_code=404)
+    return JSONResponse(agent.to_dict())
+
+
+@app.put("/api/agents/{voice_id}")
+async def update_agent(voice_id: str, request: Request):
+    """Update an agent's metadata in agents.json."""
+    body = await request.json()
+    updated = await agents_store.update(voice_id, **body)
+    if updated is None:
+        return JSONResponse({"error": "Agent not found"}, status_code=404)
+    log.info("[agents] Updated %s: %s", voice_id, list(body.keys()))
+    return JSONResponse(updated.to_dict())
+
+
+@app.post("/api/agents/{voice_id}/assign")
+async def assign_agent(voice_id: str, request: Request):
+    """Change an agent's project and/or role assignment."""
+    body = await request.json()
+    fields = {k: body[k] for k in ("project", "role", "area") if k in body}
+    if not fields:
+        return JSONResponse({"error": "No assignment fields provided"}, status_code=400)
+    updated = await agents_store.update(voice_id, **fields)
+    if updated is None:
+        return JSONResponse({"error": "Agent not found"}, status_code=404)
+    log.info("[agents] Assigned %s → project=%s role=%s area=%s",
+             voice_id, updated.project, updated.role, updated.area)
+    return JSONResponse(updated.to_dict())
 
 
 # --- Project Management ---
