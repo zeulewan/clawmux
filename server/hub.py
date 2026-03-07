@@ -1008,6 +1008,30 @@ async def restart_session(session_id: str):
     return JSONResponse({"status": "restarted", "session_id": new_session.session_id})
 
 
+@app.post("/api/sessions/{session_id}/interrupt")
+async def interrupt_session(session_id: str):
+    """Send Escape to a running agent to soft-interrupt it."""
+    session = session_mgr.sessions.get(session_id)
+    if not session:
+        return JSONResponse({"error": "session not found"}, status_code=404)
+    tmux_name = session.tmux_session
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "tmux", "send-keys", "-t", tmux_name, "Escape",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            log.warning("Failed to interrupt %s: %s", tmux_name, stderr.decode().strip())
+            return JSONResponse({"error": "tmux send-keys failed"}, status_code=500)
+    except Exception as e:
+        log.error("Interrupt error for %s: %s", tmux_name, e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+    log.info("Interrupted session %s (tmux: %s)", session_id, tmux_name)
+    return JSONResponse({"status": "interrupted"})
+
+
 _MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
 
 @app.post("/api/sessions/{session_id}/upload")

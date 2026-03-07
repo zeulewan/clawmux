@@ -238,6 +238,17 @@ body {
   flex-shrink: 0;
   box-shadow: 0 0 4px rgba(255,69,58,0.5);
 }
+.sidebar-card .sb-stop {
+  width: 22px; height: 22px;
+  padding: 0; border: none; border-radius: 4px;
+  background: rgba(255,69,58,0.15);
+  color: var(--red, #ff453a);
+  cursor: pointer; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+  align-self: center;
+}
+.sidebar-card .sb-stop:hover { background: rgba(255,69,58,0.3); }
 
 /* Sidebar project groups */
 .sidebar-project-group {
@@ -888,22 +899,6 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 }
 #text-send:hover { background: #3a80ef; transform: scale(1.05); }
 #text-send:disabled { opacity: 0.3; cursor: not-allowed; box-shadow: none; transform: none; }
-#text-paste {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  font-size: 0.85rem;
-  cursor: pointer;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: all 0.15s;
-}
-#text-paste:hover { background: var(--bg-card-hover); }
 
 /* Controls — grid: top row = waveform/transport, bottom = mode | mic | status */
 #controls {
@@ -1348,15 +1343,10 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   #waveform { height: 12px !important; }
   #status { font-size: 0.6rem; }
   #mode-toggle { font-size: 0.45rem !important; padding: 1px 5px !important; }
-  #text-paste { display: flex; }
-  /* Text input bar: two rows on mobile — buttons on top, text field below */
-  #text-input-bar.active {
-    flex-wrap: wrap;
-  }
+  /* Text input bar on mobile — single row, textarea + send */
   #text-input-bar #text-input {
-    order: 10;
-    width: 100%;
-    flex: none;
+    flex: 1;
+    min-width: 0;
   }
 
   /* Sidebar expand toggle */
@@ -1574,7 +1564,6 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 </div>
 
 <div id="text-input-bar">
-  <button id="text-paste" onclick="pasteFromClipboard()" title="Paste from clipboard">&#128203;</button>
   <textarea id="text-input" rows="1" placeholder="Type a message..."></textarea>
   <button id="text-send" onclick="sendTextMessage()" disabled>&#8593;</button>
 </div>
