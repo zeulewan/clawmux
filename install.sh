@@ -117,8 +117,12 @@ if [ -d "$INSTALL_DIR/.git" ]; then
         git pull --ff-only || warn "Could not pull latest (you may have local changes)"
     else
         ok "Already up to date."
-        if [ "$FORCE" = false ]; then
-            info "Use --force for a clean reinstall."
+        read -p "Do you want to force a clean reinstall? (y/N): " REINSTALL
+        if [[ "$REINSTALL" =~ ^[Yy] ]]; then
+            warn "Clean reinstall — removing venv..."
+            rm -rf .venv
+        else
+            info "Nothing to do. Exiting."
             exit 0
         fi
     fi
