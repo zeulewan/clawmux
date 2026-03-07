@@ -8,7 +8,7 @@
 //   audio.js: stopActiveAudio, stopRecording, stopElapsedTimer,
 //             stopThinkingSound, setSessionState, getSessionState
 //   hub.html: chatArea, controls, statusEl, dot, connLabel, inputMode,
-//             currentProject, currentProjectVoices, textInputBar,
+//             currentProject, currentProjectVoices, allProjects, textInputBar,
 //             switchTab, spawnSession, showContextMenu, hideDebugPanel,
 //             debugActive
 
@@ -240,7 +240,7 @@ function clearSessionUnread(sessionId) {
 function _sidebarState(voiceId) {
   let session = null;
   for (const [sid, s] of sessions) {
-    if (s.voice === voiceId && (!s.project_slug || s.project_slug === currentProject)) { session = s; break; }
+    if (s.voice === voiceId) { session = s; break; }
   }
   const isSpawning = spawningVoices.has(voiceId);
   const hasUnread = session && (session.unreadCount || 0) > 0;
@@ -264,8 +264,6 @@ function _sidebarState(voiceId) {
       // idle
       stateClass = 'idle'; statusLabel = 'Idle';
     }
-    // Unread badge is now an overlay, not a state override
-    // (handled separately in _updateSidebarCard)
   }
   const isSelected = session && session.session_id === activeSessionId;
   const projectText = session && session.project
@@ -341,52 +339,189 @@ function _updateSidebarCard(card, voiceId, state) {
   } else if (!isCompacting && compactEl) {
     compactEl.remove();
   }
-  // Ensure draggable + drag handlers (cards created before drag feature lack these)
-  if (!card.draggable) {
-    card.draggable = true;
-    card.addEventListener('dragstart', (e) => {
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', voiceId);
-      card.classList.add('dragging');
-    });
-    card.addEventListener('dragend', () => { card.classList.remove('dragging'); });
-    card.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      card.classList.add('drag-over');
-    });
-    card.addEventListener('dragleave', () => { card.classList.remove('drag-over'); });
-    card.addEventListener('drop', (e) => {
-      e.preventDefault();
-      card.classList.remove('drag-over');
-      const fromVoice = e.dataTransfer.getData('text/plain');
-      const toVoice = voiceId;
-      if (fromVoice && fromVoice !== toVoice) reorderSidebarVoice(fromVoice, toVoice);
-    });
-  }
   // Update closure refs
   card._voiceSession = session;
   card._voiceSpawning = isSpawning;
 }
 
+// --- Collapsed state persistence ---
+const _collapsedProjects = new Set(JSON.parse(localStorage.getItem('sidebar_collapsed_projects') || '[]'));
+function _saveCollapsedState() {
+  localStorage.setItem('sidebar_collapsed_projects', JSON.stringify([..._collapsedProjects]));
+}
+
+function _toggleProjectCollapse(slug) {
+  if (_collapsedProjects.has(slug)) {
+    _collapsedProjects.delete(slug);
+  } else {
+    _collapsedProjects.add(slug);
+  }
+  _saveCollapsedState();
+  renderSidebar();
+}
+
+function _createAgentCard(voiceId, name, state) {
+  const card = document.createElement('div');
+  card.className = 'sidebar-card';
+  card.dataset.voiceId = voiceId;
+  card.draggable = true;
+
+  // Drag-and-drop for cross-project moves
+  card.addEventListener('dragstart', (e) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', voiceId);
+    card.classList.add('dragging');
+  });
+  card.addEventListener('dragend', () => { card.classList.remove('dragging'); });
+
+  const icon = document.createElement('div');
+  icon.className = 'sb-icon';
+  const iconVal = voiceIcon(voiceId);
+  if (iconVal.startsWith('<')) { icon.innerHTML = iconVal; } else { icon.textContent = iconVal; }
+  const vc = voiceColor(voiceId);
+  icon.style.background = vc + '20';
+  icon.style.color = vc;
+  const info = document.createElement('div');
+  info.className = 'sb-info';
+  const nameEl = document.createElement('div');
+  nameEl.className = 'sb-name';
+  nameEl.textContent = name;
+  nameEl.style.color = vc;
+  const statusEl2 = document.createElement('div');
+  statusEl2.className = 'sb-status';
+  const dot2 = document.createElement('span');
+  dot2.className = 'sb-dot';
+  const labelEl = document.createElement('span');
+  labelEl.textContent = state.statusLabel;
+  statusEl2.appendChild(dot2);
+  statusEl2.appendChild(labelEl);
+  info.appendChild(nameEl);
+  if (state.roleText) {
+    const roleEl = document.createElement('div');
+    roleEl.className = 'sb-role';
+    roleEl.textContent = state.roleText;
+    info.appendChild(roleEl);
+  }
+  if (state.taskText) {
+    const taskEl = document.createElement('div');
+    taskEl.className = 'sb-task';
+    taskEl.textContent = state.taskText;
+    info.appendChild(taskEl);
+  }
+  if (state.isCompacting) {
+    const compactEl = document.createElement('div');
+    compactEl.className = 'sb-compacting';
+    compactEl.textContent = 'Compacting…';
+    info.appendChild(compactEl);
+  }
+  info.appendChild(statusEl2);
+  card.appendChild(icon);
+  card.appendChild(info);
+  if (state.stateClass) card.classList.add(state.stateClass);
+  if (state.isSelected) card.classList.add('selected');
+  if (state.hasUnread) {
+    const badge = document.createElement('span');
+    badge.className = 'sb-unread';
+    card.appendChild(badge);
+  }
+  card._voiceSession = state.session;
+  card._voiceSpawning = state.isSpawning;
+  card.onclick = () => {
+    if (card._voiceSpawning) return;
+    if (card._voiceSession) { switchTab(card._voiceSession.session_id, true); }
+    else { spawnSession(voiceId); }
+  };
+  card.oncontextmenu = (e) => {
+    e.preventDefault();
+    if (card._voiceSession) { showContextMenu(e, card._voiceSession.session_id, voiceId); }
+    else { showContextMenu(e, null, voiceId); }
+  };
+  let lpTimer = null, lpFired = false;
+  card.addEventListener('touchstart', (e) => {
+    lpFired = false;
+    lpTimer = setTimeout(() => {
+      lpTimer = null; lpFired = true;
+      card.classList.add('long-press-active');
+      const touch = e.touches[0];
+      const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: touch.clientX, clientY: touch.clientY };
+      if (card._voiceSession) { showContextMenu(fakeEvent, card._voiceSession.session_id, voiceId); }
+      else { showContextMenu(fakeEvent, null, voiceId); }
+      setTimeout(() => card.classList.remove('long-press-active'), 200);
+    }, 500);
+  }, { passive: true });
+  card.addEventListener('touchend', (e) => {
+    if (lpTimer) clearTimeout(lpTimer); lpTimer = null;
+    if (lpFired) { e.preventDefault(); lpFired = false; }
+  });
+  card.addEventListener('touchmove', () => { if (lpTimer) clearTimeout(lpTimer); lpTimer = null; });
+  return card;
+}
+
+// Move an agent to a different project via API
+async function _moveAgentToProject(voiceId, targetProjectSlug) {
+  const targetProject = (typeof allProjects !== 'undefined' ? allProjects : []).find(p => p.slug === targetProjectSlug);
+  const projectName = targetProject ? (targetProject.name || targetProjectSlug) : targetProjectSlug;
+  // Find the session for this voice
+  let session = null;
+  for (const [, s] of sessions) {
+    if (s.voice === voiceId) { session = s; break; }
+  }
+  try {
+    // Update project status on session if active
+    if (session) {
+      await fetch(`/api/project-status/${session.session_id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project: projectName, area: session.project_area || '' }),
+      });
+    }
+    // Update agents.json
+    await fetch(`/api/agents/${voiceId}/assign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project: targetProjectSlug }),
+    });
+    // Move voice between project voice lists
+    if (typeof allProjects !== 'undefined') {
+      for (const proj of allProjects) {
+        const idx = (proj.voices || []).indexOf(voiceId);
+        if (idx >= 0) {
+          proj.voices.splice(idx, 1);
+          // Persist removal
+          fetch(`/api/projects/${proj.slug}/voices`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ voices: proj.voices }),
+          }).catch(() => {});
+        }
+      }
+      if (targetProject && targetProject.voices) {
+        targetProject.voices.push(voiceId);
+        // Persist addition
+        fetch(`/api/projects/${targetProjectSlug}/voices`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ voices: targetProject.voices }),
+        }).catch(() => {});
+      }
+    }
+    renderSidebar();
+  } catch (e) {
+    console.error('Failed to move agent to project:', e);
+  }
+}
+
 function renderSidebar() {
   const list = document.getElementById('sidebar-list');
+  const projects = (typeof allProjects !== 'undefined' && allProjects.length > 0) ? allProjects : [];
 
-  // When no project is selected (default only, no voices configured),
-  // show only agents that have active sessions — not all 27 voices
-  const hasProject = currentProject !== 'default' || (currentProjectVoices && currentProjectVoices.length > 0);
-
-  let allVoices;
-  if (hasProject && currentProjectVoices && currentProjectVoices.length > 0) {
-    allVoices = currentProjectVoices.map(v => [v, VOICE_NAMES[v] || v.replace(/^[a-z]{2}_/, '').replace(/^./, c => c.toUpperCase())]);
-  } else if (!hasProject) {
-    // No project — show only voices that have active sessions
+  // No projects — show only active sessions or welcome
+  if (projects.length === 0) {
     const activeVoices = new Set();
     for (const [, s] of sessions) {
       if (s.voice) activeVoices.add(s.voice);
     }
     if (activeVoices.size === 0) {
-      // No sessions at all — show welcome state
       list.innerHTML = '';
       const welcome = document.createElement('div');
       welcome.style.cssText = 'padding:24px 16px;text-align:center;color:var(--text-secondary,#888);font-size:0.9em;';
@@ -396,21 +531,148 @@ function renderSidebar() {
       list.appendChild(welcome);
       return;
     }
-    allVoices = [...activeVoices].map(v => [v, VOICE_NAMES[v] || v.replace(/^[a-z]{2}_/, '').replace(/^./, c => c.toUpperCase())]);
-    allVoices.sort((a, b) => a[1].localeCompare(b[1]));
-  } else {
-    allVoices = Object.entries(VOICE_NAMES).sort((a, b) => a[1].localeCompare(b[1]));
+    // Flat list of active agents (no projects)
+    _renderFlatAgentList(list, [...activeVoices]);
+    return;
   }
 
-  const currentVoiceIds = new Set(allVoices.map(([id]) => id));
-  // Remove stale cards (including welcome message)
-  for (const card of [...list.children]) {
-    if (!card.dataset.voiceId || !currentVoiceIds.has(card.dataset.voiceId)) card.remove();
+  // Grouped view: one collapsible section per project
+  const existingGroups = new Map();
+  for (const el of list.querySelectorAll('.sidebar-project-group')) {
+    existingGroups.set(el.dataset.projectSlug, el);
   }
-  // Map existing cards
+
+  // Remove stale groups and non-group children (except focus card etc.)
+  const projectSlugs = new Set(projects.map(p => p.slug));
+  for (const child of [...list.children]) {
+    if (child.classList.contains('sidebar-project-group')) {
+      if (!projectSlugs.has(child.dataset.projectSlug)) child.remove();
+    } else if (!child.id) {
+      // Remove orphan elements (like old flat cards or welcome message)
+      child.remove();
+    }
+  }
+
+  for (let pi = 0; pi < projects.length; pi++) {
+    const proj = projects[pi];
+    const slug = proj.slug;
+    const isCollapsed = _collapsedProjects.has(slug);
+    const voices = (proj.voices || []).map(v => [v, VOICE_NAMES[v] || v.replace(/^[a-z]{2}_/, '').replace(/^./, c => c.toUpperCase())]);
+
+    // Count active agents
+    let activeCount = 0;
+    for (const [vid] of voices) {
+      for (const [, s] of sessions) {
+        if (s.voice === vid) { activeCount++; break; }
+      }
+    }
+
+    let group = existingGroups.get(slug);
+    if (!group) {
+      group = document.createElement('div');
+      group.className = 'sidebar-project-group';
+      group.dataset.projectSlug = slug;
+
+      // Project header
+      const header = document.createElement('div');
+      header.className = 'sidebar-project-header';
+      header.innerHTML = '<span class="project-chevron">&#9660;</span>'
+        + '<span class="project-name"></span>'
+        + '<span class="project-agent-count"></span>';
+      header.addEventListener('click', () => _toggleProjectCollapse(slug));
+      group.appendChild(header);
+
+      // Agent container
+      const agentContainer = document.createElement('div');
+      agentContainer.className = 'sidebar-project-agents';
+      group.appendChild(agentContainer);
+
+      // Drop zone: allow dropping agents onto this project group
+      group.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        group.classList.add('drag-over-group');
+      });
+      group.addEventListener('dragleave', (e) => {
+        // Only remove if leaving the group entirely
+        if (!group.contains(e.relatedTarget)) {
+          group.classList.remove('drag-over-group');
+        }
+      });
+      group.addEventListener('drop', (e) => {
+        e.preventDefault();
+        group.classList.remove('drag-over-group');
+        const fromVoice = e.dataTransfer.getData('text/plain');
+        if (!fromVoice) return;
+        // Check if agent is already in this project
+        if ((proj.voices || []).includes(fromVoice)) return;
+        _moveAgentToProject(fromVoice, slug);
+      });
+    }
+
+    // Update header text
+    const nameEl = group.querySelector('.project-name');
+    const countEl = group.querySelector('.project-agent-count');
+    const chevron = group.querySelector('.project-chevron');
+    if (nameEl) nameEl.textContent = proj.name || slug;
+    if (countEl) countEl.textContent = `(${activeCount}/${voices.length})`;
+    if (chevron) chevron.classList.toggle('collapsed', isCollapsed);
+
+    // Update agent cards in container
+    const agentContainer = group.querySelector('.sidebar-project-agents');
+    if (isCollapsed) {
+      agentContainer.classList.add('collapsed');
+      agentContainer.style.maxHeight = '0';
+    } else {
+      agentContainer.classList.remove('collapsed');
+      // Render agent cards
+      const currentCards = new Map();
+      for (const card of agentContainer.querySelectorAll('.sidebar-card')) {
+        currentCards.set(card.dataset.voiceId, card);
+      }
+      // Remove stale cards
+      const voiceIds = new Set(voices.map(([id]) => id));
+      for (const card of [...agentContainer.children]) {
+        if (card.dataset.voiceId && !voiceIds.has(card.dataset.voiceId)) card.remove();
+      }
+
+      for (let i = 0; i < voices.length; i++) {
+        const [voiceId, name] = voices[i];
+        const state = _sidebarState(voiceId);
+        let card = currentCards.get(voiceId);
+        if (card) {
+          _updateSidebarCard(card, voiceId, state);
+          if (agentContainer.children[i] !== card) agentContainer.insertBefore(card, agentContainer.children[i]);
+        } else {
+          card = _createAgentCard(voiceId, name, state);
+          if (i < agentContainer.children.length) agentContainer.insertBefore(card, agentContainer.children[i]);
+          else agentContainer.appendChild(card);
+        }
+      }
+      agentContainer.style.maxHeight = agentContainer.scrollHeight + 'px';
+    }
+
+    // Insert group in correct position
+    if (list.children[pi] !== group) {
+      if (pi < list.children.length) list.insertBefore(group, list.children[pi]);
+      else list.appendChild(group);
+    }
+  }
+}
+
+// Fallback: flat list of agents when no projects exist
+function _renderFlatAgentList(list, voiceIds) {
+  const allVoices = voiceIds.map(v => [v, VOICE_NAMES[v] || v.replace(/^[a-z]{2}_/, '').replace(/^./, c => c.toUpperCase())]);
+  allVoices.sort((a, b) => a[1].localeCompare(b[1]));
+
+  const currentVoiceIds = new Set(allVoices.map(([id]) => id));
+  for (const card of [...list.children]) {
+    if (card.dataset && card.dataset.voiceId && !currentVoiceIds.has(card.dataset.voiceId)) card.remove();
+    if (card.classList && card.classList.contains('sidebar-project-group')) card.remove();
+  }
   const existingCards = new Map();
   for (const card of list.children) {
-    existingCards.set(card.dataset.voiceId, card);
+    if (card.dataset && card.dataset.voiceId) existingCards.set(card.dataset.voiceId, card);
   }
   for (let i = 0; i < allVoices.length; i++) {
     const [voiceId, name] = allVoices[i];
@@ -420,111 +682,9 @@ function renderSidebar() {
       _updateSidebarCard(card, voiceId, state);
       if (list.children[i] !== card) list.insertBefore(card, list.children[i]);
     } else {
-      card = document.createElement('div');
-      card.className = 'sidebar-card';
-      card.dataset.voiceId = voiceId;
-      card.draggable = true;
-      card.addEventListener('dragstart', (e) => {
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', voiceId);
-        card.classList.add('dragging');
-      });
-      card.addEventListener('dragend', () => { card.classList.remove('dragging'); });
-      card.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        card.classList.add('drag-over');
-      });
-      card.addEventListener('dragleave', () => { card.classList.remove('drag-over'); });
-      card.addEventListener('drop', (e) => {
-        e.preventDefault();
-        card.classList.remove('drag-over');
-        const fromVoice = e.dataTransfer.getData('text/plain');
-        const toVoice = voiceId;
-        if (fromVoice && fromVoice !== toVoice) reorderSidebarVoice(fromVoice, toVoice);
-      });
-      const icon = document.createElement('div');
-      icon.className = 'sb-icon';
-      const iconVal = voiceIcon(voiceId);
-      if (iconVal.startsWith('<')) { icon.innerHTML = iconVal; } else { icon.textContent = iconVal; }
-      const vc = voiceColor(voiceId);
-      icon.style.background = vc + '20';
-      icon.style.color = vc;
-      const info = document.createElement('div');
-      info.className = 'sb-info';
-      const nameEl = document.createElement('div');
-      nameEl.className = 'sb-name';
-      nameEl.textContent = name;
-      nameEl.style.color = vc;
-      const statusEl2 = document.createElement('div');
-      statusEl2.className = 'sb-status';
-      const dot2 = document.createElement('span');
-      dot2.className = 'sb-dot';
-      const labelEl = document.createElement('span');
-      labelEl.textContent = state.statusLabel;
-      statusEl2.appendChild(dot2);
-      statusEl2.appendChild(labelEl);
-      info.appendChild(nameEl);
-      if (state.roleText) {
-        const roleEl = document.createElement('div');
-        roleEl.className = 'sb-role';
-        roleEl.textContent = state.roleText;
-        info.appendChild(roleEl);
-      }
-      if (state.taskText) {
-        const taskEl = document.createElement('div');
-        taskEl.className = 'sb-task';
-        taskEl.textContent = state.taskText;
-        info.appendChild(taskEl);
-      }
-      if (state.isCompacting) {
-        const compactEl = document.createElement('div');
-        compactEl.className = 'sb-compacting';
-        compactEl.textContent = 'Compacting…';
-        info.appendChild(compactEl);
-      }
-      info.appendChild(statusEl2);
-      card.appendChild(icon);
-      card.appendChild(info);
-      if (state.stateClass) card.classList.add(state.stateClass);
-      if (state.isSelected) card.classList.add('selected');
-      if (state.hasUnread) {
-        const badge = document.createElement('span');
-        badge.className = 'sb-unread';
-        card.appendChild(badge);
-      }
-      card._voiceSession = state.session;
-      card._voiceSpawning = state.isSpawning;
-      card.onclick = () => {
-        if (card._voiceSpawning) return;
-        if (card._voiceSession) { switchTab(card._voiceSession.session_id, true); }
-        else { spawnSession(voiceId); }
-      };
-      card.oncontextmenu = (e) => {
-        e.preventDefault();
-        if (card._voiceSession) { showContextMenu(e, card._voiceSession.session_id, voiceId); }
-        else { showContextMenu(e, null, voiceId); }
-      };
-      let lpTimer = null, lpFired = false;
-      card.addEventListener('touchstart', (e) => {
-        lpFired = false;
-        lpTimer = setTimeout(() => {
-          lpTimer = null; lpFired = true;
-          card.classList.add('long-press-active');
-          const touch = e.touches[0];
-          const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: touch.clientX, clientY: touch.clientY };
-          if (card._voiceSession) { showContextMenu(fakeEvent, card._voiceSession.session_id, voiceId); }
-          else { showContextMenu(fakeEvent, null, voiceId); }
-          setTimeout(() => card.classList.remove('long-press-active'), 200);
-        }, 500);
-      }, { passive: true });
-      card.addEventListener('touchend', (e) => {
-        if (lpTimer) clearTimeout(lpTimer); lpTimer = null;
-        if (lpFired) { e.preventDefault(); lpFired = false; }
-      });
-      card.addEventListener('touchmove', () => { if (lpTimer) clearTimeout(lpTimer); lpTimer = null; });
-      if (i < list.children.length) { list.insertBefore(card, list.children[i]); }
-      else { list.appendChild(card); }
+      card = _createAgentCard(voiceId, name, state);
+      if (i < list.children.length) list.insertBefore(card, list.children[i]);
+      else list.appendChild(card);
     }
   }
 }
@@ -532,7 +692,7 @@ function renderSidebar() {
 async function reorderSidebarVoice(fromVoice, toVoice) {
   // Get current voice order from the sidebar
   const list = document.getElementById('sidebar-list');
-  const voices = [...list.children].map(c => c.dataset.voiceId).filter(Boolean);
+  const voices = [...list.querySelectorAll('.sidebar-card')].map(c => c.dataset.voiceId).filter(Boolean);
   const fromIdx = voices.indexOf(fromVoice);
   const toIdx = voices.indexOf(toVoice);
   if (fromIdx < 0 || toIdx < 0) return;

@@ -213,6 +213,57 @@ body {
   box-shadow: 0 0 4px rgba(255,69,58,0.5);
 }
 
+/* Sidebar project groups */
+.sidebar-project-group {
+  margin-bottom: 2px;
+}
+.sidebar-project-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px 4px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+  transition: color 0.15s;
+}
+.sidebar-project-header:hover {
+  color: var(--text-secondary);
+}
+.sidebar-project-header .project-chevron {
+  font-size: 0.55rem;
+  transition: transform 0.2s;
+  display: inline-block;
+}
+.sidebar-project-header .project-chevron.collapsed {
+  transform: rotate(-90deg);
+}
+.sidebar-project-header .project-agent-count {
+  font-weight: 400;
+  opacity: 0.6;
+  font-size: 0.6rem;
+}
+.sidebar-project-agents {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+  transition: max-height 0.25s ease;
+}
+.sidebar-project-agents.collapsed {
+  max-height: 0 !important;
+  overflow: hidden;
+}
+.sidebar-project-group.drag-over-group > .sidebar-project-header {
+  color: var(--blue);
+  background: rgba(74,158,255,0.08);
+  border-radius: var(--radius-sm);
+}
+
 /* Main content area */
 #main-content {
   flex: 1;
@@ -1144,6 +1195,10 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   #main-content {
     margin-left: 48px;
   }
+  .sidebar-project-header { display: none; }
+  .sidebar-project-agents.collapsed { max-height: none !important; }
+  #sidebar.expanded .sidebar-project-header { display: flex; font-size: 0.55rem; padding: 6px 10px 2px; }
+  #sidebar.expanded .sidebar-project-agents.collapsed { max-height: 0 !important; }
   .sidebar-card .sb-info { display: none; }
   .sidebar-card .sb-unread {
     position: absolute;
@@ -2025,6 +2080,7 @@ function showSettingsPage() {
 // --- Project management ---
 let currentProject = 'default';
 let currentProjectVoices = null; // null = use all VOICE_NAMES (fallback)
+let allProjects = []; // [{slug, name, voices: [...]}] — all projects for grouped sidebar
 
 async function loadProjects() {
   const sel = document.getElementById('project-selector');
@@ -2041,7 +2097,8 @@ async function loadProjects() {
       projectList = Object.entries(data.projects || {}).map(([slug, p]) => ({ slug, ...p }));
       currentProject = data.active_project || 'default';
     }
-    // Populate dropdown
+    allProjects = projectList;
+    // Populate dropdown (kept for context menu submenu)
     sel.innerHTML = '';
     for (const proj of projectList) {
       const opt = document.createElement('option');
