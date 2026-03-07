@@ -1414,6 +1414,9 @@ async function getMicStream() {
     }
   }
   persistentStream.getAudioTracks().forEach(t => { t.enabled = !micMuted; });
+  // Re-populate device lists — labels become available after permission grant
+  populateMicSelector();
+  populateSpeakerSelector();
   return persistentStream;
 }
 
