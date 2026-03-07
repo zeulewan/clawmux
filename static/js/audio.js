@@ -1424,7 +1424,7 @@ async function populateMicSelector() {
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
     const mics = devices.filter(d => d.kind === 'audioinput');
-    sel.innerHTML = '<option value="">System Default</option>';
+    sel.innerHTML = '<option value="">Mic: Default</option>';
     mics.forEach((mic, i) => {
       const opt = document.createElement('option');
       opt.value = mic.deviceId;
@@ -1447,10 +1447,54 @@ function changeMicDevice(deviceId) {
   }
 }
 
+// --- Speaker device selector ---
+let _selectedSpeakerDeviceId = (() => { try { return localStorage.getItem('hub_speaker_device') || ''; } catch(e) { return ''; } })();
+
+async function populateSpeakerSelector() {
+  const sel = document.getElementById('speaker-select');
+  if (!sel) return;
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const speakers = devices.filter(d => d.kind === 'audiooutput');
+    sel.innerHTML = '<option value="">Speaker: Default</option>';
+    speakers.forEach((spk, i) => {
+      const opt = document.createElement('option');
+      opt.value = spk.deviceId;
+      opt.textContent = spk.label || `Speaker ${i + 1}`;
+      sel.appendChild(opt);
+    });
+    sel.value = _selectedSpeakerDeviceId || '';
+  } catch (e) {
+    console.warn('Failed to enumerate speaker devices:', e);
+  }
+}
+
+async function changeSpeakerDevice(deviceId) {
+  _selectedSpeakerDeviceId = deviceId;
+  try { localStorage.setItem('hub_speaker_device', deviceId); } catch(e) {}
+  // Route AudioContext output to selected device
+  if (audioCtx.setSinkId) {
+    try {
+      await audioCtx.setSinkId(deviceId || '');
+    } catch (e) {
+      console.warn('Failed to set speaker device:', e);
+    }
+  }
+}
+
 // Populate on load and when devices change
 populateMicSelector();
+populateSpeakerSelector();
 if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
-  navigator.mediaDevices.addEventListener('devicechange', populateMicSelector);
+  navigator.mediaDevices.addEventListener('devicechange', () => {
+    populateMicSelector();
+    populateSpeakerSelector();
+  });
+}
+
+// Apply saved speaker device on load
+if (_selectedSpeakerDeviceId && audioCtx.setSinkId) {
+  audioCtx.setSinkId(_selectedSpeakerDeviceId).catch(() => {});
 }
 
 // --- Recording ---
