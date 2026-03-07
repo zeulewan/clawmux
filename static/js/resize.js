@@ -59,8 +59,12 @@
         const min = key === 'sidebar' ? SIDEBAR_MIN : NOTES_MIN;
         const max = key === 'sidebar' ? SIDEBAR_MAX : NOTES_MAX;
         const newW = Math.max(min, Math.min(max, startW + delta));
-        panel.style.width = newW + 'px';
-        panel.style.minWidth = newW + 'px';
+        if (key === 'notes') {
+          panel.style.setProperty('--notes-width', newW + 'px');
+        } else {
+          panel.style.width = newW + 'px';
+          panel.style.minWidth = newW + 'px';
+        }
       }
 
       function onUp() {
@@ -105,8 +109,7 @@
       const notes = document.getElementById('notes-panel');
       if (settings.notes_width && notes) {
         const w = Math.max(NOTES_MIN, Math.min(NOTES_MAX, settings.notes_width));
-        // Only apply if panel is open (has the .open class)
-        // Store for later use when panel opens
+        notes.style.setProperty('--notes-width', w + 'px');
         notes.dataset.savedWidth = w;
       }
     } catch (e) {}
@@ -119,8 +122,7 @@
     const panel = document.getElementById('notes-panel');
     if (panel && panel.classList.contains('open') && panel.dataset.savedWidth) {
       const w = parseInt(panel.dataset.savedWidth);
-      panel.style.width = w + 'px';
-      panel.style.minWidth = w + 'px';
+      panel.style.setProperty('--notes-width', w + 'px');
     }
   };
 
@@ -131,8 +133,7 @@
         const panel = m.target;
         if (panel.classList.contains('open') && panel.dataset.savedWidth) {
           const w = parseInt(panel.dataset.savedWidth);
-          panel.style.width = w + 'px';
-          panel.style.minWidth = w + 'px';
+          panel.style.setProperty('--notes-width', w + 'px');
         }
       }
     }

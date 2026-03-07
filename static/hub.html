@@ -121,8 +121,8 @@ body {
 .sidebar-card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 8px;
+  padding: 6px 12px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 0.15s;
@@ -181,9 +181,11 @@ body {
   opacity: 0.8;
   margin-top: 1px;
   line-height: 1.3;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
+  min-height: 2.6em;
 }
 .sidebar-card .sb-compacting {
   font-size: 0.55rem;
@@ -205,12 +207,17 @@ body {
   margin-top: 2px;
   min-height: 2.2em;
 }
+.sidebar-card .sb-status > span:not(.sb-dot) {
+  min-width: 0;
+  word-break: break-word;
+}
 .sidebar-card .sb-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--text-tertiary);
   flex-shrink: 0;
+  margin-top: 3px;
 }
 .sidebar-card.idle .sb-dot { background: var(--green); box-shadow: 0 0 4px rgba(48,209,88,0.5); }
 .sidebar-card.starting .sb-dot { background: var(--yellow); animation: thinkingPulse 1.4s infinite ease-in-out; }
@@ -365,8 +372,8 @@ body {
   transition: width 0.2s ease, min-width 0.2s ease;
 }
 #notes-panel.open {
-  width: 320px;
-  min-width: 320px;
+  width: var(--notes-width, 320px);
+  min-width: 200px;
 }
 #notes-panel-header {
   display: flex;
