@@ -1,80 +1,32 @@
 # Install
 
-Open Claude Code and paste the prompt for your platform. Claude will handle everything.
+Open Claude Code and paste this prompt. Claude will handle everything.
 
 ## Install Prompt
 
-Select your OS and copy the prompt.
+```
+Install ClawMux — an open-source voice interface for managing multiple Claude Code agents. The code is fully auditable on GitHub. Review the install script before running it.
 
-=== "macOS"
+1. Clone the repo:
+   git clone https://github.com/zeulewan/clawmux.git ~/GIT/clawmux
 
-    ```
-    Install ClawMux — an open-source voice interface for managing multiple Claude Code agents. The code is fully auditable on GitHub. Review the install script before running it.
+2. Review the install script (it's short — read it to see what it does):
+   cat ~/GIT/clawmux/install.sh
 
-    1. Clone the repo:
-       git clone https://github.com/zeulewan/clawmux.git ~/GIT/clawmux
+3. Run the installer:
+   cd ~/GIT/clawmux && ./install.sh
 
-    2. Review the install script (it's short — read it to see what it does):
-       cat ~/GIT/clawmux/install.sh
+4. If no local GPU was detected, configure remote TTS/STT in Settings (http://localhost:3460) or via:
+   curl -X PUT http://localhost:3460/api/settings -H "Content-Type: application/json" -d '{"tts_url": "http://YOUR_GPU_SERVER:8880", "stt_url": "http://YOUR_GPU_SERVER:2022"}'
 
-    3. Run the installer:
-       cd ~/GIT/clawmux && ./install.sh
+5. Verify: curl -s http://localhost:3460/api/sessions and open http://localhost:3460 in a browser.
 
-    4. If no local GPU was detected, configure remote TTS/STT in Settings (http://localhost:3460) or via:
-       curl -X PUT http://localhost:3460/api/settings -H "Content-Type: application/json" -d '{"tts_url": "http://YOUR_GPU_SERVER:8880", "stt_url": "http://YOUR_GPU_SERVER:2022"}'
-
-    5. Verify: curl -s http://localhost:3460/api/sessions and open http://localhost:3460 in a browser.
-
-    Run each step, fix any errors, and report what happened.
-    ```
-
-=== "Linux"
-
-    ```
-    Install ClawMux — an open-source voice interface for managing multiple Claude Code agents. The code is fully auditable on GitHub. Review the install script before running it.
-
-    1. Clone the repo:
-       git clone https://github.com/zeulewan/clawmux.git ~/GIT/clawmux
-
-    2. Review the install script (it's short — read it to see what it does):
-       cat ~/GIT/clawmux/install.sh
-
-    3. Run the installer:
-       cd ~/GIT/clawmux && ./install.sh
-
-    4. If no local GPU was detected, configure remote TTS/STT in Settings (http://localhost:3460) or via:
-       curl -X PUT http://localhost:3460/api/settings -H "Content-Type: application/json" -d '{"tts_url": "http://YOUR_GPU_SERVER:8880", "stt_url": "http://YOUR_GPU_SERVER:2022"}'
-
-    5. Verify: curl -s http://localhost:3460/api/sessions and open http://localhost:3460 in a browser.
-
-    Run each step, fix any errors, and report what happened.
-    ```
-
-=== "WSL"
-
-    ```
-    Install ClawMux — an open-source voice interface for managing multiple Claude Code agents. The code is fully auditable on GitHub. Review the install script before running it.
-
-    1. Clone the repo:
-       git clone https://github.com/zeulewan/clawmux.git ~/GIT/clawmux
-
-    2. Review the install script (it's short — read it to see what it does):
-       cat ~/GIT/clawmux/install.sh
-
-    3. Run the installer:
-       cd ~/GIT/clawmux && ./install.sh
-
-    4. If no local GPU was detected, configure remote TTS/STT in Settings (http://localhost:3460) or via:
-       curl -X PUT http://localhost:3460/api/settings -H "Content-Type: application/json" -d '{"tts_url": "http://YOUR_GPU_SERVER:8880", "stt_url": "http://YOUR_GPU_SERVER:2022"}'
-
-    5. Verify: curl -s http://localhost:3460/api/sessions and open http://localhost:3460 in a Windows browser.
-
-    Run each step, fix any errors, and report what happened.
-    ```
+Run each step, fix any errors, and report what happened.
+```
 
 ## What Gets Installed
 
-The install script handles everything:
+The install script detects your OS and GPU, then handles everything:
 
 - System dependencies (tmux, brew on macOS)
 - Python venv with hub dependencies
