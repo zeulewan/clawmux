@@ -1443,11 +1443,16 @@ async function populateMicSelector() {
 function changeMicDevice(deviceId) {
   _selectedMicDeviceId = deviceId;
   try { localStorage.setItem('hub_mic_device', deviceId); } catch(e) {}
+  // Stop active recording if any — it uses the old stream
+  if (recording) stopRecording(true);
   // Kill existing stream so next getMicStream() acquires the new device
   if (persistentStream) {
     persistentStream.getTracks().forEach(t => t.stop());
     persistentStream = null;
   }
+  // Stop VAD intervals that hold references to the old stream
+  stopPlaybackVAD();
+  stopThinkingVAD();
 }
 
 // --- Speaker device selector ---
@@ -1456,6 +1461,8 @@ let _selectedSpeakerDeviceId = (() => { try { return localStorage.getItem('hub_s
 async function populateSpeakerSelector() {
   const sel = document.getElementById('speaker-select');
   if (!sel) return;
+  // Hide entirely if browser doesn't support AudioContext.setSinkId
+  if (!audioCtx.setSinkId) { sel.style.display = 'none'; return; }
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
     const speakers = devices.filter(d => d.kind === 'audiooutput');
