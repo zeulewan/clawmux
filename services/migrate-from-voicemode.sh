@@ -1,7 +1,7 @@
 #!/bin/bash
 # Migrate TTS/STT services from VoiceMode to ClawMux
-# Creates symlinks from ~/.clawmux/services/ to existing ~/.voicemode/services/
-# so running services continue to work without reinstalling.
+# Copies service directories from ~/.voicemode/services/ to ~/.clawmux/services/
+# so ClawMux owns its own copy of the services.
 set -e
 
 CLAWMUX_HOME="${CLAWMUX_HOME:-$HOME/.clawmux}"
@@ -21,11 +21,14 @@ mkdir -p "$CLAWMUX_HOME/services"
 
 # --- Whisper ---
 if [ -d "$VOICEMODE_HOME/services/whisper" ]; then
-    if [ -e "$CLAWMUX_HOME/services/whisper" ]; then
-        warn "Whisper already exists at $CLAWMUX_HOME/services/whisper — skipping"
+    if [ -d "$CLAWMUX_HOME/services/whisper" ] && [ ! -L "$CLAWMUX_HOME/services/whisper" ]; then
+        warn "Whisper already exists at $CLAWMUX_HOME/services/whisper (not a symlink) — skipping"
     else
-        ln -s "$VOICEMODE_HOME/services/whisper" "$CLAWMUX_HOME/services/whisper"
-        ok "Whisper symlinked: $CLAWMUX_HOME/services/whisper -> $VOICEMODE_HOME/services/whisper"
+        # Remove symlink if present
+        [ -L "$CLAWMUX_HOME/services/whisper" ] && rm "$CLAWMUX_HOME/services/whisper"
+        info "Copying Whisper (~5GB, this may take a minute)..."
+        cp -a "$VOICEMODE_HOME/services/whisper" "$CLAWMUX_HOME/services/whisper"
+        ok "Whisper copied to $CLAWMUX_HOME/services/whisper"
     fi
 else
     warn "No Whisper found at $VOICEMODE_HOME/services/whisper"
@@ -33,11 +36,14 @@ fi
 
 # --- Kokoro ---
 if [ -d "$VOICEMODE_HOME/services/kokoro" ]; then
-    if [ -e "$CLAWMUX_HOME/services/kokoro" ]; then
-        warn "Kokoro already exists at $CLAWMUX_HOME/services/kokoro — skipping"
+    if [ -d "$CLAWMUX_HOME/services/kokoro" ] && [ ! -L "$CLAWMUX_HOME/services/kokoro" ]; then
+        warn "Kokoro already exists at $CLAWMUX_HOME/services/kokoro (not a symlink) — skipping"
     else
-        ln -s "$VOICEMODE_HOME/services/kokoro" "$CLAWMUX_HOME/services/kokoro"
-        ok "Kokoro symlinked: $CLAWMUX_HOME/services/kokoro -> $VOICEMODE_HOME/services/kokoro"
+        # Remove symlink if present
+        [ -L "$CLAWMUX_HOME/services/kokoro" ] && rm "$CLAWMUX_HOME/services/kokoro"
+        info "Copying Kokoro (~7GB, this may take a minute)..."
+        cp -a "$VOICEMODE_HOME/services/kokoro" "$CLAWMUX_HOME/services/kokoro"
+        ok "Kokoro copied to $CLAWMUX_HOME/services/kokoro"
     fi
 else
     warn "No Kokoro found at $VOICEMODE_HOME/services/kokoro"
