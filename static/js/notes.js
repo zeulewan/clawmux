@@ -10,16 +10,23 @@ function toggleNotesPanel() {
   const panel = document.getElementById('notes-panel');
   panel.classList.toggle('open');
   const isOpen = panel.classList.contains('open');
-  try { localStorage.setItem('notes_panel_open', isOpen ? '1' : '0'); } catch(e) {}
+  fetch('/api/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ notes_panel_open: isOpen }),
+  }).catch(() => {});
   if (isOpen && !_notesLoaded) {
     loadNotes();
   }
 }
 
-// Restore panel state on load
-(function _restoreNotesPanel() {
+// Restore panel state from server settings on load
+(async function _restoreNotesPanel() {
   try {
-    if (localStorage.getItem('notes_panel_open') === '1') {
+    const resp = await fetch('/api/settings');
+    if (!resp.ok) return;
+    const settings = await resp.json();
+    if (settings.notes_panel_open) {
       document.getElementById('notes-panel').classList.add('open');
       loadNotes();
     }
