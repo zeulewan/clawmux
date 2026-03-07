@@ -24,7 +24,7 @@ fi
 echo "[kokoro] Starting on port $KOKORO_PORT..."
 
 cd "$KOKORO_DIR"
-KOKORO_HOST=0.0.0.0 KOKORO_PORT="$KOKORO_PORT" \
+MODEL_DIR="$KOKORO_DIR/api/src/models" VOICES_DIR="$KOKORO_DIR/api/src/voices/v1_0" KOKORO_HOST=0.0.0.0 KOKORO_PORT="$KOKORO_PORT" \
     nohup "$KOKORO_DIR/.venv/bin/python" -m uvicorn api.src.main:app \
     --host 0.0.0.0 --port "$KOKORO_PORT" \
     >> "$LOG_DIR/kokoro.log" 2>&1 &
