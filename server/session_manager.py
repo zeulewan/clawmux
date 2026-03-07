@@ -440,6 +440,15 @@ class SessionManager:
             except Exception:
                 pass
 
+            # Check if there's prior history to determine greeting style
+            has_history = False
+            if self.history_store:
+                hist_prefix = self.project_mgr.get_history_prefix(project_slug)
+                prior_messages = self.history_store.load(voice_id, hist_prefix)
+                has_history = any(
+                    m.get("role") in ("user", "assistant") for m in prior_messages
+                )
+
             if silent_startup:
                 identity = (
                     f"Your name is {voice_name}. "
@@ -447,11 +456,12 @@ class SessionManager:
                     f"Immediately run: clawmux wait\n"
                     f"This will block until a message arrives. Say nothing until you receive a message.\n"
                 )
-            elif resuming:
+            elif has_history:
                 identity = (
                     f"Your name is {voice_name}. "
-                    f"You have an ongoing conversation with this user. "
-                    f"Greet them with: clawmux send --to user 'Hi, I am back!'\n"
+                    f"You were restarted but your previous conversation history is preserved below. "
+                    f"Read the context summary at the end of this file to understand what you were working on.\n"
+                    f"Greet the user by running: clawmux send --to user 'Hey, I am back. I have read my previous context and I am ready to continue.'\n"
                     f"Then run: clawmux wait\n"
                 )
             else:
@@ -561,6 +571,16 @@ class SessionManager:
                 "Route all status updates, questions, and task requests through the manager. "
                 "If Zeul speaks to you directly, you may respond via `send --to user`.\n"
             )
+
+            # Inject context summary from previous session history
+            if self.history_store:
+                hist_prefix = self.project_mgr.get_history_prefix(project_slug)
+                context_summary = self.history_store.generate_context_summary(
+                    voice_id, voice_name, hist_prefix
+                )
+                if context_summary:
+                    identity += f"\n{context_summary}\n"
+                    log.info("[%s] Injected context summary into CLAUDE.md", session_id)
 
             claude_md.write_text(identity)
 

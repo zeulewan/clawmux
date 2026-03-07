@@ -113,6 +113,55 @@ class HistoryStore:
             del data["pending_interjections"]
             self._save_data(voice_id, data, project)
 
+    def generate_context_summary(self, voice_id: str, voice_name: str, project: str | None = None, max_messages: int = 30) -> str | None:
+        """Generate a context summary from recent history for agent restart.
+
+        Returns a markdown string summarizing recent conversation, or None if
+        there's no meaningful history to summarize.
+        """
+        messages = self.load(voice_id, project)
+        if not messages:
+            return None
+
+        # Filter to meaningful messages (skip activity/status updates)
+        meaningful = [
+            m for m in messages
+            if m.get("role") in ("user", "assistant", "system")
+            and m.get("text", "").strip()
+            and not m.get("bare_ack")
+        ]
+
+        if not meaningful:
+            return None
+
+        # Take the last N meaningful messages
+        recent = meaningful[-max_messages:]
+
+        lines = [
+            "# Context from Previous Session",
+            f"You ({voice_name}) were previously active in this session. Below is a summary of recent conversation history.",
+            "Use this to understand what you were working on and continue seamlessly.\n",
+            "## Recent Messages",
+        ]
+
+        for m in recent:
+            role = m.get("role", "?")
+            text = m.get("text", "").strip()
+            # Truncate very long messages
+            if len(text) > 500:
+                text = text[:500] + "..."
+            if role == "user":
+                lines.append(f"**User (Zeul):** {text}")
+            elif role == "assistant":
+                lines.append(f"**You ({voice_name}):** {text}")
+            elif role == "system":
+                lines.append(f"*System:* {text}")
+
+        lines.append("\n---")
+        lines.append("Resume where you left off. Do NOT re-introduce yourself or ask what you were doing.")
+
+        return "\n".join(lines)
+
     def copy_history(self, voice_id: str, from_project: str | None, to_project: str) -> bool:
         """Copy a voice's history from one project to another. Returns True on success.
 
