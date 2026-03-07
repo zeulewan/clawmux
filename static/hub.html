@@ -1573,29 +1573,16 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   <h2>Settings</h2>
 
   <div class="settings-section" id="voice-settings-section">
-    <h3 class="settings-section-title">Voice</h3>
+    <h3 class="settings-section-title">Text-to-Speech</h3>
     <div class="settings-card">
       <div class="settings-toggle" onclick="toggleSetting('tts_enabled')">
-        <div class="toggle-info"><span class="toggle-name">Text-to-Speech</span><span class="toggle-desc">Speak responses aloud, enable karaoke highlighting and play buttons</span></div>
+        <div class="toggle-info"><span class="toggle-name">Enabled</span><span class="toggle-desc">Speak responses aloud, enable karaoke highlighting and play buttons</span></div>
         <div class="toggle-indicator on" id="toggle-tts_enabled"></div>
       </div>
-      <div class="settings-toggle" onclick="toggleSetting('stt_enabled')">
-        <div class="toggle-info"><span class="toggle-name">Speech-to-Text</span><span class="toggle-desc">Enable microphone recording and voice input</span></div>
-        <div class="toggle-indicator on" id="toggle-stt_enabled"></div>
+      <div id="deploy-tts-url-row" class="settings-inline" style="padding:8px 16px;">
+        <span class="toggle-name">TTS URL</span>
+        <input id="deploy-tts-url" type="text" placeholder="http://127.0.0.1:8880" style="width:55%; padding:4px 8px; font-size:0.8rem; border:1px solid var(--border); border-radius:6px; background:var(--bg-card); color:var(--text); font-family:inherit;">
       </div>
-      <div class="settings-toggle" onclick="toggleSetting('auto_record')">
-        <div class="toggle-info"><span class="toggle-name">Auto Record</span><span class="toggle-desc">Start recording when agent finishes speaking</span></div>
-        <div class="toggle-indicator" id="toggle-auto_record"></div>
-      </div>
-      <div class="settings-toggle" onclick="toggleSetting('auto_end')">
-        <div class="toggle-info"><span class="toggle-name">Auto End</span><span class="toggle-desc">Stop recording after silence is detected</span></div>
-        <div class="toggle-indicator on" id="toggle-auto_end"></div>
-      </div>
-      <div class="settings-toggle" onclick="toggleSetting('auto_interrupt')">
-        <div class="toggle-info"><span class="toggle-name">Auto Interrupt</span><span class="toggle-desc">Stop playback when you start talking</span></div>
-        <div class="toggle-indicator" id="toggle-auto_interrupt"></div>
-      </div>
-
       <div class="settings-inline" style="padding:8px 16px;">
         <span class="toggle-name">Playback Speed</span>
         <select id="speed-select" onchange="changeSpeed(this.value)" style="width:auto; padding:4px 8px; font-size:0.8rem;">
@@ -1606,8 +1593,47 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
           <option value="2.0">2x</option>
         </select>
       </div>
-
+      <div class="settings-toggle" onclick="toggleSetting('auto_interrupt')">
+        <div class="toggle-info"><span class="toggle-name">Auto Interrupt</span><span class="toggle-desc">Stop playback when you start talking</span></div>
+        <div class="toggle-indicator" id="toggle-auto_interrupt"></div>
+      </div>
     </div>
+  </div>
+
+  <div class="settings-section">
+    <h3 class="settings-section-title">Speech-to-Text</h3>
+    <div class="settings-card">
+      <div class="settings-toggle" onclick="toggleSetting('stt_enabled')">
+        <div class="toggle-info"><span class="toggle-name">Enabled</span><span class="toggle-desc">Enable microphone recording and voice input</span></div>
+        <div class="toggle-indicator on" id="toggle-stt_enabled"></div>
+      </div>
+      <div id="deploy-stt-url-row" class="settings-inline" style="padding:8px 16px;">
+        <span class="toggle-name">STT URL</span>
+        <input id="deploy-stt-url" type="text" placeholder="http://127.0.0.1:2022" style="width:55%; padding:4px 8px; font-size:0.8rem; border:1px solid var(--border); border-radius:6px; background:var(--bg-card); color:var(--text); font-family:inherit;">
+      </div>
+      <div class="settings-inline" style="padding:8px 16px;">
+        <div class="toggle-info"><span class="toggle-name">Whisper Model</span><span class="toggle-desc">STT model quality — larger models are slower but more accurate</span></div>
+        <select id="deploy-quality-select" style="width:auto; padding:4px 8px; font-size:0.8rem;">
+          <option value="high">High (large-v3)</option>
+          <option value="medium">Medium (medium)</option>
+          <option value="low">Low (base)</option>
+        </select>
+      </div>
+      <div class="settings-toggle" onclick="toggleSetting('auto_record')">
+        <div class="toggle-info"><span class="toggle-name">Auto Record</span><span class="toggle-desc">Start recording when agent finishes speaking</span></div>
+        <div class="toggle-indicator" id="toggle-auto_record"></div>
+      </div>
+      <div class="settings-toggle" onclick="toggleSetting('auto_end')">
+        <div class="toggle-info"><span class="toggle-name">Auto End</span><span class="toggle-desc">Stop recording after silence is detected</span></div>
+        <div class="toggle-indicator on" id="toggle-auto_end"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="deploy-service-warning" style="display:none; margin:0 0 0.75rem 0; padding:10px 14px; background:#3d3000; border:1px solid #665200; border-radius:8px; font-size:0.78rem; line-height:1.5; color:#ffd666;">
+  </div>
+  <div id="deploy-save-row" style="margin-bottom:0.75rem; text-align:right;">
+    <button id="deploy-save-btn" onclick="saveDeploymentConfig()" style="padding:6px 16px; font-size:0.8rem; background:var(--voice-color, #4a9eff); color:white; border:none; border-radius:6px; cursor:pointer; font-family:inherit;">Save Service URLs</button>
   </div>
 
   <div class="settings-section">
@@ -1642,33 +1668,6 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
       <div class="settings-toggle" onclick="toggleSetting('audio_cues')">
         <div class="toggle-info"><span class="toggle-name">Audio Cues</span><span class="toggle-desc">Chime when ready to record</span></div>
         <div class="toggle-indicator on" id="toggle-audio_cues"></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="settings-section" id="deployment-settings-section">
-    <h3 class="settings-section-title">Services</h3>
-    <div class="settings-card">
-      <div id="deploy-tts-url-row" class="settings-inline" style="padding:8px 16px;">
-        <span class="toggle-name">TTS URL</span>
-        <input id="deploy-tts-url" type="text" placeholder="http://127.0.0.1:8880" style="width:55%; padding:4px 8px; font-size:0.8rem; border:1px solid var(--border); border-radius:6px; background:var(--bg-card); color:var(--text); font-family:inherit;">
-      </div>
-      <div id="deploy-stt-url-row" class="settings-inline" style="padding:8px 16px;">
-        <span class="toggle-name">STT URL</span>
-        <input id="deploy-stt-url" type="text" placeholder="http://127.0.0.1:2022" style="width:55%; padding:4px 8px; font-size:0.8rem; border:1px solid var(--border); border-radius:6px; background:var(--bg-card); color:var(--text); font-family:inherit;">
-      </div>
-      <div class="settings-inline" style="padding:8px 16px;">
-        <div class="toggle-info"><span class="toggle-name">Whisper Model</span><span class="toggle-desc">STT model quality — larger models are slower but more accurate</span></div>
-        <select id="deploy-quality-select" style="width:auto; padding:4px 8px; font-size:0.8rem;">
-          <option value="high">High (large-v3)</option>
-          <option value="medium">Medium (medium)</option>
-          <option value="low">Low (base)</option>
-        </select>
-      </div>
-      <div id="deploy-service-warning" style="display:none; margin:8px 16px; padding:10px 14px; background:#3d3000; border:1px solid #665200; border-radius:8px; font-size:0.78rem; line-height:1.5; color:#ffd666;">
-      </div>
-      <div style="padding:8px 16px; text-align:right;">
-        <button id="deploy-save-btn" onclick="saveDeploymentConfig()" style="padding:6px 16px; font-size:0.8rem; background:var(--voice-color, #4a9eff); color:white; border:none; border-radius:6px; cursor:pointer; font-family:inherit;">Save</button>
       </div>
     </div>
   </div>
