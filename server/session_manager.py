@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import re
 import shutil
 import time
 import uuid
@@ -416,7 +417,7 @@ class SessionManager:
                 if stored_id:
                     # Verify the session file exists in the project dir matching this work_dir
                     # Claude maps /tmp/foo/bar → ~/.claude/projects/-tmp-foo-bar/
-                    claude_project_dir = Path.home() / ".claude" / "projects" / str(work_dir).replace("/", "-").replace("_", "-")
+                    claude_project_dir = Path.home() / ".claude" / "projects" / re.sub(r"[^a-zA-Z0-9-]", "-", str(work_dir))
                     found = (claude_project_dir / f"{stored_id}.jsonl").exists()
                     if found:
                         claude_session_id = stored_id
@@ -654,7 +655,7 @@ class SessionManager:
         work_dir = session.work_dir
         resuming = False
         if claude_session_id:
-            claude_project_dir = Path.home() / ".claude" / "projects" / work_dir.replace("/", "-").replace("_", "-")
+            claude_project_dir = Path.home() / ".claude" / "projects" / re.sub(r"[^a-zA-Z0-9-]", "-", work_dir)
             resuming = (claude_project_dir / f"{claude_session_id}.jsonl").exists()
             if not resuming:
                 log.info("[%s] Session %s not found on disk, starting fresh", session_id, claude_session_id)
