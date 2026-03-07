@@ -486,7 +486,12 @@ function addMessage(sessionId, role, text, opts = {}) {
         const el = createMsgEl(role, text, vc, s.voice, msgObj);
         chatArea.appendChild(el);
       }
-      if (wasNearBottom) chatArea.scrollTop = chatArea.scrollHeight;
+      if (wasNearBottom) {
+        chatArea.scrollTop = chatArea.scrollHeight;
+      } else if (role !== 'activity') {
+        const pill = document.getElementById('new-msg-pill');
+        if (pill) pill.style.display = 'block';
+      }
     } else {
       const wasNearBottom = chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150;
       let el;
