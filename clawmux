@@ -1645,6 +1645,49 @@ def cmd_regenerate(args):
         print(f"Regenerated {result.get('regenerated', 0)} CLAUDE.md files")
 
 
+def cmd_run(args):
+    """Run a one-shot headless Claude prompt and print the result."""
+    import tempfile
+    import shutil
+
+    prompt = args.prompt
+    stdin_text = ""
+    if not sys.stdin.isatty():
+        stdin_text = sys.stdin.read()
+
+    if not prompt and not stdin_text:
+        die("Nothing to run. Provide a prompt argument or pipe text via stdin.")
+
+    # Build the full prompt
+    if stdin_text and prompt:
+        full_prompt = f"{prompt}\n\n{stdin_text}"
+    elif stdin_text:
+        full_prompt = stdin_text
+    else:
+        full_prompt = prompt
+
+    model = args.model or "claude-sonnet-4-6"
+    tmpdir = tempfile.mkdtemp(prefix="clawmux-run-")
+    try:
+        result = subprocess.run(
+            ["claude", "--print", "--model", model, "-p", full_prompt],
+            cwd=tmpdir,
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        if result.returncode != 0:
+            err = result.stderr.strip() or "claude CLI failed"
+            die(err)
+        print(result.stdout.strip())
+    except subprocess.TimeoutExpired:
+        die("Claude CLI timed out (300s)")
+    except FileNotFoundError:
+        die("claude CLI not found in PATH")
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
 def cmd_project(args):
     """Set project status in the sidebar."""
     session_id = require_session_id()
@@ -1687,6 +1730,9 @@ def main():
     kill        Kill a single agent session
     project     Set project status in sidebar
 
+  Headless:
+    run         Run a one-shot Claude prompt (no session/voice)
+
   System:
     version     Show version and commit
     update      Update to latest version
@@ -1702,7 +1748,8 @@ examples:
     clawmux start
     clawmux reload
     clawmux monitor
-    clawmux monitor --agents sky adam echo""",
+    clawmux monitor --agents sky adam echo
+    clawmux run 'Summarize: some text here'""",
     )
     sub = parser.add_subparsers(dest="command", required=False)
 
@@ -1859,6 +1906,18 @@ examples:
     clawmux regenerate am_echo      # Regenerate one agent""")
     p.add_argument("agent", nargs="?", help="Voice ID to regenerate (default: all)")
     p.set_defaults(func=cmd_regenerate)
+
+    # run
+    p = sub.add_parser("run", help="Run a one-shot headless Claude prompt",
+                       description="Run a prompt through Claude CLI in a temp directory. No session, hooks, or voice.",
+                       formatter_class=argparse.RawDescriptionHelpFormatter,
+                       epilog="""examples:
+    clawmux run 'Summarize this in 3 bullets: ...'
+    echo "raw notes" | clawmux run 'Format as markdown'
+    clawmux run --model claude-sonnet-4-6 'Explain quicksort' """)
+    p.add_argument("prompt", nargs="?", default="", help="Prompt text (can also pipe via stdin)")
+    p.add_argument("--model", help="Claude model (default: claude-sonnet-4-6)")
+    p.set_defaults(func=cmd_run)
 
     # project
     p = sub.add_parser("project", help="Set project status in sidebar",

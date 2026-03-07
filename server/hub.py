@@ -1802,6 +1802,43 @@ async def update_notes(request: Request):
     return JSONResponse(notes)
 
 
+async def _run_claude(prompt: str, model: str = "claude-sonnet-4-6") -> str:
+    """Run a one-shot Claude CLI prompt in a temp directory. Returns output text."""
+    import asyncio
+    import tempfile
+    import shutil
+    tmpdir = tempfile.mkdtemp(prefix="clawmux-run-")
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "claude", "--print", "--model", model, "-p", prompt,
+            cwd=tmpdir,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
+        if proc.returncode != 0:
+            raise RuntimeError(stderr.decode().strip() or "claude CLI failed")
+        return stdout.decode().strip()
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+@app.post("/api/run")
+async def api_run(request: Request):
+    data = await request.json()
+    prompt = data.get("prompt", "").strip()
+    input_text = data.get("input", "").strip()
+    model = data.get("model", "claude-sonnet-4-6")
+    if not prompt and not input_text:
+        return JSONResponse({"error": "No prompt or input provided"}, status_code=400)
+    full_prompt = f"{prompt}\n\n{input_text}" if prompt and input_text else (prompt or input_text)
+    try:
+        output = await _run_claude(full_prompt, model)
+        return JSONResponse({"output": output})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @app.post("/api/notes/format")
 async def format_notes(request: Request):
     data = await request.json()
@@ -1809,7 +1846,6 @@ async def format_notes(request: Request):
     if not text:
         return JSONResponse({"error": "No text provided"}, status_code=400)
     try:
-        import asyncio
         prompt = (
             "You are a text formatter. Take the user's freetext notes and format "
             "them into clean, well-organized markdown. Use headings, bullet points, "
@@ -1817,16 +1853,7 @@ async def format_notes(request: Request):
             "remove, or editorialize. Return ONLY the formatted markdown, no preamble."
             "\n\n" + text
         )
-        proc = await asyncio.create_subprocess_exec(
-            "claude", "--print", "--model", "claude-sonnet-4-6", "-p", prompt,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await proc.communicate()
-        if proc.returncode != 0:
-            err = stderr.decode().strip() or "claude CLI failed"
-            return JSONResponse({"error": err}, status_code=500)
-        formatted = stdout.decode().strip()
+        formatted = await _run_claude(prompt)
         return JSONResponse({"formatted": formatted})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
