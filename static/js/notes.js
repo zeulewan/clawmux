@@ -91,34 +91,6 @@ async function saveNotes() {
   }
 }
 
-async function formatLaterNotes() {
-  const textarea = document.getElementById('notes-later');
-  const btn = document.getElementById('notes-format-btn');
-  const text = textarea.value.trim();
-  if (!text) return;
-  btn.disabled = true;
-  btn.textContent = 'Formatting…';
-  try {
-    const resp = await fetch('/api/notes/format', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    });
-    if (!resp.ok) throw new Error('Format failed');
-    const data = await resp.json();
-    textarea.value = data.formatted;
-    saveNotes();
-  } catch (e) {
-    console.error('Format error:', e);
-    const status = document.getElementById('notes-save-status');
-    if (status) status.textContent = 'Format failed';
-    setTimeout(() => { if (status) status.textContent = ''; }, 3000);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '✨ Format';
-  }
-}
-
 // Attach event listeners once DOM is ready
 document.getElementById('notes-now').addEventListener('input', _scheduleSaveNotes);
 document.getElementById('notes-later').addEventListener('input', _scheduleSaveNotes);

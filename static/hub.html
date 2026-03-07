@@ -450,14 +450,6 @@ body {
   flex-shrink: 0;
 }
 #notes-later-wrap { position: relative; flex: 1; display: flex; flex-direction: column; }
-#notes-format-btn {
-  position: absolute; bottom: 8px; right: 8px;
-  padding: 4px 12px; font-size: 0.75rem;
-  background: var(--blue); color: #fff; border: none; border-radius: var(--radius);
-  cursor: pointer; opacity: 0.85; z-index: 1;
-}
-#notes-format-btn:hover { opacity: 1; }
-#notes-format-btn:disabled { opacity: 0.5; cursor: wait; }
 
 /* Header */
 #header {
@@ -1779,7 +1771,6 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   <textarea class="notes-editor" id="notes-now" placeholder="What are agents working on..."></textarea>
   <div id="notes-later-wrap" style="display:none;position:relative;flex:1;display:flex;flex-direction:column;">
     <textarea class="notes-editor" id="notes-later" placeholder="Ideas, future projects, random stuff..."></textarea>
-    <button id="notes-format-btn" onclick="formatLaterNotes()" title="Format with AI">✨ Format</button>
   </div>
   <div class="notes-save-indicator" id="notes-save-status"></div>
 </div>

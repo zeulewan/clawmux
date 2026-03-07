@@ -602,9 +602,11 @@ async def wait_websocket(ws: WebSocket, session_id: str):
         return
 
     log.info("[%s] Wait WS connected", session_id)
-    session.status_text = "Waiting"
+    session.activity = ""
+    session.tool_name = ""
+    session.tool_input = {}
     session.set_state(AgentState.IDLE)
-    await _save_activity(session, "Waiting")
+    await _save_activity(session, "Idle")
 
     # Tell browser agent is idle (so voice input isn't treated as interjection)
     await send_to_browser({"session_id": session_id, "type": "listening", "state": "idle"})
@@ -612,7 +614,9 @@ async def wait_websocket(ws: WebSocket, session_id: str):
         "type": "session_status",
         "session_id": session_id,
         "state": session.state.value,
-        "status_text": session.status_text,
+        "activity": session.activity,
+        "tool_name": session.tool_name,
+        "tool_input": session.tool_input,
     })
 
     # Register this WS for push notifications
@@ -663,14 +667,18 @@ async def wait_websocket(ws: WebSocket, session_id: str):
     except Exception as e:
         log.warning("[%s] Wait WS error: %s", session_id, e)
     finally:
-        session.status_text = "Processing..."
+        session.activity = ""
+        session.tool_name = ""
+        session.tool_input = {}
         session.set_state(AgentState.PROCESSING)
         await _save_activity(session, "Processing")
         await send_to_browser({
             "type": "session_status",
             "session_id": session_id,
             "state": session.state.value,
-            "status_text": session.status_text,
+            "activity": session.activity,
+            "tool_name": session.tool_name,
+            "tool_input": session.tool_input,
         })
         if hasattr(session, "_wait_queue"):
             del session._wait_queue
@@ -749,7 +757,7 @@ _TOOL_STATUS_MAP = {
 }
 
 
-def _tool_status_text(tool_name: str, tool_input: dict) -> str:
+def _tool_activity_text(tool_name: str, tool_input: dict) -> str:
     """Convert a tool name + input into a human-readable status string."""
     if tool_name == "Read":
         path = tool_input.get("file_path", "")
@@ -818,7 +826,7 @@ async def hook_tool_status(request: Request):
     response_json = {}
 
     if event in ("PostToolUse", "PostToolUseFailure"):
-        # Skip status_text updates while IDLE — wait WS is the sole authority
+        # Skip activity updates while IDLE — wait WS is the sole authority
         if session.state == AgentState.IDLE:
             return JSONResponse(response_json)
         # Skip entirely for clawmux wait — wait WS handles all state transitions
@@ -826,7 +834,9 @@ async def hook_tool_status(request: Request):
         tool_input = data.get("tool_input", {})
         if tool_name == "Bash" and "clawmux wait" in tool_input.get("command", ""):
             return JSONResponse(response_json)
-        session.status_text = "Processing..."
+        session.activity = ""
+        session.tool_name = ""
+        session.tool_input = {}
         # Check inbox for pending messages — deliver via additionalContext
         if session.work_dir:
             messages = await asyncio.to_thread(inbox.read_and_clear, session.work_dir)
@@ -848,14 +858,16 @@ async def hook_tool_status(request: Request):
         # State does NOT change here — PROCESSING → IDLE only when wait WS connects
         pass
     elif event == "PreToolUse":
-        # Skip status_text updates while IDLE — wait WS is the sole authority
+        # Skip activity updates while IDLE — wait WS is the sole authority
         if session.state == AgentState.IDLE:
             return JSONResponse(response_json)
         tool_name = data.get("tool_name", "")
         tool_input = data.get("tool_input", {})
-        session.status_text = _tool_status_text(tool_name, tool_input)
+        session.tool_name = tool_name
+        session.tool_input = tool_input
+        session.activity = _tool_activity_text(tool_name, tool_input)
         # Log beginning of tool use
-        await _save_activity(session, session.status_text)
+        await _save_activity(session, session.activity)
         # Catch end of compaction — first tool call after PreCompact
         if session.state == AgentState.COMPACTING:
             session.set_state(AgentState.PROCESSING)
@@ -901,7 +913,7 @@ async def hook_tool_status(request: Request):
                 })
     elif event == "SessionStart":
         # SessionStart hook — agent stays STARTING until first wait WS connects
-        session.status_text = "Starting session..."
+        session.activity = "Starting session..."
         await _save_activity(session, "Starting")
         if session.work_dir:
             messages = await asyncio.to_thread(inbox.read_and_clear, session.work_dir)
@@ -920,7 +932,7 @@ async def hook_tool_status(request: Request):
                 })
     elif event == "PreCompact":
         session.set_state(AgentState.COMPACTING)
-        session.status_text = "Compacting context..."
+        session.activity = "Compacting context..."
         await _save_activity(session, "Compacting")
     else:
         return JSONResponse({})
@@ -932,7 +944,9 @@ async def hook_tool_status(request: Request):
             "type": "session_status",
             "session_id": session.session_id,
             "state": session.state.value,
-            "status_text": session.status_text,
+            "activity": session.activity,
+            "tool_name": session.tool_name,
+            "tool_input": session.tool_input,
         }
         if event == "Stop":
             msg["agent_idle"] = True
@@ -1768,63 +1782,6 @@ async def update_notes(request: Request):
     return JSONResponse(notes)
 
 
-async def _run_claude(prompt: str, model: str = "claude-sonnet-4-6") -> str:
-    """Run a one-shot Claude CLI prompt in a temp directory. Returns output text."""
-    import asyncio
-    import tempfile
-    import shutil
-    tmpdir = tempfile.mkdtemp(prefix="clawmux-run-")
-    try:
-        env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
-        proc = await asyncio.create_subprocess_exec(
-            "claude", "--print", "--model", model, "-p", prompt,
-            cwd=tmpdir,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=env,
-        )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
-        if proc.returncode != 0:
-            raise RuntimeError(stderr.decode().strip() or "claude CLI failed")
-        return stdout.decode().strip()
-    finally:
-        shutil.rmtree(tmpdir, ignore_errors=True)
-
-
-@app.post("/api/run")
-async def api_run(request: Request):
-    data = await request.json()
-    prompt = data.get("prompt", "").strip()
-    input_text = data.get("input", "").strip()
-    model = data.get("model", "claude-sonnet-4-6")
-    if not prompt and not input_text:
-        return JSONResponse({"error": "No prompt or input provided"}, status_code=400)
-    full_prompt = f"{prompt}\n\n{input_text}" if prompt and input_text else (prompt or input_text)
-    try:
-        output = await _run_claude(full_prompt, model)
-        return JSONResponse({"output": output})
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-
-@app.post("/api/notes/format")
-async def format_notes(request: Request):
-    data = await request.json()
-    text = data.get("text", "").strip()
-    if not text:
-        return JSONResponse({"error": "No text provided"}, status_code=400)
-    try:
-        prompt = (
-            "You are a text formatter. Take the user's freetext notes and format "
-            "them into clean, well-organized markdown. Use headings, bullet points, "
-            "and structure as appropriate. Preserve all information — do not add, "
-            "remove, or editorialize. Return ONLY the formatted markdown, no preamble."
-            "\n\n" + text
-        )
-        formatted = await _run_claude(prompt)
-        return JSONResponse({"formatted": formatted})
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 @app.get("/api/services/status")
