@@ -1809,11 +1809,13 @@ async def _run_claude(prompt: str, model: str = "claude-sonnet-4-6") -> str:
     import shutil
     tmpdir = tempfile.mkdtemp(prefix="clawmux-run-")
     try:
+        env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
         proc = await asyncio.create_subprocess_exec(
             "claude", "--print", "--model", model, "-p", prompt,
             cwd=tmpdir,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=env,
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
         if proc.returncode != 0:
