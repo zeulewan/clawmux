@@ -70,7 +70,7 @@ def _hist_prefix(session) -> str | None:
 
 def _load_project_defaults() -> dict:
     """Load default agent assignments from data/project-defaults.json."""
-    defaults_file = Path(__file__).parent.parent / "data" / "project-defaults.json"
+    defaults_file = Path(__file__).parent / "templates" / "project-defaults.json"
     if defaults_file.exists():
         try:
             data = json.loads(defaults_file.read_text())
