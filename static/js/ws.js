@@ -90,49 +90,18 @@ async function _refreshHistory(sessionId, voiceId) {
     // Interjection styling is transient — applied in real-time via user_text events
     // and cleared on inbox_update. Re-marking from history causes stale italics
     // after page/hub reload when interjections haven't been consumed yet.
-    // Check if server has messages the client is missing
-    // Filter out transient system messages (but keep agent messages which use role=system)
-    const _isAgentMsg = m => m.role === 'system' && /^\[Agent msg (from|to) /.test(m.text);
-    const _isTransientSystem = m => m.role === 'system' && !_isAgentMsg(m);
-    const localComparable = s.messages.filter(m => !_isTransientSystem(m));
-    const serverComparable = serverMessages.filter(m => !_isTransientSystem(m));
-    const serverLen = serverComparable.length;
-    const localLen = localComparable.length;
-    // Compare both count and last message content to catch missed messages
-    const lastServer = serverLen > 0 ? serverComparable[serverLen - 1] : null;
-    const lastLocal = localLen > 0 ? localComparable[localLen - 1] : null;
-    const needsSync = serverLen > localLen ||
-      (serverLen > 0 && (!lastLocal || lastServer.text !== lastLocal.text || lastServer.role !== lastLocal.role));
-    if (needsSync) {
-      console.log(`[historySync] ${sessionId}: syncing — server=${serverLen} local=${localLen}`, lastServer?.text?.slice(0,50), lastLocal?.text?.slice(0,50));
-      // Preserve local-only system messages (e.g. "Claude connected") and
-      // merge them into server messages by timestamp instead of prepending
-      const serverSystemTexts = new Set(serverMessages.filter(m => m.role === 'system').map(m => m.text));
-      const uniqueLocalSystem = s.messages.filter(m => m.role === 'system' && !serverSystemTexts.has(m.text));
-      const merged = [...uniqueLocalSystem, ...serverMessages];
-      merged.sort((a, b) => (a.ts || 0) - (b.ts || 0));
-      s.messages = merged;
-      if (sessionId === activeSessionId) {
-        // Save karaoke state before renderChat destroys DOM refs
-        let savedKaraokeWords = null;
-        if (_karaokeWords && _karaokeWords.length > 0) {
-          savedKaraokeWords = _karaokeWords.map(w => ({ word: w.word, start_time: w.start_time, end_time: w.end_time }));
-        }
-        // Suppress entry animation during history sync re-render
-        chatArea.classList.add('no-animate');
-        renderChat();
-        // Restore karaoke spans after DOM rebuild
-        if (savedKaraokeWords && savedKaraokeWords.length > 0) {
-          const msgs = chatArea.querySelectorAll('.msg.assistant');
-          if (msgs.length) _applyKaraokeSpans(msgs[msgs.length - 1], savedKaraokeWords);
-        }
-        requestAnimationFrame(() => {
-          chatScrollToBottom();
-          // Re-enable animations after render settles (double-rAF ensures
-          // one paint happens with no-animate active before removal)
-          requestAnimationFrame(() => {
-            chatArea.classList.remove('no-animate');
-          });
+    // Diff-based sync: find server messages missing locally and append them
+    // instead of replacing all messages (which causes destructive DOM rebuilds)
+    const _msgKey = m => m.id || `${m.role}:${(m.text || '').slice(0, 120)}`;
+    const localKeys = new Set(s.messages.map(_msgKey));
+    const newMessages = serverMessages.filter(m => !localKeys.has(_msgKey(m)));
+    if (newMessages.length > 0) {
+      console.log(`[historySync] ${sessionId}: appending ${newMessages.length} missed messages`);
+      for (const msg of newMessages) {
+        addMessage(sessionId, msg.role, msg.text, {
+          id: msg.id || null,
+          parentId: msg.parentId || null,
+          isBareAck: msg.isBareAck || false,
         });
       }
     }
