@@ -271,6 +271,96 @@ body {
   flex-shrink: 0;
 }
 
+/* Notes panel */
+#notes-panel {
+  width: 0;
+  min-width: 0;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: width 0.2s ease, min-width 0.2s ease;
+}
+#notes-panel.open {
+  width: 320px;
+  min-width: 320px;
+}
+#notes-panel-header {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  gap: 8px;
+  flex-shrink: 0;
+}
+#notes-panel-header .notes-tabs {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+  background: var(--bg-card);
+  border-radius: var(--radius-xs);
+  padding: 2px;
+}
+#notes-panel-header .notes-tab {
+  flex: 1;
+  padding: 5px 12px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: inherit;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+#notes-panel-header .notes-tab:hover {
+  color: var(--text);
+}
+#notes-panel-header .notes-tab.active {
+  background: var(--hover-bg);
+  color: var(--text);
+}
+#notes-panel-close {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  line-height: 1;
+  font-family: inherit;
+}
+#notes-panel-close:hover {
+  color: var(--text-secondary);
+  background: var(--hover-bg);
+}
+.notes-editor {
+  flex: 1;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  padding: 12px;
+  resize: none;
+  outline: none;
+}
+.notes-editor::placeholder {
+  color: var(--text-tertiary);
+}
+.notes-save-indicator {
+  font-size: 0.65rem;
+  color: var(--text-tertiary);
+  padding: 4px 12px 8px;
+  flex-shrink: 0;
+}
+
 /* Header */
 #header {
   padding: 12px 20px;
@@ -290,6 +380,7 @@ body {
   font-weight: 700;
   letter-spacing: -0.02em;
 }
+#header-project-status { display: none; }
 #dot {
   width: 8px;
   height: 8px;
@@ -307,7 +398,7 @@ body {
 }
 
 /* Header links */
-#debug-link, #settings-link {
+#debug-link, #settings-link, #notes-link {
   font-size: 0.7rem;
   font-weight: 500;
   color: var(--text-tertiary);
@@ -317,7 +408,7 @@ body {
   border-radius: 8px;
   transition: all 0.15s;
 }
-#debug-link:hover, #settings-link:hover {
+#debug-link:hover, #settings-link:hover, #notes-link:hover {
   color: var(--text-secondary);
   background: var(--bg-card);
 }
@@ -384,9 +475,10 @@ body {
 .settings-inline { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
 .settings-inline:last-child { border-bottom: none; }
 .settings-toggle .toggle-indicator {
-  width: 40px; height: 22px;
+  width: 40px; min-width: 40px; height: 22px;
   background: var(--border); border-radius: 11px;
   position: relative; transition: background 0.25s;
+  flex-shrink: 0;
 }
 .settings-toggle .toggle-indicator.on { background: var(--blue); }
 .settings-toggle .toggle-indicator::after {
@@ -478,11 +570,11 @@ body {
   border-radius: 3px;
   text-shadow: 0 0 0.6px currentColor, 0 0 0.6px currentColor;
 }
-body.text-only-mode .msg.assistant { cursor: default; }
-body.text-only-mode .msg.assistant .md-content code:not(pre code) { cursor: default; }
-body.text-only-mode .karaoke-word { cursor: default; }
-body.text-only-mode .karaoke-word:hover { background: transparent; text-shadow: none; transform: none; }
-body.text-only-mode .karaoke-word.active { background: transparent; text-shadow: none; }
+body.tts-disabled .msg.assistant { cursor: default; }
+body.tts-disabled .msg.assistant .md-content code:not(pre code) { cursor: default; }
+body.tts-disabled .karaoke-word { cursor: default; }
+body.tts-disabled .karaoke-word:hover { background: transparent; text-shadow: none; transform: none; }
+body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: none; }
 .msg.system {
   align-self: center;
   background: none;
@@ -1297,6 +1389,7 @@ body.text-only-mode .karaoke-word.active { background: transparent; text-shadow:
     <div id="dot" class="connecting"></div>
     <span id="conn-label">Connecting...</span>
   </div>
+  <span id="notes-link" onclick="toggleNotesPanel()">Notes</span>
   <span id="settings-link" onclick="showSettingsPage()">Settings</span>
   <!-- Debug link removed — accessible from Settings page -->
 </div>
@@ -1348,7 +1441,6 @@ body.text-only-mode .karaoke-word.active { background: transparent; text-shadow:
 </div>
 
 <div id="text-input-bar">
-  <button id="mode-toggle-text" onclick="cycleInputMode()" title="Switch mode" style="font-size:0.65rem;font-weight:600;color:var(--text-secondary);background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:4px 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;line-height:1.2;flex-shrink:0;"><span class="mode-value" style="text-transform:uppercase;letter-spacing:0.05em;">Typing</span><span class="mode-label" style="font-size:0.55rem;text-transform:uppercase;letter-spacing:0.05em;opacity:0.7;">Mode</span></button>
   <button id="text-paste" onclick="pasteFromClipboard()" title="Paste from clipboard">&#128203;</button>
   <textarea id="text-input" rows="1" placeholder="Type a message..."></textarea>
   <button id="text-send" onclick="sendTextMessage()" disabled>&#8593;</button>
@@ -1358,22 +1450,16 @@ body.text-only-mode .karaoke-word.active { background: transparent; text-shadow:
 <div id="settings-page">
   <h2>Settings</h2>
 
-  <div class="settings-section">
-    <h3 class="settings-section-title">Mode</h3>
-    <div class="settings-card">
-      <div class="settings-toggle" onclick="toggleSetting('text_only')">
-        <div class="toggle-info"><span class="toggle-name">Text Only</span><span class="toggle-desc">Disable TTS and STT — text chat only, no mic or audio</span></div>
-        <div class="toggle-indicator" id="toggle-text_only"></div>
-      </div>
-    </div>
-  </div>
-
   <div class="settings-section" id="voice-settings-section">
     <h3 class="settings-section-title">Voice</h3>
     <div class="settings-card">
-      <div class="settings-toggle" onclick="toggleSetting('voice_responses')">
-        <div class="toggle-info"><span class="toggle-name">Voice Responses</span><span class="toggle-desc">Speak responses aloud via TTS</span></div>
-        <div class="toggle-indicator on" id="toggle-voice_responses"></div>
+      <div class="settings-toggle" onclick="toggleSetting('tts_enabled')">
+        <div class="toggle-info"><span class="toggle-name">Text-to-Speech</span><span class="toggle-desc">Speak responses aloud, enable karaoke highlighting and play buttons</span></div>
+        <div class="toggle-indicator on" id="toggle-tts_enabled"></div>
+      </div>
+      <div class="settings-toggle" onclick="toggleSetting('stt_enabled')">
+        <div class="toggle-info"><span class="toggle-name">Speech-to-Text</span><span class="toggle-desc">Enable microphone recording and voice input</span></div>
+        <div class="toggle-indicator on" id="toggle-stt_enabled"></div>
       </div>
       <div class="settings-toggle" onclick="toggleSetting('auto_record')">
         <div class="toggle-info"><span class="toggle-name">Auto Record</span><span class="toggle-desc">Start recording when agent finishes speaking</span></div>
@@ -1564,6 +1650,20 @@ body.text-only-mode .karaoke-word.active { background: transparent; text-shadow:
 </div>
 
 </div><!-- /main-content -->
+
+<div id="notes-panel">
+  <div id="notes-panel-header">
+    <div class="notes-tabs">
+      <button class="notes-tab active" data-tab="now" onclick="switchNotesTab('now')">Now</button>
+      <button class="notes-tab" data-tab="later" onclick="switchNotesTab('later')">Later</button>
+    </div>
+    <button id="notes-panel-close" onclick="toggleNotesPanel()" title="Close notes">&times;</button>
+  </div>
+  <textarea class="notes-editor" id="notes-now" placeholder="What are agents working on..."></textarea>
+  <textarea class="notes-editor" id="notes-later" style="display:none;" placeholder="Ideas, future projects, random stuff..."></textarea>
+  <div class="notes-save-indicator" id="notes-save-status"></div>
+</div>
+
 </div><!-- /app-body -->
 
 <script src="/static/js/state.js"></script>
@@ -1587,6 +1687,7 @@ const textInputBar = document.getElementById('text-input-bar');
 <script src="/static/js/audio.js"></script>
 <script src="/static/js/sidebar.js"></script>
 <script src="/static/js/chat.js"></script>
+<script src="/static/js/notes.js"></script>
 <script>
 
 // --- Waveform & Audio Cues (extracted to js/audio.js) ---
@@ -2127,11 +2228,12 @@ async function loadSettings() {
     setToggle('auto_interrupt', autoInterruptEnabled);
     setToggle('thinking_sounds', thinkingSoundsEnabled);
     setToggle('audio_cues', audioCuesEnabled);
-    voiceResponsesEnabled = s.voice_responses !== false;
-    setToggle('voice_responses', voiceResponsesEnabled);
-    const textOnly = s.text_only || false;
-    setToggle('text_only', textOnly);
-    applyTextOnlyMode(textOnly);
+    ttsEnabled = s.tts_enabled !== false;
+    setToggle('tts_enabled', ttsEnabled);
+    sttEnabled = s.stt_enabled !== false;
+    setToggle('stt_enabled', sttEnabled);
+    applyTtsMode(!ttsEnabled);
+    applySttMode(!sttEnabled);
     setToggle('silent_startup', s.silent_startup || false);
     showAgentMessages = s.show_agent_messages !== false;
     setToggle('show_agent_messages', showAgentMessages);
@@ -2168,8 +2270,8 @@ async function toggleSetting(key) {
   if (key === 'auto_interrupt') { autoInterruptEnabled = isOn; }
   if (key === 'thinking_sounds') { thinkingSoundsEnabled = isOn; if (!isOn) stopThinkingSound(); }
   if (key === 'audio_cues') { audioCuesEnabled = isOn; }
-  if (key === 'voice_responses') { voiceResponsesEnabled = isOn; renderChat(); }
-  if (key === 'text_only') { applyTextOnlyMode(isOn); }
+  if (key === 'tts_enabled') { ttsEnabled = isOn; applyTtsMode(!isOn); renderChat(); }
+  if (key === 'stt_enabled') { sttEnabled = isOn; applySttMode(!isOn); }
   if (key === 'show_agent_messages') { showAgentMessages = isOn; renderChat(); }
   try {
     await fetch('/api/settings', {
@@ -2180,25 +2282,25 @@ async function toggleSetting(key) {
   } catch (e) { console.error('Failed to save setting:', e); }
 }
 
-function applyTextOnlyMode(on) {
-  textOnlyEnabled = on;
-  document.body.classList.toggle('text-only-mode', on);
-  // Hide/show voice-related settings sections
-  ['voice-settings-section', 'sounds-settings-section', 'deployment-settings-section'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = on ? 'none' : '';
-  });
+function applyTtsMode(off) {
+  document.body.classList.toggle('tts-disabled', off);
+  if (off && typeof stopActiveAudio === 'function') stopActiveAudio();
+}
+
+function applySttMode(off) {
   // Hide/show mode toggle in header and text-input-bar
   const modeToggleEl = document.getElementById('mode-toggle');
-  if (modeToggleEl) modeToggleEl.style.display = on ? 'none' : '';
-  const modeToggleTextEl = document.getElementById('mode-toggle-text');
-  if (modeToggleTextEl) modeToggleTextEl.style.display = on ? 'none' : '';
-  if (on) {
-    // Force typing mode (but don't show text bar if we're on settings page)
+  if (modeToggleEl) modeToggleEl.style.display = off ? 'none' : '';
+  // Hide/show mic button and waveform
+  const micWrapperEl = document.getElementById('mic-wrapper');
+  if (micWrapperEl) micWrapperEl.style.display = off ? 'none' : '';
+  if (off) {
+    // Stop any active recording
+    if (typeof recording !== 'undefined' && recording && typeof stopRecording === 'function') stopRecording(true);
+    // Force typing mode
     if (typeof inputMode !== 'undefined') {
       inputMode = 'typing';
       if (typeof saveInputMode === 'function') saveInputMode();
-      // Only show text bar if an active session is displayed
       if (activeSessionId && document.getElementById('settings-page').style.display !== 'block') {
         if (typeof applyInputMode === 'function') applyInputMode();
       }

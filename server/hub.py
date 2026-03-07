@@ -463,6 +463,11 @@ async def handle_browser_message(data: dict) -> None:
             return
         audio_bytes = base64.b64decode(payload)
         log.info("[%s] Audio from browser: %d bytes", session_id, len(audio_bytes))
+        # Check if STT is disabled
+        if not _load_settings().get("stt_enabled", True):
+            log.info("[%s] STT disabled, skipping transcription", session_id)
+            await send_to_browser({"session_id": session_id, "type": "done", "processing": False})
+            return
         # Transcribe and deliver via inbox (CLI mode — no converse loop)
         await send_to_browser({"session_id": session_id, "type": "status", "text": "Transcribing..."})
         text = await stt(audio_bytes)
@@ -510,6 +515,9 @@ async def handle_browser_message(data: dict) -> None:
             # Audio interjection — transcribe now
             audio_bytes = base64.b64decode(payload)
             log.info("[%s] Audio interjection: %d bytes, transcribing...", session_id, len(audio_bytes))
+            if not _load_settings().get("stt_enabled", True):
+                log.info("[%s] STT disabled, skipping interjection transcription", session_id)
+                return
             await send_to_browser({"session_id": session_id, "type": "status", "text": "Transcribing..."})
             text = await stt(audio_bytes)
             log.info("[%s] Interjection STT: %s", session_id, text[:100] if text else "(empty)")
@@ -1514,7 +1522,7 @@ async def speak_to_user(request: Request):
 
     # TTS — strip non-speakable content and play
     settings = _load_settings()
-    skip_tts = sender.text_mode or settings.get("text_only", False) or not settings.get("voice_responses", True)
+    skip_tts = sender.text_mode or not settings.get("tts_enabled", True)
     if not skip_tts:
         tts_message = strip_non_speakable(content)
         if tts_message.strip():
@@ -1719,13 +1727,13 @@ def _load_settings() -> dict:
         "auto_interrupt": False,
         "thinking_sounds": True,
         "audio_cues": True,
-        "voice_responses": True,
+        "tts_enabled": True,
+        "stt_enabled": True,
         "silent_startup": False,
         "deployment_mode": "local",
         "tts_url": hub_config.KOKORO_URL,
         "stt_url": hub_config.WHISPER_URL,
         "quality_mode": "high",
-        "text_only": False,
     }
     if settings_path.exists():
         try:
@@ -1741,6 +1749,27 @@ def _save_settings(settings: dict) -> None:
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     settings_path.write_text(json.dumps(settings, indent=2))
 
+
+
+@app.get("/api/notes")
+async def get_notes():
+    notes_path = Path("data/notes.json")
+    if notes_path.exists():
+        try:
+            return JSONResponse(json.loads(notes_path.read_text()))
+        except Exception:
+            pass
+    return JSONResponse({"now": "", "later": ""})
+
+
+@app.put("/api/notes")
+async def update_notes(request: Request):
+    data = await request.json()
+    notes = {"now": data.get("now", ""), "later": data.get("later", "")}
+    notes_path = Path("data/notes.json")
+    notes_path.parent.mkdir(parents=True, exist_ok=True)
+    notes_path.write_text(json.dumps(notes, indent=2))
+    return JSONResponse(notes)
 
 
 @app.get("/api/services/status")
