@@ -113,10 +113,18 @@ if [ -d "$INSTALL_DIR/.git" ]; then
         warn "Force reinstall requested — removing venv and reinstalling..."
         rm -rf .venv
     elif [ "$UPDATES" -gt 0 ]; then
-        info "Updates available ($UPDATES commits behind). Pulling latest..."
-        git pull --ff-only || warn "Could not pull latest (you may have local changes)"
+        info "Updates available ($UPDATES commits behind)."
+        info "Run 'clawmux update' to update without reinstalling."
+        read -p "Do you want to force a clean reinstall instead? (y/N): " REINSTALL
+        if [[ "$REINSTALL" =~ ^[Yy] ]]; then
+            warn "Clean reinstall — removing venv..."
+            rm -rf .venv
+        else
+            info "Exiting. Run 'clawmux update' to pull the latest changes."
+            exit 0
+        fi
     else
-        ok "Already up to date."
+        ok "Already installed and up to date."
         read -p "Do you want to force a clean reinstall? (y/N): " REINSTALL
         if [[ "$REINSTALL" =~ ^[Yy] ]]; then
             warn "Clean reinstall — removing venv..."

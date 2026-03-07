@@ -760,6 +760,12 @@ def cmd_update(args):
         print("Hub is not running. Update complete.")
         return
 
+    # By default, don't restart the hub — just update code and deps
+    if not getattr(args, "restart", False) and not getattr(args, "full", False):
+        print("Update complete. Hub is still running with old code.")
+        print("Run 'clawmux reload' to apply changes, or 'clawmux update --restart' to restart automatically.")
+        return
+
     if getattr(args, "full", False):
         # Full restart: kill agents + hub, restart everything
         print("Stopping hub and agents...")
@@ -1830,8 +1836,9 @@ examples:
 
     # update
     p = sub.add_parser("update", help="Update ClawMux to latest version",
-                       description="Pull latest code, reinstall deps, reinstall CLI, and reload hub. Use --full to also kill and respawn all agents.")
-    p.add_argument("--full", action="store_true", help="Kill all agents and restart everything (default: graceful hub reload)")
+                       description="Pull latest code, reinstall deps, and reinstall CLI. Does NOT restart the hub by default.")
+    p.add_argument("--restart", action="store_true", help="Reload hub after updating (default: no restart)")
+    p.add_argument("--full", action="store_true", help="Kill all agents and restart everything")
     p.add_argument("--clean", action="store_true", help="Hard reinstall: clean legacy files, reinstall hooks, regenerate templates")
     p.set_defaults(func=cmd_update)
 
