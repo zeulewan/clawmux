@@ -53,11 +53,10 @@ Check if running:
 curl -s http://127.0.0.1:2022/v1/models | head -c 200
 ```
 
-If not installed, install via [VoiceMode](https://github.com/mbailey/voicemode):
+If not installed, install via ClawMux services (from the repo root):
 ```bash
-uvx voice-mode-install --yes
-voicemode whisper install
-voicemode whisper start
+bash services/whisper/install.sh
+bash services/whisper/start.sh
 ```
 
 Or any OpenAI-compatible STT server on port 2022.
@@ -69,10 +68,10 @@ Check if running:
 curl -s http://127.0.0.1:8880/v1/models | head -c 200
 ```
 
-If not installed:
+If not installed (from the repo root):
 ```bash
-voicemode kokoro install
-voicemode kokoro start
+bash services/kokoro/install.sh
+bash services/kokoro/start.sh
 ```
 
 Or any OpenAI-compatible TTS server on port 8880.

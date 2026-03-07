@@ -42,22 +42,31 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## 4. TTS and STT Services (VoiceMode)
+## 4. TTS and STT Services
+
+Environment variables (optional — shown with defaults):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CLAWMUX_HOME` | `~/.clawmux` | Base directory |
+| `CLAWMUX_WHISPER_PORT` | `2022` | Whisper STT port |
+| `CLAWMUX_KOKORO_PORT` | `8880` | Kokoro TTS port |
+| `CLAWMUX_WHISPER_MODEL` | `large-v3` | Whisper model size |
 
 ```bash
-# Install VoiceMode (manages Whisper + Kokoro services)
-pip install voicemode
+cd "$HOME/GIT/clawmux"
 
+# Install Whisper and Kokoro services
 # Whisper STT (port 2022)
 if ! curl -s http://127.0.0.1:2022/v1/models > /dev/null 2>&1; then
-    voicemode whisper install
-    voicemode whisper start
+    bash services/whisper/install.sh
+    bash services/whisper/start.sh
 fi
 
 # Kokoro TTS (port 8880)
 if ! curl -s http://127.0.0.1:8880/v1/models > /dev/null 2>&1; then
-    voicemode kokoro install
-    voicemode kokoro start
+    bash services/kokoro/install.sh
+    bash services/kokoro/start.sh
 fi
 ```
 
@@ -134,8 +143,8 @@ echo "Open http://localhost:3460 in your browser"
 | Problem | Fix |
 |---------|-----|
 | CUDA not found | Install NVIDIA drivers and CUDA toolkit: `sudo apt install nvidia-driver-535 nvidia-cuda-toolkit` |
-| Whisper OOM | Use a smaller model: `voicemode whisper config --model base` |
+| Whisper OOM | Use a smaller model: set `CLAWMUX_WHISPER_MODEL=base` and re-run `bash services/whisper/install.sh` |
 | Port 3460 in use | Check what is using it: `lsof -i:3460` |
-| TTS/STT connection refused | Check services: `voicemode whisper status` / `voicemode kokoro status` |
+| TTS/STT connection refused | Check services: `curl -s http://127.0.0.1:2022/v1/models` / `curl -s http://127.0.0.1:8880/v1/models` |
 | MCP tools not found | Wait 10s after starting Claude Code, then retry |
 | Permission denied on CLI install | Run `sudo cp` or add the cli directory to your PATH |

@@ -2489,7 +2489,7 @@ async function checkServiceStatus() {
     const isMac = navigator.platform.startsWith('Mac') || navigator.userAgent.includes('Mac');
     const installCmds = isMac
       ? '<b>Mac:</b><br><code>pip install mlx-audio</code><br><code>brew install whisper-cpp</code>'
-      : '<b>Linux:</b><br><code>pip install voicemode && voicemode whisper install && voicemode kokoro install</code>';
+      : '<b>Linux:</b><br><code>bash services/whisper/install.sh && bash services/whisper/start.sh && bash services/kokoro/install.sh && bash services/kokoro/start.sh</code>';
     warn.innerHTML = '\u26a0\ufe0f <b>Missing services:</b> ' + missing.join(', ') +
       '<br><br>' + installCmds;
     warn.style.display = '';

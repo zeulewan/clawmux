@@ -49,7 +49,7 @@ pip install -r requirements.txt
 brew install whisper-cpp
 
 # Download the large-v3 model for best accuracy
-WHISPER_MODELS="$HOME/.voicemode/services/whisper/models"
+WHISPER_MODELS="$HOME/.clawmux/services/whisper/models"
 mkdir -p "$WHISPER_MODELS"
 if [ ! -f "$WHISPER_MODELS/ggml-large-v3.bin" ]; then
     curl -L "https://huggingface.co/gguf-org/whisper-large-v3-GGUF/resolve/main/ggml-large-v3.bin" \

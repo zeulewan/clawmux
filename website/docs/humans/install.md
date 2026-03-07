@@ -59,7 +59,7 @@ First, choose your deployment mode. Then select your OS and copy the prompt.
 
         4. Detect GPU and install TTS/STT:
            Run nvidia-smi. If NVIDIA GPU found:
-           pip install voicemode && voicemode whisper install && voicemode whisper start && voicemode kokoro install && voicemode kokoro start
+           bash services/whisper/install.sh && bash services/whisper/start.sh && bash services/kokoro/install.sh && bash services/kokoro/start.sh
            If no GPU, stop and use the Split mode prompt instead.
 
         5. Review and install the CLI (review the script first — it's short):
@@ -94,7 +94,7 @@ First, choose your deployment mode. Then select your OS and copy the prompt.
 
         4. Detect GPU and install TTS/STT:
            Run nvidia-smi. If NVIDIA GPU found:
-           pip install voicemode && voicemode whisper install && voicemode whisper start && voicemode kokoro install && voicemode kokoro start
+           bash services/whisper/install.sh && bash services/whisper/start.sh && bash services/kokoro/install.sh && bash services/kokoro/start.sh
            If nvidia-smi not found, install CUDA for WSL: https://developer.nvidia.com/cuda/wsl
 
         5. Review and install the CLI (review the script first — it's short):

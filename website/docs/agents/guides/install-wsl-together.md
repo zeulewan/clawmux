@@ -44,22 +44,31 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## 4. TTS and STT Services (VoiceMode)
+## 4. TTS and STT Services
+
+Environment variables (optional — shown with defaults):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CLAWMUX_HOME` | `~/.clawmux` | Base directory |
+| `CLAWMUX_WHISPER_PORT` | `2022` | Whisper STT port |
+| `CLAWMUX_KOKORO_PORT` | `8880` | Kokoro TTS port |
+| `CLAWMUX_WHISPER_MODEL` | `large-v3` | Whisper model size |
 
 ```bash
-# Install VoiceMode (manages Whisper + Kokoro services)
-pip install voicemode
+cd "$HOME/GIT/clawmux"
 
+# Install Whisper and Kokoro services
 # Whisper STT (port 2022)
 if ! curl -s http://127.0.0.1:2022/v1/models > /dev/null 2>&1; then
-    voicemode whisper install
-    voicemode whisper start
+    bash services/whisper/install.sh
+    bash services/whisper/start.sh
 fi
 
 # Kokoro TTS (port 8880)
 if ! curl -s http://127.0.0.1:8880/v1/models > /dev/null 2>&1; then
-    voicemode kokoro install
-    voicemode kokoro start
+    bash services/kokoro/install.sh
+    bash services/kokoro/start.sh
 fi
 ```
 
@@ -159,6 +168,6 @@ echo "Open http://localhost:3460 in your Windows browser"
 |---------|-----|
 | nvidia-smi not found | Install NVIDIA CUDA drivers for WSL from [nvidia.com/cuda/wsl](https://developer.nvidia.com/cuda/wsl) |
 | Port not accessible from Windows | Check WSL networking: `wsl --version` (must be WSL2). Try WSL IP directly. |
-| Services crash on GPU OOM | Use a smaller Whisper model: `voicemode whisper config --model base` |
+| Services crash on GPU OOM | Use a smaller Whisper model: set `CLAWMUX_WHISPER_MODEL=base` and re-run `bash services/whisper/install.sh` |
 | WSL restarts lose services | Add startup commands to `~/.bashrc` or use a systemd service |
 | MCP tools not found | Wait 10s after starting Claude Code, then retry |

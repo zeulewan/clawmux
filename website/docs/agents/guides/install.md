@@ -92,7 +92,7 @@ pip install -r requirements.txt
     # Whisper STT via whisper.cpp
     brew install whisper-cpp
 
-    WHISPER_MODELS="$HOME/.voicemode/services/whisper/models"
+    WHISPER_MODELS="$HOME/.clawmux/services/whisper/models"
     mkdir -p "$WHISPER_MODELS"
     if [ ! -f "$WHISPER_MODELS/ggml-large-v3.bin" ]; then
         curl -L "https://huggingface.co/gguf-org/whisper-large-v3-GGUF/resolve/main/ggml-large-v3.bin" \
@@ -121,10 +121,9 @@ pip install -r requirements.txt
     Skip local TTS/STT. Set up services on your GPU server:
 
     ```bash
-    # On the GPU server:
-    pip install voicemode
-    voicemode whisper install && voicemode whisper start
-    voicemode kokoro install && voicemode kokoro start
+    # On the GPU server (from the clawmux repo root):
+    bash services/whisper/install.sh && bash services/whisper/start.sh
+    bash services/kokoro/install.sh && bash services/kokoro/start.sh
     ```
 
     Make services reachable from your Mac via Tailscale or SSH tunnel:
@@ -141,19 +140,18 @@ pip install -r requirements.txt
 === "Linux Together"
 
     ```bash
-    # Install VoiceMode (manages Whisper + Kokoro services)
-    pip install voicemode
+    # Install Whisper and Kokoro services (from the clawmux repo root)
 
     # Whisper STT (port 2022)
     if ! curl -s http://127.0.0.1:2022/v1/models > /dev/null 2>&1; then
-        voicemode whisper install
-        voicemode whisper start
+        bash services/whisper/install.sh
+        bash services/whisper/start.sh
     fi
 
     # Kokoro TTS (port 8880)
     if ! curl -s http://127.0.0.1:8880/v1/models > /dev/null 2>&1; then
-        voicemode kokoro install
-        voicemode kokoro start
+        bash services/kokoro/install.sh
+        bash services/kokoro/start.sh
     fi
     ```
 
@@ -162,10 +160,9 @@ pip install -r requirements.txt
     Skip local TTS/STT. Set up services on your GPU server:
 
     ```bash
-    # On the GPU server:
-    pip install voicemode
-    voicemode whisper install && voicemode whisper start
-    voicemode kokoro install && voicemode kokoro start
+    # On the GPU server (from the clawmux repo root):
+    bash services/whisper/install.sh && bash services/whisper/start.sh
+    bash services/kokoro/install.sh && bash services/kokoro/start.sh
     ```
 
     Make services reachable via Tailscale or SSH tunnel:
@@ -182,19 +179,18 @@ pip install -r requirements.txt
 === "WSL Together"
 
     ```bash
-    # Install VoiceMode (manages Whisper + Kokoro services)
-    pip install voicemode
+    # Install Whisper and Kokoro services (from the clawmux repo root)
 
     # Whisper STT (port 2022)
     if ! curl -s http://127.0.0.1:2022/v1/models > /dev/null 2>&1; then
-        voicemode whisper install
-        voicemode whisper start
+        bash services/whisper/install.sh
+        bash services/whisper/start.sh
     fi
 
     # Kokoro TTS (port 8880)
     if ! curl -s http://127.0.0.1:8880/v1/models > /dev/null 2>&1; then
-        voicemode kokoro install
-        voicemode kokoro start
+        bash services/kokoro/install.sh
+        bash services/kokoro/start.sh
     fi
     ```
 
@@ -203,10 +199,9 @@ pip install -r requirements.txt
     Skip local TTS/STT. Set up services on your GPU server:
 
     ```bash
-    # On the GPU server:
-    pip install voicemode
-    voicemode whisper install && voicemode whisper start
-    voicemode kokoro install && voicemode kokoro start
+    # On the GPU server (from the clawmux repo root):
+    bash services/whisper/install.sh && bash services/whisper/start.sh
+    bash services/kokoro/install.sh && bash services/kokoro/start.sh
     ```
 
     Make services reachable from WSL via Tailscale or SSH tunnel:
@@ -346,7 +341,7 @@ rm -rf "$HOME/GIT/clawmux"
 |---------|-----|
 | MCP tools not found | Wait 10s after starting Claude Code, then retry |
 | Port 3460 in use | Check what is using it: `lsof -i:3460` |
-| TTS/STT connection refused | Check services: `voicemode whisper status` / `voicemode kokoro status` |
+| TTS/STT connection refused | Check services: `curl -s http://127.0.0.1:2022/v1/models` / `curl -s http://127.0.0.1:8880/v1/models` |
 | No GPU detected | Use split mode with a remote GPU server |
 | mlx-audio fails | Requires Apple Silicon — does not work on Intel Macs |
 | nvidia-smi not found in WSL | Install CUDA drivers for WSL: [nvidia.com/cuda/wsl](https://developer.nvidia.com/cuda/wsl) |

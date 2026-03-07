@@ -43,20 +43,29 @@ pip install -r requirements.txt
 
 ## 4. GPU Server Setup
 
-SSH into your GPU server and set up TTS/STT:
+SSH into your GPU server, clone the repo, and set up TTS/STT:
 
 ```bash
 # On the GPU server:
-pip install voicemode
+git clone https://github.com/zeulewan/clawmux.git ~/clawmux
+cd ~/clawmux
 
-# Whisper STT (port 2022)
-voicemode whisper install
-voicemode whisper start
+# Install Whisper and Kokoro services
+bash services/whisper/install.sh
+bash services/whisper/start.sh
 
-# Kokoro TTS (port 8880)
-voicemode kokoro install
-voicemode kokoro start
+bash services/kokoro/install.sh
+bash services/kokoro/start.sh
 ```
+
+Environment variables (optional — shown with defaults):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CLAWMUX_HOME` | `~/.clawmux` | Base directory |
+| `CLAWMUX_WHISPER_PORT` | `2022` | Whisper STT port |
+| `CLAWMUX_KOKORO_PORT` | `8880` | Kokoro TTS port |
+| `CLAWMUX_WHISPER_MODEL` | `large-v3` | Whisper model size |
 
 Make the services accessible from WSL. Options:
 
@@ -164,7 +173,7 @@ echo "Open http://localhost:3460 in your Windows browser"
 
 | Problem | Fix |
 |---------|-----|
-| TTS/STT connection refused | Check GPU server services: `voicemode whisper status` / `voicemode kokoro status` |
+| TTS/STT connection refused | Check GPU server services: `curl -s http://127.0.0.1:2022/v1/models` / `curl -s http://127.0.0.1:8880/v1/models` |
 | Tailscale in WSL issues | Ensure WSL2 (not WSL1): `wsl --set-version Ubuntu 2` |
 | Port not accessible from Windows | Try WSL IP directly instead of localhost |
 | SSH tunnel dies | Use `autossh`: `sudo apt install autossh` |

@@ -41,16 +41,19 @@ pip install -r requirements.txt
 SSH into your GPU server and set up TTS/STT:
 
 ```bash
-# On the GPU server:
-pip install voicemode
+# On the GPU server — clone the repo and install services:
+git clone https://github.com/zeulewan/clawmux.git ~/GIT/clawmux
+cd ~/GIT/clawmux
 
-# Whisper STT (port 2022)
-voicemode whisper install
-voicemode whisper start
+# Install Whisper and Kokoro services
+bash services/whisper/install.sh
+bash services/kokoro/install.sh
 
-# Kokoro TTS (port 8880)
-voicemode kokoro install
-voicemode kokoro start
+# Start Whisper STT (port 2022)
+bash services/whisper/start.sh
+
+# Start Kokoro TTS (port 8880)
+bash services/kokoro/start.sh
 ```
 
 Make the services accessible from your Mac. Options:
@@ -152,7 +155,7 @@ echo "Open http://localhost:3460 in your browser"
 
 | Problem | Fix |
 |---------|-----|
-| TTS/STT connection refused | Check GPU server services: `voicemode whisper status` / `voicemode kokoro status` |
+| TTS/STT connection refused | Check GPU server services: `curl -s http://127.0.0.1:2022/v1/models` / `curl -s http://127.0.0.1:8880/v1/models` |
 | Tailscale not connecting | Ensure both machines are on the same tailnet: `tailscale status` |
 | SSH tunnel dies | Use `autossh` for persistent tunnels: `brew install autossh` |
 | High latency | Tailscale direct connection preferred over relayed. Check `tailscale ping gpu-server` |
