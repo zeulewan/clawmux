@@ -49,6 +49,7 @@ fi
 echo "[whisper] Starting on port $WHISPER_PORT with model $(basename "$MODEL_PATH") ($THREADS threads)"
 
 cd "$WHISPER_DIR"
+export LD_LIBRARY_PATH="$WHISPER_DIR/build/src:$WHISPER_DIR/build/ggml/src:$WHISPER_DIR/build/ggml/src/ggml-cuda:${LD_LIBRARY_PATH:-}"
 nohup "$SERVER_BIN" \
     --host 0.0.0.0 \
     --port "$WHISPER_PORT" \
