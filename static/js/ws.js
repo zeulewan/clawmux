@@ -42,10 +42,11 @@ function connect() {
       setToggle('auto_record', autoMode);
       setToggle('auto_end', vadEnabled);
       setToggle('auto_interrupt', autoInterruptEnabled);
-      voiceResponsesEnabled = s.voice_responses !== false;
-      setToggle('voice_responses', voiceResponsesEnabled);
+      ttsEnabled = s.tts_enabled !== false;
+      setToggle('tts_enabled', ttsEnabled);
+      sttEnabled = s.stt_enabled !== false;
+      setToggle('stt_enabled', sttEnabled);
     }).catch(() => {});
-    startHistorySync();
   };
 
   ws.onclose = () => {
@@ -69,34 +70,29 @@ function connect() {
 let _sessionsLoading = false;
 const _messageBuffer = [];
 
-async function _refreshHistory(sessionId, voiceId) {
+// Cursor-based reconnect sync — fetches only messages after the last known ID
+async function _reconnectSyncSession(sessionId, voiceId) {
   const s = sessions.get(sessionId);
-  if (!s) return;
-  // Skip sync for the active session while audio is playing or karaoke is active
-  // to avoid DOM re-renders that break karaoke highlighting and cause visual flashes
-  if (sessionId === activeSessionId && (currentAudio || currentBufferedPlayer || _karaokeWords || playbackPaused)) return;
+  if (!s || !s.messages.length) return;
+  // Find last message with an ID (cursor)
+  let lastId = null;
+  for (let i = s.messages.length - 1; i >= 0; i--) {
+    if (s.messages[i].id) { lastId = s.messages[i].id; break; }
+  }
+  if (!lastId) return;
   try {
-    const resp = await fetch(`/api/history/${voiceId}?project=${currentProject}`);
+    const resp = await fetch(`/api/history/${voiceId}?project=${currentProject}&after=${encodeURIComponent(lastId)}`);
     if (!resp.ok) return;
     const hist = await resp.json();
-    const serverMessages = (hist.messages || []).map(m => {
+    const newMessages = (hist.messages || []).map(m => {
       const obj = { role: m.role, text: m.text };
       if (m.id) obj.id = m.id;
       if (m.parent_id) obj.parentId = m.parent_id;
       if (m.bare_ack) obj.isBareAck = true;
       return obj;
     });
-    // Note: pending_interjections is NOT used to re-mark messages as italic.
-    // Interjection styling is transient — applied in real-time via user_text events
-    // and cleared on inbox_update. Re-marking from history causes stale italics
-    // after page/hub reload when interjections haven't been consumed yet.
-    // Diff-based sync: find server messages missing locally and append them
-    // instead of replacing all messages (which causes destructive DOM rebuilds)
-    const _msgKey = m => m.id || `${m.role}:${(m.text || '').slice(0, 120)}`;
-    const localKeys = new Set(s.messages.map(_msgKey));
-    const newMessages = serverMessages.filter(m => !localKeys.has(_msgKey(m)));
     if (newMessages.length > 0) {
-      console.log(`[historySync] ${sessionId}: appending ${newMessages.length} missed messages`);
+      console.log(`[reconnectSync] ${sessionId}: appending ${newMessages.length} missed messages`);
       for (const msg of newMessages) {
         addMessage(sessionId, msg.role, msg.text, {
           id: msg.id || null,
@@ -108,15 +104,10 @@ async function _refreshHistory(sessionId, voiceId) {
   } catch (e) { /* ignore */ }
 }
 
-// Periodic history sync — catches messages missed during WebSocket drops
-let _historySyncTimer = null;
-function startHistorySync() {
-  if (_historySyncTimer) return;
-  _historySyncTimer = setInterval(() => {
-    for (const [sid, s] of sessions) {
-      if (s.voice) _refreshHistory(sid, s.voice);
-    }
-  }, 5000);
+function _reconnectSync() {
+  for (const [sid, s] of sessions) {
+    if (s.voice) _reconnectSyncSession(sid, s.voice);
+  }
 }
 
 function _flushMessageBuffer() {

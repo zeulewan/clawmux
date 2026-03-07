@@ -1309,6 +1309,15 @@ async def get_history(voice_id: str, request: Request):
     project = request.query_params.get("project", project_mgr.active_project)
     prefix = project_mgr.get_history_prefix(project)
     messages = await asyncio.to_thread(history.load, voice_id, prefix)
+    # Cursor-based filtering: return only messages after the given ID
+    after_id = request.query_params.get("after")
+    if after_id:
+        idx = None
+        for i, m in enumerate(messages):
+            if m.get("id") == after_id:
+                idx = i
+                break
+        messages = messages[idx + 1:] if idx is not None else []
     # Include count of pending interjections so browser can style unseen messages
     pending_count = 0
     for s in session_mgr.sessions.values():
