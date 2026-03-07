@@ -91,14 +91,16 @@ async function _refreshHistory(sessionId, voiceId) {
     // and cleared on inbox_update. Re-marking from history causes stale italics
     // after page/hub reload when interjections haven't been consumed yet.
     // Check if server has messages the client is missing
-    // Filter out system messages from both sides for comparison
-    const localNonSystem = s.messages.filter(m => m.role !== 'system');
-    const serverNonSystem = serverMessages.filter(m => m.role !== 'system');
-    const serverLen = serverNonSystem.length;
-    const localLen = localNonSystem.length;
+    // Filter out transient system messages (but keep agent messages which use role=system)
+    const _isAgentMsg = m => m.role === 'system' && /^\[Agent msg (from|to) /.test(m.text);
+    const _isTransientSystem = m => m.role === 'system' && !_isAgentMsg(m);
+    const localComparable = s.messages.filter(m => !_isTransientSystem(m));
+    const serverComparable = serverMessages.filter(m => !_isTransientSystem(m));
+    const serverLen = serverComparable.length;
+    const localLen = localComparable.length;
     // Compare both count and last message content to catch missed messages
-    const lastServer = serverLen > 0 ? serverNonSystem[serverLen - 1] : null;
-    const lastLocal = localLen > 0 ? localNonSystem[localLen - 1] : null;
+    const lastServer = serverLen > 0 ? serverComparable[serverLen - 1] : null;
+    const lastLocal = localLen > 0 ? localComparable[localLen - 1] : null;
     const needsSync = serverLen > localLen ||
       (serverLen > 0 && (!lastLocal || lastServer.text !== lastLocal.text || lastServer.role !== lastLocal.role));
     if (needsSync) {
@@ -124,8 +126,11 @@ async function _refreshHistory(sessionId, voiceId) {
         }
         requestAnimationFrame(() => {
           chatScrollToBottom();
-          // Re-enable animations after render settles
-          chatArea.classList.remove('no-animate');
+          // Re-enable animations after render settles (double-rAF ensures
+          // one paint happens with no-animate active before removal)
+          requestAnimationFrame(() => {
+            chatArea.classList.remove('no-animate');
+          });
         });
       }
     }
