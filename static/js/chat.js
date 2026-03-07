@@ -218,14 +218,6 @@ function createMsgEl(role, text, voiceColorHex, voiceId, msgObj = null) {
     div.appendChild(actions);
   }
 
-  // Double-click to ack messages with an ID (not on user's own messages) — desktop only
-  if (!isMobile && msgObj && msgObj.id && role !== 'system' && role !== 'thinking' && role !== 'user' && role !== 'user interjection') {
-    div.addEventListener('dblclick', (e) => {
-      e.preventDefault();
-      _sendUserAck(msgObj.id);
-    });
-  }
-
   // Mobile: attach long-press directly to each message (matches sidebar pattern)
   if (isMobile && role !== 'thinking' && role !== 'system') {
     let lpTimer = null, lpFired = false, startX = 0, startY = 0;
