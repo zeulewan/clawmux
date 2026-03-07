@@ -113,7 +113,7 @@ _shutdown_mode: str = "full"
 # Message queue for when browser is disconnected (bounded, with timestamps for TTL)
 _QUEUE_MAX = 100
 _QUEUE_TTL = 30  # seconds — discard queued messages older than this
-_QUEUEABLE_TYPES = {"assistant_text", "user_text", "audio", "done", "session_status", "session_ended"}
+_QUEUEABLE_TYPES = {"assistant_text", "user_text", "audio", "done", "session_status", "session_ended", "agent_message", "user_ack"}
 _browser_msg_queue: collections.deque[tuple[float, dict]] = collections.deque(maxlen=_QUEUE_MAX)
 
 
