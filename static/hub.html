@@ -641,22 +641,6 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 #chat-area.no-animate .msg { animation: none; }
-#new-msg-pill {
-  position: absolute;
-  bottom: 140px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--blue);
-  color: #fff;
-  padding: 6px 16px;
-  border-radius: 20px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-  z-index: 100;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-  pointer-events: auto;
-}
 .msg.user {
   align-self: flex-end;
   background: var(--blue);
@@ -1547,7 +1531,6 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 </div>
 
 <div id="chat-area" style="display:none;"></div>
-<div id="new-msg-pill" style="display:none;">New messages ↓</div>
 
 <div id="controls" style="display:none;">
   <div id="controls-left">
