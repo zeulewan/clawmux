@@ -39,6 +39,7 @@ from session_manager import SessionManager
 from state_machine import AgentState
 
 from agents_store import AgentsStore
+from template_renderer import TemplateRenderer
 
 # Logging
 logging.basicConfig(
@@ -55,6 +56,7 @@ log = logging.getLogger("hub")
 history = HistoryStore()
 project_mgr = ProjectManager()
 agents_store = AgentsStore()
+template_renderer = TemplateRenderer(agents_store)
 session_mgr = SessionManager(history_store=history, project_mgr=project_mgr, agents_store=agents_store)
 broker = MessageBroker()
 
@@ -701,7 +703,7 @@ async def get_debug_log():
 def _session_from_cwd(cwd: str) -> "SessionInfo | None":
     """Map a working directory path to its ClawMux session.
 
-    Claude Code hooks send the agent's cwd (e.g. /tmp/clawmux-sessions/clawmux/am_echo).
+    Claude Code hooks send the agent's cwd (e.g. ~/.clawmux/sessions/am_echo).
     We match that against each session's work_dir.
     """
     for session in session_mgr.sessions.values():
@@ -1118,7 +1120,32 @@ async def assign_agent(voice_id: str, request: Request):
         return JSONResponse({"error": "Agent not found"}, status_code=404)
     log.info("[agents] Assigned %s → project=%s role=%s area=%s",
              voice_id, updated.project, updated.role, updated.area)
+    # Auto-regenerate CLAUDE.md for the reassigned agent
+    session = next((s for s in session_mgr.sessions.values() if s.voice == voice_id), None)
+    if session and session.work_dir:
+        await template_renderer.render_to_file(voice_id, Path(session.work_dir))
     return JSONResponse(updated.to_dict())
+
+
+@app.post("/api/agents/regenerate")
+async def regenerate_all_templates():
+    """Regenerate CLAUDE.md for all active agents."""
+    template_renderer.reload_template()
+    count = await template_renderer.render_all(session_mgr.sessions)
+    return JSONResponse({"regenerated": count})
+
+
+@app.post("/api/agents/{voice_id}/regenerate")
+async def regenerate_template(voice_id: str):
+    """Regenerate CLAUDE.md for a single agent."""
+    template_renderer.reload_template()
+    session = next((s for s in session_mgr.sessions.values() if s.voice == voice_id), None)
+    if not session or not session.work_dir:
+        return JSONResponse({"error": "Agent not found or not active"}, status_code=404)
+    ok = await template_renderer.render_to_file(voice_id, Path(session.work_dir))
+    if not ok:
+        return JSONResponse({"error": "Agent not in agents.json"}, status_code=404)
+    return JSONResponse({"regenerated": voice_id})
 
 
 # --- Project Management ---

@@ -1341,6 +1341,16 @@ while True:
     print(f"Live watcher started (polls every 3s, log: {log_path})")
 
 
+def cmd_regenerate(args):
+    """Regenerate CLAUDE.md templates for agents."""
+    if args.agent:
+        result = http_post(f"/api/agents/{args.agent}/regenerate", {})
+        print(f"Regenerated CLAUDE.md for {result.get('regenerated', args.agent)}")
+    else:
+        result = http_post("/api/agents/regenerate", {})
+        print(f"Regenerated {result.get('regenerated', 0)} CLAUDE.md files")
+
+
 def cmd_project(args):
     """Set project status in the sidebar."""
     session_id = require_session_id()
@@ -1525,6 +1535,16 @@ examples:
                        description="Show message history between agents.")
     p.add_argument("--session", help="Filter by session ID")
     p.set_defaults(func=cmd_messages)
+
+    # regenerate
+    p = sub.add_parser("regenerate", help="Regenerate CLAUDE.md templates",
+                       description="Regenerate CLAUDE.md files from template for active agents.",
+                       formatter_class=argparse.RawDescriptionHelpFormatter,
+                       epilog="""examples:
+    clawmux regenerate              # Regenerate all
+    clawmux regenerate am_echo      # Regenerate one agent""")
+    p.add_argument("agent", nargs="?", help="Voice ID to regenerate (default: all)")
+    p.set_defaults(func=cmd_regenerate)
 
     # project
     p = sub.add_parser("project", help="Set project status in sidebar",
