@@ -272,9 +272,6 @@ function _getChatLimit(sid) {
 }
 
 function renderChat(forceScroll = false) {
-  // Hide "New messages" pill on full re-render
-  const pill = document.getElementById('new-msg-pill');
-  if (pill) pill.style.display = 'none';
   // Check if user is near bottom BEFORE clearing DOM (scrollHeight resets after innerHTML='')
   const wasNearBottom = forceScroll || chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150;
   chatArea.innerHTML = '';
@@ -411,24 +408,7 @@ function _initChatScroll() {
         });
       }
     }
-    // Hide "New messages" pill when scrolled to bottom
-    const atBottom = chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150;
-    if (atBottom) {
-      const pill = document.getElementById('new-msg-pill');
-      if (pill) pill.style.display = 'none';
-    }
   });
-}
-
-// Click handler for "New messages" pill
-{
-  const pill = document.getElementById('new-msg-pill');
-  if (pill) {
-    pill.addEventListener('click', () => {
-      chatArea.scrollTop = chatArea.scrollHeight;
-      pill.style.display = 'none';
-    });
-  }
 }
 
 function _debugBanner(msg) { /* no-op */ }
@@ -500,10 +480,6 @@ function addMessage(sessionId, role, text, opts = {}) {
       chatArea.appendChild(el);
       if (wasNearBottom) {
         chatArea.scrollTop = chatArea.scrollHeight;
-      } else if (role !== 'activity') {
-        // Show "New messages" pill for real messages only
-        const pill = document.getElementById('new-msg-pill');
-        if (pill) pill.style.display = 'block';
       }
     }
   }
