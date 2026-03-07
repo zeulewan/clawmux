@@ -568,16 +568,24 @@ def _check_system_deps():
     is_mac = platform.system() == "Darwin"
     installed = []
 
+    # Extend PATH for lookup — venv python may have a minimal PATH
+    extra_paths = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+    lookup_path = os.environ.get("PATH", "") + os.pathsep + extra_paths
+
     # Check tmux
-    if shutil.which("tmux") is None:
+    if shutil.which("tmux", path=lookup_path) is None:
         print("tmux not found, installing...")
-        if is_mac:
-            r = subprocess.run(["brew", "install", "tmux"], capture_output=True, text=True)
+        brew = shutil.which("brew", path=lookup_path)
+        if is_mac and brew:
+            r = subprocess.run([brew, "install", "tmux"], capture_output=True, text=True)
+        elif is_mac:
+            print("Warning: brew not found — install tmux manually (brew install tmux)")
+            r = None
         else:
             r = subprocess.run(["sudo", "apt", "install", "-y", "tmux"], capture_output=True, text=True)
-        if r.returncode == 0:
+        if r is not None and r.returncode == 0:
             installed.append("tmux")
-        else:
+        elif r is not None:
             print(f"Warning: failed to install tmux: {r.stderr.strip()}")
 
     # Check python3-venv (Linux only)
