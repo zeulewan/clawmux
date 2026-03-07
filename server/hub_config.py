@@ -23,10 +23,6 @@ TMUX_SESSION_PREFIX = "voice"
 WHISPER_URL = "http://127.0.0.1:2022"
 KOKORO_URL = "http://127.0.0.1:8880"
 
-# Deployment modes: "local" (all on this machine), "split" (hub local, TTS/STT remote),
-# "remote" (thin client — hub, TTS, STT all remote)
-DEPLOYMENT_MODE = "local"
-
 # Quality mode maps to Whisper model sizes: "high" = large-v3, "medium" = medium, "low" = base
 QUALITY_MODE = "high"
 QUALITY_MODEL_MAP = {

@@ -10,7 +10,7 @@ Automated installation guide for AI agents. Select your platform and deployment 
 === "macOS"
 
     ```bash
-    # Verify Apple Silicon (required for Together mode)
+    # Verify Apple Silicon (required for local TTS/STT)
     sysctl -n machdep.cpu.brand_string  # Must show "Apple M..."
 
     # Python
@@ -35,7 +35,7 @@ Automated installation guide for AI agents. Select your platform and deployment 
     # System dependencies (Debian/Ubuntu)
     sudo apt install -y python3-venv tmux
 
-    # NVIDIA GPU (required for Together mode)
+    # NVIDIA GPU (required for local TTS/STT)
     nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null
 
     # Python
@@ -54,7 +54,7 @@ Automated installation guide for AI agents. Select your platform and deployment 
     # System dependencies
     sudo apt install -y python3-venv tmux
 
-    # NVIDIA GPU passthrough (required for Together mode)
+    # NVIDIA GPU passthrough (required for local TTS/STT)
     nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null
     # If this fails: https://developer.nvidia.com/cuda/wsl
 
@@ -219,10 +219,10 @@ pip install -r requirements.txt
     ssh -NL 8880:127.0.0.1:8880 -L 2022:127.0.0.1:2022 user@gpu-server &
     ```
 
-## 5. Configure Split Mode
+## 5. Configure Remote TTS/STT
 
-!!! note "Split mode only"
-    Skip this section if you chose a **Together** setup.
+!!! note "Remote GPU only"
+    Skip this section if TTS/STT services run on the same machine as the hub.
 
 ```bash
 # Replace GPU_SERVER with the Tailscale IP or hostname of your GPU server
@@ -230,7 +230,7 @@ GPU_SERVER="100.x.x.x"  # Or hostname.ts.net
 
 curl -X PUT http://localhost:3460/api/settings \
   -H "Content-Type: application/json" \
-  -d "{\"deployment_mode\": \"split\", \"tts_url\": \"http://${GPU_SERVER}:8880\", \"stt_url\": \"http://${GPU_SERVER}:2022\"}"
+  -d "{\"tts_url\": \"http://${GPU_SERVER}:8880\", \"stt_url\": \"http://${GPU_SERVER}:2022\"}"
 ```
 
 If using SSH tunnels, the URLs are `http://127.0.0.1:8880` and `http://127.0.0.1:2022`.
@@ -342,7 +342,7 @@ rm -rf "$HOME/GIT/clawmux"
 | MCP tools not found | Wait 10s after starting Claude Code, then retry |
 | Port 3460 in use | Check what is using it: `lsof -i:3460` |
 | TTS/STT connection refused | Check services: `curl -s http://127.0.0.1:2022/v1/models` / `curl -s http://127.0.0.1:8880/v1/models` |
-| No GPU detected | Use split mode with a remote GPU server |
+| No GPU detected | Point TTS/STT URLs at a remote GPU server |
 | mlx-audio fails | Requires Apple Silicon — does not work on Intel Macs |
 | nvidia-smi not found in WSL | Install CUDA drivers for WSL: [nvidia.com/cuda/wsl](https://developer.nvidia.com/cuda/wsl) |
 | WSL port not accessible | Try WSL IP directly: `hostname -I` |

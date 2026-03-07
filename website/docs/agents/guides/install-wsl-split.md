@@ -85,7 +85,7 @@ Make the services accessible from WSL. Options:
   ssh -NL 8880:127.0.0.1:8880 -L 2022:127.0.0.1:2022 user@gpu-server &
   ```
 
-## 5. Configure Split Mode
+## 5. Configure Remote TTS/STT
 
 After the hub starts, configure remote TTS/STT URLs:
 
@@ -95,7 +95,7 @@ GPU_SERVER="100.x.x.x"  # Or hostname.ts.net
 
 curl -X PUT http://localhost:3460/api/settings \
   -H "Content-Type: application/json" \
-  -d "{\"deployment_mode\": \"split\", \"tts_url\": \"http://${GPU_SERVER}:8880\", \"stt_url\": \"http://${GPU_SERVER}:2022\"}"
+  -d "{\"tts_url\": \"http://${GPU_SERVER}:8880\", \"stt_url\": \"http://${GPU_SERVER}:2022\"}"
 ```
 
 If using SSH tunnels, the URLs are `http://127.0.0.1:8880` and `http://127.0.0.1:2022`.

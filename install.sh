@@ -151,8 +151,7 @@ case "$GPU" in
     apple)  install_apple_services ;;
     none)
         warn "No GPU detected. ClawMux requires a GPU for TTS/STT."
-        warn "You can use Split mode to point at a remote GPU server."
-        warn "Set tts_url and stt_url in Settings after starting the hub."
+        warn "Set TTS URL and STT URL in Settings to point at a remote GPU server."
         ;;
 esac
 

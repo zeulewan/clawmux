@@ -231,7 +231,8 @@ async def compaction_monitor_loop() -> None:
 
 
 # --- TTS / STT (extracted to voice.py) ---
-from voice import router as voice_router, tts, tts_captioned, stt, strip_non_speakable
+from voice import router as voice_router, tts, tts_captioned, stt, strip_non_speakable, reload_pronunciation_overrides
+import voice
 
 
 # --- Context usage cache ---
@@ -318,17 +319,16 @@ async def lifespan(app: FastAPI):
     saved = _load_settings()
     import hub_config
     hub_config.CLAUDE_MODEL = saved.get("model", "opus")
-    if saved.get("deployment_mode") in ("local", "split", "remote"):
-        hub_config.DEPLOYMENT_MODE = saved["deployment_mode"]
     if saved.get("tts_url"):
         hub_config.KOKORO_URL = saved["tts_url"].rstrip("/")
     if saved.get("stt_url"):
         hub_config.WHISPER_URL = saved["stt_url"].rstrip("/")
     if saved.get("quality_mode") in ("high", "medium", "low"):
         hub_config.QUALITY_MODE = saved["quality_mode"]
-    log.info("Model: %s, Mode: %s, TTS: %s, STT: %s",
-             hub_config.CLAUDE_MODEL, hub_config.DEPLOYMENT_MODE,
+    log.info("Model: %s, TTS: %s, STT: %s",
+             hub_config.CLAUDE_MODEL,
              hub_config.KOKORO_URL, hub_config.WHISPER_URL)
+    voice.reload_pronunciation_overrides()
     await agents_store.load()
     await session_mgr.cleanup_stale_sessions()
     broker.start()
@@ -1708,9 +1708,6 @@ async def update_settings(request: Request):
     # Apply model change at runtime
     if "model" in data and data["model"] in ("opus", "sonnet", "haiku"):
         hub_config.CLAUDE_MODEL = data["model"]
-    # Apply deployment mode settings at runtime (hot-reload, no restart needed)
-    if "deployment_mode" in data and data["deployment_mode"] in ("local", "split", "remote"):
-        hub_config.DEPLOYMENT_MODE = data["deployment_mode"]
     if "tts_url" in data and data["tts_url"]:
         hub_config.KOKORO_URL = data["tts_url"].rstrip("/")
         log.info("TTS URL changed to: %s", hub_config.KOKORO_URL)
@@ -1740,7 +1737,6 @@ def _load_settings() -> dict:
         "tts_enabled": True,
         "stt_enabled": True,
         "silent_startup": False,
-        "deployment_mode": "local",
         "tts_url": hub_config.KOKORO_URL,
         "stt_url": hub_config.WHISPER_URL,
         "quality_mode": "high",

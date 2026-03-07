@@ -108,7 +108,7 @@ body {
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  overflow: hidden;
   flex-shrink: 0;
 }
 #sidebar-list {
@@ -117,6 +117,10 @@ body {
   flex-direction: column;
   gap: 2px;
   flex: 1;
+  overflow-y: auto;
+}
+#sidebar-expand-btn {
+  flex-shrink: 0;
 }
 .sidebar-card {
   display: flex;
@@ -1221,6 +1225,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   #settings-link { font-size: 0; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; padding: 0; }
   #settings-link::before { content: '⚙'; font-size: 14px; }
   #conn-label { display: none; }
+  #mic-select, #speaker-select { display: none !important; }
   /* Put connection dot inline with title */
   #header > div:has(#dot) { padding: 2px 6px !important; border-radius: 8px; }
 
@@ -1642,25 +1647,15 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   </div>
 
   <div class="settings-section" id="deployment-settings-section">
-    <h3 class="settings-section-title">Deployment</h3>
+    <h3 class="settings-section-title">Services</h3>
     <div class="settings-card">
-      <div class="settings-inline" style="padding:12px 16px;">
-        <div class="toggle-info"><span class="toggle-name">Mode</span></div>
-        <select id="deploy-mode-select" onchange="onDeployModeChange(this.value)" style="width:auto; padding:4px 8px; font-size:0.8rem;">
-          <option value="local">Together</option>
-          <option value="split">Split</option>
-        </select>
+      <div id="deploy-tts-url-row" class="settings-inline" style="padding:12px 16px;">
+        <span class="toggle-name">TTS URL</span>
+        <input id="deploy-tts-url" type="text" placeholder="http://127.0.0.1:8880" style="width:55%; padding:4px 8px; font-size:0.8rem; border:1px solid var(--border); border-radius:6px; background:var(--bg-card); color:var(--text); font-family:inherit;">
       </div>
-      <div id="deploy-mode-desc" style="padding:4px 16px 10px; font-size:0.72rem; color:var(--text-tertiary); line-height:1.4;">Hub and audio services run on the same machine.</div>
-      <div id="deploy-remote-urls" style="display:none;">
-        <div class="settings-inline" style="padding:12px 16px;">
-          <span class="toggle-name">Remote TTS URL</span>
-          <input id="deploy-tts-url" type="text" placeholder="https://..." style="width:55%; padding:4px 8px; font-size:0.8rem; border:1px solid var(--border); border-radius:6px; background:var(--bg-card); color:var(--text); font-family:inherit;">
-        </div>
-        <div class="settings-inline" style="padding:12px 16px;">
-          <span class="toggle-name">Remote STT URL</span>
-          <input id="deploy-stt-url" type="text" placeholder="https://..." style="width:55%; padding:4px 8px; font-size:0.8rem; border:1px solid var(--border); border-radius:6px; background:var(--bg-card); color:var(--text); font-family:inherit;">
-        </div>
+      <div id="deploy-stt-url-row" class="settings-inline" style="padding:12px 16px;">
+        <span class="toggle-name">STT URL</span>
+        <input id="deploy-stt-url" type="text" placeholder="http://127.0.0.1:2022" style="width:55%; padding:4px 8px; font-size:0.8rem; border:1px solid var(--border); border-radius:6px; background:var(--bg-card); color:var(--text); font-family:inherit;">
       </div>
       <div class="settings-inline" style="padding:12px 16px;">
         <div class="toggle-info"><span class="toggle-name">Whisper Model</span><span class="toggle-desc">STT model quality — larger models are slower but more accurate</span></div>
@@ -2362,8 +2357,8 @@ async function toggleSetting(key) {
   if (key === 'auto_interrupt') { autoInterruptEnabled = isOn; }
   if (key === 'thinking_sounds') { thinkingSoundsEnabled = isOn; if (!isOn) stopThinkingSound(); }
   if (key === 'audio_cues') { audioCuesEnabled = isOn; }
-  if (key === 'tts_enabled') { ttsEnabled = isOn; applyTtsMode(!isOn); renderChat(); }
-  if (key === 'stt_enabled') { sttEnabled = isOn; applySttMode(!isOn); }
+  if (key === 'tts_enabled') { ttsEnabled = isOn; applyTtsMode(!isOn); renderChat(); updateServiceUrlVisibility(); }
+  if (key === 'stt_enabled') { sttEnabled = isOn; applySttMode(!isOn); updateServiceUrlVisibility(); }
   if (key === 'show_agent_messages') { showAgentMessages = isOn; renderChat(); }
   try {
     await fetch('/api/settings', {
@@ -2411,17 +2406,11 @@ async function updateSetting(key, value) {
 }
 
 // --- Deployment mode settings ---
-function onDeployModeChange(mode) {
-  const urlsDiv = document.getElementById('deploy-remote-urls');
-  const descEl = document.getElementById('deploy-mode-desc');
-  urlsDiv.style.display = (mode === 'split') ? '' : 'none';
-  if (descEl) {
-    descEl.textContent = mode === 'split'
-      ? 'Hub runs here, TTS/STT run on a remote GPU server.'
-      : 'Hub and audio services run on the same machine.';
-  }
-  const warn = document.getElementById('deploy-service-warning');
-  if (warn && mode !== 'local') warn.style.display = 'none';
+function updateServiceUrlVisibility() {
+  const ttsRow = document.getElementById('deploy-tts-url-row');
+  const sttRow = document.getElementById('deploy-stt-url-row');
+  if (ttsRow) ttsRow.style.display = ttsEnabled ? '' : 'none';
+  if (sttRow) sttRow.style.display = sttEnabled ? '' : 'none';
 }
 
 async function loadDeploymentConfig() {
@@ -2429,16 +2418,14 @@ async function loadDeploymentConfig() {
     const resp = await fetch('/api/settings');
     if (!resp.ok) return;
     const cfg = await resp.json();
-    const modeEl = document.getElementById('deploy-mode-select');
     const ttsEl = document.getElementById('deploy-tts-url');
     const sttEl = document.getElementById('deploy-stt-url');
     const qualEl = document.getElementById('deploy-quality-select');
-    if (cfg.deployment_mode && modeEl) modeEl.value = cfg.deployment_mode;
     if (cfg.tts_url && ttsEl) ttsEl.value = cfg.tts_url;
     if (cfg.stt_url && sttEl) sttEl.value = cfg.stt_url;
     if (cfg.quality_mode && qualEl) qualEl.value = cfg.quality_mode;
-    onDeployModeChange(cfg.deployment_mode || 'local');
-    if ((cfg.deployment_mode || 'local') === 'local') checkServiceStatus();
+    updateServiceUrlVisibility();
+    checkServiceStatus();
   } catch (e) { /* API may not exist yet */ }
 }
 
@@ -2449,7 +2436,6 @@ async function saveDeploymentConfig() {
   btn.disabled = true;
   try {
     const body = {
-      deployment_mode: document.getElementById('deploy-mode-select').value,
       tts_url: document.getElementById('deploy-tts-url').value,
       stt_url: document.getElementById('deploy-stt-url').value,
       quality_mode: document.getElementById('deploy-quality-select').value,
@@ -2461,12 +2447,7 @@ async function saveDeploymentConfig() {
     });
     btn.textContent = resp.ok ? 'Saved!' : 'Error';
     setTimeout(() => { btn.textContent = origText; btn.disabled = false; }, 1500);
-    // Check service availability when mode is "together" (local)
-    if (body.deployment_mode === 'local') {
-      checkServiceStatus();
-    } else {
-      document.getElementById('deploy-service-warning').style.display = 'none';
-    }
+    checkServiceStatus();
   } catch (e) {
     console.error('Failed to save deployment config:', e);
     btn.textContent = 'Error';

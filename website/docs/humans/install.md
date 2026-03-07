@@ -21,7 +21,7 @@ Select your OS and copy the prompt.
        cd ~/GIT/clawmux && ./install.sh
 
     4. If no local GPU was detected, configure remote TTS/STT in Settings (http://localhost:3460) or via:
-       curl -X PUT http://localhost:3460/api/settings -H "Content-Type: application/json" -d '{"deployment_mode": "split", "tts_url": "http://YOUR_GPU_SERVER:8880", "stt_url": "http://YOUR_GPU_SERVER:2022"}'
+       curl -X PUT http://localhost:3460/api/settings -H "Content-Type: application/json" -d '{"tts_url": "http://YOUR_GPU_SERVER:8880", "stt_url": "http://YOUR_GPU_SERVER:2022"}'
 
     5. Verify: curl -s http://localhost:3460/api/sessions and open http://localhost:3460 in a browser.
 
@@ -43,7 +43,7 @@ Select your OS and copy the prompt.
        cd ~/GIT/clawmux && ./install.sh
 
     4. If no local GPU was detected, configure remote TTS/STT in Settings (http://localhost:3460) or via:
-       curl -X PUT http://localhost:3460/api/settings -H "Content-Type: application/json" -d '{"deployment_mode": "split", "tts_url": "http://YOUR_GPU_SERVER:8880", "stt_url": "http://YOUR_GPU_SERVER:2022"}'
+       curl -X PUT http://localhost:3460/api/settings -H "Content-Type: application/json" -d '{"tts_url": "http://YOUR_GPU_SERVER:8880", "stt_url": "http://YOUR_GPU_SERVER:2022"}'
 
     5. Verify: curl -s http://localhost:3460/api/sessions and open http://localhost:3460 in a browser.
 
@@ -65,7 +65,7 @@ Select your OS and copy the prompt.
        cd ~/GIT/clawmux && ./install.sh
 
     4. If no local GPU was detected, configure remote TTS/STT in Settings (http://localhost:3460) or via:
-       curl -X PUT http://localhost:3460/api/settings -H "Content-Type: application/json" -d '{"deployment_mode": "split", "tts_url": "http://YOUR_GPU_SERVER:8880", "stt_url": "http://YOUR_GPU_SERVER:2022"}'
+       curl -X PUT http://localhost:3460/api/settings -H "Content-Type: application/json" -d '{"tts_url": "http://YOUR_GPU_SERVER:8880", "stt_url": "http://YOUR_GPU_SERVER:2022"}'
 
     5. Verify: curl -s http://localhost:3460/api/sessions and open http://localhost:3460 in a Windows browser.
 
