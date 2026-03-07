@@ -84,11 +84,26 @@ body {
   position: relative;
 }
 
+/* Resize handles */
+.resize-handle {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+  transition: background 0.15s;
+}
+.resize-handle:hover,
+.resize-handle:active {
+  background: var(--accent, #0a84ff);
+}
+
 /* Sidebar */
 #sidebar-settings-btn { display: none; }
 #sidebar {
   width: 220px;
-  min-width: 220px;
+  min-width: 140px;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border);
   display: flex;
@@ -1198,6 +1213,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   #main-content {
     margin-left: 48px;
   }
+  .resize-handle { display: none !important; }
   .sidebar-project-header { display: none; }
   .sidebar-project-agents.collapsed { max-height: none !important; }
   #sidebar.expanded .sidebar-project-header { display: flex; font-size: 0.55rem; padding: 6px 10px 2px; }
@@ -1760,6 +1776,7 @@ const textInputBar = document.getElementById('text-input-bar');
 <script src="/static/js/sidebar.js"></script>
 <script src="/static/js/chat.js"></script>
 <script src="/static/js/notes.js"></script>
+<script src="/static/js/resize.js"></script>
 <script>
 
 // --- Waveform & Audio Cues (extracted to js/audio.js) ---
