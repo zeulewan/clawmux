@@ -1387,18 +1387,70 @@ function updateMicUI() {
 }
 
 // --- Persistent mic stream ---
+let _selectedMicDeviceId = (() => { try { return localStorage.getItem('hub_mic_device') || ''; } catch(e) { return ''; } })();
+
 async function getMicStream() {
   if (persistentStream) {
-    // Check if tracks are still alive
     const tracks = persistentStream.getAudioTracks();
     if (tracks.length > 0 && tracks[0].readyState === 'live') {
       return persistentStream;
     }
   }
-  persistentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  // Apply current mute state
+  const constraints = _selectedMicDeviceId
+    ? { audio: { deviceId: { exact: _selectedMicDeviceId } } }
+    : { audio: true };
+  try {
+    persistentStream = await navigator.mediaDevices.getUserMedia(constraints);
+  } catch (e) {
+    // Selected device unavailable — fall back to default
+    if (_selectedMicDeviceId) {
+      console.warn('Selected mic unavailable, falling back to default:', e);
+      _selectedMicDeviceId = '';
+      try { localStorage.removeItem('hub_mic_device'); } catch(ex) {}
+      persistentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      populateMicSelector();
+    } else {
+      throw e;
+    }
+  }
   persistentStream.getAudioTracks().forEach(t => { t.enabled = !micMuted; });
   return persistentStream;
+}
+
+// --- Mic device selector ---
+async function populateMicSelector() {
+  const sel = document.getElementById('mic-select');
+  if (!sel) return;
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const mics = devices.filter(d => d.kind === 'audioinput');
+    sel.innerHTML = '<option value="">System Default</option>';
+    mics.forEach((mic, i) => {
+      const opt = document.createElement('option');
+      opt.value = mic.deviceId;
+      opt.textContent = mic.label || `Microphone ${i + 1}`;
+      sel.appendChild(opt);
+    });
+    sel.value = _selectedMicDeviceId || '';
+  } catch (e) {
+    console.warn('Failed to enumerate mic devices:', e);
+  }
+}
+
+function changeMicDevice(deviceId) {
+  _selectedMicDeviceId = deviceId;
+  try { localStorage.setItem('hub_mic_device', deviceId); } catch(e) {}
+  // Kill existing stream so next getMicStream() acquires the new device
+  if (persistentStream) {
+    persistentStream.getTracks().forEach(t => t.stop());
+    persistentStream = null;
+  }
+}
+
+// Populate on load and when devices change
+populateMicSelector();
+if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+  navigator.mediaDevices.addEventListener('devicechange', populateMicSelector);
 }
 
 // --- Recording ---
