@@ -258,6 +258,9 @@ body {
   max-height: 0 !important;
   overflow: hidden;
 }
+.sidebar-project-group.dragging {
+  opacity: 0.4;
+}
 .sidebar-project-group.drag-over-group > .sidebar-project-header {
   color: var(--blue);
   background: rgba(74,158,255,0.08);
@@ -1444,7 +1447,6 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   <select id="project-selector" style="display:none;" onchange="switchProject(this.value)">
     <option value="default">Default</option>
   </select>
-  <span id="project-label" style="display:none; font-size:0.7rem; color:var(--text-secondary); cursor:pointer; font-weight:500;" onclick="toggleProjectPopup(event)"></span>
   <button id="mode-toggle" onclick="cycleInputMode()"><span class="mode-value">Voice</span><span class="mode-label">Mode</span></button>
   <div style="flex:1;"></div>
   <div id="header-project-status" style="font-size:0.65rem; color:var(--text-tertiary); text-align:right; max-width:200px; line-height:1.4;"></div>
@@ -1462,7 +1464,6 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   <!-- Debug link removed — accessible from Settings page -->
 </div>
 <div id="model-popup" style="display:none; position:fixed; background:#1a1a1a; border:1px solid #333; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.6); z-index:9999; min-width:100px; overflow:hidden;"></div>
-<div id="project-popup" style="display:none; position:fixed; background:#1a1a1a; border:1px solid #333; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.6); z-index:9999; min-width:120px; overflow:hidden;"></div>
 
 <div id="app-body">
 
@@ -2081,6 +2082,7 @@ function showSettingsPage() {
 let currentProject = 'default';
 let currentProjectVoices = null; // null = use all VOICE_NAMES (fallback)
 let allProjects = []; // [{slug, name, voices: [...]}] — all projects for grouped sidebar
+let _savedProjectOrder = null; // persisted project ordering from settings
 
 async function loadProjects() {
   const sel = document.getElementById('project-selector');
@@ -2097,6 +2099,16 @@ async function loadProjects() {
       projectList = Object.entries(data.projects || {}).map(([slug, p]) => ({ slug, ...p }));
       currentProject = data.active_project || 'default';
     }
+    // Sort by saved project order if available
+    const savedOrder = (typeof _savedProjectOrder !== 'undefined') ? _savedProjectOrder : null;
+    if (savedOrder && savedOrder.length > 0) {
+      const orderMap = new Map(savedOrder.map((slug, i) => [slug, i]));
+      projectList.sort((a, b) => {
+        const ai = orderMap.has(a.slug) ? orderMap.get(a.slug) : 9999;
+        const bi = orderMap.has(b.slug) ? orderMap.get(b.slug) : 9999;
+        return ai - bi;
+      });
+    }
     allProjects = projectList;
     // Populate dropdown (kept for context menu submenu)
     sel.innerHTML = '';
@@ -2111,11 +2123,9 @@ async function loadProjects() {
     const activeProj = projectList.find(p => p.slug === currentProject);
     currentProjectVoices = activeProj && activeProj.voices ? activeProj.voices : null;
     renderSidebar();
-    updateProjectLabel();
     renderProjectSettings();
   } catch (e) {
-    // Projects API not available — still show label as fallback
-    updateProjectLabel();
+    // Projects API not available — graceful fallback
   }
 }
 
@@ -2211,56 +2221,7 @@ async function switchProject(slug) {
   }
 }
 
-function updateProjectLabel() {
-  const label = document.getElementById('project-label');
-  const sel = document.getElementById('project-selector');
-  if (!label || !sel) return;
-  const opt = sel.options[sel.selectedIndex];
-  if (opt && currentProject !== 'default') {
-    label.textContent = (opt.textContent || 'Project') + ' \u25BE';
-  } else {
-    label.textContent = 'No Project \u25BE';
-  }
-  label.style.display = 'inline';
-}
-
-function toggleProjectPopup(e) {
-  e.stopPropagation();
-  document.getElementById('model-popup').style.display = 'none';
-  const popup = document.getElementById('project-popup');
-  if (popup.style.display !== 'none') { popup.style.display = 'none'; return; }
-  const sel = document.getElementById('project-selector');
-  popup.innerHTML = '';
-  for (const opt of sel.options) {
-    const isCurrent = opt.value === currentProject;
-    const div = document.createElement('div');
-    div.style.cssText = 'padding:8px 16px;cursor:pointer;' + (isCurrent ? 'font-weight:700;color:#4a9eff;' : 'color:#e0e0e0;');
-    div.textContent = opt.textContent + (isCurrent ? ' \u2713' : '');
-    div.onmousedown = div.ontouchstart = () => { popup.style.display = 'none'; switchProject(opt.value); };
-    popup.appendChild(div);
-  }
-  // "+ New Project" option
-  const sep = document.createElement('div');
-  sep.style.cssText = 'border-top:1px solid #333;margin:4px 0;';
-  popup.appendChild(sep);
-  const newDiv = document.createElement('div');
-  newDiv.style.cssText = 'padding:8px 16px;cursor:pointer;color:#4a9eff;font-size:0.9em;';
-  newDiv.textContent = '+ New Project';
-  newDiv.onmousedown = newDiv.ontouchstart = (ev) => {
-    ev.stopPropagation();
-    popup.style.display = 'none';
-    _promptNewProject();
-  };
-  popup.appendChild(newDiv);
-
-  const label = document.getElementById('project-label');
-  const rect = label.getBoundingClientRect();
-  popup.style.top = rect.bottom + 4 + 'px';
-  popup.style.left = rect.left + 'px';
-  popup.style.display = 'block';
-  const close = () => { popup.style.display = 'none'; document.removeEventListener('click', close); };
-  setTimeout(() => document.addEventListener('click', close), 0);
-}
+// updateProjectLabel and toggleProjectPopup removed — project selector now in sidebar
 
 async function _promptNewProject() {
   const name = prompt('Project name:');
@@ -2310,6 +2271,10 @@ async function loadSettings() {
     setToggle('silent_startup', s.silent_startup || false);
     showAgentMessages = s.show_agent_messages !== false;
     setToggle('show_agent_messages', showAgentMessages);
+    // Load saved project order for sidebar grouping
+    if (s.project_order && Array.isArray(s.project_order)) {
+      _savedProjectOrder = s.project_order;
+    }
     // Sync default model dropdown
     const dmSel = document.getElementById('default-model-select');
     if (dmSel) dmSel.value = s.model || 'opus';
@@ -2509,7 +2474,6 @@ function updateModelLabel() {
 
 function toggleModelPopup(e) {
   e.stopPropagation();
-  document.getElementById('project-popup').style.display = 'none';
   const popup = document.getElementById('model-popup');
   if (popup.style.display !== 'none') { popup.style.display = 'none'; return; }
   const s = activeSessionId ? sessions.get(activeSessionId) : null;
@@ -3165,8 +3129,7 @@ initDragDrop();
 _initChatScroll();
 renderSidebar();
 connect();
-loadSettings();
-loadProjects();
+loadSettings().then(() => loadProjects());
 loadDeploymentConfig();
 startUsagePolling();
 startStateSync();

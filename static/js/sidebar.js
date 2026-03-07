@@ -360,6 +360,28 @@ function _toggleProjectCollapse(slug) {
   renderSidebar();
 }
 
+// --- Project group reordering via drag-and-drop ---
+let _draggingProjectSlug = null;
+
+async function _reorderProjects(fromSlug, toSlug) {
+  if (typeof allProjects === 'undefined' || fromSlug === toSlug) return;
+  const fromIdx = allProjects.findIndex(p => p.slug === fromSlug);
+  const toIdx = allProjects.findIndex(p => p.slug === toSlug);
+  if (fromIdx < 0 || toIdx < 0) return;
+  const [moved] = allProjects.splice(fromIdx, 1);
+  allProjects.splice(toIdx, 0, moved);
+  renderSidebar();
+  // Persist order to settings
+  const order = allProjects.map(p => p.slug);
+  try {
+    await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project_order: order }),
+    });
+  } catch (e) { console.error('Failed to save project order:', e); }
+}
+
 function _createAgentCard(voiceId, name, state) {
   const card = document.createElement('div');
   card.className = 'sidebar-card';
@@ -573,13 +595,25 @@ function renderSidebar() {
       group.className = 'sidebar-project-group';
       group.dataset.projectSlug = slug;
 
-      // Project header
+      // Project header (draggable for reordering)
       const header = document.createElement('div');
       header.className = 'sidebar-project-header';
+      header.draggable = true;
       header.innerHTML = '<span class="project-chevron">&#9660;</span>'
         + '<span class="project-name"></span>'
         + '<span class="project-agent-count"></span>';
       header.addEventListener('click', () => _toggleProjectCollapse(slug));
+      header.addEventListener('dragstart', (e) => {
+        e.stopPropagation();
+        _draggingProjectSlug = slug;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('application/x-project-slug', slug);
+        group.classList.add('dragging');
+      });
+      header.addEventListener('dragend', () => {
+        _draggingProjectSlug = null;
+        group.classList.remove('dragging');
+      });
       group.appendChild(header);
 
       // Agent container
@@ -587,14 +621,13 @@ function renderSidebar() {
       agentContainer.className = 'sidebar-project-agents';
       group.appendChild(agentContainer);
 
-      // Drop zone: allow dropping agents onto this project group
+      // Drop zone: allow dropping agents or project groups
       group.addEventListener('dragover', (e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         group.classList.add('drag-over-group');
       });
       group.addEventListener('dragleave', (e) => {
-        // Only remove if leaving the group entirely
         if (!group.contains(e.relatedTarget)) {
           group.classList.remove('drag-over-group');
         }
@@ -602,9 +635,15 @@ function renderSidebar() {
       group.addEventListener('drop', (e) => {
         e.preventDefault();
         group.classList.remove('drag-over-group');
+        // Check if this is a project reorder
+        const fromProject = e.dataTransfer.getData('application/x-project-slug');
+        if (fromProject && fromProject !== slug) {
+          _reorderProjects(fromProject, slug);
+          return;
+        }
+        // Otherwise it's an agent drop
         const fromVoice = e.dataTransfer.getData('text/plain');
         if (!fromVoice) return;
-        // Check if agent is already in this project
         if ((proj.voices || []).includes(fromVoice)) return;
         _moveAgentToProject(fromVoice, slug);
       });
