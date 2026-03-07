@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from hub_config import (
+    DATA_DIR,
     HEALTH_CHECK_INTERVAL_SECONDS,
     HUB_PORT,
     LEGACY_SESSION_DIR,
@@ -433,7 +434,7 @@ class SessionManager:
             # Check if silent startup is enabled
             silent_startup = False
             try:
-                settings_path = Path("data/settings.json")
+                settings_path = DATA_DIR / "settings.json"
                 if settings_path.exists():
                         silent_startup = json.loads(settings_path.read_text()).get("silent_startup", False)
             except Exception:

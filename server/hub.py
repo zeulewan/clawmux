@@ -1749,7 +1749,7 @@ async def update_settings(request: Request):
 
 
 def _load_settings() -> dict:
-    settings_path = Path("data/settings.json")
+    settings_path = hub_config.DATA_DIR / "settings.json"
     defaults = {
         "model": "opus",
         "auto_record": False,
@@ -1775,7 +1775,7 @@ def _load_settings() -> dict:
 
 
 def _save_settings(settings: dict) -> None:
-    settings_path = Path("data/settings.json")
+    settings_path = hub_config.DATA_DIR / "settings.json"
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     settings_path.write_text(json.dumps(settings, indent=2))
 
@@ -1783,7 +1783,7 @@ def _save_settings(settings: dict) -> None:
 
 @app.get("/api/notes")
 async def get_notes():
-    notes_path = Path("data/notes.json")
+    notes_path = hub_config.DATA_DIR / "notes.json"
     if notes_path.exists():
         try:
             return JSONResponse(json.loads(notes_path.read_text()))
@@ -1796,7 +1796,7 @@ async def get_notes():
 async def update_notes(request: Request):
     data = await request.json()
     notes = {"now": data.get("now", ""), "later": data.get("later", "")}
-    notes_path = Path("data/notes.json")
+    notes_path = hub_config.DATA_DIR / "notes.json"
     notes_path.parent.mkdir(parents=True, exist_ok=True)
     notes_path.write_text(json.dumps(notes, indent=2))
     return JSONResponse(notes)
@@ -1821,7 +1821,7 @@ async def services_status():
 
 
 _last_good_usage: dict | None = None
-_USAGE_SIDECAR = Path("data/usage-last-good.json")
+_USAGE_SIDECAR = hub_config.DATA_DIR / "usage-last-good.json"
 
 def _load_usage_sidecar() -> dict | None:
     """Load last-known-good usage from sidecar file."""
