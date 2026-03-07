@@ -280,17 +280,15 @@ def _get_stt_prompt() -> str:
         pass
     return os.environ.get("VOICEMODE_STT_PROMPT", "")
 
-_stt_prompt = _get_stt_prompt()
-
-
 async def stt(audio_bytes: bytes) -> str:
     """Audio bytes → text via Whisper. Retries up to 3 times on failure."""
+    stt_prompt = _get_stt_prompt()
     last_err = None
     for attempt in range(3):
         try:
             data = {"model": "whisper-1", "response_format": "json"}
-            if _stt_prompt:
-                data["prompt"] = _stt_prompt
+            if stt_prompt:
+                data["prompt"] = stt_prompt
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.post(
                     f"{hub_config.WHISPER_URL}/v1/audio/transcriptions",
