@@ -895,6 +895,67 @@ def _apply_agent_status_bar(tmux_session, label, color):
                        capture_output=True)
 
 
+def _monitor_sessions_from_agents_json(project_slug):
+    """Try to read agent sessions from data/agents.json.
+
+    Returns a list of session dicts matching the /api/sessions format,
+    or None if agents.json is missing/empty/unreadable.
+    """
+    try:
+        repo_dir = _find_repo_dir()
+    except SystemExit:
+        return None
+
+    agents_file = os.path.join(repo_dir, "data", "agents.json")
+    if not os.path.isfile(agents_file):
+        return None
+
+    try:
+        with open(agents_file) as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None
+
+    agents = data.get("agents", {})
+    if not agents:
+        return None
+
+    # Build session list in the same format cmd_monitor expects
+    # Also verify tmux sessions actually exist
+    result = []
+    for voice_id, entry in agents.items():
+        if entry.get("project") != project_slug and project_slug != "default":
+            continue
+        session_id = entry.get("session_id")
+        if not session_id:
+            continue
+        # Derive tmux session name — check both old and new naming conventions
+        # Old: voice-{project}-{name}, New: just {name}
+        name = voice_id.replace("af_", "").replace("am_", "").replace("bm_", "").replace("bf_", "")
+        # Check which tmux session exists
+        tmux_session = None
+        for candidate in [name, f"voice-{project_slug}-{name}", f"clawmux-{name}"]:
+            check = subprocess.run(["tmux", "has-session", "-t", f"={candidate}"],
+                                   capture_output=True)
+            if check.returncode == 0:
+                tmux_session = candidate
+                break
+        if not tmux_session:
+            continue
+        result.append({
+            "session_id": session_id,
+            "tmux_session": tmux_session,
+            "voice": voice_id,
+            "label": name.capitalize(),
+            "project_slug": entry.get("project", "default"),
+            "project": entry.get("project", ""),
+            "project_area": entry.get("area", ""),
+            "status_text": "",
+        })
+
+    return result if result else None
+
+
 def cmd_monitor(args):
     """Open a tmux session with a grid of panes showing all agent sessions."""
     import math
@@ -926,12 +987,14 @@ def cmd_monitor(args):
             os.execlp("tmux", "tmux", "attach", "-t", f"={MONITOR_SESSION}")
         return
 
-    # Get active sessions from hub, filtered by project
-    sessions = http_get("/api/sessions")
-    agent_sessions = [
-        s for s in sessions
-        if s.get("tmux_session") and s.get("project_slug", "default") == project_slug
-    ]
+    # Get active sessions — try agents.json first, fall back to API
+    agent_sessions = _monitor_sessions_from_agents_json(project_slug)
+    if agent_sessions is None:
+        sessions = http_get("/api/sessions")
+        agent_sessions = [
+            s for s in sessions
+            if s.get("tmux_session") and s.get("project_slug", "default") == project_slug
+        ]
 
     if not agent_sessions:
         die(f"no active agent sessions for project '{project_slug}'")
