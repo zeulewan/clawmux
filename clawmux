@@ -161,6 +161,23 @@ def http_post(path: str, data: dict) -> dict:
         die(f"http error: {e}")
 
 
+def http_delete(path: str) -> dict:
+    """Simple HTTP DELETE to the hub REST API."""
+    import urllib.request
+    import urllib.error
+    try:
+        req = urllib.request.Request(hub_url(path), method="DELETE")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        err = json.loads(e.read()) if e.headers.get("content-type", "").startswith("application/json") else {}
+        die(err.get("error", f"HTTP {e.code}: {e.reason}"))
+    except urllib.error.URLError as e:
+        die(f"cannot reach hub at {HUB_BASE}: {e.reason}")
+    except Exception as e:
+        die(f"http error: {e}")
+
+
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
@@ -515,6 +532,28 @@ def cmd_reply(args):
         "message": args.message,
     })
     print(f"replied to {args.msg_id}")
+
+
+def cmd_kill(args):
+    """Kill a single agent session."""
+    agent = args.agent.lower()
+
+    if args.force:
+        # Forced: just kill the tmux session directly
+        r = subprocess.run(["tmux", "kill-session", "-t", agent],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            die(f"tmux session '{agent}' not found")
+        print(f"Killed {agent} (forced)")
+        return
+
+    # Graceful: resolve session, call DELETE API, then kill tmux
+    session_id = _resolve_agent_session_id(agent)
+    http_delete(f"/api/sessions/{session_id}")
+    # Kill tmux session (may already be gone from API cleanup)
+    subprocess.run(["tmux", "kill-session", "-t", agent],
+                   capture_output=True, text=True)
+    print(f"Killed {agent} (graceful)")
 
 
 def cmd_kill_all(args):
@@ -1645,6 +1684,7 @@ def main():
 
   Session:
     spawn       Launch a new agent session
+    kill        Kill a single agent session
     project     Set project status in sidebar
 
   System:
@@ -1767,6 +1807,17 @@ examples:
     p.add_argument("--restart", action="store_true", help="Kill existing monitor and recreate")
     p.add_argument("--no-live", action="store_true", help="Disable auto-update when agents join/leave")
     p.set_defaults(func=cmd_monitor)
+
+    # kill
+    p = sub.add_parser("kill", help="Kill a single agent session",
+                       description="Kill an agent session. Default is graceful (API + tmux). Use --force to skip the API call.",
+                       formatter_class=argparse.RawDescriptionHelpFormatter,
+                       epilog="""examples:
+    clawmux kill echo
+    clawmux kill sky --force""")
+    p.add_argument("agent", help="Agent name (e.g. sky, echo, fable)")
+    p.add_argument("--force", action="store_true", help="Skip graceful API shutdown, just kill tmux")
+    p.set_defaults(func=cmd_kill)
 
     # kill-all
     p = sub.add_parser("kill-all", help="Stop hub and kill all agent sessions",
