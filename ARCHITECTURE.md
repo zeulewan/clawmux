@@ -1,0 +1,246 @@
+# ClawMux Architecture
+
+ClawMux is a multi-agent orchestration platform that spawns, manages, and connects multiple Claude Code instances through a shared hub. It provides voice I/O (TTS/STT), a browser-based chat UI, inter-agent messaging, and project management — all coordinated through a single FastAPI server.
+
+## Directory Structure
+
+```
+clawmux/
+├── clawmux              # CLI tool (Python script, installed to /usr/local/bin)
+├── server/              # Backend — FastAPI hub, session management, voice pipeline
+│   ├── hub.py           # Main FastAPI app — WebSocket endpoints, REST API, hook handlers
+│   ├── session_manager.py  # Session lifecycle — spawn, terminate, health checks
+│   ├── state_machine.py    # AgentState enum (STARTING → IDLE → PROCESSING → DEAD)
+│   ├── hub_config.py       # Constants — ports, paths, voice pool, model config
+│   ├── voice.py            # TTS (Kokoro) and STT (Whisper) pipeline
+│   ├── history_store.py    # Per-agent persistent message history (JSON files)
+│   ├── inbox.py            # Per-session inbox file for hook-based message delivery
+│   ├── message_broker.py   # Inter-agent message tracking (pending → ack → responded)
+│   ├── agents_store.py     # Agent metadata store (data/agents.json)
+│   ├── project_manager.py  # Multi-project management (data/projects.json)
+│   ├── template_renderer.py # CLAUDE.md template rendering per agent
+│   ├── pronunciation.json  # TTS pronunciation overrides
+│   ├── backends/           # Pluggable agent runtime backends
+│   │   ├── base.py         # AgentBackend ABC
+│   │   ├── claude_code.py  # Claude Code via tmux (primary backend)
+│   │   ├── openclaw.py     # OpenClaw backend (iOS app)
+│   │   └── generic_cli.py  # Generic CLI backend
+│   └── templates/          # CLAUDE.md templates and role-specific rules
+│       ├── claude_md.template  # Main template with {name}, {role}, {project} vars
+│       ├── rules/              # Role-specific instruction files
+│       │   ├── manager.md
+│       │   └── worker.md
+│       └── project-defaults.json
+├── static/              # Frontend — browser UI
+│   ├── hub.html         # Main SPA (3100+ lines — HTML, CSS, inline JS)
+│   ├── index.html       # Landing/login page
+│   ├── mux.html         # Lightweight multiplexer view
+│   └── js/              # Extracted JS modules
+│       ├── state.js     # Global shared state variables
+│       ├── ws.js        # WebSocket connection, message routing, reconnect sync
+│       ├── audio.js     # Mic recording, TTS playback, karaoke, VAD
+│       ├── chat.js      # Message rendering, markdown, threading, text input
+│       ├── sidebar.js   # Sidebar rendering, agent status, drag-and-drop
+│       └── notes.js     # Notes panel (per-session scratch notes)
+├── hooks/               # Claude Code hook scripts
+│   └── stop-check-inbox.sh  # Stop hook — checks inbox, prompts clawmux wait
+├── data/                # Runtime data directory (gitignored)
+├── docs/                # Additional documentation
+├── ios/                 # iOS app source (OpenClaw client)
+├── website/             # Documentation website (zensical/mkdocs)
+├── install.sh           # Installation script
+├── start-hub.sh         # Hub startup wrapper
+├── stop-hub.sh          # Hub shutdown wrapper
+├── requirements.txt     # Python dependencies
+└── .env                 # Environment variables
+```
+
+## Backend Architecture
+
+### FastAPI App (`server/hub.py`)
+
+The hub is a single FastAPI application (~1700 lines) running on port 3460 (configurable via `CLAWMUX_PORT`). It handles:
+
+**WebSocket Endpoints:**
+- `/ws` — Browser WebSocket. Pushes all UI events (messages, status, audio). Handles incoming voice/text from the browser. On connect, sends `session_list` and flushes any queued messages.
+- `/ws/wait/{session_id}` — Agent wait WebSocket. One-shot blocking connection: agent connects, receives one batch of messages, disconnects. Sets agent state to IDLE on connect, PROCESSING on disconnect.
+
+**REST API Endpoints (key ones):**
+- `POST /api/hooks/tool-status` — Receives Claude Code hooks (PreToolUse, PostToolUse, Stop, PreCompact, Notification, SessionStart). Updates agent state and delivers inbox messages via `additionalContext`.
+- `GET /api/history/{voice_id}` — Message history with optional `?after=<msg_id>` cursor.
+- `POST /api/send` — Inter-agent messaging (from CLI `clawmux send`).
+- `POST /api/speak` — Agent-to-user speech (from CLI `clawmux send --to user`).
+- `POST /api/sessions/{id}/spawn` — Spawn a new agent session.
+- `POST /api/sessions/{id}/terminate` — Kill an agent.
+- `GET /api/sessions` — List all sessions with state.
+- `GET /api/inbox/{session_id}` — Read and clear inbox (used by stop hook).
+- `POST /api/tts`, `POST /api/transcribe` — TTS and STT endpoints (in `voice.py` router).
+
+**Hook System:**
+Claude Code sends HTTP POST requests to `/api/hooks/tool-status` on every tool use. The hub uses these to:
+1. Track agent activity (which tool is running)
+2. Deliver queued inbox messages via `additionalContext` in the hook response
+3. Manage state transitions (COMPACTING detection, etc.)
+
+### Session Manager (`server/session_manager.py`)
+
+Manages the full lifecycle of agent sessions:
+- **Session dataclass** — Holds all per-agent state: `session_id`, `voice`, `state`, `work_dir`, `model`, `interjections`, `claude_session_id`, etc.
+- **Spawning** — Creates work directory under `~/.clawmux/sessions/{voice_id}/`, renders CLAUDE.md from template, delegates to backend.
+- **Health checks** — Periodic liveness checks via the backend. Detects dead sessions.
+- **Orphan adoption** — On startup, discovers existing tmux sessions and re-adopts them.
+- **Model switching** — Hot-swap Claude model (opus/sonnet/haiku) with conversation resume.
+
+### State Machine (`server/state_machine.py`)
+
+```
+STARTING → IDLE → PROCESSING → IDLE → ...
+                ↘ COMPACTING ↗
+ANY → DEAD
+```
+
+- **STARTING** — Session spawned, Claude Code booting.
+- **IDLE** — Agent in `clawmux wait`, ready for messages.
+- **PROCESSING** — Agent actively working (making tool calls).
+- **COMPACTING** — Claude Code compressing context window.
+- **DEAD** — Session terminated.
+
+### Message Delivery
+
+Two mutually exclusive delivery paths, gated by `AgentState`:
+
+1. **IDLE (in wait):** Messages are pushed to `session._wait_queue` → delivered via wait WebSocket immediately.
+2. **PROCESSING (working):** Messages are written to the inbox file (`.inbox.jsonl`). PreToolUse/PostToolUse hooks read and clear the inbox, injecting messages via `additionalContext` in the hook response.
+
+The inbox file (`server/inbox.py`) uses `fcntl.flock` for process-safe read/write. The stop hook (`hooks/stop-check-inbox.sh`) checks the inbox when Claude finishes — if messages are pending, it prevents Claude from stopping (exit 2).
+
+### Inter-Agent Messaging (`server/message_broker.py`)
+
+Tracks messages through lifecycle states: `pending → acknowledged → responded → failed`. Messages are injected into tmux panes via `tmux send-keys`. The broker handles ack/response routing and retry logic (3 retries, 60s interval, 180s timeout).
+
+### Voice Pipeline (`server/voice.py`)
+
+- **TTS** — Kokoro server at `http://127.0.0.1:8880`. Generates speech with per-agent voices and word-level timestamps for karaoke highlighting.
+- **STT** — Whisper server at `http://127.0.0.1:2022`. Supports quality modes: high (large-v3), medium, low (base).
+- **Pronunciation** — Custom overrides in `pronunciation.json` for proper nouns and technical terms.
+
+### Agent Backends (`server/backends/`)
+
+Pluggable backend interface (`AgentBackend` ABC) with methods: `spawn`, `terminate`, `health_check`, `deliver_message`, `restart`, `capture_pane`, `apply_status_bar`.
+
+- **ClaudeCodeBackend** — Primary. Runs Claude Code in tmux sessions with `claude --dangerously-skip-permissions`. Configures hooks to POST to the hub.
+- **OpenClawBackend** — For iOS OpenClaw app connections.
+- **GenericCLIBackend** — For arbitrary CLI agents.
+
+### Configuration
+
+- **`~/.clawmux/data/agents.json`** — Agent metadata (project assignments, roles, areas). Managed by `AgentsStore`.
+- **`~/.clawmux/data/projects.json`** — Project definitions and voice assignments. Managed by `ProjectManager`.
+- **`~/.clawmux/data/settings.json`** — User preferences (auto_record, tts_enabled, stt_enabled, etc.).
+- **`server/hub_config.py`** — Constants: ports, paths, voice pool (27 voices across 3 projects), model defaults.
+- **`.env`** — Environment variables (`CLAWMUX_PORT`, `CLAWMUX_HOME`, etc.).
+
+## Frontend Architecture
+
+### Overview
+
+The browser UI is a vanilla JS/HTML/CSS single-page application. No frameworks — all DOM manipulation is direct. The main file is `static/hub.html` (3100+ lines containing HTML structure, all CSS, and ~1400 lines of inline JS). Extracted JS modules live in `static/js/`.
+
+### Script Load Order
+
+```
+state.js → ws.js → (inline DOM refs) → audio.js → sidebar.js → chat.js → notes.js → (inline main script)
+```
+
+All modules share global (window-scoped) variables. Dependencies are documented in comment headers.
+
+### JS Modules
+
+- **`state.js`** — Global shared variables: `sessions` Map, `activeSessionId`, `ws`, recording state, audio state, UI toggles.
+- **`ws.js`** — WebSocket connection (`connect()`), message routing (`handleMessage()`), cursor-based reconnect sync. Handles all incoming WS message types (session_list, session_status, assistant_text, user_text, audio, listening, etc.).
+- **`audio.js`** — Mic recording (MediaRecorder API), TTS playback (Web Audio API with buffered streaming), karaoke word highlighting, VAD (voice activity detection), transport controls (pause/resume/scrub), waveform visualization.
+- **`chat.js`** — `addMessage()` with ID-based dedup, `renderChat()` with lazy loading and virtual scrolling, markdown rendering (marked.js + DOMPurify + highlight.js), KaTeX math, threading/ack UI, text input mode, drag-and-drop file upload, context menus.
+- **`sidebar.js`** — Agent cards with state indicators (idle/working/speaking), unread badges, drag-to-reorder, voice grid view, settings panel rendering.
+- **`notes.js`** — Per-session scratch notes panel with auto-save.
+
+### HTML Structure (`hub.html`)
+
+```
+body
+├── #header (logo, active voice name, project selector, model selector)
+├── #app-body
+│   ├── #sidebar (agent list, settings button)
+│   ├── #main-content
+│   │   ├── #voice-grid (multi-agent overview)
+│   │   ├── #welcome-view
+│   │   ├── #focus-view
+│   │   ├── #chat-area (message list, append-only)
+│   │   ├── #controls (mic, waveform, transport)
+│   │   ├── #text-input-bar (typing mode)
+│   │   └── #settings-page
+│   └── #notes-panel (collapsible side panel)
+```
+
+### Data Flow: User Message → Agent → Response
+
+1. User speaks or types in browser
+2. Browser sends audio/text via WebSocket to hub
+3. Hub transcribes audio (STT) if needed
+4. Hub writes message to agent's inbox file + pushes to `_wait_queue` if IDLE
+5. Agent receives message via `clawmux wait` (or hook `additionalContext`)
+6. Agent processes and calls `clawmux send --to user 'response'`
+7. Hub receives via `POST /api/speak`, generates TTS audio
+8. Hub pushes `assistant_text` + `audio` events to browser via WebSocket
+9. Browser appends message to chat and plays audio with karaoke highlighting
+
+### DOM Update Patterns
+
+- **Append-only for new messages** — `addMessage()` appends a single DOM element. No periodic re-renders.
+- **Full render on tab switch** — `renderChat()` clears and rebuilds when switching between agent tabs.
+- **Cursor-based reconnect** — On WebSocket reconnect, fetches only messages after the last known ID.
+- **Lazy loading** — Shows last 50 messages, loads more on scroll-to-top, unloads on scroll-to-bottom.
+
+## CLI (`clawmux`)
+
+The CLI is a standalone Python script (~1600 lines) installed to `/usr/local/bin/clawmux`. It communicates with the hub via HTTP REST and WebSocket. Each command connects, does one thing, and exits.
+
+### Environment Variables
+
+- `CLAWMUX_SESSION_ID` — Session ID (set automatically in agent tmux sessions)
+- `CLAWMUX_PORT` — Hub port (default 3460)
+
+### Key Commands
+
+| Command | Description |
+|---------|-------------|
+| `clawmux send --to <name> 'msg'` | Send a message to a user or agent |
+| `clawmux wait` | Block until a message arrives (one-shot WebSocket) |
+| `clawmux status` | Show hub state and all sessions |
+| `clawmux spawn <voice_id>` | Launch a new agent session |
+| `clawmux start` | Start the hub server |
+| `clawmux stop` | Stop the hub gracefully |
+| `clawmux reload` | Gracefully restart the hub |
+| `clawmux monitor` | Live dashboard of all agent activity |
+| `clawmux project <name>` | Set agent's current project/area |
+| `clawmux messages` | View message history for a session |
+| `clawmux update` | Pull latest code and restart |
+| `clawmux version` | Show version info |
+| `clawmux kill-all` | Terminate all agent sessions |
+| `clawmux regenerate` | Re-render all CLAUDE.md files |
+| `clawmux migrate` | Run data migrations |
+
+### How `clawmux wait` Works
+
+1. CLI opens WebSocket to `/ws/wait/{session_id}`
+2. Hub sets agent state to IDLE, checks inbox for pending messages
+3. If messages pending: sends immediately, returns
+4. If empty: blocks on `asyncio.Queue`, polls inbox every 5s as fallback
+5. On message received: sends to CLI, CLI prints and exits
+6. Hub sets state back to PROCESSING on disconnect
+
+### How `clawmux send` Works
+
+1. CLI POSTs to `/api/send` (inter-agent) or `/api/speak` (to user)
+2. Hub resolves recipient session, writes to inbox + pushes to wait queue if IDLE
+3. For user messages: generates TTS, pushes audio to browser
+4. Returns message ID for threading/acks
