@@ -2,6 +2,16 @@
 
 import os
 import time
+from pathlib import Path
+
+# Base directory for all ClawMux data (sessions, agents.json, history)
+CLAWMUX_HOME = Path(os.environ.get("CLAWMUX_HOME", os.path.expanduser("~/.clawmux")))
+SESSIONS_DIR = CLAWMUX_HOME / "sessions"
+DATA_DIR = CLAWMUX_HOME / "data"
+HISTORY_DIR = CLAWMUX_HOME / "history"
+
+# Legacy session directory (pre-v0.7.3) — scanned for orphan adoption
+LEGACY_SESSION_DIR = Path("/tmp/clawmux-sessions")
 
 HUB_PORT = int(os.environ.get("CLAWMUX_PORT", "3460"))
 HUB_START_TIME = time.time()

@@ -38,6 +38,9 @@ from project_manager import ProjectManager
 from session_manager import SessionManager
 from state_machine import AgentState
 
+from agents_store import AgentsStore
+from template_renderer import TemplateRenderer
+
 # Logging
 logging.basicConfig(
     level=logging.INFO,
@@ -52,13 +55,29 @@ log = logging.getLogger("hub")
 
 history = HistoryStore()
 project_mgr = ProjectManager()
-session_mgr = SessionManager(history_store=history, project_mgr=project_mgr)
+agents_store = AgentsStore()
+template_renderer = TemplateRenderer(agents_store)
+from backends.claude_code import ClaudeCodeBackend
+_backend = ClaudeCodeBackend()
+session_mgr = SessionManager(history_store=history, project_mgr=project_mgr, agents_store=agents_store, backend=_backend)
 broker = MessageBroker()
 
 
 def _hist_prefix(session) -> str | None:
     """Get the history prefix for a session's project."""
     return project_mgr.get_history_prefix(session.project_slug)
+
+
+def _load_project_defaults() -> dict:
+    """Load default agent assignments from data/project-defaults.json."""
+    defaults_file = Path(__file__).parent / "templates" / "project-defaults.json"
+    if defaults_file.exists():
+        try:
+            data = json.loads(defaults_file.read_text())
+            return data.get("default_agents", {})
+        except (json.JSONDecodeError, KeyError):
+            pass
+    return {"managers": ["af_sky", "af_sarah"], "workers": ["af_alloy", "am_adam", "am_echo", "am_onyx"]}
 
 
 def _gen_msg_id() -> str:
@@ -313,6 +332,7 @@ async def lifespan(app: FastAPI):
     log.info("Model: %s, Mode: %s, TTS: %s, STT: %s",
              hub_config.CLAUDE_MODEL, hub_config.DEPLOYMENT_MODE,
              hub_config.KOKORO_URL, hub_config.WHISPER_URL)
+    await agents_store.load()
     await session_mgr.cleanup_stale_sessions()
     broker.start()
     timeout_task = asyncio.create_task(session_mgr.run_timeout_loop())
@@ -669,14 +689,8 @@ async def set_project_status(session_id: str, request: Request):
         "project": session.project,
         "area": session.project_area,
     })
-    # Persist to disk so it survives hub restarts
-    if session.work_dir:
-        try:
-            Path(session.work_dir, ".project_status.json").write_text(
-                json.dumps({"project": session.project, "area": session.project_area})
-            )
-        except Exception as e:
-            log.warning("[%s] Failed to persist project status: %s", session_id, e)
+    # Persist to agents.json (authoritative store)
+    await session_mgr._sync_agent_store(session.voice, session)
     return JSONResponse({"ok": True})
 
 
@@ -703,7 +717,7 @@ async def get_debug_log():
 def _session_from_cwd(cwd: str) -> "SessionInfo | None":
     """Map a working directory path to its ClawMux session.
 
-    Claude Code hooks send the agent's cwd (e.g. /tmp/clawmux-sessions/clawmux/am_echo).
+    Claude Code hooks send the agent's cwd (e.g. ~/.clawmux/sessions/am_echo).
     We match that against each session's work_dir.
     """
     for session in session_mgr.sessions.values():
@@ -779,9 +793,8 @@ async def hook_tool_status(request: Request):
 
     event = data.get("hook_event_name", "")
 
-    # Prefer X-ClawMux-Session header (set via CLAWMUX_SESSION_ID env var),
-    # fall back to cwd-based lookup
-    clawmux_sid = request.headers.get("x-clawmux-session", "")
+    # Prefer ClawMux-Session header, fall back to legacy X-ClawMux-Session, then cwd
+    clawmux_sid = request.headers.get("clawmux-session", "") or request.headers.get("x-clawmux-session", "")
     session = session_mgr.sessions.get(clawmux_sid) if clawmux_sid else None
     if not session:
         cwd = data.get("cwd", "")
@@ -1078,6 +1091,76 @@ async def set_session_speed(session_id: str, request: Request):
     return JSONResponse({"speed": speed})
 
 
+# --- Agent Metadata (v0.7.3 centralized agents.json) ---
+
+
+@app.get("/api/agents")
+async def list_agents():
+    """Return all agents from agents.json."""
+    agents = await agents_store.all_agents()
+    return JSONResponse({vid: entry.to_dict() for vid, entry in agents.items()})
+
+
+@app.get("/api/agents/{voice_id}")
+async def get_agent(voice_id: str):
+    """Return a single agent's metadata from agents.json."""
+    agent = await agents_store.get(voice_id)
+    if agent is None:
+        return JSONResponse({"error": "Agent not found"}, status_code=404)
+    return JSONResponse(agent.to_dict())
+
+
+@app.put("/api/agents/{voice_id}")
+async def update_agent(voice_id: str, request: Request):
+    """Update an agent's metadata in agents.json."""
+    body = await request.json()
+    updated = await agents_store.update(voice_id, **body)
+    if updated is None:
+        return JSONResponse({"error": "Agent not found"}, status_code=404)
+    log.info("[agents] Updated %s: %s", voice_id, list(body.keys()))
+    return JSONResponse(updated.to_dict())
+
+
+@app.post("/api/agents/{voice_id}/assign")
+async def assign_agent(voice_id: str, request: Request):
+    """Change an agent's project and/or role assignment."""
+    body = await request.json()
+    fields = {k: body[k] for k in ("project", "role", "area") if k in body}
+    if not fields:
+        return JSONResponse({"error": "No assignment fields provided"}, status_code=400)
+    updated = await agents_store.update(voice_id, **fields)
+    if updated is None:
+        return JSONResponse({"error": "Agent not found"}, status_code=404)
+    log.info("[agents] Assigned %s → project=%s role=%s area=%s",
+             voice_id, updated.project, updated.role, updated.area)
+    # Auto-regenerate CLAUDE.md for the reassigned agent
+    session = next((s for s in session_mgr.sessions.values() if s.voice == voice_id), None)
+    if session and session.work_dir:
+        await template_renderer.render_to_file(voice_id, Path(session.work_dir))
+    return JSONResponse(updated.to_dict())
+
+
+@app.post("/api/agents/regenerate")
+async def regenerate_all_templates():
+    """Regenerate CLAUDE.md for all active agents."""
+    template_renderer.reload_template()
+    count = await template_renderer.render_all(session_mgr.sessions)
+    return JSONResponse({"regenerated": count})
+
+
+@app.post("/api/agents/{voice_id}/regenerate")
+async def regenerate_template(voice_id: str):
+    """Regenerate CLAUDE.md for a single agent."""
+    template_renderer.reload_template()
+    session = next((s for s in session_mgr.sessions.values() if s.voice == voice_id), None)
+    if not session or not session.work_dir:
+        return JSONResponse({"error": "Agent not found or not active"}, status_code=404)
+    ok = await template_renderer.render_to_file(voice_id, Path(session.work_dir))
+    if not ok:
+        return JSONResponse({"error": "Agent not in agents.json"}, status_code=404)
+    return JSONResponse({"regenerated": voice_id})
+
+
 # --- Project Management ---
 
 @app.get("/api/projects")
@@ -1104,6 +1187,26 @@ async def create_project(request: Request):
     voices = data.get("voices")  # Optional: list of voice IDs to use
     try:
         project = project_mgr.create_project(slug, name, voices=voices)
+        # Populate agents.json with project entry and default agent assignments
+        from agents_store import ProjectEntry
+        await agents_store.set_project(slug, ProjectEntry(display_name=name))
+        defaults = _load_project_defaults()
+        voice_ids = project.get("voices", [])
+        manager_ids = set(defaults.get("managers", []))
+        for vid in voice_ids:
+            agent = await agents_store.get(vid)
+            if agent is None:
+                from agents_store import AgentEntry
+                role = "manager" if vid in manager_ids else "worker"
+                await agents_store.set(vid, AgentEntry(project=slug, role=role))
+            else:
+                # Update project assignment for existing agent
+                await agents_store.update(vid, project=slug)
+        # Regenerate CLAUDE.md for assigned agents
+        for vid in voice_ids:
+            session = next((s for s in session_mgr.sessions.values() if s.voice == vid), None)
+            if session and session.work_dir:
+                await template_renderer.render_to_file(vid, Path(session.work_dir))
         return JSONResponse(project)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -1849,7 +1952,8 @@ def _log_sigterm(signum, frame):
 
 
 if __name__ == "__main__":
-    config = uvicorn.Config(app, host="127.0.0.1", port=HUB_PORT, log_level="info")
+    _hub_host = os.environ.get("CLAWMUX_HOST", "127.0.0.1")
+    config = uvicorn.Config(app, host=_hub_host, port=HUB_PORT, log_level="info")
     _uvicorn_server = uvicorn.Server(config)
     signal.signal(signal.SIGTERM, _log_sigterm)
     _uvicorn_server.run()

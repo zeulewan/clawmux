@@ -1,9 +1,8 @@
-"""Session lifecycle manager — tmux + Claude Code spawning, health checks, timeout."""
+"""Session lifecycle manager — delegates agent spawning to pluggable backends."""
 
 import asyncio
 import json
 import logging
-import os
 import shutil
 import time
 import uuid
@@ -11,20 +10,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from hub_config import (
-    AGENT_COLORS,
-    CLAUDE_BASE_COMMAND,
     HEALTH_CHECK_INTERVAL_SECONDS,
     HUB_PORT,
+    LEGACY_SESSION_DIR,
+    SESSIONS_DIR,
     SESSION_TIMEOUT_MINUTES,
     TMUX_SESSION_PREFIX,
     VOICES,
 )
+from agents_store import AgentEntry, AgentsStore
 from project_manager import ProjectManager
 from state_machine import AgentState
 
 log = logging.getLogger("hub.sessions")
-
-SESSION_DIR_BASE = Path("/tmp/clawmux-sessions")
 
 
 @dataclass
@@ -108,75 +106,73 @@ class Session:
 
 
 class SessionManager:
-    def __init__(self, history_store=None, project_mgr: ProjectManager | None = None) -> None:
+    def __init__(self, history_store=None, project_mgr: ProjectManager | None = None,
+                 agents_store: AgentsStore | None = None, backend=None) -> None:
         self.sessions: dict[str, Session] = {}
         self._counter = 0
         self.history_store = history_store
         self.project_mgr = project_mgr or ProjectManager()
-        SESSION_DIR_BASE.mkdir(parents=True, exist_ok=True)
+        self.agents_store = agents_store
+        self.backend = backend  # AgentBackend instance
+        SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+        if LEGACY_SESSION_DIR.exists():
+            log.info("Legacy session dir found at %s — will scan for orphans", LEGACY_SESSION_DIR)
+
+    async def _sync_agent_store(self, voice_id: str, session: Session | None = None, **overrides) -> None:
+        """Dual-write: update agents.json for a voice. If session is None, marks agent as dead."""
+        if not self.agents_store:
+            return
+        if session is None:
+            await self.agents_store.update(voice_id, session_id=None, state="dead")
+            return
+        entry = AgentEntry(
+            session_id=session.session_id,
+            project=session.project or None,
+            area=session.project_area or "",
+            last_active=session.last_activity,
+            model=session.model or "opus",
+            state=session.state.value if hasattr(session.state, 'value') else str(session.state),
+        )
+        for k, v in overrides.items():
+            if hasattr(entry, k):
+                setattr(entry, k, v)
+        await self.agents_store.set(voice_id, entry)
 
     async def cleanup_stale_sessions(self) -> None:
-        """Adopt orphaned voice-* tmux sessions from previous hub runs."""
+        """Adopt orphaned agent tmux sessions from previous hub runs."""
         # Build set of live tmux sessions
-        live_tmux: set[str] = set()
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                "tmux", "list-sessions", "-F", "#{session_name}",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            stdout, _ = await proc.communicate()
-            if proc.returncode == 0:
-                # Collect valid tmux prefixes: "voice-" for default, "{cleanslug}-" for named projects
-                valid_prefixes = [TMUX_SESSION_PREFIX + "-"]
-                for slug, proj in self.project_mgr.projects.items():
-                    if slug != "default" and not proj.get("flat_layout"):
-                        valid_prefixes.append(slug.replace("-", "") + "-")
-                for name in stdout.decode().strip().splitlines():
-                    if any(name.startswith(p) for p in valid_prefixes):
-                        live_tmux.add(name)
-        except Exception as e:
-            log.error("Error listing tmux sessions: %s", e)
-
-        # Scan voice work dirs for adoptable sessions (all projects)
         from hub_config import VOICE_POOL
-        voice_ids = {v[0] for v in VOICE_POOL}
         voice_names_map = dict(VOICE_POOL)
+        # Known session names: new flat names ("sky") + legacy prefixed ("voice-sky", "hnapp-bella")
+        known_session_names: set[str] = set()
+        for vid, vname in VOICE_POOL:
+            known_session_names.add(vname.lower())  # flat: "sky"
+            known_session_names.add(f"{TMUX_SESSION_PREFIX}-{vname.lower()}")  # legacy: "voice-sky"
+        for slug, proj in self.project_mgr.projects.items():
+            if slug != "default":
+                clean_slug = slug.replace("-", "")
+                for vid in proj.get("voices", []):
+                    vname = voice_names_map.get(vid, vid)
+                    known_session_names.add(f"{clean_slug}-{vname.lower()}")  # legacy: "hnapp-bella"
+
+        live_tmux = await self.backend.list_live_sessions(known_session_names)
+
         adopted = 0
 
-        # Collect all possible work dirs: flat layout + project subdirs
-        work_dirs_to_scan: list[tuple[str, Path]] = []
-        for voice_id in voice_ids:
-            # Flat layout (default project)
-            work_dirs_to_scan.append((voice_id, SESSION_DIR_BASE / voice_id))
-        # Also scan project subdirectories
-        for slug, proj in self.project_mgr.projects.items():
-            if not proj.get("flat_layout"):
-                for voice_id in proj.get("voices", []):
-                    proj_dir = SESSION_DIR_BASE / slug / voice_id
-                    if proj_dir.exists():
-                        work_dirs_to_scan.append((voice_id, proj_dir))
+        if self.agents_store:
+            all_agents = await self.agents_store.all_agents()
+        else:
+            all_agents = {}
 
-        for voice_id, work_dir in work_dirs_to_scan:
-
-            session_json_path = work_dir / ".session.json"
-            old_session_id = ""
-
-            if session_json_path.exists():
-                try:
-                    session_data = json.loads(session_json_path.read_text())
-                    old_session_id = session_data.get("session_id", "")
-                except Exception:
-                    pass
-
+        for voice_id, entry in all_agents.items():
+            old_session_id = entry.session_id
             if not old_session_id:
                 continue
 
             # Check if the tmux session for this session_id still exists
             if old_session_id not in live_tmux:
-                # No tmux session — clean up stale state files
-                log.info("No tmux for %s (%s), cleaning state files", voice_id, old_session_id)
-                session_json_path.unlink(missing_ok=True)
+                log.info("No tmux for %s (%s), marking dead in agents.json", voice_id, old_session_id)
+                await self._sync_agent_store(voice_id)
                 continue
 
             # Already tracked by this hub instance
@@ -185,14 +181,8 @@ class SessionManager:
 
             # Adopt: create a Session object with the old session_id
             voice_name = voice_names_map.get(voice_id, voice_id)
-            # Determine project_slug from work_dir path
-            adopt_project = "default"
-            for slug, proj in self.project_mgr.projects.items():
-                if not proj.get("flat_layout"):
-                    proj_dir = SESSION_DIR_BASE / slug
-                    if str(work_dir).startswith(str(proj_dir)):
-                        adopt_project = slug
-                        break
+            adopt_project = entry.project or "default"
+            work_dir = self.project_mgr.get_session_dir(voice_id, adopt_project)
             session = Session(
                 session_id=old_session_id,
                 tmux_session=old_session_id,
@@ -209,17 +199,12 @@ class SessionManager:
                 stored_id = self.history_store.get_claude_session_id(voice_id, hist_prefix)
                 if stored_id:
                     session.claude_session_id = stored_id
-            # Restore project status from disk
-            proj_file = work_dir / ".project_status.json"
-            if proj_file.exists():
-                try:
-                    proj_data = json.loads(proj_file.read_text())
-                    session.project = proj_data.get("project", "")
-                    session.project_area = proj_data.get("area", "")
-                    log.info("Restored project status for %s: %s / %s",
-                             voice_id, session.project, session.project_area)
-                except Exception:
-                    pass
+            # Restore project status from agents.json
+            session.project = entry.project or ""
+            session.project_area = entry.area or ""
+            if session.project:
+                log.info("Restored project status for %s: %s / %s",
+                         voice_id, session.project, session.project_area)
             # Restore pending interjections from disk
             if self.history_store:
                 saved = self.history_store.load_interjections(voice_id)
@@ -227,7 +212,8 @@ class SessionManager:
                     session.interjections = saved
                     session.set_state(AgentState.PROCESSING)
                     log.info("Restored %d interjection(s) for %s", len(saved), voice_id)
-            # Set model to hub default if not already set
+            # Restore model from agents.json, fall back to hub default
+            session.model = entry.model or ""
             if not session.model:
                 import hub_config
                 session.model = hub_config.CLAUDE_MODEL
@@ -237,28 +223,35 @@ class SessionManager:
             log.info("Adopted orphaned session: %s (voice=%s, tmux=%s, model=%s)",
                      old_session_id, voice_id, old_session_id, session.model)
             # Apply agent-colored status bar to adopted session
-            await self._apply_agent_status_bar(old_session_id, voice_name, voice_id)
+            await self.backend.apply_status_bar(old_session_id, voice_name, voice_id)
+            # Update agents.json with restored state
+            await self._sync_agent_store(voice_id, session)
 
         if adopted:
             log.info("Adopted %d orphaned session(s)", adopted)
 
-        # Kill any remaining orphaned tmux sessions that we couldn't adopt
-        # Skip monitor sessions (clawmux-monitor-*) — those are independent of the hub
+        # Kill orphaned tmux sessions that are in OUR agents.json but couldn't be adopted.
+        # Only kill sessions we own — never touch tmux sessions from other hub instances.
         known_tmux = {s.tmux_session for s in self.sessions.values()}
+        our_session_ids = {e.session_id for e in all_agents.values() if e.session_id}
         for name in live_tmux:
-            if name not in known_tmux and "-monitor" not in name:
+            if name not in known_tmux and name in our_session_ids and "-monitor" not in name:
                 log.warning("Killing unadoptable orphaned tmux session: %s", name)
-                await self._cleanup_tmux(name)
+                await self.backend.terminate(name)
 
-        # Clean orphaned session work dirs (but keep voice dirs for --resume and project dirs)
+        # Clean orphaned work dirs in SESSIONS_DIR only (our own directory).
+        # Never touch LEGACY_SESSION_DIR — it may belong to another hub instance.
+        from hub_config import VOICE_POOL
+        known_voice_ids = {v[0] for v in VOICE_POOL}
         project_slugs = set(self.project_mgr.projects.keys())
-        try:
-            for d in SESSION_DIR_BASE.iterdir():
-                if d.is_dir() and d.name not in self.sessions and d.name not in voice_ids and d.name not in project_slugs:
-                    log.warning("Removing orphaned work dir: %s", d)
-                    shutil.rmtree(d, ignore_errors=True)
-        except Exception as e:
-            log.error("Error cleaning stale work dirs: %s", e)
+        if SESSIONS_DIR.exists():
+            try:
+                for d in SESSIONS_DIR.iterdir():
+                    if d.is_dir() and d.name not in self.sessions and d.name not in known_voice_ids and d.name not in project_slugs:
+                        log.warning("Removing orphaned work dir: %s", d)
+                        shutil.rmtree(d, ignore_errors=True)
+            except Exception as e:
+                log.error("Error cleaning stale work dirs: %s", e)
 
     def list_sessions(self) -> list[dict]:
         return [s.to_dict() for s in self.sessions.values()]
@@ -361,18 +354,12 @@ class SessionManager:
         else:
             voice_id, voice_name = self._next_voice(project_slug)
 
-        # Name session after the voice, namespaced by project
-        # Default project: "voice-sky" (backward compatible)
-        # Named projects: "hnapp-bella" (project slug + short voice name)
-        if project_slug == "default":
-            session_id = f"{TMUX_SESSION_PREFIX}-{voice_name.lower()}"
-        else:
-            clean_slug = project_slug.replace("-", "")
-            session_id = f"{clean_slug}-{voice_name.lower()}"
+        # Flat naming: just the voice name (e.g., "sky", "echo")
+        session_id = voice_name.lower()
         tmux_name = session_id
 
-        # Kill stale tmux session with same name if it exists
-        await self._run(f"tmux kill-session -t {tmux_name} 2>/dev/null || true")
+        # Kill stale session with same name if it exists
+        await self.backend.terminate(tmux_name)
 
         session = Session(
             session_id=session_id,
@@ -392,21 +379,15 @@ class SessionManager:
             work_dir.mkdir(parents=True, exist_ok=True)
             session.work_dir = str(work_dir)
 
-            # Restore project status from previous session if available
-            proj_file = work_dir / ".project_status.json"
-            if proj_file.exists():
-                try:
-                    proj_data = json.loads(proj_file.read_text())
-                    session.project = proj_data.get("project", "")
-                    session.project_area = proj_data.get("area", "")
-                except Exception:
-                    pass
+            # Restore project status from agents.json if available
+            if self.agents_store:
+                prev = await self.agents_store.get(voice_id)
+                if prev and prev.project:
+                    session.project = prev.project
+                    session.project_area = prev.area or ""
 
-            # Write session state file (used for re-adoption after hub reload)
-            (work_dir / ".session.json").write_text(json.dumps({
-                "session_id": session_id,
-                "voice": voice_id,
-            }))
+            # Write agent state to agents.json (authoritative store)
+            await self._sync_agent_store(voice_id, session)
 
             # Check if we can resume a previous Claude session for this voice
             claude_session_id = None
@@ -574,84 +555,17 @@ class SessionManager:
             # Pre-accept workspace trust so Claude Code doesn't prompt on first launch
             self._accept_workspace_trust(str(work_dir))
 
-            # Create tmux session starting in the work dir
-            await self._run(
-                f"tmux new-session -d -s {tmux_name} -x 200 -y 50 -c {work_dir}"
-            )
-
-            # Apply agent-colored status bar
-            await self._apply_agent_status_bar(tmux_name, voice_name, voice_id)
-
-            # Unset CLAUDECODE so nested Claude Code sessions don't get blocked
-            # Export session ID so clawmux CLI can identify this session
-            await self._run(
-                f'tmux send-keys -t {tmux_name} "unset CLAUDECODE && export CLAWMUX_SESSION_ID={session_id} && export CLAWMUX_PORT={HUB_PORT}" Enter'
-            )
-
-            # Send a marker so we can detect fresh output from Claude
-            marker = f"__CLAUDE_INIT_{short_id}__"
-            await self._run(
-                f'tmux send-keys -t {tmux_name} "echo {marker}" Enter'
-            )
-
-            # Start Claude with session ID (resume or fresh)
+            # Delegate spawning to the backend (tmux, env vars, Claude CLI, init polling)
             import hub_config
             session_model = session.model or hub_config.CLAUDE_MODEL
             session.model = session_model  # Store effective model so browser can display it
-            model_flag = f" --model {session_model}" if session_model != "opus" else ""
-            startup_prompt = "Run this exact command now: clawmux wait"
-            if resuming:
-                claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag} --resume {claude_session_id} '{startup_prompt}'"
-            else:
-                claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag} --session-id {claude_session_id} '{startup_prompt}'"
-            await self._run(
-                f'tmux send-keys -t {tmux_name} "{claude_cmd}" Enter'
+            await self.backend.spawn(
+                session_name=tmux_name, work_dir=str(work_dir),
+                session_id=session_id, hub_port=HUB_PORT,
+                voice_id=voice_id, voice_name=voice_name,
+                claude_session_id=claude_session_id,
+                resuming=resuming, model=session_model,
             )
-
-            # Wait for Claude to initialize (poll for input prompt AFTER marker)
-            start = time.time()
-            init_deadline = start + 30
-            while time.time() < init_deadline:
-                try:
-                    result = await self._run(
-                        f"tmux capture-pane -t {tmux_name} -p"
-                    )
-                    if result and marker in result:
-                        # Look for Claude's prompt after the marker
-                        after_marker = result.split(marker, 1)[1]
-                        if ">" in after_marker or "❯" in after_marker:
-                            log.info("[%s] Claude ready (%.1fs)", session_id, time.time() - start)
-                            break
-                except Exception:
-                    pass
-                await asyncio.sleep(1)
-            else:
-                log.warning("[%s] Claude init poll timed out, sending command anyway", session_id)
-
-            # Wait for Claude Code to fully initialize before injecting
-            # The > prompt appears early but Claude isn't ready for input yet,
-            # especially on --resume where context loads after the prompt shows.
-            # Poll for the status bar (contains model name) as a reliable readiness signal.
-            log.info("[%s] Waiting for full initialization", session_id)
-            ready_deadline = time.time() + 30
-            while time.time() < ready_deadline:
-                try:
-                    result = await self._run(
-                        f"tmux capture-pane -t {tmux_name} -p -e"
-                    )
-                    if result and ("Opus" in result or "Sonnet" in result or "Haiku" in result
-                                   or "opus" in result or "sonnet" in result or "haiku" in result
-                                   or "bypass" in result or "plan" in result):
-                        log.info("[%s] Claude Code fully initialized", session_id)
-                        break
-                except Exception:
-                    pass
-                await asyncio.sleep(1)
-            else:
-                log.warning("[%s] Claude Code init poll timed out, injecting anyway", session_id)
-
-            # Small extra delay for input buffer to be ready
-            await asyncio.sleep(1)
 
             # State stays STARTING — transitions to IDLE when wait WS connects
             session.status = "ready"  # legacy compat: browser checks this for mic enable
@@ -661,7 +575,7 @@ class SessionManager:
 
         except Exception as e:
             log.error("Failed to spawn session %s: %s", session_id, e)
-            await self._cleanup_tmux(tmux_name)
+            await self.backend.terminate(tmux_name)
             self._cleanup_workdir(session)
             del self.sessions[session_id]
             raise
@@ -673,10 +587,13 @@ class SessionManager:
             return
 
         log.info("Terminating session %s", session_id)
+        voice_id = session.voice
         session.set_state(AgentState.DEAD)
-        await self._cleanup_tmux(session.tmux_session)
+        await self.backend.terminate(session.tmux_session)
         self._cleanup_workdir(session)
         del self.sessions[session_id]
+        # Dual-write: mark agent as dead in agents.json
+        await self._sync_agent_store(voice_id)
 
     async def restart_claude_with_model(self, session_id: str) -> None:
         """Kill and respawn Claude in existing tmux with new model, resuming conversation."""
@@ -695,32 +612,10 @@ class SessionManager:
         session.restarting = True
         session.set_state(AgentState.STARTING)
 
-        # Kill the entire tmux session (cleanly kills all processes inside)
-        await self._cleanup_tmux(tmux_name)
-        await asyncio.sleep(1)
-
-        # Recreate the tmux session in the same work dir
-        work_dir = session.work_dir
-        await self._run(
-            f"tmux new-session -d -s {tmux_name} -x 200 -y 50 -c {work_dir}"
-        )
-
-        # Re-apply agent-colored status bar
-        await self._apply_agent_status_bar(tmux_name, session.label, session.voice)
-
-        await self._run(
-            f'tmux send-keys -t {tmux_name} "unset CLAUDECODE && export CLAWMUX_SESSION_ID={session_id} && export CLAWMUX_PORT={HUB_PORT}" Enter'
-        )
-
-        # Send marker for detecting Claude readiness
-        marker = f"__CLAUDE_RESTART_{session_id[-8:]}__"
-        await self._run(f'tmux send-keys -t {tmux_name} "echo {marker}" Enter')
-        await asyncio.sleep(0.5)
-
         # Verify the session file exists before resuming
+        work_dir = session.work_dir
         resuming = False
         if claude_session_id:
-            # Claude maps /tmp/foo/bar → ~/.claude/projects/-tmp-foo-bar/
             claude_project_dir = Path.home() / ".claude" / "projects" / work_dir.replace("/", "-").replace("_", "-")
             resuming = (claude_project_dir / f"{claude_session_id}.jsonl").exists()
             if not resuming:
@@ -731,47 +626,13 @@ class SessionManager:
                     hist_prefix = self.project_mgr.get_history_prefix(session.project_slug)
                     self.history_store.set_claude_session_id(session.voice, claude_session_id, hist_prefix)
 
-        # Start Claude with --resume (if session exists) or --session-id (fresh)
-        startup_prompt = "Run this exact command now: clawmux wait"
-        if resuming:
-            claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag} --resume {claude_session_id} '{startup_prompt}'"
-        else:
-            claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag} --session-id {claude_session_id} '{startup_prompt}'"
-        await self._run(f'tmux send-keys -t {tmux_name} "{claude_cmd}" Enter')
-
-        # Wait for Claude to initialize
-        start = time.time()
-        init_deadline = start + 30
-        while time.time() < init_deadline:
-            try:
-                result = await self._run(f"tmux capture-pane -t {tmux_name} -p")
-                if result and marker in result:
-                    after_marker = result.split(marker, 1)[1]
-                    if ">" in after_marker or "❯" in after_marker:
-                        log.info("[%s] Claude restarted (%.1fs)", session_id, time.time() - start)
-                        break
-            except Exception:
-                pass
-            await asyncio.sleep(1)
-        else:
-            log.warning("[%s] Claude restart poll timed out", session_id)
-
-        # Wait for Claude Code to fully reinitialize
-        log.info("[%s] Waiting for full reinitialization after restart", session_id)
-        ready_deadline = time.time() + 30
-        while time.time() < ready_deadline:
-            try:
-                result = await self._run(f"tmux capture-pane -t {tmux_name} -p -e")
-                if result and ("Opus" in result or "Sonnet" in result or "Haiku" in result
-                               or "opus" in result or "sonnet" in result or "haiku" in result
-                               or "bypass" in result or "plan" in result):
-                    break
-            except Exception:
-                pass
-            await asyncio.sleep(1)
-        else:
-            log.warning("[%s] Claude Code reinit poll timed out", session_id)
-        await asyncio.sleep(1)
+        # Delegate restart to the backend
+        await self.backend.restart(
+            session_name=tmux_name, work_dir=work_dir,
+            session_id=session_id, hub_port=HUB_PORT,
+            voice_id=session.voice, voice_name=session.label,
+            claude_session_id=claude_session_id, model=session_model,
+        )
 
         session.restarting = False
         # State stays STARTING — transitions to IDLE when wait WS connects
@@ -780,13 +641,7 @@ class SessionManager:
         log.info("[%s] Model restart complete", session_id)
 
     async def check_health(self, session: Session) -> bool:
-        proc = await asyncio.create_subprocess_exec(
-            "tmux", "has-session", "-t", session.tmux_session,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        await proc.wait()
-        return proc.returncode == 0
+        return await self.backend.health_check(session.tmux_session)
 
     async def run_timeout_loop(self) -> None:
         while True:
@@ -804,8 +659,11 @@ class SessionManager:
                 alive = await self.check_health(session)
                 if not alive:
                     log.warning("Session %s tmux died, cleaning up", session_id)
+                    voice_id = session.voice
                     self._cleanup_workdir(session)
                     del self.sessions[session_id]
+                    # Dual-write: mark agent as dead in agents.json
+                    await self._sync_agent_store(voice_id)
                     continue
 
                 # Voice mode watchdog: detect agents that dropped out of wait loop
@@ -832,9 +690,9 @@ class SessionManager:
         if (now - session.created_at) < 120:
             return
 
-        # Check if clawmux is visible in the tmux pane (actively waiting)
+        # Check if clawmux is visible in the pane (actively waiting)
         try:
-            result = await self._run(f"tmux capture-pane -t {session.tmux_session} -p")
+            result = await self.backend.capture_pane(session.tmux_session)
             if result and ("clawmux" in result.lower() or "listening" in result.lower()):
                 return
         except Exception:
@@ -842,7 +700,6 @@ class SessionManager:
 
         # Agent appears to have dropped out of voice mode — attempt re-injection
         session.reinject_attempts += 1
-        tmux_name = session.tmux_session
 
         log.warning(
             "[%s] Voice watchdog: agent dropped out of voice mode, re-injecting (attempt %d/%d)",
@@ -852,30 +709,21 @@ class SessionManager:
 
         try:
             # Check if Claude Code is at a prompt (has > or ❯ visible)
-            result = await self._run(f"tmux capture-pane -t {tmux_name} -p")
+            result = await self.backend.capture_pane(session.tmux_session)
             if not result or (">" not in result and "❯" not in result):
                 log.info("[%s] Voice watchdog: Claude not at prompt, skipping re-inject", session_id)
                 return
 
             log.info("[%s] Voice watchdog: re-injecting clawmux wait", session_id)
             startup_msg = 'Run this exact command now: clawmux wait'
-            await self._tmux_type(tmux_name, startup_msg)
-            await asyncio.sleep(1)
-            await self._run(f'tmux send-keys -t {tmux_name} Enter')
+            await self.backend.deliver_message(session.tmux_session, startup_msg)
         except Exception as e:
             log.error("[%s] Voice watchdog re-inject failed: %s", session_id, e)
 
     def _cleanup_workdir(self, session: Session) -> None:
         # Don't delete voice work dirs — they persist for --resume
-        # Only clean up state files so stale config doesn't interfere
-        if session.work_dir:
-            for name in (".session.json",):
-                p = Path(session.work_dir) / name
-                if p.exists():
-                    try:
-                        p.unlink()
-                    except Exception:
-                        pass
+        # State is now managed via agents.json, so no per-agent files to clean up
+        pass
 
     def _accept_workspace_trust(self, work_dir: str) -> None:
         """Pre-accept Claude Code workspace trust for the session work dir.
@@ -893,58 +741,3 @@ class SessionManager:
         except Exception as e:
             log.warning("Could not pre-accept workspace trust: %s", e)
 
-    async def _cleanup_tmux(self, tmux_name: str) -> None:
-        try:
-            await self._run(f"tmux kill-session -t {tmux_name}")
-        except Exception:
-            pass
-
-    async def _tmux_type(self, tmux_name: str, text: str) -> None:
-        """Type text literally into a tmux pane and press Enter.
-
-        Uses subprocess_exec with -l flag to avoid shell quoting issues
-        with special characters (quotes, apostrophes, exclamation marks).
-        """
-        # send-keys -l sends literal text (no key name interpretation)
-        proc = await asyncio.create_subprocess_exec(
-            "tmux", "send-keys", "-t", tmux_name, "-l", text,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        await proc.communicate()
-        # Send Enter as a separate key
-        proc = await asyncio.create_subprocess_exec(
-            "tmux", "send-keys", "-t", tmux_name, "Enter",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        await proc.communicate()
-
-    async def _apply_agent_status_bar(self, tmux_session: str, label: str, voice_id: str) -> None:
-        """Set a colored status bar on an agent's tmux session."""
-        color = AGENT_COLORS.get(voice_id)
-        if not color:
-            return
-        for opt, val in [
-            ("status", "on"),
-            ("status-style", f"fg=#ffffff,bg={color}"),
-            ("status-left", f" {label} "),
-            ("status-left-style", f"fg=#ffffff,bg={color},bold"),
-            ("status-left-length", "20"),
-            ("status-right", ""),
-            ("status-right-length", "0"),
-            ("window-status-current-format", ""),
-            ("window-status-format", ""),
-        ]:
-            await self._run(f"tmux set-option -t {tmux_session} {opt} '{val}'")
-
-    async def _run(self, cmd: str) -> str:
-        proc = await asyncio.create_subprocess_shell(
-            cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await proc.communicate()
-        if proc.returncode != 0:
-            raise RuntimeError(f"Command failed ({proc.returncode}): {cmd}\n{stderr.decode()}")
-        return stdout.decode()

@@ -1,0 +1,1 @@
+Do NOT use `send --to user` to speak to Zeul directly — only the manager speaks to Zeul. Route all status updates, questions, and task requests through the manager. If Zeul speaks to you directly, you may respond via `send --to user`.
