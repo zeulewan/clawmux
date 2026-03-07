@@ -114,13 +114,19 @@ async function _refreshHistory(sessionId, voiceId) {
         if (_karaokeWords && _karaokeWords.length > 0) {
           savedKaraokeWords = _karaokeWords.map(w => ({ word: w.word, start_time: w.start_time, end_time: w.end_time }));
         }
+        // Suppress entry animation during history sync re-render
+        chatArea.classList.add('no-animate');
         renderChat();
         // Restore karaoke spans after DOM rebuild
         if (savedKaraokeWords && savedKaraokeWords.length > 0) {
           const msgs = chatArea.querySelectorAll('.msg.assistant');
           if (msgs.length) _applyKaraokeSpans(msgs[msgs.length - 1], savedKaraokeWords);
         }
-        requestAnimationFrame(() => { chatScrollToBottom(); });
+        requestAnimationFrame(() => {
+          chatScrollToBottom();
+          // Re-enable animations after render settles
+          chatArea.classList.remove('no-animate');
+        });
       }
     }
   } catch (e) { /* ignore */ }
