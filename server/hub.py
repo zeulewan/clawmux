@@ -1952,7 +1952,8 @@ def _log_sigterm(signum, frame):
 
 
 if __name__ == "__main__":
-    config = uvicorn.Config(app, host="127.0.0.1", port=HUB_PORT, log_level="info")
+    _hub_host = os.environ.get("CLAWMUX_HOST", "127.0.0.1")
+    config = uvicorn.Config(app, host=_hub_host, port=HUB_PORT, log_level="info")
     _uvicorn_server = uvicorn.Server(config)
     signal.signal(signal.SIGTERM, _log_sigterm)
     _uvicorn_server.run()
