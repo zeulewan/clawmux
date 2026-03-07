@@ -416,6 +416,8 @@ function _debugBanner(msg) { /* no-op */ }
 function addMessage(sessionId, role, text, opts = {}) {
   const s = sessions.get(sessionId);
   if (!s) return;
+  // Dedup: skip if a message with the same ID already exists in the store
+  if (opts.id && s.messages.some(m => m.id === opts.id)) return;
   const msgObj = { role, text, ts: Date.now() / 1000 };
   if (opts.id) msgObj.id = opts.id;
   if (opts.parentId) msgObj.parentId = opts.parentId;
