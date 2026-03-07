@@ -447,7 +447,6 @@ function addMessage(sessionId, role, text, opts = {}) {
 // --- Input mode (Auto / Typing) ---
 let inputMode = 'voice'; // 'voice' or 'typing'
 const modeToggle = document.getElementById('mode-toggle');
-const modeToggleText = document.getElementById('mode-toggle-text');
 // Rearrange controls: top row = waveform/transport, bottom row = mode | mic | status
 {
   const controlsEl = document.getElementById('controls');
@@ -470,8 +469,7 @@ const textSendBtn = document.getElementById('text-send');
 
 function cycleInputMode() {
   // Block switching to voice when text-only mode is enabled
-  const textOnlyToggle = document.getElementById('toggle-text_only');
-  if (textOnlyToggle && textOnlyToggle.classList.contains('on')) return;
+  if (!sttEnabled) return;
   inputMode = inputMode === 'voice' ? 'typing' : 'voice';
   applyInputMode();
   saveInputMode();
@@ -484,8 +482,6 @@ function cycleInputMode() {
 function applyInputMode() {
   const modeText = inputMode === 'voice' ? 'Voice' : 'Typing';
   modeToggle.innerHTML = '<span class="mode-value">' + modeText + '</span><span class="mode-label">Mode</span>';
-  // Also update text-input-bar mode toggle
-  if (modeToggleText) modeToggleText.querySelector('.mode-value').textContent = modeText;
   if (inputMode === 'typing') {
     controls.style.display = 'none';
     textInputBar.classList.add('active');

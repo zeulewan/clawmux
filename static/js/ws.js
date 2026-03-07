@@ -4,7 +4,7 @@
 //
 // Dependencies (defined in state.js and hub.html inline script):
 //   state.js: sessions, activeSessionId, ws, autoMode, vadEnabled,
-//             autoInterruptEnabled, voiceResponsesEnabled, currentAudio,
+//             autoInterruptEnabled, ttsEnabled, sttEnabled, currentAudio,
 //             currentBufferedPlayer, playbackPaused, showAgentMessages,
 //             recording, micMuted
 //   hub.html: setConnected, setStatus, showCopyToast, _flushPendingAudio,
@@ -130,8 +130,8 @@ function handleMessage(data) {
       if (!sessions.has(s.session_id)) {
         promises.push(addSession(s, false));
       } else {
-        // Session already exists — refresh history and restore state
-        promises.push(_refreshHistory(s.session_id, s.voice));
+        // Session already exists — cursor-based sync and restore state
+        promises.push(_reconnectSyncSession(s.session_id, s.voice));
         const existing = sessions.get(s.session_id);
         if (existing) {
           existing.speed = s.speed || existing.speed;
@@ -278,7 +278,10 @@ function handleMessage(data) {
     if (s) {
       s.project = data.project || '';
       s.project_area = data.area || '';
+      if ('role' in data) s.role = data.role || '';
+      if ('task' in data) s.task = data.task || '';
     }
+    renderSidebar();
     renderVoiceGridIfActive();
     updateHeaderProjectStatus();
     return;

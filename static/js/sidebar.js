@@ -272,12 +272,14 @@ function _sidebarState(voiceId) {
     ? session.project
     : '';
   const projectArea = session && session.project_area ? session.project_area : '';
+  const roleText = session && session.role ? session.role : '';
+  const taskText = session && session.task ? session.task : '';
   const isCompacting = session && session.compacting;
-  return { session, isSpawning, stateClass, statusLabel, isSelected, projectText, projectArea, hasUnread, isCompacting };
+  return { session, isSpawning, stateClass, statusLabel, isSelected, projectText, projectArea, roleText, taskText, hasUnread, isCompacting };
 }
 
 function _updateSidebarCard(card, voiceId, state) {
-  const { session, isSpawning, stateClass, statusLabel, isSelected, projectText, projectArea, hasUnread, isCompacting } = state;
+  const { session, isSpawning, stateClass, statusLabel, isSelected, projectText, projectArea, roleText, taskText, hasUnread, isCompacting } = state;
   // Update state class only if changed
   const stateClasses = ['starting', 'working', 'unread', 'idle', 'offline'];
   const curState = stateClasses.find(c => card.classList.contains(c)) || '';
@@ -289,21 +291,34 @@ function _updateSidebarCard(card, voiceId, state) {
   // Update status label
   const label = card.querySelector('.sb-status span:not(.sb-dot)');
   if (label && label.textContent !== statusLabel) label.textContent = statusLabel;
-  // Update project line
-  let projEl = card.querySelector('.sb-project');
-  const fullProject = projectText + (projectArea ? '\n' + projectArea : '');
-  if (projectText) {
-    if (!projEl) {
-      projEl = document.createElement('div');
-      projEl.className = 'sb-project';
+  // Update role line
+  let roleEl = card.querySelector('.sb-role');
+  if (roleText) {
+    if (!roleEl) {
+      roleEl = document.createElement('div');
+      roleEl.className = 'sb-role';
+      const info = card.querySelector('.sb-info');
+      const nameEl = card.querySelector('.sb-name');
+      if (nameEl && nameEl.nextSibling) info.insertBefore(roleEl, nameEl.nextSibling);
+      else info.appendChild(roleEl);
+    }
+    if (roleEl.textContent !== roleText) roleEl.textContent = roleText;
+  } else if (roleEl) {
+    roleEl.remove();
+  }
+  // Update task line
+  let taskEl = card.querySelector('.sb-task');
+  if (taskText) {
+    if (!taskEl) {
+      taskEl = document.createElement('div');
+      taskEl.className = 'sb-task';
       const info = card.querySelector('.sb-info');
       const statusLine = card.querySelector('.sb-status');
-      info.insertBefore(projEl, statusLine);
+      info.insertBefore(taskEl, statusLine);
     }
-    const newHtml = projectText + (projectArea ? '<br><span style="opacity:0.6;">' + projectArea + '</span>' : '');
-    if (projEl.innerHTML !== newHtml) projEl.innerHTML = newHtml;
-  } else if (projEl) {
-    projEl.remove();
+    if (taskEl.textContent !== taskText) taskEl.textContent = taskText;
+  } else if (taskEl) {
+    taskEl.remove();
   }
   // Update unread badge
   let badge = card.querySelector('.sb-unread');
@@ -450,11 +465,17 @@ function renderSidebar() {
       statusEl2.appendChild(dot2);
       statusEl2.appendChild(labelEl);
       info.appendChild(nameEl);
-      if (state.projectText) {
-        const projEl = document.createElement('div');
-        projEl.className = 'sb-project';
-        projEl.innerHTML = state.projectText + (state.projectArea ? '<br><span style="opacity:0.6;">' + state.projectArea + '</span>' : '');
-        info.appendChild(projEl);
+      if (state.roleText) {
+        const roleEl = document.createElement('div');
+        roleEl.className = 'sb-role';
+        roleEl.textContent = state.roleText;
+        info.appendChild(roleEl);
+      }
+      if (state.taskText) {
+        const taskEl = document.createElement('div');
+        taskEl.className = 'sb-task';
+        taskEl.textContent = state.taskText;
+        info.appendChild(taskEl);
       }
       if (state.isCompacting) {
         const compactEl = document.createElement('div');

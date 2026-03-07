@@ -40,6 +40,8 @@ class Session:
     status_text: str = ""  # last tool call description (orthogonal to state)
     project: str = ""  # current project/repo name (set by agent via set_project_status)
     project_area: str = ""  # current sub-area (e.g. "frontend", "docs")
+    role: str = ""  # display role (e.g. "Manager", "Frontend", "Researcher")
+    task: str = ""  # current task description (~5 words)
     text_mode: bool = False  # when True, skip TTS and just send text
     interjections: list[str] = field(default_factory=list)  # queued user messages sent while agent was busy
     model: str = ""  # per-session Claude model override (opus/sonnet/haiku); empty = use global default
@@ -92,6 +94,8 @@ class Session:
             "status_text": self.status_text,
             "project": self.project,
             "project_area": self.project_area,
+            "role": self.role,
+            "task": self.task,
             "model": self.model,
             "unread_count": self.unread_count,
             "work_dir": self.work_dir,
@@ -129,6 +133,8 @@ class SessionManager:
             session_id=session.session_id,
             project=session.project or None,
             area=session.project_area or "",
+            role=session.role or "worker",
+            task=session.task or "",
             last_active=session.last_activity,
             model=session.model or "opus",
             state=session.state.value if hasattr(session.state, 'value') else str(session.state),
@@ -202,6 +208,8 @@ class SessionManager:
             # Restore project status from agents.json
             session.project = entry.project or ""
             session.project_area = entry.area or ""
+            session.role = entry.role or ""
+            session.task = entry.task or ""
             if session.project:
                 log.info("Restored project status for %s: %s / %s",
                          voice_id, session.project, session.project_area)
@@ -385,6 +393,9 @@ class SessionManager:
                 if prev and prev.project:
                     session.project = prev.project
                     session.project_area = prev.area or ""
+                if prev:
+                    session.role = prev.role or ""
+                    session.task = prev.task or ""
 
             # Write agent state to agents.json (authoritative store)
             await self._sync_agent_store(voice_id, session)
