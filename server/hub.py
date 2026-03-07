@@ -57,7 +57,9 @@ history = HistoryStore()
 project_mgr = ProjectManager()
 agents_store = AgentsStore()
 template_renderer = TemplateRenderer(agents_store)
-session_mgr = SessionManager(history_store=history, project_mgr=project_mgr, agents_store=agents_store)
+from backends.claude_code import ClaudeCodeBackend
+_backend = ClaudeCodeBackend()
+session_mgr = SessionManager(history_store=history, project_mgr=project_mgr, agents_store=agents_store, backend=_backend)
 broker = MessageBroker()
 
 
@@ -779,9 +781,8 @@ async def hook_tool_status(request: Request):
 
     event = data.get("hook_event_name", "")
 
-    # Prefer X-ClawMux-Session header (set via CLAWMUX_SESSION_ID env var),
-    # fall back to cwd-based lookup
-    clawmux_sid = request.headers.get("x-clawmux-session", "")
+    # Prefer ClawMux-Session header, fall back to legacy X-ClawMux-Session, then cwd
+    clawmux_sid = request.headers.get("clawmux-session", "") or request.headers.get("x-clawmux-session", "")
     session = session_mgr.sessions.get(clawmux_sid) if clawmux_sid else None
     if not session:
         cwd = data.get("cwd", "")

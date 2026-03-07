@@ -84,7 +84,7 @@ def _install_hooks(repo_dir: str) -> None:
         "type": "http",
         "url": f"http://localhost:{HUB_PORT}/api/hooks/tool-status",
         "timeout": 5,
-        "headers": {"X-ClawMux-Session": "$CLAWMUX_SESSION_ID"},
+        "headers": {"ClawMux-Session": "$CLAWMUX_SESSION_ID"},
         "allowedEnvVars": ["CLAWMUX_SESSION_ID"],
     }]}
     stop_entry = {"hooks": [{

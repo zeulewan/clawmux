@@ -1,0 +1,225 @@
+"""Claude Code backend — manages agents via tmux + Claude Code CLI."""
+
+import asyncio
+import logging
+import time
+
+from hub_config import AGENT_COLORS, CLAUDE_BASE_COMMAND
+from .base import AgentBackend
+
+log = logging.getLogger("hub.backend.claude_code")
+
+
+class ClaudeCodeBackend(AgentBackend):
+    """Runs agents in tmux sessions with Claude Code CLI."""
+
+    async def spawn(
+        self,
+        session_name: str,
+        work_dir: str,
+        session_id: str,
+        hub_port: int,
+        voice_id: str,
+        voice_name: str,
+        claude_session_id: str,
+        resuming: bool,
+        model: str,
+    ) -> None:
+        # Kill stale tmux session with same name
+        await self._run(f"tmux kill-session -t {session_name} 2>/dev/null || true")
+
+        # Create tmux session in the work dir
+        await self._run(
+            f"tmux new-session -d -s {session_name} -x 200 -y 50 -c {work_dir}"
+        )
+
+        # Apply agent-colored status bar
+        await self.apply_status_bar(session_name, voice_name, voice_id)
+
+        # Set environment variables
+        await self._run(
+            f'tmux send-keys -t {session_name} '
+            f'"unset CLAUDECODE && export CLAWMUX_SESSION_ID={session_id} '
+            f'&& export CLAWMUX_PORT={hub_port}" Enter'
+        )
+
+        # Send a marker so we can detect fresh output from Claude
+        short_id = session_id[-6:]
+        marker = f"__CLAUDE_INIT_{short_id}__"
+        await self._run(f'tmux send-keys -t {session_name} "echo {marker}" Enter')
+
+        # Build Claude command
+        model_flag = f" --model {model}" if model != "opus" else ""
+        startup_prompt = "Run this exact command now: clawmux wait"
+        if resuming:
+            claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag} --resume {claude_session_id} '{startup_prompt}'"
+        else:
+            claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag} --session-id {claude_session_id} '{startup_prompt}'"
+        await self._run(f'tmux send-keys -t {session_name} "{claude_cmd}" Enter')
+
+        # Wait for Claude to initialize (poll for input prompt AFTER marker)
+        await self._wait_for_claude_init(session_name, marker)
+
+    async def terminate(self, session_name: str) -> None:
+        try:
+            await self._run(f"tmux kill-session -t {session_name}")
+        except Exception:
+            pass
+
+    async def health_check(self, session_name: str) -> bool:
+        proc = await asyncio.create_subprocess_exec(
+            "tmux", "has-session", "-t", session_name,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await proc.wait()
+        return proc.returncode == 0
+
+    async def deliver_message(self, session_name: str, text: str) -> None:
+        await self._tmux_type(session_name, text)
+
+    async def restart(
+        self,
+        session_name: str,
+        work_dir: str,
+        session_id: str,
+        hub_port: int,
+        voice_id: str,
+        voice_name: str,
+        claude_session_id: str,
+        model: str,
+    ) -> None:
+        # Kill the entire tmux session
+        await self.terminate(session_name)
+
+        # Recreate in the same work dir
+        await self._run(
+            f"tmux new-session -d -s {session_name} -x 200 -y 50 -c {work_dir}"
+        )
+
+        # Apply status bar
+        await self.apply_status_bar(session_name, voice_name, voice_id)
+
+        # Set environment
+        await self._run(
+            f'tmux send-keys -t {session_name} '
+            f'"unset CLAUDECODE && export CLAWMUX_SESSION_ID={session_id} '
+            f'&& export CLAWMUX_PORT={hub_port}" Enter'
+        )
+
+        # Send marker and Claude command (always resume on restart)
+        short_id = session_id[-6:]
+        marker = f"__CLAUDE_INIT_{short_id}__"
+        await self._run(f'tmux send-keys -t {session_name} "echo {marker}" Enter')
+
+        model_flag = f" --model {model}" if model != "opus" else ""
+        startup_prompt = "Run this exact command now: clawmux wait"
+        claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag} --resume {claude_session_id} '{startup_prompt}'"
+        await self._run(f'tmux send-keys -t {session_name} "{claude_cmd}" Enter')
+
+        await self._wait_for_claude_init(session_name, marker)
+
+    async def capture_pane(self, session_name: str) -> str:
+        try:
+            return await self._run(f"tmux capture-pane -t {session_name} -p")
+        except Exception:
+            return ""
+
+    async def apply_status_bar(self, session_name: str, label: str, voice_id: str) -> None:
+        color = AGENT_COLORS.get(voice_id)
+        if not color:
+            return
+        for opt, val in [
+            ("status", "on"),
+            ("status-style", f"fg=#ffffff,bg={color}"),
+            ("status-left", f" {label} "),
+            ("status-left-style", f"fg=#ffffff,bg={color},bold"),
+            ("status-left-length", "20"),
+            ("status-right", ""),
+            ("status-right-length", "0"),
+            ("window-status-current-format", ""),
+            ("window-status-format", ""),
+        ]:
+            await self._run(f"tmux set-option -t {session_name} {opt} '{val}'")
+
+    async def list_live_sessions(self, known_names: set[str]) -> set[str]:
+        """Return known session names that have live tmux sessions."""
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "tmux", "list-sessions", "-F", "#{session_name}",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            stdout, _ = await proc.communicate()
+            if proc.returncode == 0:
+                live = set(stdout.decode().strip().splitlines())
+                return live & known_names
+        except Exception as e:
+            log.error("Error listing tmux sessions: %s", e)
+        return set()
+
+    # --- Internal helpers ---
+
+    async def _wait_for_claude_init(self, session_name: str, marker: str) -> None:
+        """Poll tmux pane until Claude Code shows its prompt after the marker."""
+        start = time.time()
+        init_deadline = start + 30
+        while time.time() < init_deadline:
+            try:
+                result = await self._run(f"tmux capture-pane -t {session_name} -p")
+                if result and marker in result:
+                    after_marker = result.split(marker, 1)[1]
+                    if ">" in after_marker or "❯" in after_marker:
+                        log.info("[%s] Claude ready (%.1fs)", session_name, time.time() - start)
+                        break
+            except Exception:
+                pass
+            await asyncio.sleep(1)
+        else:
+            log.warning("[%s] Claude init poll timed out, sending command anyway", session_name)
+
+        # Wait for full initialization (status bar with model name)
+        log.info("[%s] Waiting for full initialization", session_name)
+        ready_deadline = time.time() + 30
+        while time.time() < ready_deadline:
+            try:
+                result = await self._run(f"tmux capture-pane -t {session_name} -p -e")
+                if result and any(kw in result for kw in (
+                    "Opus", "Sonnet", "Haiku", "opus", "sonnet", "haiku", "bypass", "plan"
+                )):
+                    log.info("[%s] Claude Code fully initialized", session_name)
+                    break
+            except Exception:
+                pass
+            await asyncio.sleep(1)
+        else:
+            log.warning("[%s] Claude Code init poll timed out, injecting anyway", session_name)
+
+        # Small extra delay for input buffer to be ready
+        await asyncio.sleep(1)
+
+    async def _tmux_type(self, session_name: str, text: str) -> None:
+        """Type text literally into a tmux pane and press Enter."""
+        proc = await asyncio.create_subprocess_exec(
+            "tmux", "send-keys", "-t", session_name, "-l", text,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await proc.communicate()
+        proc = await asyncio.create_subprocess_exec(
+            "tmux", "send-keys", "-t", session_name, "Enter",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await proc.communicate()
+
+    async def _run(self, cmd: str) -> str:
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            raise RuntimeError(f"Command failed ({proc.returncode}): {cmd}\n{stderr.decode()}")
+        return stdout.decode()
