@@ -9,12 +9,9 @@ import logging
 import time
 from pathlib import Path
 
-from hub_config import AGENTS_PER_PROJECT, VOICE_POOL, VOICES
+from hub_config import AGENTS_PER_PROJECT, DATA_DIR, LEGACY_SESSION_DIR, SESSIONS_DIR, VOICE_POOL, VOICES
 
 log = logging.getLogger("hub.projects")
-
-SESSION_DIR_BASE = Path("/tmp/clawmux-sessions")
-DATA_DIR = Path(__file__).parent.parent / "data"
 
 
 class ProjectManager:
@@ -137,9 +134,6 @@ class ProjectManager:
         if "/" in slug or ".." in slug:
             raise ValueError(f"Invalid project slug: {slug}")
 
-        session_dir = SESSION_DIR_BASE / slug
-        session_dir.mkdir(parents=True, exist_ok=True)
-
         if voices is None:
             voices = self._assign_voices()
 
@@ -192,18 +186,12 @@ class ProjectManager:
         log.info("Reordered voices for project %s: %s", slug, voices)
 
     def get_session_dir(self, voice_id: str, project_slug: str | None = None) -> Path:
-        """Get the work directory for a voice in a project.
+        """Get the work directory for a voice.
 
-        For default (flat_layout=True): /tmp/clawmux-sessions/{voice_id}
-        For named projects: /tmp/clawmux-sessions/{project_slug}/{voice_id}
+        All sessions use flat layout: SESSIONS_DIR/{voice_id}
+        Project assignment is tracked in agents.json, not the directory path.
         """
-        slug = project_slug or self.active_project
-        proj = self.projects.get(slug)
-        if not proj:
-            return SESSION_DIR_BASE / voice_id
-        if proj.get("flat_layout"):
-            return SESSION_DIR_BASE / voice_id
-        return SESSION_DIR_BASE / slug / voice_id
+        return SESSIONS_DIR / voice_id
 
     def get_history_prefix(self, project_slug: str | None = None) -> str | None:
         """Get the history subdirectory prefix for a project.

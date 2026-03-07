@@ -15,6 +15,8 @@ from hub_config import (
     CLAUDE_BASE_COMMAND,
     HEALTH_CHECK_INTERVAL_SECONDS,
     HUB_PORT,
+    LEGACY_SESSION_DIR,
+    SESSIONS_DIR,
     SESSION_TIMEOUT_MINUTES,
     TMUX_SESSION_PREFIX,
     VOICES,
@@ -24,8 +26,6 @@ from project_manager import ProjectManager
 from state_machine import AgentState
 
 log = logging.getLogger("hub.sessions")
-
-SESSION_DIR_BASE = Path("/tmp/clawmux-sessions")
 
 
 @dataclass
@@ -110,13 +110,16 @@ class Session:
 
 class SessionManager:
     def __init__(self, history_store=None, project_mgr: ProjectManager | None = None,
-                 agents_store: AgentsStore | None = None) -> None:
+                 agents_store: AgentsStore | None = None, backend=None) -> None:
         self.sessions: dict[str, Session] = {}
         self._counter = 0
         self.history_store = history_store
         self.project_mgr = project_mgr or ProjectManager()
         self.agents_store = agents_store
-        SESSION_DIR_BASE.mkdir(parents=True, exist_ok=True)
+        self.backend = backend  # AgentBackend instance
+        SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+        if LEGACY_SESSION_DIR.exists():
+            log.info("Legacy session dir found at %s — will scan for orphans", LEGACY_SESSION_DIR)
 
     async def _sync_agent_store(self, voice_id: str, session: Session | None = None, **overrides) -> None:
         """Dual-write: update agents.json for a voice. If session is None, marks agent as dead."""
@@ -139,8 +142,22 @@ class SessionManager:
         await self.agents_store.set(voice_id, entry)
 
     async def cleanup_stale_sessions(self) -> None:
-        """Adopt orphaned voice-* tmux sessions from previous hub runs."""
+        """Adopt orphaned agent tmux sessions from previous hub runs."""
         # Build set of live tmux sessions
+        from hub_config import VOICE_POOL
+        voice_names_map = dict(VOICE_POOL)
+        # Known session names: new flat names ("sky") + legacy prefixed ("voice-sky", "hnapp-bella")
+        known_session_names: set[str] = set()
+        for vid, vname in VOICE_POOL:
+            known_session_names.add(vname.lower())  # flat: "sky"
+            known_session_names.add(f"{TMUX_SESSION_PREFIX}-{vname.lower()}")  # legacy: "voice-sky"
+        for slug, proj in self.project_mgr.projects.items():
+            if slug != "default":
+                clean_slug = slug.replace("-", "")
+                for vid in proj.get("voices", []):
+                    vname = voice_names_map.get(vid, vid)
+                    known_session_names.add(f"{clean_slug}-{vname.lower()}")  # legacy: "hnapp-bella"
+
         live_tmux: set[str] = set()
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -150,20 +167,12 @@ class SessionManager:
             )
             stdout, _ = await proc.communicate()
             if proc.returncode == 0:
-                # Collect valid tmux prefixes: "voice-" for default, "{cleanslug}-" for named projects
-                valid_prefixes = [TMUX_SESSION_PREFIX + "-"]
-                for slug, proj in self.project_mgr.projects.items():
-                    if slug != "default" and not proj.get("flat_layout"):
-                        valid_prefixes.append(slug.replace("-", "") + "-")
                 for name in stdout.decode().strip().splitlines():
-                    if any(name.startswith(p) for p in valid_prefixes):
+                    if name in known_session_names:
                         live_tmux.add(name)
         except Exception as e:
             log.error("Error listing tmux sessions: %s", e)
 
-        # Read agents.json for adoptable sessions instead of scanning .session.json files
-        from hub_config import VOICE_POOL
-        voice_names_map = dict(VOICE_POOL)
         adopted = 0
 
         if self.agents_store:
@@ -245,15 +254,21 @@ class SessionManager:
                 log.warning("Killing unadoptable orphaned tmux session: %s", name)
                 await self._cleanup_tmux(name)
 
-        # Clean orphaned session work dirs (but keep voice dirs for --resume and project dirs)
+        # Clean orphaned session work dirs in SESSIONS_DIR
+        # Keep voice dirs (for --resume) and any project subdirs
+        from hub_config import VOICE_POOL
+        known_voice_ids = {v[0] for v in VOICE_POOL}
         project_slugs = set(self.project_mgr.projects.keys())
-        try:
-            for d in SESSION_DIR_BASE.iterdir():
-                if d.is_dir() and d.name not in self.sessions and d.name not in voice_ids and d.name not in project_slugs:
-                    log.warning("Removing orphaned work dir: %s", d)
-                    shutil.rmtree(d, ignore_errors=True)
-        except Exception as e:
-            log.error("Error cleaning stale work dirs: %s", e)
+        for base_dir in (SESSIONS_DIR, LEGACY_SESSION_DIR):
+            if not base_dir.exists():
+                continue
+            try:
+                for d in base_dir.iterdir():
+                    if d.is_dir() and d.name not in self.sessions and d.name not in known_voice_ids and d.name not in project_slugs:
+                        log.warning("Removing orphaned work dir: %s", d)
+                        shutil.rmtree(d, ignore_errors=True)
+            except Exception as e:
+                log.error("Error cleaning stale work dirs in %s: %s", base_dir, e)
 
     def list_sessions(self) -> list[dict]:
         return [s.to_dict() for s in self.sessions.values()]
@@ -356,14 +371,8 @@ class SessionManager:
         else:
             voice_id, voice_name = self._next_voice(project_slug)
 
-        # Name session after the voice, namespaced by project
-        # Default project: "voice-sky" (backward compatible)
-        # Named projects: "hnapp-bella" (project slug + short voice name)
-        if project_slug == "default":
-            session_id = f"{TMUX_SESSION_PREFIX}-{voice_name.lower()}"
-        else:
-            clean_slug = project_slug.replace("-", "")
-            session_id = f"{clean_slug}-{voice_name.lower()}"
+        # Flat naming: just the voice name (e.g., "sky", "echo")
+        session_id = voice_name.lower()
         tmux_name = session_id
 
         # Kill stale tmux session with same name if it exists

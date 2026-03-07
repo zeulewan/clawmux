@@ -25,9 +25,11 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from hub_config import DATA_DIR
+
 log = logging.getLogger("agents_store")
 
-AGENTS_FILE = Path("data/agents.json")
+AGENTS_FILE = DATA_DIR / "agents.json"
 
 
 @dataclass
