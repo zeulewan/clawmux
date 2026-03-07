@@ -9,10 +9,22 @@ let _activeNotesTab = 'now';
 function toggleNotesPanel() {
   const panel = document.getElementById('notes-panel');
   panel.classList.toggle('open');
-  if (panel.classList.contains('open') && !_notesLoaded) {
+  const isOpen = panel.classList.contains('open');
+  try { localStorage.setItem('notes_panel_open', isOpen ? '1' : '0'); } catch(e) {}
+  if (isOpen && !_notesLoaded) {
     loadNotes();
   }
 }
+
+// Restore panel state on load
+(function _restoreNotesPanel() {
+  try {
+    if (localStorage.getItem('notes_panel_open') === '1') {
+      document.getElementById('notes-panel').classList.add('open');
+      loadNotes();
+    }
+  } catch(e) {}
+})();
 
 function switchNotesTab(tab) {
   _activeNotesTab = tab;
