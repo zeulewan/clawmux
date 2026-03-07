@@ -230,29 +230,28 @@ class SessionManager:
         if adopted:
             log.info("Adopted %d orphaned session(s)", adopted)
 
-        # Kill any remaining orphaned tmux sessions that we couldn't adopt
-        # Skip monitor sessions (clawmux-monitor-*) — those are independent of the hub
+        # Kill orphaned tmux sessions that are in OUR agents.json but couldn't be adopted.
+        # Only kill sessions we own — never touch tmux sessions from other hub instances.
         known_tmux = {s.tmux_session for s in self.sessions.values()}
+        our_session_ids = {e.session_id for e in all_agents.values() if e.session_id}
         for name in live_tmux:
-            if name not in known_tmux and "-monitor" not in name:
+            if name not in known_tmux and name in our_session_ids and "-monitor" not in name:
                 log.warning("Killing unadoptable orphaned tmux session: %s", name)
                 await self.backend.terminate(name)
 
-        # Clean orphaned session work dirs in SESSIONS_DIR
-        # Keep voice dirs (for --resume) and any project subdirs
+        # Clean orphaned work dirs in SESSIONS_DIR only (our own directory).
+        # Never touch LEGACY_SESSION_DIR — it may belong to another hub instance.
         from hub_config import VOICE_POOL
         known_voice_ids = {v[0] for v in VOICE_POOL}
         project_slugs = set(self.project_mgr.projects.keys())
-        for base_dir in (SESSIONS_DIR, LEGACY_SESSION_DIR):
-            if not base_dir.exists():
-                continue
+        if SESSIONS_DIR.exists():
             try:
-                for d in base_dir.iterdir():
+                for d in SESSIONS_DIR.iterdir():
                     if d.is_dir() and d.name not in self.sessions and d.name not in known_voice_ids and d.name not in project_slugs:
                         log.warning("Removing orphaned work dir: %s", d)
                         shutil.rmtree(d, ignore_errors=True)
             except Exception as e:
-                log.error("Error cleaning stale work dirs in %s: %s", base_dir, e)
+                log.error("Error cleaning stale work dirs: %s", e)
 
     def list_sessions(self) -> list[dict]:
         return [s.to_dict() for s in self.sessions.values()]
