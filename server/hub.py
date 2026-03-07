@@ -149,16 +149,22 @@ async def send_to_browser(data: dict) -> bool:
                      session_id, msg_type, len(_browser_msg_queue))
         return False
     dead = []
+    delivered = False
     for ws in list(browser_clients):
         try:
             await ws.send_json(data)
+            delivered = True
         except Exception:
             dead.append(ws)
     for ws in dead:
         browser_clients.discard(ws)
         if msg_type in ("assistant_text", "user_text", "audio"):
             log.warning("[%s] Browser client died during %s send", session_id, msg_type)
-    return len(browser_clients) > 0
+    # If all clients failed, queue for replay on reconnect
+    if not delivered and dead and msg_type in _QUEUEABLE_TYPES:
+        _browser_msg_queue.append((time.time(), data))
+        log.info("[%s] All clients dead, queued %s for reconnect", session_id, msg_type)
+    return delivered
 
 
 async def heartbeat_loop() -> None:
