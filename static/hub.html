@@ -450,6 +450,24 @@ body {
   flex-shrink: 0;
 }
 #notes-later-wrap { position: relative; flex: 1; display: flex; flex-direction: column; }
+.notes-preview-toggle {
+  position: absolute; top: 4px; right: 8px; z-index: 1;
+  background: var(--bg-secondary); border: 1px solid var(--border-color);
+  color: var(--text-secondary); border-radius: 4px; padding: 2px 8px;
+  font-size: 0.7rem; cursor: pointer;
+}
+.notes-preview-toggle:hover { color: var(--text-primary); background: var(--bg-hover); }
+.notes-preview-toggle.active { color: var(--blue); border-color: var(--blue); }
+.notes-preview {
+  flex: 1; overflow-y: auto; padding: 12px; font-size: 0.85rem;
+  color: var(--text-primary); line-height: 1.5;
+}
+.notes-preview h1, .notes-preview h2, .notes-preview h3 { margin: 0.8em 0 0.4em; }
+.notes-preview ul, .notes-preview ol { padding-left: 1.5em; }
+.notes-preview code { background: var(--bg-secondary); padding: 1px 4px; border-radius: 3px; font-size: 0.8rem; }
+.notes-preview pre { background: var(--bg-secondary); padding: 8px; border-radius: 4px; overflow-x: auto; }
+.notes-preview pre code { background: none; padding: 0; }
+.notes-preview a { color: var(--blue); }
 
 /* Header */
 #header {
@@ -1115,20 +1133,13 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 .activity-line {
   align-self: flex-start;
   padding: 0 18px;
-  margin-top: -6px;
-  margin-bottom: -6px;
+  margin-top: -2px;
+  margin-bottom: -2px;
   font-size: 0.7rem;
   color: var(--text-secondary);
   opacity: 0.6;
   line-height: 1.3;
   word-break: break-word;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.activity-line + .activity-line {
-  margin-top: -4px;
 }
 @keyframes spin {
   from { transform: rotate(0deg); }
@@ -1770,7 +1781,9 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   </div>
   <textarea class="notes-editor" id="notes-now" placeholder="What are agents working on..."></textarea>
   <div id="notes-later-wrap" style="display:none;position:relative;flex:1;display:flex;flex-direction:column;">
+    <button id="notes-later-preview-btn" class="notes-preview-toggle" onclick="toggleLaterPreview()">Preview</button>
     <textarea class="notes-editor" id="notes-later" placeholder="Ideas, future projects, random stuff..."></textarea>
+    <div id="notes-later-preview" class="notes-preview" style="display:none;"></div>
   </div>
   <div class="notes-save-indicator" id="notes-save-status"></div>
 </div>

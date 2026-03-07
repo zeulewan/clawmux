@@ -91,6 +91,30 @@ async function saveNotes() {
   }
 }
 
+let _laterPreviewMode = false;
+
+function toggleLaterPreview() {
+  _laterPreviewMode = !_laterPreviewMode;
+  const textarea = document.getElementById('notes-later');
+  const preview = document.getElementById('notes-later-preview');
+  const btn = document.getElementById('notes-later-preview-btn');
+  if (_laterPreviewMode) {
+    // Save any pending changes before switching
+    if (_notesSaveTimer) { clearTimeout(_notesSaveTimer); _notesSaveTimer = null; saveNotes(); }
+    const html = typeof marked !== 'undefined' ? marked.parse(textarea.value || '') : textarea.value;
+    preview.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(html) : html;
+    textarea.style.display = 'none';
+    preview.style.display = '';
+    btn.textContent = 'Edit';
+    btn.classList.add('active');
+  } else {
+    textarea.style.display = '';
+    preview.style.display = 'none';
+    btn.textContent = 'Preview';
+    btn.classList.remove('active');
+  }
+}
+
 // Attach event listeners once DOM is ready
 document.getElementById('notes-now').addEventListener('input', _scheduleSaveNotes);
 document.getElementById('notes-later').addEventListener('input', _scheduleSaveNotes);
