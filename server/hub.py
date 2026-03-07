@@ -68,6 +68,18 @@ def _hist_prefix(session) -> str | None:
     return project_mgr.get_history_prefix(session.project_slug)
 
 
+def _load_project_defaults() -> dict:
+    """Load default agent assignments from data/project-defaults.json."""
+    defaults_file = Path(__file__).parent.parent / "data" / "project-defaults.json"
+    if defaults_file.exists():
+        try:
+            data = json.loads(defaults_file.read_text())
+            return data.get("default_agents", {})
+        except (json.JSONDecodeError, KeyError):
+            pass
+    return {"managers": ["af_sky", "af_sarah"], "workers": ["af_alloy", "am_adam", "am_echo", "am_onyx"]}
+
+
 def _gen_msg_id() -> str:
     """Generate a short unique message ID for history tracking."""
     return "msg-" + uuid.uuid4().hex[:8]
@@ -1175,6 +1187,26 @@ async def create_project(request: Request):
     voices = data.get("voices")  # Optional: list of voice IDs to use
     try:
         project = project_mgr.create_project(slug, name, voices=voices)
+        # Populate agents.json with project entry and default agent assignments
+        from agents_store import ProjectEntry
+        await agents_store.set_project(slug, ProjectEntry(display_name=name))
+        defaults = _load_project_defaults()
+        voice_ids = project.get("voices", [])
+        manager_ids = set(defaults.get("managers", []))
+        for vid in voice_ids:
+            agent = await agents_store.get(vid)
+            if agent is None:
+                from agents_store import AgentEntry
+                role = "manager" if vid in manager_ids else "worker"
+                await agents_store.set(vid, AgentEntry(project=slug, role=role))
+            else:
+                # Update project assignment for existing agent
+                await agents_store.update(vid, project=slug)
+        # Regenerate CLAUDE.md for assigned agents
+        for vid in voice_ids:
+            session = next((s for s in session_mgr.sessions.values() if s.voice == vid), None)
+            if session and session.work_dir:
+                await template_renderer.render_to_file(vid, Path(session.work_dir))
         return JSONResponse(project)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)

@@ -609,6 +609,15 @@ def cmd_update(args):
         return
     print(r.stdout.strip())
 
+    # Auto-migrate if legacy layout detected
+    if _detect_legacy_layout():
+        print("\nLegacy layout detected — running migration...")
+        summary = _run_migration()
+        print(f"  Migrated {summary['agents_migrated']} agent(s), {summary['live_sessions']} live session(s) preserved.")
+        if summary["projects"]:
+            print(f"  Projects: {', '.join(summary['projects'])}")
+        print()
+
     # Check system dependencies
     _check_system_deps()
 
@@ -727,6 +736,190 @@ def cmd_update(args):
                 print("Warning: hub did not restart within 30 seconds — check /tmp/clawmux.log")
 
     print("Update complete.")
+
+
+def _detect_legacy_layout() -> bool:
+    """Check if legacy /tmp/clawmux-sessions/ layout exists without ~/.clawmux/."""
+    legacy_dir = "/tmp/clawmux-sessions"
+    clawmux_home = os.environ.get("CLAWMUX_HOME", os.path.expanduser("~/.clawmux"))
+    return os.path.isdir(legacy_dir) and not os.path.isdir(os.path.join(clawmux_home, "data"))
+
+
+def _run_migration(dry_run: bool = False) -> dict:
+    """Migrate from legacy /tmp/clawmux-sessions/ to ~/.clawmux/.
+
+    Returns a summary dict with counts of migrated items.
+    """
+    import shutil
+
+    legacy_dir = "/tmp/clawmux-sessions"
+    clawmux_home = os.environ.get("CLAWMUX_HOME", os.path.expanduser("~/.clawmux"))
+    sessions_dir = os.path.join(clawmux_home, "sessions")
+    data_dir = os.path.join(clawmux_home, "data")
+    history_dir = os.path.join(clawmux_home, "history")
+
+    summary = {
+        "agents_found": 0,
+        "agents_migrated": 0,
+        "live_sessions": 0,
+        "projects": set(),
+        "history_copied": False,
+        "settings_copied": False,
+    }
+
+    if not os.path.isdir(legacy_dir):
+        print("No legacy layout found at /tmp/clawmux-sessions/")
+        return summary
+
+    # Create directory structure
+    if not dry_run:
+        os.makedirs(sessions_dir, exist_ok=True)
+        os.makedirs(data_dir, exist_ok=True)
+        os.makedirs(history_dir, exist_ok=True)
+
+    # Scan legacy dirs for .session.json and .project_status.json
+    agents_data = {}
+
+    # Check for live tmux sessions
+    live_tmux = set()
+    try:
+        r = subprocess.run(["tmux", "list-sessions", "-F", "#{session_name}"],
+                          capture_output=True, text=True)
+        if r.returncode == 0:
+            live_tmux = set(r.stdout.strip().splitlines())
+    except Exception:
+        pass
+
+    def _scan_voice_dir(voice_id, dir_path, project_slug=None):
+        """Scan a voice directory for session/project state files."""
+        session_file = os.path.join(dir_path, ".session.json")
+        project_file = os.path.join(dir_path, ".project_status.json")
+
+        if not os.path.exists(session_file):
+            return
+
+        summary["agents_found"] += 1
+        if project_slug:
+            summary["projects"].add(project_slug)
+
+        try:
+            session_data = json.loads(open(session_file).read())
+        except Exception:
+            session_data = {}
+
+        old_session_id = session_data.get("session_id", "")
+        is_live = old_session_id in live_tmux
+        if is_live:
+            summary["live_sessions"] += 1
+
+        agent_entry = {
+            "session_id": old_session_id if is_live else None,
+            "project": project_slug,
+            "role": "worker",
+            "area": "",
+            "backend": "claude-code",
+            "last_active": os.path.getmtime(session_file),
+            "model": "opus",
+            "state": "idle" if is_live else "dead",
+        }
+
+        if os.path.exists(project_file):
+            try:
+                proj = json.loads(open(project_file).read())
+                if not project_slug:
+                    agent_entry["project"] = proj.get("project", "")
+                agent_entry["area"] = proj.get("area", "")
+                if proj.get("project"):
+                    summary["projects"].add(proj["project"])
+            except Exception:
+                pass
+
+        # Handle conflicts: use most recent last_active
+        if voice_id not in agents_data or agent_entry["last_active"] > agents_data[voice_id]["last_active"]:
+            agents_data[voice_id] = agent_entry
+        summary["agents_migrated"] += 1
+
+    # Scan flat layout: /tmp/clawmux-sessions/{voice_id}/
+    for entry in os.scandir(legacy_dir):
+        if not entry.is_dir():
+            continue
+        if os.path.exists(os.path.join(entry.path, ".session.json")):
+            _scan_voice_dir(entry.name, entry.path)
+        else:
+            # Project subdir: /tmp/clawmux-sessions/{project}/{voice_id}/
+            for sub in os.scandir(entry.path):
+                if sub.is_dir() and os.path.exists(os.path.join(sub.path, ".session.json")):
+                    _scan_voice_dir(sub.name, sub.path, project_slug=entry.name)
+
+    # Copy history
+    repo_dir = _find_repo_dir()
+    old_history = os.path.join(repo_dir, "data", "history")
+    if os.path.isdir(old_history):
+        if not dry_run:
+            for f in os.listdir(old_history):
+                src = os.path.join(old_history, f)
+                dst = os.path.join(history_dir, f)
+                if os.path.isfile(src) and not os.path.exists(dst):
+                    shutil.copy2(src, dst)
+        summary["history_copied"] = True
+
+    # Copy settings
+    old_settings = os.path.join(repo_dir, "data", "settings.json")
+    new_settings = os.path.join(data_dir, "settings.json")
+    if os.path.exists(old_settings) and not os.path.exists(new_settings):
+        if not dry_run:
+            shutil.copy2(old_settings, new_settings)
+        summary["settings_copied"] = True
+
+    # Write agents.json (atomic)
+    agents_json_path = os.path.join(data_dir, "agents.json")
+    if not dry_run:
+        agents_json = {"agents": agents_data, "projects": {}}
+        # Merge with existing agents.json if present (don't overwrite newer entries)
+        if os.path.exists(agents_json_path):
+            try:
+                existing = json.loads(open(agents_json_path).read())
+                for vid, entry in existing.get("agents", {}).items():
+                    if vid not in agents_data or entry.get("last_active", 0) > agents_data.get(vid, {}).get("last_active", 0):
+                        agents_json["agents"][vid] = entry
+                agents_json["projects"] = existing.get("projects", {})
+            except Exception:
+                pass
+        tmp_path = agents_json_path + ".tmp"
+        with open(tmp_path, "w") as f:
+            json.dump(agents_json, f, indent=2)
+            f.write("\n")
+        os.replace(tmp_path, agents_json_path)
+
+    summary["projects"] = list(summary["projects"])
+    return summary
+
+
+def cmd_migrate(args):
+    """Migrate from legacy /tmp/clawmux-sessions/ to ~/.clawmux/."""
+    dry_run = getattr(args, "dry_run", False)
+
+    if dry_run:
+        print("DRY RUN — no files will be modified\n")
+
+    if not _detect_legacy_layout() and not getattr(args, "force", False):
+        print("No migration needed — already using ~/.clawmux/ layout.")
+        return
+
+    summary = _run_migration(dry_run=dry_run)
+
+    print(f"\nMigration {'preview' if dry_run else 'complete'}:")
+    print(f"  Agents found:    {summary['agents_found']}")
+    print(f"  Agents migrated: {summary['agents_migrated']}")
+    print(f"  Live sessions:   {summary['live_sessions']} (left untouched)")
+    if summary["projects"]:
+        print(f"  Projects:        {', '.join(summary['projects'])}")
+    print(f"  History copied:  {'yes' if summary['history_copied'] else 'no'}")
+    print(f"  Settings copied: {'yes' if summary['settings_copied'] else 'no'}")
+
+    if summary["live_sessions"] > 0:
+        print(f"\n  NOTE: {summary['live_sessions']} live session(s) preserved at old paths.")
+        print("  They will continue working. New sessions will use ~/.clawmux/sessions/.")
 
 
 def cmd_uninstall(args):
@@ -1523,6 +1716,13 @@ examples:
                        description="Pull latest code, reinstall deps, reinstall CLI, and reload hub. Use --full to also kill and respawn all agents.")
     p.add_argument("--full", action="store_true", help="Kill all agents and restart everything (default: graceful hub reload)")
     p.set_defaults(func=cmd_update)
+
+    # migrate
+    p = sub.add_parser("migrate", help="Migrate from legacy layout to ~/.clawmux/",
+                       description="Migrate session data from /tmp/clawmux-sessions/ to ~/.clawmux/. Live sessions are preserved.")
+    p.add_argument("--dry-run", action="store_true", help="Preview migration without making changes")
+    p.add_argument("--force", action="store_true", help="Run migration even if ~/.clawmux/ already exists")
+    p.set_defaults(func=cmd_migrate)
 
     # uninstall
     p = sub.add_parser("uninstall", help="Uninstall ClawMux",

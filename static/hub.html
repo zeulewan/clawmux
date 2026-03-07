@@ -2563,6 +2563,14 @@ async function _moveToProject(sessionId, projectName) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ project: projectName, area: sess ? (sess.project_area || '') : '' }),
     });
+    // Also update agents.json via the centralized API
+    if (sess && sess.voice) {
+      await fetch(`/api/agents/${sess.voice}/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project: projectName }),
+      });
+    }
   } catch (e) {
     console.error('Failed to move to project:', e);
   }
