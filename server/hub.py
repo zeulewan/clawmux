@@ -1802,6 +1802,36 @@ async def update_notes(request: Request):
     return JSONResponse(notes)
 
 
+@app.post("/api/notes/format")
+async def format_notes(request: Request):
+    data = await request.json()
+    text = data.get("text", "").strip()
+    if not text:
+        return JSONResponse({"error": "No text provided"}, status_code=400)
+    try:
+        import asyncio
+        prompt = (
+            "You are a text formatter. Take the user's freetext notes and format "
+            "them into clean, well-organized markdown. Use headings, bullet points, "
+            "and structure as appropriate. Preserve all information — do not add, "
+            "remove, or editorialize. Return ONLY the formatted markdown, no preamble."
+            "\n\n" + text
+        )
+        proc = await asyncio.create_subprocess_exec(
+            "claude", "--print", "--model", "claude-sonnet-4-6", "-p", prompt,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            err = stderr.decode().strip() or "claude CLI failed"
+            return JSONResponse({"error": err}, status_code=500)
+        formatted = stdout.decode().strip()
+        return JSONResponse({"formatted": formatted})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @app.get("/api/services/status")
 async def services_status():
     tts_ok = False

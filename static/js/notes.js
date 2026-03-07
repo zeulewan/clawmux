@@ -41,7 +41,7 @@ function switchNotesTab(tab, persist = true) {
   const tabs = document.querySelectorAll('#notes-panel-header .notes-tab');
   tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
   document.getElementById('notes-now').style.display = tab === 'now' ? '' : 'none';
-  document.getElementById('notes-later').style.display = tab === 'later' ? '' : 'none';
+  document.getElementById('notes-later-wrap').style.display = tab === 'later' ? '' : 'none';
   if (persist) {
     fetch('/api/settings', {
       method: 'PUT',
@@ -88,6 +88,34 @@ async function saveNotes() {
     console.error('Failed to save notes:', e);
     const status = document.getElementById('notes-save-status');
     if (status) status.textContent = 'Save failed';
+  }
+}
+
+async function formatLaterNotes() {
+  const textarea = document.getElementById('notes-later');
+  const btn = document.getElementById('notes-format-btn');
+  const text = textarea.value.trim();
+  if (!text) return;
+  btn.disabled = true;
+  btn.textContent = 'Formatting…';
+  try {
+    const resp = await fetch('/api/notes/format', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    if (!resp.ok) throw new Error('Format failed');
+    const data = await resp.json();
+    textarea.value = data.formatted;
+    saveNotes();
+  } catch (e) {
+    console.error('Format error:', e);
+    const status = document.getElementById('notes-save-status');
+    if (status) status.textContent = 'Format failed';
+    setTimeout(() => { if (status) status.textContent = ''; }, 3000);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✨ Format';
   }
 }
 
