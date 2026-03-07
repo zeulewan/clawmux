@@ -3,6 +3,7 @@
 # Detects hardware, installs dependencies, sets up TTS/STT, and configures the hub.
 # Usage: curl -sSL https://raw.githubusercontent.com/zeulewan/clawmux/main/install.sh | bash
 #   or:  ./install.sh
+#   or:  ./install.sh --force   (clean reinstall)
 
 set -euo pipefail
 
@@ -11,6 +12,14 @@ INSTALL_DIR="${CLAWMUX_DIR:-$HOME/GIT/clawmux}"
 HUB_PORT="${CLAWMUX_PORT:-3460}"
 WHISPER_PORT=2022
 KOKORO_PORT=8880
+FORCE=false
+
+# Parse flags
+for arg in "$@"; do
+    case "$arg" in
+        --force) FORCE=true ;;
+    esac
+done
 
 # Colors
 RED='\033[0;31m'
@@ -90,12 +99,29 @@ else
     warn "Continuing anyway — you can install Claude Code later."
 fi
 
-# --- Clone / Update Repo ---
+# --- Already Installed Detection ---
 
 if [ -d "$INSTALL_DIR/.git" ]; then
-    info "Repo already exists at $INSTALL_DIR, pulling latest..."
+    info "ClawMux is already installed at $INSTALL_DIR"
     cd "$INSTALL_DIR"
-    git pull --ff-only || warn "Could not pull latest (you may have local changes)"
+
+    # Check for updates
+    git fetch --quiet 2>/dev/null || true
+    UPDATES=$(git rev-list HEAD..origin/main --count 2>/dev/null || echo "0")
+
+    if [ "$FORCE" = true ]; then
+        warn "Force reinstall requested — removing venv and reinstalling..."
+        rm -rf .venv
+    elif [ "$UPDATES" -gt 0 ]; then
+        info "Updates available ($UPDATES commits behind). Pulling latest..."
+        git pull --ff-only || warn "Could not pull latest (you may have local changes)"
+    else
+        ok "Already up to date."
+        if [ "$FORCE" = false ]; then
+            info "Use --force for a clean reinstall."
+            exit 0
+        fi
+    fi
 else
     info "Cloning repo to $INSTALL_DIR..."
     mkdir -p "$(dirname "$INSTALL_DIR")"
@@ -147,11 +173,28 @@ install_apple_services() {
 }
 
 case "$GPU" in
-    nvidia) install_nvidia_services ;;
-    apple)  install_apple_services ;;
+    nvidia)
+        info "Found GPU: ${GPU_NAME:-NVIDIA} (${GPU_VRAM:-?}MB VRAM)"
+        read -p "Install local TTS/STT services (Whisper + Kokoro)? (Y/n): " INSTALL_SERVICES
+        INSTALL_SERVICES="${INSTALL_SERVICES:-Y}"
+        if [[ "$INSTALL_SERVICES" =~ ^[Yy] ]]; then
+            install_nvidia_services
+        else
+            info "Skipping local services. Configure remote TTS/STT URLs in Settings after starting the hub."
+        fi
+        ;;
+    apple)
+        info "Found Apple Silicon GPU"
+        read -p "Install local TTS/STT services? (Y/n): " INSTALL_SERVICES
+        INSTALL_SERVICES="${INSTALL_SERVICES:-Y}"
+        if [[ "$INSTALL_SERVICES" =~ ^[Yy] ]]; then
+            install_apple_services
+        else
+            info "Skipping local services. Configure remote TTS/STT URLs in Settings after starting the hub."
+        fi
+        ;;
     none)
-        warn "No GPU detected. ClawMux requires a GPU for TTS/STT."
-        warn "Set TTS URL and STT URL in Settings to point at a remote GPU server."
+        info "No GPU detected — configure remote TTS/STT in Settings after starting the hub."
         ;;
 esac
 
