@@ -450,7 +450,6 @@ def cmd_send(args):
         "sender": session_id,
         "to": args.to,
         "message": message,
-        "expect_response": getattr(args, "wait_response", False),
     }
     if getattr(args, "re", None):
         payload["parent_id"] = args.re
@@ -474,64 +473,6 @@ def cmd_send(args):
 
     msg_id = result["id"]
     print(msg_id)
-
-    if args.wait_ack:
-        print("DEPRECATED: --wait-ack is deprecated. Use 'clawmux wait' for push-based delivery.", file=sys.stderr)
-        # Poll for acknowledgment
-        deadline = time.time() + 30
-        while time.time() < deadline:
-            time.sleep(2)
-            msg = http_get(f"/api/messages/{msg_id}")
-            if msg.get("state") in ("acknowledged", "responded"):
-                print("acknowledged", file=sys.stderr)
-                return
-            if msg.get("state") == "failed":
-                die("message delivery failed")
-        die("timeout waiting for acknowledgment")
-
-    if getattr(args, "wait_response", False):
-        print("DEPRECATED: --wait-response is deprecated. Use 'clawmux wait' for push-based delivery.", file=sys.stderr)
-        # Poll for response
-        deadline = time.time() + 120
-        while time.time() < deadline:
-            time.sleep(2)
-            msg = http_get(f"/api/messages/{msg_id}")
-            if msg.get("state") == "responded":
-                print(msg.get("response_text", ""))
-                return
-            if msg.get("state") == "failed":
-                die("message delivery failed")
-        die("timeout waiting for response")
-
-
-def cmd_ack(args):
-    """Acknowledge receipt of a message."""
-    print("DEPRECATED: Use 'clawmux send --to <agent> --re <msg_id>' for threaded replies.", file=sys.stderr)
-    import urllib.request
-    import urllib.error
-    try:
-        req = urllib.request.Request(
-            hub_url(f"/api/messages/{args.msg_id}/ack"),
-            data=b"{}",
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            json.loads(resp.read())
-        print(f"acknowledged {args.msg_id}")
-    except urllib.error.HTTPError as e:
-        die(f"ack failed: {e.reason}")
-    except Exception as e:
-        die(f"ack error: {e}")
-
-
-def cmd_reply(args):
-    """Reply to a specific message."""
-    print("DEPRECATED: Use 'clawmux send --to <agent> --re <msg_id> \"reply text\"' instead.", file=sys.stderr)
-    result = http_post(f"/api/messages/{args.msg_id}/reply", {
-        "message": args.message,
-    })
-    print(f"replied to {args.msg_id}")
 
 
 def cmd_kill(args):
@@ -1682,8 +1623,7 @@ def main():
   Messaging:
     send        Send a message to an agent or user (TTS)
     wait        Block until a message arrives (idle mode)
-    ack         Acknowledge receipt of a message
-    reply       Reply to a specific message
+    messages    List inter-agent messages
 
   Monitoring:
     monitor     Open tiled tmux view of agent sessions (per project)
@@ -1693,12 +1633,10 @@ def main():
     kill        Kill a single agent session
     project     Set project status in sidebar
 
-  Headless:
-    run         Run a one-shot Claude prompt (no session/voice)
-
   System:
     version     Show version and commit
     update      Update to latest version
+    regenerate  Regenerate CLAUDE.md templates
     uninstall   Remove ClawMux
 
 examples:
@@ -1711,8 +1649,7 @@ examples:
     clawmux start
     clawmux reload
     clawmux monitor
-    clawmux monitor --agents sky adam echo
-    clawmux run 'Summarize: some text here'""",
+    clawmux monitor --agents sky adam echo""",
     )
     sub = parser.add_subparsers(dest="command", required=False)
 
@@ -1736,27 +1673,11 @@ examples:
                        epilog="""examples:
     clawmux send --to alloy "FYI, I pushed a fix."
     clawmux send --to user "Here's what I found."
-    clawmux send --to alloy --re msg-abc123 "Got it, thanks."
-    clawmux send --to alloy --wait-ack "Can you check the auth module?" """)
+    clawmux send --to alloy --re msg-abc123 "Got it, thanks." """)
     p.add_argument("--to", required=True, help="Recipient: agent name (e.g. sky, echo) or 'user' for TTS")
     p.add_argument("message", nargs="?", default="", help="Message text (optional with --re for bare acknowledgment)")
     p.add_argument("--re", help="Parent message ID for threaded reply (e.g. msg-abc123)")
-    p.add_argument("--wait-ack", action="store_true", help="[DEPRECATED] Block until recipient acknowledges")
-    p.add_argument("--wait-response", action="store_true", help="[DEPRECATED] Block until recipient replies")
     p.set_defaults(func=cmd_send)
-
-    # ack (DEPRECATED)
-    p = sub.add_parser("ack", help="[DEPRECATED] Acknowledge receipt of a message",
-                       description="DEPRECATED: Use 'clawmux send --to <agent> --re <msg_id>' instead.")
-    p.add_argument("msg_id", help="Message ID to acknowledge (e.g. msg-a1b2c3)")
-    p.set_defaults(func=cmd_ack)
-
-    # reply (DEPRECATED)
-    p = sub.add_parser("reply", help="[DEPRECATED] Reply to a message",
-                       description="DEPRECATED: Use 'clawmux send --to <agent> --re <msg_id> \"reply text\"' instead.")
-    p.add_argument("msg_id", help="Message ID to reply to")
-    p.add_argument("message", help="Reply text")
-    p.set_defaults(func=cmd_reply)
 
     # status
     p = sub.add_parser("status", help="Show hub state and session info",
