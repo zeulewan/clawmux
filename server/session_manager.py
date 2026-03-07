@@ -161,45 +161,25 @@ class SessionManager:
         except Exception as e:
             log.error("Error listing tmux sessions: %s", e)
 
-        # Scan voice work dirs for adoptable sessions (all projects)
+        # Read agents.json for adoptable sessions instead of scanning .session.json files
         from hub_config import VOICE_POOL
-        voice_ids = {v[0] for v in VOICE_POOL}
         voice_names_map = dict(VOICE_POOL)
         adopted = 0
 
-        # Collect all possible work dirs: flat layout + project subdirs
-        work_dirs_to_scan: list[tuple[str, Path]] = []
-        for voice_id in voice_ids:
-            # Flat layout (default project)
-            work_dirs_to_scan.append((voice_id, SESSION_DIR_BASE / voice_id))
-        # Also scan project subdirectories
-        for slug, proj in self.project_mgr.projects.items():
-            if not proj.get("flat_layout"):
-                for voice_id in proj.get("voices", []):
-                    proj_dir = SESSION_DIR_BASE / slug / voice_id
-                    if proj_dir.exists():
-                        work_dirs_to_scan.append((voice_id, proj_dir))
+        if self.agents_store:
+            all_agents = await self.agents_store.all_agents()
+        else:
+            all_agents = {}
 
-        for voice_id, work_dir in work_dirs_to_scan:
-
-            session_json_path = work_dir / ".session.json"
-            old_session_id = ""
-
-            if session_json_path.exists():
-                try:
-                    session_data = json.loads(session_json_path.read_text())
-                    old_session_id = session_data.get("session_id", "")
-                except Exception:
-                    pass
-
+        for voice_id, entry in all_agents.items():
+            old_session_id = entry.session_id
             if not old_session_id:
                 continue
 
             # Check if the tmux session for this session_id still exists
             if old_session_id not in live_tmux:
-                # No tmux session — clean up stale state files
-                log.info("No tmux for %s (%s), cleaning state files", voice_id, old_session_id)
-                session_json_path.unlink(missing_ok=True)
+                log.info("No tmux for %s (%s), marking dead in agents.json", voice_id, old_session_id)
+                await self._sync_agent_store(voice_id)
                 continue
 
             # Already tracked by this hub instance
@@ -208,14 +188,8 @@ class SessionManager:
 
             # Adopt: create a Session object with the old session_id
             voice_name = voice_names_map.get(voice_id, voice_id)
-            # Determine project_slug from work_dir path
-            adopt_project = "default"
-            for slug, proj in self.project_mgr.projects.items():
-                if not proj.get("flat_layout"):
-                    proj_dir = SESSION_DIR_BASE / slug
-                    if str(work_dir).startswith(str(proj_dir)):
-                        adopt_project = slug
-                        break
+            adopt_project = entry.project or "default"
+            work_dir = self.project_mgr.get_session_dir(voice_id, adopt_project)
             session = Session(
                 session_id=old_session_id,
                 tmux_session=old_session_id,
@@ -232,17 +206,12 @@ class SessionManager:
                 stored_id = self.history_store.get_claude_session_id(voice_id, hist_prefix)
                 if stored_id:
                     session.claude_session_id = stored_id
-            # Restore project status from disk
-            proj_file = work_dir / ".project_status.json"
-            if proj_file.exists():
-                try:
-                    proj_data = json.loads(proj_file.read_text())
-                    session.project = proj_data.get("project", "")
-                    session.project_area = proj_data.get("area", "")
-                    log.info("Restored project status for %s: %s / %s",
-                             voice_id, session.project, session.project_area)
-                except Exception:
-                    pass
+            # Restore project status from agents.json
+            session.project = entry.project or ""
+            session.project_area = entry.area or ""
+            if session.project:
+                log.info("Restored project status for %s: %s / %s",
+                         voice_id, session.project, session.project_area)
             # Restore pending interjections from disk
             if self.history_store:
                 saved = self.history_store.load_interjections(voice_id)
@@ -250,7 +219,8 @@ class SessionManager:
                     session.interjections = saved
                     session.set_state(AgentState.PROCESSING)
                     log.info("Restored %d interjection(s) for %s", len(saved), voice_id)
-            # Set model to hub default if not already set
+            # Restore model from agents.json, fall back to hub default
+            session.model = entry.model or ""
             if not session.model:
                 import hub_config
                 session.model = hub_config.CLAUDE_MODEL
@@ -261,7 +231,7 @@ class SessionManager:
                      old_session_id, voice_id, old_session_id, session.model)
             # Apply agent-colored status bar to adopted session
             await self._apply_agent_status_bar(old_session_id, voice_name, voice_id)
-            # Dual-write: populate agents.json from adopted session
+            # Update agents.json with restored state
             await self._sync_agent_store(voice_id, session)
 
         if adopted:
@@ -417,23 +387,14 @@ class SessionManager:
             work_dir.mkdir(parents=True, exist_ok=True)
             session.work_dir = str(work_dir)
 
-            # Restore project status from previous session if available
-            proj_file = work_dir / ".project_status.json"
-            if proj_file.exists():
-                try:
-                    proj_data = json.loads(proj_file.read_text())
-                    session.project = proj_data.get("project", "")
-                    session.project_area = proj_data.get("area", "")
-                except Exception:
-                    pass
+            # Restore project status from agents.json if available
+            if self.agents_store:
+                prev = await self.agents_store.get(voice_id)
+                if prev and prev.project:
+                    session.project = prev.project
+                    session.project_area = prev.area or ""
 
-            # Write session state file (used for re-adoption after hub reload)
-            (work_dir / ".session.json").write_text(json.dumps({
-                "session_id": session_id,
-                "voice": voice_id,
-            }))
-
-            # Dual-write: update agents.json
+            # Write agent state to agents.json (authoritative store)
             await self._sync_agent_store(voice_id, session)
 
             # Check if we can resume a previous Claude session for this voice
@@ -901,15 +862,8 @@ class SessionManager:
 
     def _cleanup_workdir(self, session: Session) -> None:
         # Don't delete voice work dirs — they persist for --resume
-        # Only clean up state files so stale config doesn't interfere
-        if session.work_dir:
-            for name in (".session.json",):
-                p = Path(session.work_dir) / name
-                if p.exists():
-                    try:
-                        p.unlink()
-                    except Exception:
-                        pass
+        # State is now managed via agents.json, so no per-agent files to clean up
+        pass
 
     def _accept_workspace_trust(self, work_dir: str) -> None:
         """Pre-accept Claude Code workspace trust for the session work dir.

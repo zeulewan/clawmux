@@ -673,15 +673,7 @@ async def set_project_status(session_id: str, request: Request):
         "project": session.project,
         "area": session.project_area,
     })
-    # Persist to disk so it survives hub restarts
-    if session.work_dir:
-        try:
-            Path(session.work_dir, ".project_status.json").write_text(
-                json.dumps({"project": session.project, "area": session.project_area})
-            )
-        except Exception as e:
-            log.warning("[%s] Failed to persist project status: %s", session_id, e)
-    # Dual-write: update agents.json with project info
+    # Persist to agents.json (authoritative store)
     await session_mgr._sync_agent_store(session.voice, session)
     return JSONResponse({"ok": True})
 
