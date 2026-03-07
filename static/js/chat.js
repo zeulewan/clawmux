@@ -143,10 +143,14 @@ function createMsgEl(role, text, voiceColorHex, voiceId, msgObj = null) {
     // Expandable body
     const body = document.createElement('div');
     body.className = 'agent-msg-body';
-    body.style.cssText = 'display:none;margin-top:4px;opacity:0.9;font-size:0.95em;white-space:pre-wrap;';
     const mdEl = (typeof marked !== 'undefined') ? _renderMarkdown(content) : null;
-    if (mdEl) body.appendChild(mdEl);
-    else body.textContent = content;
+    if (mdEl) {
+      body.style.cssText = 'display:none;margin-top:4px;opacity:0.9;font-size:0.95em;';
+      body.appendChild(mdEl);
+    } else {
+      body.style.cssText = 'display:none;margin-top:4px;opacity:0.9;font-size:0.95em;white-space:pre-wrap;';
+      body.textContent = content;
+    }
 
     div.appendChild(header);
     div.appendChild(body);
