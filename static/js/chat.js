@@ -272,6 +272,9 @@ function _getChatLimit(sid) {
 }
 
 function renderChat(forceScroll = false) {
+  // Hide "New messages" pill on full re-render
+  const pill = document.getElementById('new-msg-pill');
+  if (pill) pill.style.display = 'none';
   // Check if user is near bottom BEFORE clearing DOM (scrollHeight resets after innerHTML='')
   const wasNearBottom = forceScroll || chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150;
   chatArea.innerHTML = '';
@@ -408,7 +411,24 @@ function _initChatScroll() {
         });
       }
     }
+    // Hide "New messages" pill when scrolled to bottom
+    const atBottom = chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150;
+    if (atBottom) {
+      const pill = document.getElementById('new-msg-pill');
+      if (pill) pill.style.display = 'none';
+    }
   });
+}
+
+// Click handler for "New messages" pill
+{
+  const pill = document.getElementById('new-msg-pill');
+  if (pill) {
+    pill.addEventListener('click', () => {
+      chatArea.scrollTop = chatArea.scrollHeight;
+      pill.style.display = 'none';
+    });
+  }
 }
 
 function _debugBanner(msg) { /* no-op */ }
@@ -424,9 +444,49 @@ function addMessage(sessionId, role, text, opts = {}) {
   if (opts.isBareAck) msgObj.isBareAck = true;
   s.messages.push(msgObj);
   if (sessionId === activeSessionId) {
-    // For threaded messages, re-render to group properly
+    // For threaded messages, insert inline under the parent
     if (opts.parentId) {
-      renderChat();
+      const wasNearBottom = chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150;
+      const vc = voiceColor(s.voice);
+      const parentEl = chatArea.querySelector(`[data-msg-id="${CSS.escape(opts.parentId)}"]`);
+      if (parentEl) {
+        // Find or create thread container around the parent
+        let threadCtr = parentEl.closest('.thread-container');
+        if (!threadCtr) {
+          threadCtr = document.createElement('div');
+          threadCtr.className = 'thread-container';
+          parentEl.before(threadCtr);
+          threadCtr.appendChild(parentEl);
+        }
+        if (opts.isBareAck) {
+          // Add/update ack badge on parent
+          let badge = parentEl.querySelector('.thread-ack-badge');
+          if (badge) {
+            const cur = parseInt(badge.dataset.count || '1') + 1;
+            badge.dataset.count = cur;
+            badge.textContent = cur > 1 ? '\uD83D\uDC4D ' + cur : '\uD83D\uDC4D';
+            badge.title = cur + ' ack';
+          } else {
+            badge = document.createElement('span');
+            badge.className = 'thread-ack-badge';
+            badge.dataset.count = '1';
+            badge.textContent = '\uD83D\uDC4D';
+            badge.title = '1 ack';
+            parentEl.appendChild(badge);
+            const ackBtn = parentEl.querySelector('.msg-ack-btn');
+            if (ackBtn) ackBtn.style.display = 'none';
+          }
+        } else {
+          const replyEl = createMsgEl(role, text, vc, s.voice, msgObj);
+          replyEl.classList.add('thread-reply');
+          threadCtr.appendChild(replyEl);
+        }
+      } else {
+        // Parent not in DOM — append at bottom as a normal message
+        const el = createMsgEl(role, text, vc, s.voice, msgObj);
+        chatArea.appendChild(el);
+      }
+      if (wasNearBottom) chatArea.scrollTop = chatArea.scrollHeight;
     } else {
       const wasNearBottom = chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150;
       let el;
@@ -438,7 +498,13 @@ function addMessage(sessionId, role, text, opts = {}) {
         el = createMsgEl(role, text, voiceColor(s.voice), s.voice, msgObj);
       }
       chatArea.appendChild(el);
-      if (wasNearBottom) chatArea.scrollTop = chatArea.scrollHeight;
+      if (wasNearBottom) {
+        chatArea.scrollTop = chatArea.scrollHeight;
+      } else if (role !== 'activity') {
+        // Show "New messages" pill for real messages only
+        const pill = document.getElementById('new-msg-pill');
+        if (pill) pill.style.display = 'block';
+      }
     }
   }
 }
