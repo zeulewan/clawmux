@@ -11,3 +11,4 @@ data/
 ios/build/
 ios/VoiceChat.xcodeproj/
 ios/*.xcworkspace/
+_garbage/
