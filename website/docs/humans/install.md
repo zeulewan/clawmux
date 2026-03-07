@@ -4,220 +4,83 @@ Open Claude Code and paste the prompt for your platform. Claude will handle ever
 
 ## Install Prompt
 
-First, choose your deployment mode. Then select your OS and copy the prompt.
+Select your OS and copy the prompt.
 
-=== "Together"
+=== "macOS"
 
-    Hub + TTS + STT all on the same machine. Requires a GPU.
+    ```
+    Install ClawMux — an open-source voice interface for managing multiple Claude Code agents. The code is fully auditable on GitHub. Review the install script before running it.
 
-    === "macOS"
+    1. Clone the repo:
+       git clone https://github.com/zeulewan/clawmux.git ~/GIT/clawmux
 
-        Requires Apple Silicon (M1+).
+    2. Review the install script (it's short — read it to see what it does):
+       cat ~/GIT/clawmux/install.sh
 
-        ```
-        Install ClawMux — an open-source voice interface for managing multiple Claude Code agents. The code is fully auditable on GitHub.
+    3. Run the installer:
+       cd ~/GIT/clawmux && ./install.sh
 
-        1. Install dependencies:
-           which brew || /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-           which tmux || brew install tmux
+    4. If no local GPU was detected, configure remote TTS/STT in Settings (http://localhost:3460) or via:
+       curl -X PUT http://localhost:3460/api/settings -H "Content-Type: application/json" -d '{"deployment_mode": "split", "tts_url": "http://YOUR_GPU_SERVER:8880", "stt_url": "http://YOUR_GPU_SERVER:2022"}'
 
-        2. Clone the repo:
-           git clone https://github.com/zeulewan/clawmux.git ~/GIT/clawmux
+    5. Verify: curl -s http://localhost:3460/api/sessions and open http://localhost:3460 in a browser.
 
-        3. Set up Python:
-           cd ~/GIT/clawmux && python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+    Run each step, fix any errors, and report what happened.
+    ```
 
-        4. Install TTS/STT for Apple Silicon:
-           pip install mlx-audio
-           brew install whisper-cpp
+=== "Linux"
 
-        5. Review and install the CLI (review the script first — it's short):
-           cat clawmux | head -20
-           mkdir -p ~/.local/bin && cp clawmux ~/.local/bin/clawmux && chmod +x ~/.local/bin/clawmux
-           Make sure ~/.local/bin is in your PATH.
-           Or if you prefer system-wide: sudo cp clawmux /usr/local/bin/clawmux && sudo chmod +x /usr/local/bin/clawmux
+    ```
+    Install ClawMux — an open-source voice interface for managing multiple Claude Code agents. The code is fully auditable on GitHub. Review the install script before running it.
 
-        6. Start the hub:
-           cd ~/GIT/clawmux && ./start-hub.sh
+    1. Clone the repo:
+       git clone https://github.com/zeulewan/clawmux.git ~/GIT/clawmux
 
-        7. Verify: curl -s http://localhost:3460/api/sessions and open http://localhost:3460 in a browser.
+    2. Review the install script (it's short — read it to see what it does):
+       cat ~/GIT/clawmux/install.sh
 
-        Run each step, fix any errors, and report what happened.
-        ```
+    3. Run the installer:
+       cd ~/GIT/clawmux && ./install.sh
 
-    === "Linux"
+    4. If no local GPU was detected, configure remote TTS/STT in Settings (http://localhost:3460) or via:
+       curl -X PUT http://localhost:3460/api/settings -H "Content-Type: application/json" -d '{"deployment_mode": "split", "tts_url": "http://YOUR_GPU_SERVER:8880", "stt_url": "http://YOUR_GPU_SERVER:2022"}'
 
-        Requires NVIDIA GPU with CUDA.
+    5. Verify: curl -s http://localhost:3460/api/sessions and open http://localhost:3460 in a browser.
 
-        ```
-        Install ClawMux — an open-source voice interface for managing multiple Claude Code agents. The code is fully auditable on GitHub.
+    Run each step, fix any errors, and report what happened.
+    ```
 
-        1. Install system dependencies (Debian/Ubuntu):
-           sudo apt install -y python3-venv tmux
+=== "WSL"
 
-        2. Clone the repo:
-           git clone https://github.com/zeulewan/clawmux.git ~/GIT/clawmux
+    ```
+    Install ClawMux — an open-source voice interface for managing multiple Claude Code agents. The code is fully auditable on GitHub. Review the install script before running it.
 
-        3. Set up Python:
-           cd ~/GIT/clawmux && python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+    1. Clone the repo:
+       git clone https://github.com/zeulewan/clawmux.git ~/GIT/clawmux
 
-        4. Detect GPU and install TTS/STT:
-           Run nvidia-smi. If NVIDIA GPU found:
-           bash services/whisper/install.sh && bash services/whisper/start.sh && bash services/kokoro/install.sh && bash services/kokoro/start.sh
-           If no GPU, stop and use the Split mode prompt instead.
+    2. Review the install script (it's short — read it to see what it does):
+       cat ~/GIT/clawmux/install.sh
 
-        5. Review and install the CLI (review the script first — it's short):
-           cat clawmux | head -20
-           mkdir -p ~/.local/bin && cp clawmux ~/.local/bin/clawmux && chmod +x ~/.local/bin/clawmux
-           Make sure ~/.local/bin is in your PATH.
-           Or if you prefer system-wide: sudo cp clawmux /usr/local/bin/clawmux && sudo chmod +x /usr/local/bin/clawmux
+    3. Run the installer:
+       cd ~/GIT/clawmux && ./install.sh
 
-        6. Start the hub:
-           cd ~/GIT/clawmux && ./start-hub.sh
+    4. If no local GPU was detected, configure remote TTS/STT in Settings (http://localhost:3460) or via:
+       curl -X PUT http://localhost:3460/api/settings -H "Content-Type: application/json" -d '{"deployment_mode": "split", "tts_url": "http://YOUR_GPU_SERVER:8880", "stt_url": "http://YOUR_GPU_SERVER:2022"}'
 
-        7. Verify: curl -s http://localhost:3460/api/sessions and open http://localhost:3460 in a browser.
+    5. Verify: curl -s http://localhost:3460/api/sessions and open http://localhost:3460 in a Windows browser.
 
-        Run each step, fix any errors, and report what happened.
-        ```
-
-    === "WSL"
-
-        Requires NVIDIA GPU with WSL2 CUDA passthrough.
-
-        ```
-        Install ClawMux — an open-source voice interface for managing multiple Claude Code agents. The code is fully auditable on GitHub.
-
-        1. Install system dependencies:
-           sudo apt install -y python3-venv tmux
-
-        2. Clone the repo:
-           git clone https://github.com/zeulewan/clawmux.git ~/GIT/clawmux
-
-        3. Set up Python:
-           cd ~/GIT/clawmux && python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
-
-        4. Detect GPU and install TTS/STT:
-           Run nvidia-smi. If NVIDIA GPU found:
-           bash services/whisper/install.sh && bash services/whisper/start.sh && bash services/kokoro/install.sh && bash services/kokoro/start.sh
-           If nvidia-smi not found, install CUDA for WSL: https://developer.nvidia.com/cuda/wsl
-
-        5. Review and install the CLI (review the script first — it's short):
-           cat clawmux | head -20
-           mkdir -p ~/.local/bin && cp clawmux ~/.local/bin/clawmux && chmod +x ~/.local/bin/clawmux
-           Make sure ~/.local/bin is in your PATH.
-           Or if you prefer system-wide: sudo cp clawmux /usr/local/bin/clawmux && sudo chmod +x /usr/local/bin/clawmux
-
-        6. Start the hub:
-           cd ~/GIT/clawmux && ./start-hub.sh
-
-        7. Verify: curl -s http://localhost:3460/api/sessions and open http://localhost:3460 in a Windows browser at http://localhost:3460.
-
-        Run each step, fix any errors, and report what happened.
-        ```
-
-=== "Split"
-
-    Hub runs locally, TTS/STT on a remote GPU server. No local GPU needed.
-
-    === "macOS"
-
-        ```
-        Install ClawMux — an open-source voice interface for managing multiple Claude Code agents. The code is fully auditable on GitHub.
-
-        1. Install dependencies:
-           which brew || /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-           which tmux || brew install tmux
-
-        2. Clone the repo:
-           git clone https://github.com/zeulewan/clawmux.git ~/GIT/clawmux
-
-        3. Set up Python:
-           cd ~/GIT/clawmux && python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
-
-        4. Review and install the CLI (review the script first — it's short):
-           cat clawmux | head -20
-           mkdir -p ~/.local/bin && cp clawmux ~/.local/bin/clawmux && chmod +x ~/.local/bin/clawmux
-           Make sure ~/.local/bin is in your PATH.
-           Or if you prefer system-wide: sudo cp clawmux /usr/local/bin/clawmux && sudo chmod +x /usr/local/bin/clawmux
-
-        5. Start the hub:
-           cd ~/GIT/clawmux && ./start-hub.sh
-
-        6. Configure Split mode — point TTS/STT at your remote GPU server:
-           curl -X PUT http://localhost:3460/api/settings -H "Content-Type: application/json" -d '{"deployment_mode": "split", "tts_url": "http://YOUR_GPU_SERVER:8880", "stt_url": "http://YOUR_GPU_SERVER:2022"}'
-
-        7. Verify: curl -s http://localhost:3460/api/sessions and open http://localhost:3460 in a browser.
-
-        Run each step, fix any errors, and report what happened.
-        ```
-
-    === "Linux"
-
-        ```
-        Install ClawMux — an open-source voice interface for managing multiple Claude Code agents. The code is fully auditable on GitHub.
-
-        1. Install system dependencies (Debian/Ubuntu):
-           sudo apt install -y python3-venv tmux
-
-        2. Clone the repo:
-           git clone https://github.com/zeulewan/clawmux.git ~/GIT/clawmux
-
-        3. Set up Python:
-           cd ~/GIT/clawmux && python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
-
-        4. Review and install the CLI (review the script first — it's short):
-           cat clawmux | head -20
-           mkdir -p ~/.local/bin && cp clawmux ~/.local/bin/clawmux && chmod +x ~/.local/bin/clawmux
-           Make sure ~/.local/bin is in your PATH.
-           Or if you prefer system-wide: sudo cp clawmux /usr/local/bin/clawmux && sudo chmod +x /usr/local/bin/clawmux
-
-        5. Start the hub:
-           cd ~/GIT/clawmux && ./start-hub.sh
-
-        6. Configure Split mode — point TTS/STT at your remote GPU server:
-           curl -X PUT http://localhost:3460/api/settings -H "Content-Type: application/json" -d '{"deployment_mode": "split", "tts_url": "http://YOUR_GPU_SERVER:8880", "stt_url": "http://YOUR_GPU_SERVER:2022"}'
-
-        7. Verify: curl -s http://localhost:3460/api/sessions and open http://localhost:3460 in a browser.
-
-        Run each step, fix any errors, and report what happened.
-        ```
-
-    === "WSL"
-
-        ```
-        Install ClawMux — an open-source voice interface for managing multiple Claude Code agents. The code is fully auditable on GitHub.
-
-        1. Install system dependencies:
-           sudo apt install -y python3-venv tmux
-
-        2. Clone the repo:
-           git clone https://github.com/zeulewan/clawmux.git ~/GIT/clawmux
-
-        3. Set up Python:
-           cd ~/GIT/clawmux && python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
-
-        4. Review and install the CLI (review the script first — it's short):
-           cat clawmux | head -20
-           mkdir -p ~/.local/bin && cp clawmux ~/.local/bin/clawmux && chmod +x ~/.local/bin/clawmux
-           Make sure ~/.local/bin is in your PATH.
-           Or if you prefer system-wide: sudo cp clawmux /usr/local/bin/clawmux && sudo chmod +x /usr/local/bin/clawmux
-
-        5. Start the hub:
-           cd ~/GIT/clawmux && ./start-hub.sh
-
-        6. Configure Split mode — point TTS/STT at your remote GPU server:
-           curl -X PUT http://localhost:3460/api/settings -H "Content-Type: application/json" -d '{"deployment_mode": "split", "tts_url": "http://YOUR_GPU_SERVER:8880", "stt_url": "http://YOUR_GPU_SERVER:2022"}'
-
-        7. Verify: curl -s http://localhost:3460/api/sessions and open http://localhost:3460 in a Windows browser at http://localhost:3460.
-
-        Run each step, fix any errors, and report what happened.
-        ```
+    Run each step, fix any errors, and report what happened.
+    ```
 
 ## What Gets Installed
 
+The install script handles everything:
+
+- System dependencies (tmux, brew on macOS)
 - Python venv with hub dependencies
-- Whisper STT + Kokoro TTS (Together mode only)
-- `clawmux` CLI for terminal control
+- Whisper STT + Kokoro TTS (if GPU detected)
+- `clawmux` CLI
+- Claude Code hooks and slash commands
 
 ## Requirements
 
@@ -225,11 +88,11 @@ First, choose your deployment mode. Then select your OS and copy the prompt.
 |-----------|---------|
 | OS | Linux / WSL / macOS |
 | Python | 3.10+ |
-| GPU | NVIDIA RTX 3070+ or Apple Silicon M1+ (Together mode) |
+| GPU | NVIDIA RTX 3070+ or Apple Silicon M1+ (for local TTS/STT) |
 | RAM | 16GB+ |
 | Claude Code | Installed and authenticated |
 
-No GPU? Use **Split mode** — run the hub locally and point TTS/STT at a remote GPU server.
+No GPU? The installer will detect that and skip TTS/STT setup. Just point at a remote GPU server in Settings afterwards.
 
 ## After Install
 
