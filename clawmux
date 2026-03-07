@@ -626,6 +626,60 @@ def cmd_update(args):
             print(f"  Projects: {', '.join(summary['projects'])}")
         print()
 
+    # --clean: hard reinstall with legacy cleanup
+    if getattr(args, "clean", False):
+        import shutil
+        cleaned = []
+
+        # 1. Delete legacy data directories
+        legacy_dirs = [
+            "/tmp/clawmux-sessions",
+            os.path.join(repo_dir, "data"),
+        ]
+        for d in legacy_dirs:
+            if os.path.isdir(d):
+                shutil.rmtree(d)
+                cleaned.append(f"Removed {d}")
+
+        # Clean stale dot-files from session dirs
+        sessions_dir = os.path.join(
+            os.environ.get("CLAWMUX_HOME", os.path.expanduser("~/.clawmux")),
+            "sessions",
+        )
+        stale_files = [".session.json", ".project_status.json"]
+        if os.path.isdir(sessions_dir):
+            for sess in os.scandir(sessions_dir):
+                if not sess.is_dir():
+                    continue
+                for sf in stale_files:
+                    p_stale = os.path.join(sess.path, sf)
+                    if os.path.exists(p_stale):
+                        os.remove(p_stale)
+                        cleaned.append(f"Removed {p_stale}")
+
+        # 2. Run migration to ensure ~/.clawmux/ structure
+        print("Running migration...")
+        summary = _run_migration()
+        cleaned.append(f"Migration: {summary['agents_migrated']} agent(s) processed")
+
+        # 3. Reinstall hooks
+        print("Reinstalling hooks...")
+        _install_hooks(repo_dir)
+
+        # 4. Regenerate CLAUDE.md templates
+        print("Regenerating CLAUDE.md templates...")
+        try:
+            result = http_post("/api/agents/regenerate", {})
+            cleaned.append(f"Regenerated {result.get('regenerated', 0)} CLAUDE.md files")
+        except SystemExit:
+            cleaned.append("Skipped CLAUDE.md regeneration (hub not running)")
+
+        # 5. Print summary
+        print("\nClean summary:")
+        for item in cleaned:
+            print(f"  {item}")
+        print()
+
     # Check system dependencies
     _check_system_deps()
 
@@ -1723,6 +1777,7 @@ examples:
     p = sub.add_parser("update", help="Update ClawMux to latest version",
                        description="Pull latest code, reinstall deps, reinstall CLI, and reload hub. Use --full to also kill and respawn all agents.")
     p.add_argument("--full", action="store_true", help="Kill all agents and restart everything (default: graceful hub reload)")
+    p.add_argument("--clean", action="store_true", help="Hard reinstall: clean legacy files, reinstall hooks, regenerate templates")
     p.set_defaults(func=cmd_update)
 
     # migrate
