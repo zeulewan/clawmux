@@ -253,10 +253,10 @@ function _sidebarState(voiceId) {
     if (st === 'starting') {
       stateClass = 'starting'; statusLabel = 'Starting...';
     } else if (session.compacting) {
-      stateClass = 'working'; statusLabel = 'Compacting...';
+      stateClass = 'working'; statusLabel = session.toolStatusText || 'Compacting';
     } else if (st === 'working') {
       stateClass = 'working';
-      statusLabel = session.toolStatusText || 'Working...';
+      statusLabel = session.toolStatusText || session.toolName || 'Processing';
     } else if (st === 'speaking' || st === 'listening') {
       // Speaking/listening are browser-only — sidebar shows idle
       stateClass = 'idle'; statusLabel = 'Idle';

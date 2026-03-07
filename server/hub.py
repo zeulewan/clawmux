@@ -913,7 +913,7 @@ async def hook_tool_status(request: Request):
                 })
     elif event == "SessionStart":
         # SessionStart hook — agent stays STARTING until first wait WS connects
-        session.activity = "Starting session..."
+        session.activity = "Starting"
         await _save_activity(session, "Starting")
         if session.work_dir:
             messages = await asyncio.to_thread(inbox.read_and_clear, session.work_dir)
@@ -932,7 +932,7 @@ async def hook_tool_status(request: Request):
                 })
     elif event == "PreCompact":
         session.set_state(AgentState.COMPACTING)
-        session.activity = "Compacting context..."
+        session.activity = "Compacting"
         await _save_activity(session, "Compacting")
     else:
         return JSONResponse({})

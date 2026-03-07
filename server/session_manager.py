@@ -38,7 +38,9 @@ class Session:
     label: str = ""
     voice: str = "af_sky"
     speed: float = 1.0
-    status_text: str = ""  # last tool call description (orthogonal to state)
+    activity: str = ""  # composed tool description (orthogonal to state)
+    tool_name: str = ""  # raw tool name from last PreToolUse
+    tool_input: dict = field(default_factory=dict)  # raw tool input from last PreToolUse
     project: str = ""  # current project/repo name (set by agent via set_project_status)
     project_area: str = ""  # current sub-area (e.g. "frontend", "docs")
     role: str = ""  # display role (e.g. "Manager", "Frontend", "Researcher")
@@ -92,7 +94,9 @@ class Session:
             "label": self.label,
             "voice": self.voice,
             "speed": self.speed,
-            "status_text": self.status_text,
+            "activity": self.activity,
+            "tool_name": self.tool_name,
+            "tool_input": self.tool_input,
             "project": self.project,
             "project_area": self.project_area,
             "role": self.role,

@@ -139,9 +139,9 @@ function handleMessage(data) {
           existing.project = s.project || existing.project || '';
           existing.project_area = s.project_area || existing.project_area || '';
           existing.unreadCount = s.unread_count || 0;
-          // Restore tool status text from server (persists across reloads)
-          if (s.status_text) {
-            existing.toolStatusText = s.status_text;
+          // Restore tool activity text from server (persists across reloads)
+          if (s.activity) {
+            existing.toolStatusText = s.activity;
           }
           // Restore session state from server's canonical state field
           const serverState = s.state || (s.in_wait ? 'idle' : (s.processing ? 'processing' : 'idle'));
@@ -237,11 +237,12 @@ function handleMessage(data) {
   if (type === 'session_status') {
     const s = sessions.get(data.session_id);
     if (s) {
-      // Update status_text (last tool call description)
-      if ('status_text' in data) {
-        if (data.status_text) {
-          s.toolStatusText = data.status_text;
-        }
+      // Update activity and tool_name
+      if ('activity' in data) {
+        s.toolStatusText = data.activity || '';
+      }
+      if ('tool_name' in data) {
+        s.toolName = data.tool_name || '';
       }
       // Use canonical state field if present
       const serverState = data.state;

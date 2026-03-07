@@ -11,7 +11,7 @@ class AgentState(str, enum.Enum):
 
     Two orthogonal axes:
       - state (this enum): where the agent is in its lifecycle
-      - status_text (str on Session): what the agent is currently doing
+      - activity (str on Session): what the agent is currently doing
 
     SPEAKING is browser-only (TTS playback is independent of agent state).
 
