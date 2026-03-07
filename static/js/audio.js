@@ -1173,6 +1173,7 @@ async function karaokePlayFromWord(msgEl, startTime, fetchId, clickedWord = fals
   } else {
     const text = msgEl.dataset.text;
     if (!text) return;
+    msgEl.classList.add('tts-loading');
     try {
       const resp = await fetch('/api/tts-captioned', {
         method: 'POST',
@@ -1187,7 +1188,8 @@ async function karaokePlayFromWord(msgEl, startTime, fetchId, clickedWord = fals
       decoded = await audioCtx.decodeAudioData(bytes.buffer);
       realWords = words ? words.filter(w => /\w/.test(w.word)) : [];
       msgEl._ttsCache = { decoded, words: realWords };
-    } catch(e) { console.error('TTS failed:', e); return; }
+    } catch(e) { console.error('TTS failed:', e); msgEl.classList.remove('tts-loading'); return; }
+    msgEl.classList.remove('tts-loading');
   }
   // If a newer click arrived while we were fetching, bail out
   if (fetchId !== undefined && fetchId !== _karaokeFetchId) return;

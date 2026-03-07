@@ -685,6 +685,15 @@ body {
   border-radius: 3px;
   text-shadow: 0 0 0.6px currentColor, 0 0 0.6px currentColor;
 }
+.msg.tts-loading {
+  opacity: 0.7;
+  animation: ttsLoadingPulse 1s infinite ease-in-out;
+  pointer-events: none;
+}
+@keyframes ttsLoadingPulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 0.4; }
+}
 body.tts-disabled .msg.assistant { cursor: default; }
 body.tts-disabled .msg.assistant .md-content code:not(pre code) { cursor: default; }
 body.tts-disabled .karaoke-word { cursor: default; }
