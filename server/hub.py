@@ -764,12 +764,10 @@ def _tool_status_text(tool_name: str, tool_input: dict) -> str:
         cmd = tool_input.get("command", "")
         desc = tool_input.get("description", "")
         preview = desc or cmd
-        if len(preview) > 120:
-            preview = preview[:117] + "..."
         return f"Running {preview}" if preview else "Running command"
     if tool_name == "Grep":
         pattern = tool_input.get("pattern", "")
-        return f"Searching for {pattern[:60]}" if pattern else "Searching"
+        return f"Searching for {pattern}" if pattern else "Searching"
     if tool_name == "WebFetch":
         url = tool_input.get("url", "")
         try:
@@ -1777,11 +1775,13 @@ async def _run_claude(prompt: str, model: str = "claude-sonnet-4-6") -> str:
     import shutil
     tmpdir = tempfile.mkdtemp(prefix="clawmux-run-")
     try:
+        env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
         proc = await asyncio.create_subprocess_exec(
             "claude", "--print", "--model", model, "-p", prompt,
             cwd=tmpdir,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=env,
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
         if proc.returncode != 0:
