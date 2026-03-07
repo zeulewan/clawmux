@@ -93,16 +93,43 @@ async function saveNotes() {
 
 let _laterPreviewMode = false;
 
+function _renderLaterPreview() {
+  const textarea = document.getElementById('notes-later');
+  const preview = document.getElementById('notes-later-preview');
+  const html = typeof marked !== 'undefined' ? marked.parse(textarea.value || '') : textarea.value;
+  preview.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(html) : html;
+
+  // Make checkboxes interactive
+  const checkboxes = preview.querySelectorAll('input[type="checkbox"]');
+  checkboxes.forEach((cb, idx) => {
+    cb.disabled = false;
+    cb.style.cursor = 'pointer';
+    cb.addEventListener('change', () => {
+      const text = textarea.value;
+      const re = /- \[[ x]\]/g;
+      let match, count = 0;
+      while ((match = re.exec(text)) !== null) {
+        if (count === idx) {
+          const toggled = match[0] === '- [x]' ? '- [ ]' : '- [x]';
+          textarea.value = text.slice(0, match.index) + toggled + text.slice(match.index + match[0].length);
+          _renderLaterPreview();
+          _scheduleSaveNotes();
+          break;
+        }
+        count++;
+      }
+    });
+  });
+}
+
 function toggleLaterPreview() {
   _laterPreviewMode = !_laterPreviewMode;
   const textarea = document.getElementById('notes-later');
   const preview = document.getElementById('notes-later-preview');
   const btn = document.getElementById('notes-later-preview-btn');
   if (_laterPreviewMode) {
-    // Save any pending changes before switching
     if (_notesSaveTimer) { clearTimeout(_notesSaveTimer); _notesSaveTimer = null; saveNotes(); }
-    const html = typeof marked !== 'undefined' ? marked.parse(textarea.value || '') : textarea.value;
-    preview.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(html) : html;
+    _renderLaterPreview();
     textarea.style.display = 'none';
     preview.style.display = '';
     btn.textContent = 'Edit';
