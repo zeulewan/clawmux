@@ -56,6 +56,13 @@ Blocks until a message arrives (voice from user or inter-agent). The hub pushes 
 clawmux project 'project-name' --area 'frontend'
 ```
 
+## Updating your task status
+Keep your task status updated so the team knows what you are working on:
+```bash
+clawmux task 'Short description of current work'
+```
+Update this whenever your focus changes — starting a new task, finishing one, or switching context.
+
 IMPORTANT: Always use `clawmux send --to user` for ALL output to the user. Never just print text to the terminal. Text printed directly to Claude Code chat is NOT visible to the user in the browser.
 
 # Message Delivery
@@ -77,6 +84,12 @@ You can read this file for context on what the user is focused on. Do not modify
 
 Run `clawmux --help` to see all available commands (spawn, monitor, projects, version, update, etc.).
 
+# Agent tmux Sessions
+Agent tmux sessions use the label name (lowercase), not the voice ID. For example:
+- Onyx's tmux session is `onyx`, not `am_onyx`
+- Sky's tmux session is `sky`, not `af_sky`
+Use `tmux ls` to see actual session names before killing sessions.
+
 # Hub Management
 NEVER use `pkill`, `kill`, or any signal-based commands to restart the hub. Use the built-in CLI commands instead:
 - `clawmux reload` — Gracefully restart the hub (agents auto-reconnect)
@@ -96,5 +109,3 @@ When you receive an inter-agent message:
 
 # Team Manager
 {managers_section}
-
-{role_specific_rules}

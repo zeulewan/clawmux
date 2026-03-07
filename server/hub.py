@@ -59,25 +59,16 @@ agents_store = AgentsStore()
 template_renderer = TemplateRenderer(agents_store)
 from backends.claude_code import ClaudeCodeBackend
 _backend = ClaudeCodeBackend()
-session_mgr = SessionManager(history_store=history, project_mgr=project_mgr, agents_store=agents_store, backend=_backend)
+async def _on_session_death(session_id: str):
+    await send_to_browser({"type": "session_terminated", "session_id": session_id})
+
+session_mgr = SessionManager(history_store=history, project_mgr=project_mgr, agents_store=agents_store, backend=_backend, on_session_death=_on_session_death)
 broker = MessageBroker()
 
 
 def _hist_prefix(session) -> str | None:
     """Get the history prefix for a session's project."""
     return project_mgr.get_history_prefix(session.project_slug)
-
-
-def _load_project_defaults() -> dict:
-    """Load default agent assignments from data/project-defaults.json."""
-    defaults_file = Path(__file__).parent / "templates" / "project-defaults.json"
-    if defaults_file.exists():
-        try:
-            data = json.loads(defaults_file.read_text())
-            return data.get("default_agents", {})
-        except (json.JSONDecodeError, KeyError):
-            pass
-    return {"managers": ["af_sky", "af_sarah"], "workers": ["af_alloy", "am_adam", "am_echo", "am_onyx"]}
 
 
 def _gen_msg_id() -> str:
@@ -712,29 +703,9 @@ async def set_project_status(session_id: str, request: Request):
     })
     # Persist to agents.json (authoritative store)
     await session_mgr._sync_agent_store(session.voice, session)
-    # Inject role into agent's CLAUDE.md and notify agent
+    # Write role rules to .claude/CLAUDE.md (Claude Code auto-detects the change)
     if "role" in data and session.work_dir:
-        claude_md = Path(session.work_dir) / "CLAUDE.md"
-        if claude_md.exists():
-            content = claude_md.read_text()
-            role_section = f"\n# Role\nYou are the **{session.role}**.\n"
-            if "\n# Role\n" in content:
-                # Replace existing role section
-                content = re.sub(r'\n# Role\n.*?(?=\n#|\Z)', role_section, content, flags=re.DOTALL)
-            else:
-                content = content.rstrip() + "\n" + role_section
-            claude_md.write_text(content)
-            log.info("[%s] Updated CLAUDE.md with role: %s", session_id, session.role)
-        # Send inter-agent message to notify agent of role change
-        try:
-            await _inbox_write_and_notify(session, {
-                "from": "system",
-                "type": "text",
-                "content": f"Your role has been updated to {session.role}. Reread your CLAUDE.md.",
-                "msg_id": _gen_msg_id(),
-            })
-        except Exception as e:
-            log.warning("[%s] Failed to notify agent of role change: %s", session_id, e)
+        await template_renderer.render_role_to_file(session.voice, Path(session.work_dir))
     return JSONResponse({"ok": True})
 
 
@@ -793,12 +764,10 @@ def _tool_status_text(tool_name: str, tool_input: dict) -> str:
         cmd = tool_input.get("command", "")
         desc = tool_input.get("description", "")
         preview = desc or cmd
-        if len(preview) > 40:
-            preview = preview[:37] + "..."
         return f"Running {preview}" if preview else "Running command"
     if tool_name == "Grep":
         pattern = tool_input.get("pattern", "")
-        return f"Searching for {pattern[:30]}" if pattern else "Searching"
+        return f"Searching for {pattern}" if pattern else "Searching"
     if tool_name == "WebFetch":
         url = tool_input.get("url", "")
         try:
@@ -1234,15 +1203,12 @@ async def create_project(request: Request):
         # Populate agents.json with project entry and default agent assignments
         from agents_store import ProjectEntry
         await agents_store.set_project(slug, ProjectEntry(display_name=name))
-        defaults = _load_project_defaults()
         voice_ids = project.get("voices", [])
-        manager_ids = set(defaults.get("managers", []))
         for vid in voice_ids:
             agent = await agents_store.get(vid)
             if agent is None:
                 from agents_store import AgentEntry
-                role = "manager" if vid in manager_ids else "worker"
-                await agents_store.set(vid, AgentEntry(project=slug, role=role))
+                await agents_store.set(vid, AgentEntry(project=slug))
             else:
                 # Update project assignment for existing agent
                 await agents_store.update(vid, project=slug)

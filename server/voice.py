@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import struct
+from pathlib import Path
 
 import httpx
 from fastapi import APIRouter, Request
@@ -267,17 +268,29 @@ def _strip_prefix_audio(audio_b64: str, timestamps: list, prefix: str) -> tuple[
 # ---------------------------------------------------------------------------
 
 def _get_stt_prompt() -> str:
-    """Read STT prompt from voicemode.env for Whisper vocabulary biasing."""
-    env_path = os.path.expanduser("~/.voicemode/voicemode.env")
+    """Read STT prompt for Whisper vocabulary biasing.
+
+    Checks (in order): CLAWMUX_STT_PROMPT env var, ClawMux .env file,
+    legacy VOICEMODE_STT_PROMPT env var.
+    """
+    # Check env var first
+    prompt = os.environ.get("CLAWMUX_STT_PROMPT")
+    if prompt:
+        return prompt
+    # Read from ClawMux .env file
+    env_path = Path(__file__).parent.parent / ".env"
     try:
         with open(env_path) as f:
             for line in f:
                 line = line.strip()
+                if line.startswith("CLAWMUX_STT_PROMPT="):
+                    return line.split("=", 1)[1].strip().strip('"').strip("'")
+                # Legacy fallback
                 if line.startswith("VOICEMODE_STT_PROMPT="):
-                    val = line.split("=", 1)[1].strip().strip('"').strip("'")
-                    return val
+                    return line.split("=", 1)[1].strip().strip('"').strip("'")
     except FileNotFoundError:
         pass
+    # Legacy env var fallback
     return os.environ.get("VOICEMODE_STT_PROMPT", "")
 
 async def stt(audio_bytes: bytes) -> str:
