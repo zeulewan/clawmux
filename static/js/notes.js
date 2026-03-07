@@ -26,6 +26,9 @@ function toggleNotesPanel() {
     const resp = await fetch('/api/settings');
     if (!resp.ok) return;
     const settings = await resp.json();
+    if (settings.notes_active_tab) {
+      switchNotesTab(settings.notes_active_tab, false);
+    }
     if (settings.notes_panel_open) {
       document.getElementById('notes-panel').classList.add('open');
       loadNotes();
@@ -33,12 +36,19 @@ function toggleNotesPanel() {
   } catch(e) {}
 })();
 
-function switchNotesTab(tab) {
+function switchNotesTab(tab, persist = true) {
   _activeNotesTab = tab;
   const tabs = document.querySelectorAll('#notes-panel-header .notes-tab');
   tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
   document.getElementById('notes-now').style.display = tab === 'now' ? '' : 'none';
   document.getElementById('notes-later').style.display = tab === 'later' ? '' : 'none';
+  if (persist) {
+    fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes_active_tab: tab }),
+    }).catch(() => {});
+  }
 }
 
 async function loadNotes() {
