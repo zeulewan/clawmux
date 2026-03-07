@@ -1,5 +1,6 @@
 """Per-voice persistent message history stored as JSON files."""
 
+import fcntl
 import json
 import logging
 import time
@@ -34,8 +35,15 @@ class HistoryStore:
             return {}
 
     def _save_data(self, voice_id: str, data: dict, project: str | None = None) -> None:
+        """Save data with file locking to prevent concurrent write corruption."""
+        path = self._path(voice_id, project)
         try:
-            self._path(voice_id, project).write_text(json.dumps(data, indent=2))
+            with open(path, "w") as f:
+                fcntl.flock(f, fcntl.LOCK_EX)
+                try:
+                    f.write(json.dumps(data, indent=2))
+                finally:
+                    fcntl.flock(f, fcntl.LOCK_UN)
         except Exception as e:
             log.error("Failed to save history for %s: %s", voice_id, e)
 
@@ -43,8 +51,7 @@ class HistoryStore:
         return self._load_data(voice_id, project).get("messages", [])
 
     def append(self, voice_id: str, voice_name: str, role: str, text: str, project: str | None = None, *, msg_id: str | None = None, parent_id: str | None = None, bare_ack: bool = False) -> None:
-        data = self._load_data(voice_id, project)
-        messages = data.get("messages", [])
+        path = self._path(voice_id, project)
         entry: dict = {"role": role, "text": text, "ts": time.time()}
         if msg_id:
             entry["id"] = msg_id
@@ -52,11 +59,26 @@ class HistoryStore:
             entry["parent_id"] = parent_id
         if bare_ack:
             entry["bare_ack"] = True
-        messages.append(entry)
-        if len(messages) > MAX_MESSAGES:
-            messages = messages[-MAX_MESSAGES:]
-        data.update({"voice_id": voice_id, "voice_name": voice_name, "messages": messages})
-        self._save_data(voice_id, data, project)
+        # Lock around the full read-modify-write to prevent concurrent appends
+        # from overwriting each other
+        with open(path, "a+") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            try:
+                f.seek(0)
+                raw = f.read()
+                data = json.loads(raw) if raw.strip() else {}
+                messages = data.get("messages", [])
+                messages.append(entry)
+                if len(messages) > MAX_MESSAGES:
+                    messages = messages[-MAX_MESSAGES:]
+                data.update({"voice_id": voice_id, "voice_name": voice_name, "messages": messages})
+                f.seek(0)
+                f.truncate()
+                f.write(json.dumps(data, indent=2))
+            except Exception as e:
+                log.error("Failed to append to history for %s: %s", voice_id, e)
+            finally:
+                fcntl.flock(f, fcntl.LOCK_UN)
 
     def clear(self, voice_id: str, project: str | None = None) -> None:
         path = self._path(voice_id, project)
