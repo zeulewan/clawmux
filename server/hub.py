@@ -54,9 +54,9 @@ log = logging.getLogger("hub")
 
 history = HistoryStore()
 project_mgr = ProjectManager()
-session_mgr = SessionManager(history_store=history, project_mgr=project_mgr)
-broker = MessageBroker()
 agents_store = AgentsStore()
+session_mgr = SessionManager(history_store=history, project_mgr=project_mgr, agents_store=agents_store)
+broker = MessageBroker()
 
 
 def _hist_prefix(session) -> str | None:
@@ -681,6 +681,8 @@ async def set_project_status(session_id: str, request: Request):
             )
         except Exception as e:
             log.warning("[%s] Failed to persist project status: %s", session_id, e)
+    # Dual-write: update agents.json with project info
+    await session_mgr._sync_agent_store(session.voice, session)
     return JSONResponse({"ok": True})
 
 

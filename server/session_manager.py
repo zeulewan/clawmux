@@ -19,6 +19,7 @@ from hub_config import (
     TMUX_SESSION_PREFIX,
     VOICES,
 )
+from agents_store import AgentEntry, AgentsStore
 from project_manager import ProjectManager
 from state_machine import AgentState
 
@@ -108,12 +109,34 @@ class Session:
 
 
 class SessionManager:
-    def __init__(self, history_store=None, project_mgr: ProjectManager | None = None) -> None:
+    def __init__(self, history_store=None, project_mgr: ProjectManager | None = None,
+                 agents_store: AgentsStore | None = None) -> None:
         self.sessions: dict[str, Session] = {}
         self._counter = 0
         self.history_store = history_store
         self.project_mgr = project_mgr or ProjectManager()
+        self.agents_store = agents_store
         SESSION_DIR_BASE.mkdir(parents=True, exist_ok=True)
+
+    async def _sync_agent_store(self, voice_id: str, session: Session | None = None, **overrides) -> None:
+        """Dual-write: update agents.json for a voice. If session is None, marks agent as dead."""
+        if not self.agents_store:
+            return
+        if session is None:
+            await self.agents_store.update(voice_id, session_id=None, state="dead")
+            return
+        entry = AgentEntry(
+            session_id=session.session_id,
+            project=session.project or None,
+            area=session.project_area or "",
+            last_active=session.last_activity,
+            model=session.model or "opus",
+            state=session.state.value if hasattr(session.state, 'value') else str(session.state),
+        )
+        for k, v in overrides.items():
+            if hasattr(entry, k):
+                setattr(entry, k, v)
+        await self.agents_store.set(voice_id, entry)
 
     async def cleanup_stale_sessions(self) -> None:
         """Adopt orphaned voice-* tmux sessions from previous hub runs."""
@@ -238,6 +261,8 @@ class SessionManager:
                      old_session_id, voice_id, old_session_id, session.model)
             # Apply agent-colored status bar to adopted session
             await self._apply_agent_status_bar(old_session_id, voice_name, voice_id)
+            # Dual-write: populate agents.json from adopted session
+            await self._sync_agent_store(voice_id, session)
 
         if adopted:
             log.info("Adopted %d orphaned session(s)", adopted)
@@ -407,6 +432,9 @@ class SessionManager:
                 "session_id": session_id,
                 "voice": voice_id,
             }))
+
+            # Dual-write: update agents.json
+            await self._sync_agent_store(voice_id, session)
 
             # Check if we can resume a previous Claude session for this voice
             claude_session_id = None
@@ -673,10 +701,13 @@ class SessionManager:
             return
 
         log.info("Terminating session %s", session_id)
+        voice_id = session.voice
         session.set_state(AgentState.DEAD)
         await self._cleanup_tmux(session.tmux_session)
         self._cleanup_workdir(session)
         del self.sessions[session_id]
+        # Dual-write: mark agent as dead in agents.json
+        await self._sync_agent_store(voice_id)
 
     async def restart_claude_with_model(self, session_id: str) -> None:
         """Kill and respawn Claude in existing tmux with new model, resuming conversation."""
@@ -804,8 +835,11 @@ class SessionManager:
                 alive = await self.check_health(session)
                 if not alive:
                     log.warning("Session %s tmux died, cleaning up", session_id)
+                    voice_id = session.voice
                     self._cleanup_workdir(session)
                     del self.sessions[session_id]
+                    # Dual-write: mark agent as dead in agents.json
+                    await self._sync_agent_store(voice_id)
                     continue
 
                 # Voice mode watchdog: detect agents that dropped out of wait loop
