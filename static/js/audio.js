@@ -1163,6 +1163,9 @@ function karaokeSeekTo(startTime) {
 
 // Play message TTS from a specific offset (or beginning). Uses cached buffer if available.
 async function karaokePlayFromWord(msgEl, startTime, fetchId, clickedWord = false, clickedWordText = null) {
+  // Resume AudioContext immediately in user gesture context (before any async gaps)
+  if (audioCtx.state === 'suspended') await audioCtx.resume();
+
   const voiceId = msgEl.dataset.voice || (activeSessionId ? sessions.get(activeSessionId)?.voice : null) || 'af_sky';
   const s = activeSessionId ? sessions.get(activeSessionId) : null;
   const speed = s ? (s.speed || 1.0) : 1.0;
@@ -1183,8 +1186,6 @@ async function karaokePlayFromWord(msgEl, startTime, fetchId, clickedWord = fals
       if (!resp.ok) throw new Error('TTS failed');
       const { audio_b64, words } = await resp.json();
       const bytes = Uint8Array.from(atob(audio_b64), c => c.charCodeAt(0));
-      const ready = audioCtx.state === 'suspended' ? audioCtx.resume() : Promise.resolve();
-      await ready;
       decoded = await audioCtx.decodeAudioData(bytes.buffer);
       realWords = words ? words.filter(w => /\w/.test(w.word)) : [];
       msgEl._ttsCache = { decoded, words: realWords };
