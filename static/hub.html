@@ -673,10 +673,12 @@ body {
   /* Voice color background applied via JS */
 }
 .karaoke-word { cursor: pointer; transition: transform 0.1s ease, text-shadow 0.1s ease, background 0.1s ease; display: inline-block; border-radius: 3px; }
-.karaoke-word:hover {
-  background: var(--voice-color-bg, transparent);
-  text-shadow: 0 0 0.6px currentColor, 0 0 0.6px currentColor;
-  transform: scale(1.05);
+@media (hover: hover) {
+  .karaoke-word:hover {
+    background: var(--voice-color-bg, transparent);
+    text-shadow: 0 0 0.6px currentColor, 0 0 0.6px currentColor;
+    transform: scale(1.05);
+  }
 }
 .karaoke-word.active {
   background: var(--voice-color-bg, transparent);
@@ -1579,23 +1581,25 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
         <div class="toggle-info"><span class="toggle-name">Enabled</span><span class="toggle-desc">Speak responses aloud, enable karaoke highlighting and play buttons</span></div>
         <div class="toggle-indicator on" id="toggle-tts_enabled"></div>
       </div>
-      <div id="deploy-tts-url-row" class="settings-inline" style="padding:8px 16px;">
-        <span class="toggle-name">TTS URL</span>
-        <input id="deploy-tts-url" type="text" placeholder="http://127.0.0.1:8880" style="width:55%; padding:4px 8px; font-size:0.8rem; border:1px solid var(--border); border-radius:6px; background:var(--bg-card); color:var(--text); font-family:inherit;">
-      </div>
-      <div class="settings-inline" style="padding:8px 16px;">
-        <span class="toggle-name">Playback Speed</span>
-        <select id="speed-select" onchange="changeSpeed(this.value)" style="width:auto; padding:4px 8px; font-size:0.8rem;">
-          <option value="0.75">0.75x</option>
-          <option value="1.0" selected>1x</option>
-          <option value="1.25">1.25x</option>
-          <option value="1.5">1.5x</option>
-          <option value="2.0">2x</option>
-        </select>
-      </div>
-      <div class="settings-toggle" onclick="toggleSetting('auto_interrupt')">
-        <div class="toggle-info"><span class="toggle-name">Auto Interrupt</span><span class="toggle-desc">Stop playback when you start talking</span></div>
-        <div class="toggle-indicator" id="toggle-auto_interrupt"></div>
+      <div id="tts-sub-settings">
+        <div id="deploy-tts-url-row" class="settings-inline" style="padding:8px 16px;">
+          <span class="toggle-name">TTS URL</span>
+          <input id="deploy-tts-url" type="text" placeholder="http://127.0.0.1:8880" style="width:55%; padding:4px 8px; font-size:0.8rem; border:1px solid var(--border); border-radius:6px; background:var(--bg-card); color:var(--text); font-family:inherit;">
+        </div>
+        <div class="settings-inline" style="padding:8px 16px;">
+          <span class="toggle-name">Playback Speed</span>
+          <select id="speed-select" onchange="changeSpeed(this.value)" style="width:auto; padding:4px 8px; font-size:0.8rem;">
+            <option value="0.75">0.75x</option>
+            <option value="1.0" selected>1x</option>
+            <option value="1.25">1.25x</option>
+            <option value="1.5">1.5x</option>
+            <option value="2.0">2x</option>
+          </select>
+        </div>
+        <div class="settings-toggle" onclick="toggleSetting('auto_interrupt')">
+          <div class="toggle-info"><span class="toggle-name">Auto Interrupt</span><span class="toggle-desc">Stop playback when you start talking</span></div>
+          <div class="toggle-indicator" id="toggle-auto_interrupt"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -1607,25 +1611,27 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
         <div class="toggle-info"><span class="toggle-name">Enabled</span><span class="toggle-desc">Enable microphone recording and voice input</span></div>
         <div class="toggle-indicator on" id="toggle-stt_enabled"></div>
       </div>
-      <div id="deploy-stt-url-row" class="settings-inline" style="padding:8px 16px;">
-        <span class="toggle-name">STT URL</span>
-        <input id="deploy-stt-url" type="text" placeholder="http://127.0.0.1:2022" style="width:55%; padding:4px 8px; font-size:0.8rem; border:1px solid var(--border); border-radius:6px; background:var(--bg-card); color:var(--text); font-family:inherit;">
-      </div>
-      <div class="settings-inline" style="padding:8px 16px;">
-        <div class="toggle-info"><span class="toggle-name">Whisper Model</span><span class="toggle-desc">STT model quality — larger models are slower but more accurate</span></div>
-        <select id="deploy-quality-select" style="width:auto; padding:4px 8px; font-size:0.8rem;">
-          <option value="high">High (large-v3)</option>
-          <option value="medium">Medium (medium)</option>
-          <option value="low">Low (base)</option>
-        </select>
-      </div>
-      <div class="settings-toggle" onclick="toggleSetting('auto_record')">
-        <div class="toggle-info"><span class="toggle-name">Auto Record</span><span class="toggle-desc">Start recording when agent finishes speaking</span></div>
-        <div class="toggle-indicator" id="toggle-auto_record"></div>
-      </div>
-      <div class="settings-toggle" onclick="toggleSetting('auto_end')">
-        <div class="toggle-info"><span class="toggle-name">Auto End</span><span class="toggle-desc">Stop recording after silence is detected</span></div>
-        <div class="toggle-indicator on" id="toggle-auto_end"></div>
+      <div id="stt-sub-settings">
+        <div id="deploy-stt-url-row" class="settings-inline" style="padding:8px 16px;">
+          <span class="toggle-name">STT URL</span>
+          <input id="deploy-stt-url" type="text" placeholder="http://127.0.0.1:2022" style="width:55%; padding:4px 8px; font-size:0.8rem; border:1px solid var(--border); border-radius:6px; background:var(--bg-card); color:var(--text); font-family:inherit;">
+        </div>
+        <div class="settings-inline" style="padding:8px 16px;">
+          <div class="toggle-info"><span class="toggle-name">Whisper Model</span><span class="toggle-desc">STT model quality — larger models are slower but more accurate</span></div>
+          <select id="deploy-quality-select" style="width:auto; padding:4px 8px; font-size:0.8rem;">
+            <option value="high">High (large-v3)</option>
+            <option value="medium">Medium (medium)</option>
+            <option value="low">Low (base)</option>
+          </select>
+        </div>
+        <div class="settings-toggle" onclick="toggleSetting('auto_record')">
+          <div class="toggle-info"><span class="toggle-name">Auto Record</span><span class="toggle-desc">Start recording when agent finishes speaking</span></div>
+          <div class="toggle-indicator" id="toggle-auto_record"></div>
+        </div>
+        <div class="settings-toggle" onclick="toggleSetting('auto_end')">
+          <div class="toggle-info"><span class="toggle-name">Auto End</span><span class="toggle-desc">Stop recording after silence is detected</span></div>
+          <div class="toggle-indicator on" id="toggle-auto_end"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -2406,10 +2412,10 @@ async function updateSetting(key, value) {
 
 // --- Deployment mode settings ---
 function updateServiceUrlVisibility() {
-  const ttsRow = document.getElementById('deploy-tts-url-row');
-  const sttRow = document.getElementById('deploy-stt-url-row');
-  if (ttsRow) ttsRow.style.display = ttsEnabled ? '' : 'none';
-  if (sttRow) sttRow.style.display = sttEnabled ? '' : 'none';
+  const ttsSub = document.getElementById('tts-sub-settings');
+  const sttSub = document.getElementById('stt-sub-settings');
+  if (ttsSub) ttsSub.style.display = ttsEnabled ? '' : 'none';
+  if (sttSub) sttSub.style.display = sttEnabled ? '' : 'none';
 }
 
 async function loadDeploymentConfig() {
