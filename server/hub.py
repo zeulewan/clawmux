@@ -694,17 +694,47 @@ async def set_project_status(session_id: str, request: Request):
     if not session:
         return JSONResponse({"error": "session not found"}, status_code=404)
     data = await request.json()
-    session.project = data.get("project", "")
-    session.project_area = data.get("area", "")
-    log.info("[%s] Project status: %s / %s", session_id, session.project, session.project_area)
+    session.project = data.get("project", session.project)
+    session.project_area = data.get("area", session.project_area)
+    if "role" in data:
+        session.role = data["role"]
+    if "task" in data:
+        session.task = data["task"]
+    log.info("[%s] Project status: %s / %s (role=%s, task=%s)",
+             session_id, session.project, session.project_area, session.role, session.task)
     await send_to_browser({
         "type": "project_status",
         "session_id": session_id,
         "project": session.project,
         "area": session.project_area,
+        "role": session.role,
+        "task": session.task,
     })
     # Persist to agents.json (authoritative store)
     await session_mgr._sync_agent_store(session.voice, session)
+    # Inject role into agent's CLAUDE.md and notify agent
+    if "role" in data and session.work_dir:
+        claude_md = Path(session.work_dir) / "CLAUDE.md"
+        if claude_md.exists():
+            content = claude_md.read_text()
+            role_section = f"\n# Role\nYou are the **{session.role}**.\n"
+            if "\n# Role\n" in content:
+                # Replace existing role section
+                content = re.sub(r'\n# Role\n.*?(?=\n#|\Z)', role_section, content, flags=re.DOTALL)
+            else:
+                content = content.rstrip() + "\n" + role_section
+            claude_md.write_text(content)
+            log.info("[%s] Updated CLAUDE.md with role: %s", session_id, session.role)
+        # Send inter-agent message to notify agent of role change
+        try:
+            await _inbox_write_and_notify(session, {
+                "from": "system",
+                "type": "text",
+                "content": f"Your role has been updated to {session.role}. Reread your CLAUDE.md.",
+                "msg_id": _gen_msg_id(),
+            })
+        except Exception as e:
+            log.warning("[%s] Failed to notify agent of role change: %s", session_id, e)
     return JSONResponse({"ok": True})
 
 

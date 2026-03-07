@@ -7,7 +7,7 @@
 //             vadEnabled, vadInterval, vadDetectedSpeech, currentAudio,
 //             currentBufferedPlayer, persistentStream, autoInterruptEnabled,
 //             playbackVadInterval, playbackVadCtx, thinkingSoundsEnabled,
-//             audioCuesEnabled, voiceResponsesEnabled, playbackPaused,
+//             audioCuesEnabled, ttsEnabled, sttEnabled, playbackPaused,
 //             pausedBuffer, pauseOffset, pausedSessionId, playbackStartTime,
 //             recordingSessionId, mediaRecorder, audioChunks,
 //             pendingListenSessionId, spawningVoices
@@ -972,7 +972,7 @@ let _karaokeActiveIdx = -1;
 const _pendingKaraokeWords = new Map(); // sessionId -> words[]
 
 function karaokeSetupMessage(sessionId, words) {
-  if (!voiceResponsesEnabled || textOnlyEnabled) return;
+  if (!ttsEnabled) return;
   // Filter to real (non-punctuation/symbol) words only
   const realWords = words.filter(w => /[\p{L}\p{N}]/u.test(w.word));
   if (realWords.length === 0) return;
@@ -987,7 +987,7 @@ function karaokeSetupMessage(sessionId, words) {
 }
 
 function _applyKaraokeSpans(msgEl, realWords) {
-  if (textOnlyEnabled) return;
+  if (!ttsEnabled) return;
   const mdContent = msgEl.querySelector('.md-content');
 
   // If message has markdown-rendered content, apply timestamps to existing karaoke-word spans
@@ -1087,7 +1087,7 @@ function _applyKaraokeSpans(msgEl, realWords) {
 
 function karaokeStart(audioRef, words) {
   karaokeStop();
-  if (!voiceResponsesEnabled) return;
+  if (!ttsEnabled) return;
   if (!words || !words.length) return;
   const activeWords = words.filter(w => w.el);
   if (!activeWords.length) return;
@@ -1240,7 +1240,7 @@ let _karaokeFetchId = 0; // incremented on each new click to cancel stale async 
 chatArea.addEventListener('click', async (e) => {
   // On mobile, skip if a long-press context menu just fired
   if (isMobile && _longPressFired) { _longPressFired = false; return; }
-  if (textOnlyEnabled) return; // no audio in text-only mode
+  if (!ttsEnabled) return; // no audio when TTS is disabled
   const msgEl = e.target.closest('.msg.assistant');
   if (!msgEl) return;
   if (e.target.closest('.msg-actions')) return; // let action buttons handle themselves
@@ -1354,6 +1354,13 @@ function updateMicUI() {
 
   micBtn.classList.remove('recording', 'interruptable', 'processing', 'connecting');
 
+  // Keep mic hidden when STT is off
+  if (!sttEnabled) {
+    micBtn.style.display = 'none';
+    micCancelBtn.style.display = 'none';
+    return;
+  }
+
   if (isPlaying) {
     // During playback: mic = interrupt/stop
     micBtn.style.display = 'flex';
@@ -1396,6 +1403,7 @@ async function getMicStream() {
 
 // --- Recording ---
 async function startRecording(sessionId) {
+  if (!sttEnabled) return;
   recordingSessionId = sessionId;
   // Interrupt any ongoing playback so voice doesn't continue while recording
   if (currentAudio || currentBufferedPlayer) {
@@ -1570,6 +1578,7 @@ micBtn.addEventListener('click', (e) => {
   // If PTT is active (spacebar held), ignore click events
   if (pttActive) return;
   if (micBtn.disabled) return;
+  if (!sttEnabled) return;
 
   // Interrupt: tap during playback → stop audio, hub sends listening next
   if (currentAudio || currentBufferedPlayer) {
@@ -1603,7 +1612,7 @@ micBtn.addEventListener('click', (e) => {
 
 // --- Push-to-Talk: hold to record, release to send ---
 function pttStart(e) {
-  if (inputMode !== 'voice' || micBtn.disabled) return;
+  if (!sttEnabled || inputMode !== 'voice' || micBtn.disabled) return;
   e.preventDefault();
   // Stop auto-recording if active so PTT takes over cleanly
   if (recording && !pttActive) stopRecording(true);
