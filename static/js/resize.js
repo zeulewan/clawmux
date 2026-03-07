@@ -73,7 +73,10 @@
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
         panel.style.transition = '';
-        _scheduleSave(key, parseInt(panel.style.width));
+        const savedW = key === 'notes'
+          ? parseInt(panel.style.getPropertyValue('--notes-width'))
+          : parseInt(panel.style.width);
+        _scheduleSave(key, savedW);
       }
 
       document.addEventListener('mousemove', onMove);
