@@ -105,11 +105,13 @@ async function _refreshHistory(sessionId, voiceId) {
       (serverLen > 0 && (!lastLocal || lastServer.text !== lastLocal.text || lastServer.role !== lastLocal.role));
     if (needsSync) {
       console.log(`[historySync] ${sessionId}: syncing — server=${serverLen} local=${localLen}`, lastServer?.text?.slice(0,50), lastLocal?.text?.slice(0,50));
-      // Preserve local-only system messages (e.g. "Claude connected") but
-      // deduplicate ones already in server history (e.g. agent messages)
+      // Preserve local-only system messages (e.g. "Claude connected") and
+      // merge them into server messages by timestamp instead of prepending
       const serverSystemTexts = new Set(serverMessages.filter(m => m.role === 'system').map(m => m.text));
       const uniqueLocalSystem = s.messages.filter(m => m.role === 'system' && !serverSystemTexts.has(m.text));
-      s.messages = [...uniqueLocalSystem, ...serverMessages];
+      const merged = [...uniqueLocalSystem, ...serverMessages];
+      merged.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+      s.messages = merged;
       if (sessionId === activeSessionId) {
         // Save karaoke state before renderChat destroys DOM refs
         let savedKaraokeWords = null;
