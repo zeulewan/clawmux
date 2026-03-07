@@ -2386,6 +2386,8 @@ async function toggleSetting(key) {
 function applyTtsMode(off) {
   document.body.classList.toggle('tts-disabled', off);
   if (off && typeof stopActiveAudio === 'function') stopActiveAudio();
+  const spkSel = document.getElementById('speaker-select');
+  if (spkSel) spkSel.style.display = off ? 'none' : '';
 }
 
 function applySttMode(off) {
@@ -2395,6 +2397,9 @@ function applySttMode(off) {
   // Hide/show mic button and waveform
   const micWrapperEl = document.getElementById('mic-wrapper');
   if (micWrapperEl) micWrapperEl.style.display = off ? 'none' : '';
+  // Hide/show mic device selector in header
+  const micSel = document.getElementById('mic-select');
+  if (micSel) micSel.style.display = off ? 'none' : '';
   if (off) {
     // Stop any active recording
     if (typeof recording !== 'undefined' && recording && typeof stopRecording === 'function') stopRecording(true);
