@@ -2407,6 +2407,8 @@ function applySttMode(off) {
     if (typeof inputMode !== 'undefined') {
       inputMode = 'typing';
       if (typeof saveInputMode === 'function') saveInputMode();
+      // Always sync mode toggle text (even on settings page where applyInputMode is skipped)
+      if (modeToggleEl) modeToggleEl.innerHTML = '<span class="mode-value">Typing</span><span class="mode-label">Mode</span>';
       if (activeSessionId && document.getElementById('settings-page').style.display !== 'block') {
         if (typeof applyInputMode === 'function') applyInputMode();
       }
