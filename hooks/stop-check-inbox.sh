@@ -28,7 +28,7 @@ SENTINEL="${WORK_DIR}/.hook_delivered"
 # Check if a message was already delivered via hooks this cycle
 if [ -f "$SENTINEL" ]; then
     rm -f "$SENTINEL"
-    echo "You received a message during your last task — it was delivered to you via hooks above. Scroll up, find it, and respond to it now. Do NOT call clawmux wait." >&2
+    echo "A message was delivered to you via hooks during your last task (look for [MSG] or [VOICE] in system reminders above). If you already responded to it, run \`clawmux wait\` now. If you have not responded yet, do so now, then run \`clawmux wait\`." >&2
     exit 2
 fi
 
