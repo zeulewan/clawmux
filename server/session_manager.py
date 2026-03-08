@@ -165,6 +165,7 @@ class SessionManager:
         known_session_names: set[str] = set()
         for vid, vname in VOICE_POOL:
             known_session_names.add(vname.lower())  # flat: "sky"
+            known_session_names.add(vid)  # voice_id: "bm_daniel" (legacy naming)
             known_session_names.add(f"{TMUX_SESSION_PREFIX}-{vname.lower()}")  # legacy: "voice-sky"
         for slug, proj in self.project_mgr.projects.items():
             if slug != "default":

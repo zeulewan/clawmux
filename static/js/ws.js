@@ -87,6 +87,7 @@ async function _reconnectSyncSession(sessionId, voiceId) {
     const newMessages = (hist.messages || []).map(m => {
       const obj = { role: m.role, text: m.text };
       if (m.id) obj.id = m.id;
+      if (m.ts) obj.ts = m.ts;
       if (m.parent_id) obj.parentId = m.parent_id;
       if (m.bare_ack) obj.isBareAck = true;
       return obj;
@@ -278,6 +279,13 @@ function handleMessage(data) {
       if (data.status === 'ready' && !data.silent) {
         cueSessionReady();
         addMessage(data.session_id, 'system', 'Claude connected.');
+        // Remove "Waiting for Claude..." in minimal mode
+        if (!activityVerbose) {
+          const s = sessions.get(data.session_id);
+          if (s) s.messages = s.messages.filter(m => m.id !== 'waiting-for-claude-' + data.session_id);
+          const waitEl = chatArea && chatArea.querySelector('[data-msg-id="waiting-for-claude-' + data.session_id + '"]');
+          if (waitEl) waitEl.remove();
+        }
       }
       updateThinkingLabel(data.session_id);
     }

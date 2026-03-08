@@ -158,6 +158,7 @@ body {
 
 /* Sidebar */
 #sidebar-settings-btn { display: none; }
+#sidebar-tray { display: none; }
 #sidebar {
   width: 220px;
   min-width: 140px;
@@ -176,8 +177,10 @@ body {
   flex-direction: column;
   gap: 2px;
   flex: 1;
-  overflow-y: auto;
+  overflow-y: scroll;
+  scrollbar-width: none; /* Firefox */
 }
+#sidebar-list::-webkit-scrollbar { display: none; } /* Chrome/Safari */
 #sidebar-expand-btn {
   flex-shrink: 0;
 }
@@ -313,7 +316,10 @@ body {
 }
 .sidebar-card .sb-status > span:not(.sb-dot) {
   min-width: 0;
-  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .sidebar-card .sb-dot {
   width: 6px;
@@ -464,7 +470,7 @@ body {
   padding: 10px 12px;
   border-radius: 10px;
   cursor: pointer;
-  display: flex;
+  display: none !important;
   align-items: center;
   gap: 10px;
   border: 1px solid transparent;
@@ -680,7 +686,7 @@ body {
 }
 
 /* Header links */
-#debug-link, #settings-link, #notes-link {
+#debug-link, #settings-link, #notes-link, #focus-link {
   font-size: 0.7rem;
   font-weight: 500;
   color: var(--text-tertiary);
@@ -690,7 +696,7 @@ body {
   border-radius: var(--radius-xs);
   transition: all 0.15s;
 }
-#debug-link:hover, #settings-link:hover, #notes-link:hover {
+#debug-link:hover, #settings-link:hover, #notes-link:hover, #focus-link:hover {
   color: var(--text-secondary);
   background: var(--bg-card);
 }
@@ -1689,7 +1695,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   #sidebar.expanded .sidebar-project-header .project-name,
   #sidebar.expanded .sidebar-project-header .project-agent-count { opacity: 1; pointer-events: auto; transition: opacity 0.15s ease-out 0.2s; }
   /* sb-info out of flow — starts past sidebar edge so no partial chars during slide */
-  .sidebar-card .sb-info { position: absolute; left: 56px; top: 0; bottom: 0; right: 4px; overflow: hidden; display: flex; flex-direction: column; justify-content: center; gap: 1px; }
+  .sidebar-card .sb-info { position: absolute; left: 56px; top: 0; bottom: 0; width: 140px; overflow: hidden; display: flex; flex-direction: column; justify-content: center; gap: 1px; opacity: 1; }
   /* Remove min-heights that inflate the block */
   .sidebar-card .sb-status { min-height: 0 !important; }
   .sidebar-card .sb-task { min-height: 0 !important; }
@@ -1700,7 +1706,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
     width: 7px;
     height: 7px;
   }
-  #sidebar-list { padding-left: 0; padding-right: 0; }
+  #sidebar-list { padding-left: 0; padding-right: 0; overflow-x: hidden; }
   .sidebar-card {
     justify-content: flex-start;
     padding: 10px 8px;
@@ -1742,31 +1748,43 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 
   /* Hide focus card on mobile */
   .sidebar-focus-card { display: none !important; }
-  /* Hide notes/settings from header on mobile — they live in the sidebar drawer */
+  /* Hide notes/settings/focus from header on mobile — they live in the sidebar drawer */
   #settings-link { display: none !important; }
   #notes-link { display: none !important; }
+  #focus-link { display: none !important; }
   /* Notes + Settings buttons in sidebar drawer */
-  #sidebar-notes-btn { display: none; }
-  #sidebar-settings-btn { display: none; }
-  #sidebar.expanded #sidebar-notes-btn,
-  #sidebar.expanded #sidebar-notes-btn,
-  #sidebar.expanded #sidebar-settings-btn {
+  /* Tray: fixed 200px wide so children don't shrink; sidebar overflow clips it */
+  #sidebar-tray {
     display: flex;
+    flex-direction: row;
     align-items: center;
-    gap: 10px;
-    padding: 8px 10px;
-    margin: 0 8px 8px;
-    border-radius: 10px;
+    width: 200px;
+    flex-shrink: 0;
+    height: 52px;
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -6px 16px rgba(0,0,0,0.18);
+    background: var(--bg-glass);
+  }
+  #sidebar-notes-btn, #sidebar-settings-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    flex: 1;
+    height: 100%;
+    padding: 6px 4px;
     cursor: pointer;
     color: var(--text-secondary);
-    font-size: 0.8rem;
+    font-size: 0.6rem;
     font-weight: 500;
     border: none;
     background: none;
-    width: calc(100% - 16px);
+    white-space: nowrap;
+    border-radius: 0;
   }
-  #sidebar.expanded #sidebar-notes-btn:hover,
-  #sidebar.expanded #sidebar-settings-btn:hover { background: var(--hover-bg); }
+  #sidebar-notes-btn:hover,
+  #sidebar-settings-btn:hover { background: var(--hover-bg); }
 
   /* More bottom clearance for the taller mobile pill (80px mic) */
   #chat-area { padding-bottom: 190px; }
@@ -1802,11 +1820,19 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
     min-width: 0;
   }
 
-  /* Sidebar expand toggle — larger touch target */
+  /* Hamburger: 48px = collapsed sidebar width, always the first thing visible */
   #sidebar-expand-btn {
-    display: flex !important;
-    padding: 16px 0 !important;
-    font-size: 1.4rem !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    min-width: 48px;
+    flex-shrink: 0;
+    height: 100%;
+    font-size: 1.4rem;
+    cursor: pointer;
+    color: var(--text-secondary);
+    border-right: 1px solid var(--border);
   }
 
   /* Expanded sidebar on mobile — just width, everything else is always ready */
@@ -1814,14 +1840,15 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
     width: 200px;
     box-shadow: 4px 0 24px rgba(0,0,0,0.4);
   }
+  /* Normalize all text sizes on mobile — same whether expanded or not so no flash on toggle */
+  .sidebar-card .sb-name { font-size: 0.7rem; line-height: 1.1; }
+  .sidebar-card .sb-status { font-size: 0.5rem; margin-top: 0; gap: 3px; }
+  .sidebar-card .sb-dot { width: 5px; height: 5px; }
+  .sidebar-card .sb-area { font-size: 0.42rem; margin-top: 0; }
+  .sidebar-card .sb-role { font-size: 0.45rem; margin-top: 0; line-height: 1.1; }
+  .sidebar-card .sb-task { font-size: 0.5rem; margin-top: 0; line-height: 1.1; }
+  .sidebar-card .sb-compacting { font-size: 0.45rem; margin-top: 0; }
   #sidebar.expanded .sb-info { pointer-events: auto; }
-  #sidebar.expanded .sidebar-card .sb-name { font-size: 0.7rem; line-height: 1.1; }
-  #sidebar.expanded .sidebar-card .sb-status { font-size: 0.5rem; margin-top: 0; gap: 3px; }
-  #sidebar.expanded .sidebar-card .sb-dot { width: 5px; height: 5px; }
-  #sidebar.expanded .sidebar-card .sb-area { font-size: 0.42rem; margin-top: 0; }
-  #sidebar.expanded .sidebar-card .sb-role { font-size: 0.45rem; margin-top: 0; line-height: 1.1; }
-  #sidebar.expanded .sidebar-card .sb-task { font-size: 0.5rem; margin-top: 0; line-height: 1.1; }
-  #sidebar.expanded .sidebar-card .sb-compacting { font-size: 0.45rem; margin-top: 0; }
   @keyframes fadeSlideIn {
     from { opacity: 0; transform: translateX(-8px); }
     to { opacity: 1; transform: translateX(0); }
@@ -1963,6 +1990,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
     <div id="dot" class="connecting"></div>
     <span id="conn-label">Connecting...</span>
   </div>
+  <span id="focus-link" onclick="switchToFocus()">Focus</span>
   <span id="notes-link" onclick="toggleNotesPanel()">Notes</span>
   <span id="settings-link" onclick="showSettingsPage()">Settings</span>
   <!-- Debug link removed — accessible from Settings page -->
@@ -1978,15 +2006,17 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
     <div class="sidebar-focus-icon"><svg viewBox="0 0 24 24" fill="currentColor" style="width:1em;height:1em"><path fill-rule="evenodd" d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm0 3a7 7 0 1 1 0 14A7 7 0 0 1 12 5zm0 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/></svg></div>
     <span>Focus</span>
   </div>
-  <button id="sidebar-notes-btn" onclick="collapseSidebar(); toggleNotesPanel();">
-    <span style="font-size:1rem;">📝</span>
-    <span>Notes</span>
-  </button>
-  <button id="sidebar-settings-btn" onclick="collapseSidebar(); showSettingsPage();">
-    <span style="font-size:1rem;">⚙</span>
-    <span>Settings</span>
-  </button>
-  <div id="sidebar-expand-btn" style="display:none; align-items:center; justify-content:center; padding:8px; cursor:pointer; border-top:1px solid var(--border); color:var(--text-tertiary); font-size:0.7rem;" onclick="toggleSidebarExpand()">&#9776;</div>
+  <div id="sidebar-tray">
+    <div id="sidebar-expand-btn" onclick="toggleSidebarExpand()">&#9776;</div>
+    <button id="sidebar-notes-btn" onclick="collapseSidebar(); toggleNotesPanel();">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M3 5h2V3H3v2zm4 0h10V3H7v2zm4 4H7V7h4v2zm6 0h-4V7h4v2zm-6 4H7v-2h4v2zm6 0h-4v-2h4v2zm-2 4H7v-2h8v2zM3 9h2V7H3v2zm0 4h2v-2H3v2zm0 4h2v-2H3v2z"/></svg>
+      <span>Notes</span>
+    </button>
+    <button id="sidebar-settings-btn" onclick="collapseSidebar(); showSettingsPage();">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.03 7.03 0 0 0-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87a.48.48 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.01-1.58zM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2z"/></svg>
+      <span>Settings</span>
+    </button>
+  </div>
 </div>
 <div id="sidebar-overlay" onclick="collapseSidebar()"></div>
 
@@ -2017,7 +2047,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   </div>
   <div id="mic-wrapper">
     <button id="mic-cancel" class="btn-icon" title="Cancel recording" onclick="cancelRecording()">&#10005;</button>
-    <button class="btn-icon transport-btn" id="transport-pause" style="display:none;" onclick="transportPause()" title="Pause">&#9208;</button>
+    <button class="btn-icon transport-btn" id="transport-pause" style="display:none;" onclick="transportPause()" title="Pause"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><rect x="6" y="5" width="4" height="14" rx="1.5"/><rect x="14" y="5" width="4" height="14" rx="1.5"/></svg></button>
     <button id="mic" disabled><svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg></button>
   </div>
   <div id="controls-right">

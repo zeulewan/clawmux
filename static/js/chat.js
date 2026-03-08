@@ -290,7 +290,13 @@ function _showPermanentAck(msgEl, count) {
     badge.className = 'msg-ack-permanent';
     badge.textContent = '\uD83D\uDC4D';
     badge.title = '1 ack';
-    msgEl.appendChild(badge);
+    // For agent messages, place badge inline inside the header (right next to arrow+name)
+    if (msgEl.classList.contains('agent-msg')) {
+      const header = msgEl.querySelector('.agent-msg-header');
+      (header || msgEl).appendChild(badge);
+    } else {
+      msgEl.appendChild(badge);
+    }
     // Make ack button invisible but keep it in flow so copy button doesn't shift position
     const ackBtn = msgEl.querySelector('.msg-ack-btn');
     if (ackBtn) { ackBtn.style.opacity = '0'; ackBtn.style.pointerEvents = 'none'; ackBtn.style.cursor = 'default'; }
@@ -522,7 +528,7 @@ function addMessage(sessionId, role, text, opts = {}) {
   if (!s) return;
   // Dedup: skip if a message with the same ID already exists in the store
   if (opts.id && s.messages.some(m => m.id === opts.id)) return;
-  const msgObj = { role, text, ts: Date.now() / 1000 };
+  const msgObj = { role, text, ts: opts.ts || Date.now() / 1000 };
   if (opts.id) msgObj.id = opts.id;
   if (opts.parentId) msgObj.parentId = opts.parentId;
   if (opts.isBareAck) msgObj.isBareAck = true;
@@ -563,7 +569,7 @@ function addMessage(sessionId, role, text, opts = {}) {
         const el = createMsgEl(role, text, vc, s.voice, msgObj);
         chatArea.appendChild(el);
       }
-      if (wasNearBottom) chatScrollToBottom(false);
+      if (wasNearBottom) chatScrollToBottom(true);
     } else {
       const wasNearBottom = chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150;
       let el;

@@ -211,8 +211,7 @@ function toggleSidebarExpand() {
   } else {
     sidebar.classList.add('expanded');
     overlay.classList.add('visible');
-    // Delay re-render until after the width transition completes (prevents icon clipping)
-    setTimeout(() => renderSidebar(), 220);
+    renderSidebar();
   }
   // Restore scroll position after layout change
   requestAnimationFrame(() => { if (chat) chat.scrollTop = scrollPos; });
