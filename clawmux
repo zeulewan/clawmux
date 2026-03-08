@@ -265,9 +265,39 @@ def cmd_status(args):
             print(f"  Model: {found['model']}")
         return
 
-    # Hub overview
+    if getattr(args, "watch", False):
+        import time as _time, io as _io
+        print("\033[2J\033[H\033[?25l", end="", flush=True)  # clear screen, hide cursor
+        try:
+            while True:
+                buf = _io.StringIO()
+                _print_status_table(file=buf)
+                output = buf.getvalue()
+                # Move cursor home and overwrite (no clear = no flash)
+                print("\033[H", end="", flush=True)
+                print(output, end="", flush=True)
+                # Clear any leftover lines from previous render
+                print("\033[J", end="", flush=True)
+                _time.sleep(0.5)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            print("\033[?25h", end="", flush=True)  # restore cursor
+        return
+    else:
+        _print_status_table()
+
+
+def _print_status_table(file=None):
+    """Print the hub status table."""
+    import builtins as _builtins
+    _orig_print = _builtins.print
+    def print(*a, **kw):
+        kw.setdefault("file", file)
+        _orig_print(*a, **kw)
     sessions = http_get("/api/sessions")
     debug = http_get("/api/debug")
+    context = http_get("/api/context")
 
     hub_info = debug.get("hub", debug)
     uptime_s = hub_info.get("uptime_seconds", 0)
@@ -298,31 +328,42 @@ def cmd_status(args):
         active_marker = " *" if slug == active_project else ""
         agent_count = len(by_project[slug])
         print(f"  {proj_name}{active_marker} ({agent_count} agents)")
-        print(f"  {'Name':<10} {'State':<8} {'Activity':<22} {'Area':<22} {'Work Dir'}")
-        print(f"  {'-' * 90}")
+        print(f"  {'Name':<10} {'Role':<20} {'Task':<32} {'State':<10} {'tool_name':<14} {'activity':<30} {'ctx'}")
+        print(f"  {'-' * 120}")
         for s in sorted(by_project[slug], key=lambda s: s.get("label", "")):
             name = s.get("label", s.get("voice", "?"))
-            # Derive high-level state (matches sidebar)
-            if s.get("status") in ("starting", "dead"):
+            role = s.get("role", "")
+            if len(role) > 18:
+                role = role[:16] + ".."
+            task = s.get("task", "")
+            if len(task) > 30:
+                task = task[:28] + ".."
+            # Derive state from API fields
+            raw_state = s.get("state", "")
+            if raw_state in ("idle", "processing", "compacting", "starting"):
+                state = raw_state
+            elif s.get("status") in ("starting", "dead"):
                 state = s["status"]
             elif s.get("compacting"):
-                state = "working"
+                state = "compacting"
             elif s.get("in_wait"):
-                state = "waiting"
-            elif s.get("status_text") or s.get("processing"):
+                state = "idle"
+            elif s.get("processing"):
                 state = "working"
             else:
                 state = "idle"
-            # Tool activity as separate column
-            activity = s.get("status_text", "")
-            if s.get("compacting"):
-                activity = "Compacting..."
-            if len(activity) > 20:
-                activity = activity[:18] + ".."
-            area = s.get("project_area", "")
-            work_dir = s.get("work_dir", "")
-            work_dir = work_dir.replace("/home/zeul/", "~/").replace("/tmp/clawmux-sessions/", "~/sessions/")
-            print(f"  {name:<10} {state:<8} {activity:<22} {area:<22} {work_dir}")
+            tool_name = s.get("tool_name", "")
+            if len(tool_name) > 12:
+                tool_name = tool_name[:10] + ".."
+            activity = s.get("activity", "")
+            if len(activity) > 28:
+                activity = activity[:26] + ".."
+            # Context percentage
+            sid = s.get("session_id", "")
+            ctx_info = context.get(sid, {})
+            ctx_pct = ctx_info.get("percent")
+            ctx_str = f"{ctx_pct:.0f}%" if ctx_pct is not None else ""
+            print(f"  {name:<10} {role:<20} {task:<32} {state:<10} {tool_name:<14} {activity:<30} {ctx_str}")
         print()
 
 
@@ -1120,12 +1161,18 @@ def cmd_messages(args):
         print(f"  {msg_id}  {sender} → {recipient}  [{state}]  {content}")
 
 
-def _apply_agent_status_bar(tmux_session, label, color):
-    """Set a clean status bar on an agent's tmux session: white text on agent color."""
+AGENT_FG = {
+    "af_sarah": "#4a0000", "am_adam": "#1a3a1a", "af_nova": "#4a1040",
+    "am_eric": "#0a2a3a", "bm_fable": "#4a3a00", "bf_lily": "#3a2a10",
+}
+
+def _apply_agent_status_bar(tmux_session, label, color, voice=""):
+    """Set a clean status bar on an agent's tmux session."""
+    fg = AGENT_FG.get(voice, "#ffffff")
     for opt, val in [
-        ("status-style", f"fg=#ffffff,bg={color}"),
+        ("status-style", f"fg={fg},bg={color}"),
         ("status-left", f" {label} "),
-        ("status-left-style", f"fg=#ffffff,bg={color},bold"),
+        ("status-left-style", f"fg={fg},bg={color},bold"),
         ("status-left-length", "20"),
         ("status-right", ""),
         ("status-right-length", "0"),
@@ -1378,7 +1425,7 @@ def cmd_monitor(args):
         voice = agent.get("voice", "")
         color = AGENT_COLORS.get(voice)
         if color:
-            _apply_agent_status_bar(agent["tmux_session"], label, color)
+            _apply_agent_status_bar(agent["tmux_session"], label, color, voice=voice)
 
     # Get project display name for status bar
     projects_data = http_get("/api/projects")
@@ -1495,16 +1542,22 @@ def tmux(*args):
         log(f"tmux error: {{r.stderr.strip()}}")
     return r
 
+AGENT_FG = {{
+    "af_sarah": "#4a0000", "am_adam": "#1a3a1a", "af_nova": "#4a1040",
+    "am_eric": "#0a2a3a", "bm_fable": "#4a3a00", "bf_lily": "#3a2a10",
+}}
+
 def set_agent_colors(agent):
     voice = agent.get("voice", "")
     color = COLORS.get(voice)
     if color:
         target = agent["tmux_session"]
         label = agent.get("label", target)
+        fg = AGENT_FG.get(voice, "#ffffff")
         for opt, val in [
-            ("status-style", f"fg=#ffffff,bg={{color}}"),
+            ("status-style", f"fg={{fg}},bg={{color}}"),
             ("status-left", f" {{label}} "),
-            ("status-left-style", f"fg=#ffffff,bg={{color}},bold"),
+            ("status-left-style", f"fg={{fg}},bg={{color}},bold"),
             ("status-left-length", "20"),
             ("status-right", ""),
             ("status-right-length", "0"),
@@ -1562,6 +1615,11 @@ while True:
             tmux("select-layout", "-t", MONITOR, "tiled")
             log("Layout re-tiled")
 
+        # Re-apply colors after layout changes (new panes added/removed)
+        if changed:
+            for label, agent in desired_labels.items():
+                set_agent_colors(agent)
+
     except Exception as e:
         log(f"Error: {{e}}")
 '''
@@ -1595,12 +1653,31 @@ def cmd_regenerate(args):
 def cmd_project(args):
     """Set project status in the sidebar."""
     session_id = require_session_id()
-    http_post(f"/api/project-status/{session_id}", {
+    payload = {
         "project": args.project,
         "area": args.area or "",
-    })
+    }
+    if args.role:
+        payload["role"] = args.role
+    if args.task:
+        payload["task"] = args.task
+    http_post(f"/api/project-status/{session_id}", payload)
     area = f" · {args.area}" if args.area else ""
     print(f"Project: {args.project}{area}")
+
+
+def cmd_task(args):
+    """Set task description in the sidebar."""
+    session_id = require_session_id()
+    http_post(f"/api/project-status/{session_id}", {"task": args.description})
+    print(f"Task: {args.description}")
+
+
+def cmd_role(args):
+    """Set agent role in the sidebar."""
+    session_id = require_session_id()
+    http_post(f"/api/project-status/{session_id}", {"role": args.role})
+    print(f"Role: {args.role}")
 
 
 # ---------------------------------------------------------------------------
@@ -1687,6 +1764,7 @@ examples:
     clawmux status              # Hub overview with all sessions
     clawmux status sky          # Detailed info for Sky""")
     p.add_argument("agent", nargs="?", help="Agent name for detailed status (e.g. sky, alloy)")
+    p.add_argument("-w", "--watch", action="store_true", help="Live-updating status (refreshes every 0.5s)")
     p.set_defaults(func=cmd_status)
 
     # projects
@@ -1801,7 +1879,29 @@ examples:
     clawmux project voice-hub --area frontend""")
     p.add_argument("project", help="Project or repo name")
     p.add_argument("--area", help="Sub-area (e.g. frontend, backend, docs)")
+    p.add_argument("--role", help="Agent role (e.g. Frontend, Backend)")
+    p.add_argument("--task", help="Current task description")
     p.set_defaults(func=cmd_project)
+
+    # task
+    p = sub.add_parser("task", help="Set current task description",
+                       description="Update the sidebar to show what you're currently working on.",
+                       formatter_class=argparse.RawDescriptionHelpFormatter,
+                       epilog="""examples:
+    clawmux task 'Fixing auth bug'
+    clawmux task 'Reviewing PR #42'""")
+    p.add_argument("description", help="Short task description")
+    p.set_defaults(func=cmd_task)
+
+    # role
+    p = sub.add_parser("role", help="Set agent role",
+                       description="Set or change your agent role (shown in the sidebar).",
+                       formatter_class=argparse.RawDescriptionHelpFormatter,
+                       epilog="""examples:
+    clawmux role Frontend
+    clawmux role OpenClaw""")
+    p.add_argument("role", help="Role name")
+    p.set_defaults(func=cmd_role)
 
     args = parser.parse_args()
     if not args.command:
