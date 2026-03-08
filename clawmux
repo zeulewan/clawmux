@@ -1667,6 +1667,7 @@ def cmd_monitor(args):
                  attach_cmd(agent["tmux_session"]), "Enter")
         label = agent.get("label", agent["tmux_session"])
         tmux_run("select-pane", "-t", pane_id, "-T", label)
+        tmux_run("set-option", "-p", "-t", pane_id, "@agent-label", label)
 
         # Set the agent's tmux session status bar to their signature color
         voice = agent.get("voice", "")
@@ -1740,16 +1741,17 @@ def get_sessions():
     return result
 
 def get_pane_map():
-    """Return {{label: pane_id}} dict from current monitor panes."""
-    r = subprocess.run(["tmux","list-panes","-t",MONITOR,"-F","#{{pane_id}} #{{pane_title}}"],
+    """Return {{label: pane_id}} dict from current monitor panes.
+    Uses @agent-label user option (immune to inner-session title overrides)."""
+    r = subprocess.run(["tmux","list-panes","-t",MONITOR,"-F","#{{pane_id}} #{{@agent-label}}"],
                        capture_output=True, text=True)
     if r.returncode != 0:
         return None
     panes = {{}}
     for line in r.stdout.strip().splitlines():
         parts = line.split(" ", 1)
-        if len(parts) == 2:
-            panes[parts[1]] = parts[0]
+        if len(parts) == 2 and parts[1].strip():
+            panes[parts[1].strip()] = parts[0]
     return panes
 
 def any_pane_id():
@@ -1761,16 +1763,16 @@ def any_pane_id():
     return r.stdout.strip().splitlines()[0]
 
 def get_pane_order():
-    """Return [(pane_id, title)] in current tmux pane index order."""
-    r = subprocess.run(["tmux","list-panes","-t",MONITOR,"-F","#{{pane_id}} #{{pane_title}}"],
+    """Return [(pane_id, label)] in current tmux pane index order."""
+    r = subprocess.run(["tmux","list-panes","-t",MONITOR,"-F","#{{pane_id}} #{{@agent-label}}"],
                        capture_output=True, text=True)
     if r.returncode != 0:
         return None
     result = []
     for line in r.stdout.strip().splitlines():
         parts = line.split(" ", 1)
-        if len(parts) == 2:
-            result.append((parts[0], parts[1]))
+        if len(parts) == 2 and parts[1].strip():
+            result.append((parts[0], parts[1].strip()))
     return result
 
 def reorder_panes():
@@ -1791,9 +1793,11 @@ def reorder_panes():
         old_i_id, old_i_title = pane_list[i]
         # Swap programs between position i and position j
         tmux("swap-pane", "-s", desired_id, "-t", old_i_id)
-        # swap-pane moves content but NOT pane_ids — update titles to match new content
+        # swap-pane moves content but NOT pane options — update labels on both panes
         tmux("select-pane", "-t", old_i_id, "-T", desired_title)
+        tmux("set-option", "-p", "-t", old_i_id, "@agent-label", desired_title)
         tmux("select-pane", "-t", desired_id, "-T", old_i_title)
+        tmux("set-option", "-p", "-t", desired_id, "@agent-label", old_i_title)
         # Update our tracking list
         pane_list[i] = (old_i_id, desired_title)
         pane_list[j] = (desired_id, old_i_title)
@@ -1874,6 +1878,7 @@ while True:
             if r.returncode == 0:
                 new_pane = r.stdout.strip()
                 tmux("select-pane", "-t", new_pane, "-T", label)
+                tmux("set-option", "-p", "-t", new_pane, "@agent-label", label)
                 set_agent_colors(agent)
                 log(f"Added pane {{new_pane}} for {{label}}")
             else:
