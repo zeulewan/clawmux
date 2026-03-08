@@ -10,7 +10,7 @@ data/
 # iOS
 ios/build/
 ios/VoiceChat.xcodeproj/
-ios/VoiceHub.xcodeproj/xcuserdata/
-ios/VoiceHub.xcodeproj/project.xcworkspace/xcuserdata/
+ios/ClawMux.xcodeproj/xcuserdata/
+ios/ClawMux.xcodeproj/project.xcworkspace/xcuserdata/
 ios/*.xcworkspace/
 _garbage/

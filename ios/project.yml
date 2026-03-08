@@ -1,4 +1,4 @@
-name: VoiceHub
+name: ClawMux
 options:
   bundleIdPrefix: com.zeul
   deploymentTarget:
@@ -15,7 +15,7 @@ targets:
       - target: VoiceHubWidgetExtension
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.zeul.voicehub
+        PRODUCT_BUNDLE_IDENTIFIER: com.zeul.clawmux
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 25QMAKVCBN
         TARGETED_DEVICE_FAMILY: "1"
@@ -30,7 +30,7 @@ targets:
       - VoiceHubShared
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.zeul.voicehub.widget
+        PRODUCT_BUNDLE_IDENTIFIER: com.zeul.clawmux.widget
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 25QMAKVCBN
         TARGETED_DEVICE_FAMILY: "1"
