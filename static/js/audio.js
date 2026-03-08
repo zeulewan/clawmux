@@ -1163,7 +1163,8 @@ function karaokeSeekTo(startTime) {
 
 // Play message TTS from a specific offset (or beginning). Uses cached buffer if available.
 async function karaokePlayFromWord(msgEl, startTime, fetchId, clickedWord = false, clickedWordText = null) {
-  // Resume AudioContext immediately in user gesture context (before any async gaps)
+  // Resume AudioContext in user gesture context — must await before async gap
+  // Mobile browsers (especially Firefox) require resume to complete within the gesture handler
   if (audioCtx.state === 'suspended') await audioCtx.resume();
 
   const voiceId = msgEl.dataset.voice || (activeSessionId ? sessions.get(activeSessionId)?.voice : null) || 'af_sky';
@@ -1221,6 +1222,14 @@ async function karaokePlayFromWord(msgEl, startTime, fetchId, clickedWord = fals
   }
 
   stopActiveAudio();
+  // Ensure AudioContext is running before playback (belt-and-suspenders after async gap)
+  if (audioCtx.state !== 'running') {
+    try { await audioCtx.resume(); } catch(e) { console.warn('AudioContext resume failed:', e); }
+  }
+  if (audioCtx.state !== 'running') {
+    console.warn('AudioContext still not running after resume:', audioCtx.state);
+    return;
+  }
   const sessionId = activeSessionId || '__tts__';
   const offset = Math.max(0, Math.min(startTime || 0, decoded.duration - 0.05));
   const source = audioCtx.createBufferSource();
@@ -1456,6 +1465,9 @@ function changeMicDevice(deviceId) {
   // Stop VAD intervals that hold references to the old stream
   stopPlaybackVAD();
   stopThinkingVAD();
+  // Blur dropdown so Space bar doesn't re-trigger selection
+  const sel = document.getElementById('mic-select');
+  if (sel) sel.blur();
 }
 
 // --- Speaker device selector ---
@@ -1493,11 +1505,30 @@ async function changeSpeakerDevice(deviceId) {
       console.warn('Failed to set speaker device:', e);
     }
   }
+  // Blur dropdown so Space bar doesn't re-trigger selection
+  const sel = document.getElementById('speaker-select');
+  if (sel) sel.blur();
 }
 
 // Populate on load and when devices change
 populateMicSelector();
 populateSpeakerSelector();
+// On hard reload, enumerateDevices may return empty labels before mic permission.
+// If permission is already granted (from a previous session), do a silent getUserMedia
+// to unlock full device labels, then re-populate.
+(async () => {
+  try {
+    if (navigator.permissions && navigator.permissions.query) {
+      const perm = await navigator.permissions.query({ name: 'microphone' });
+      if (perm.state === 'granted') {
+        const tmp = await navigator.mediaDevices.getUserMedia({ audio: true });
+        tmp.getTracks().forEach(t => t.stop());
+        populateMicSelector();
+        populateSpeakerSelector();
+      }
+    }
+  } catch (e) { /* permission API not supported or denied — that's fine */ }
+})();
 if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
   navigator.mediaDevices.addEventListener('devicechange', () => {
     populateMicSelector();
