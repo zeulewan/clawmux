@@ -1035,7 +1035,7 @@ async def interrupt_session(session_id: str):
         await asyncio.sleep(3)
         try:
             proc = await asyncio.create_subprocess_exec(
-                "tmux", "send-keys", "-t", tmux_name, "clawmux wait", "Enter",
+                "tmux", "send-keys", "-t", tmux_name, "Run this exact command now: clawmux wait", "Enter",
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
             )
