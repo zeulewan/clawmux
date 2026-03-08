@@ -62,6 +62,7 @@ class Session:
     project_slug: str = "default"  # which project this session belongs to
     reinject_attempts: int = 0  # number of voice-mode re-injection attempts
     max_reinject_attempts: int = 3  # max re-injection attempts before giving up
+    hook_delivered_message: bool = False  # True when PreToolUse/PostToolUse delivered inbox messages this cycle
 
     def set_state(self, new_state: AgentState) -> None:
         """Transition to a new state, syncing deprecated boolean flags."""
@@ -147,6 +148,7 @@ class SessionManager:
             task=session.task or "",
             last_active=session.last_activity,
             model=session.model or "opus",
+            effort=session.effort or "",
             state=session.state.value if hasattr(session.state, 'value') else str(session.state),
         )
         for k, v in overrides.items():
@@ -235,6 +237,8 @@ class SessionManager:
             if not session.model:
                 import hub_config
                 session.model = hub_config.CLAUDE_MODEL
+            # Restore effort from agents.json
+            session.effort = getattr(entry, 'effort', '') or ""
             self.sessions[old_session_id] = session
             self._counter += 1
             adopted += 1
@@ -684,6 +688,8 @@ class SessionManager:
         # State stays STARTING — transitions to IDLE when wait WS connects
         session.status = "ready"  # legacy compat
         session.touch()
+        # Persist model/effort to agents.json
+        await self._sync_agent_store(session.voice, session)
         log.info("[%s] Model restart complete", session_id)
 
     async def check_health(self, session: Session) -> bool:

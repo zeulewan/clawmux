@@ -42,6 +42,7 @@ class AgentEntry:
     backend: str = "claude-code"  # backend type
     last_active: float = 0.0
     model: str = "opus"
+    effort: str = ""              # "low", "medium", "high", or "" for default
     state: str = "dead"           # "idle", "processing", "compacting", "dead"
 
     def to_dict(self) -> dict:
