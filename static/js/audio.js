@@ -1510,8 +1510,8 @@ async function changeSpeakerDevice(deviceId) {
   if (sel) sel.blur();
 }
 
-// Prevent Space/Enter from reopening device dropdowns after selection
-['mic-select', 'speaker-select'].forEach(id => {
+// Prevent Space/Enter from reopening header dropdowns after selection
+['mic-select', 'speaker-select', 'session-model', 'project-selector'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('keydown', e => {
     if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); el.blur(); }

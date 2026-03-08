@@ -1489,13 +1489,13 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 <div id="header">
   <h1><a href="https://clawmux.com" target="_blank" style="color: inherit; text-decoration: none;">ClawMux</a></h1>
   <span id="active-voice" style="display:none; font-size:1.1rem; font-weight:700;"></span>
-  <select id="session-model" style="display:none;" onchange="setSessionModel(this.value)">
+  <select id="session-model" tabindex="-1" style="display:none;" onchange="setSessionModel(this.value)">
     <option value="opus">Opus</option>
     <option value="sonnet">Sonnet</option>
     <option value="haiku">Haiku</option>
   </select>
   <span id="model-label" style="display:none; font-size:0.7rem; color:var(--text-secondary); cursor:pointer;" onclick="toggleModelPopup(event)"></span>
-  <select id="project-selector" style="display:none;" onchange="switchProject(this.value)">
+  <select id="project-selector" tabindex="-1" style="display:none;" onchange="switchProject(this.value)">
     <option value="default">Default</option>
   </select>
   <button id="mode-toggle" onclick="cycleInputMode()"><span class="mode-value">Voice</span><span class="mode-label">Mode</span></button>
