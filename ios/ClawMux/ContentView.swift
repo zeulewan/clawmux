@@ -89,13 +89,8 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            // Atmospheric canvas — always dark
-            LinearGradient(
-                colors: [Color.canvas1, Color.canvas2],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            // Deep atmospheric canvas matching browser palette
+            Color.canvas1.ignoresSafeArea()
 
             if showingChat && vm.activeSessionId != nil {
                 chatView
@@ -188,12 +183,13 @@ struct ContentView: View {
     }
 
     private func agentCard(_ voice: VoiceInfo) -> some View {
-        let session   = vm.sessions.first { $0.voice == voice.id }
-        let spawning  = vm.spawningVoiceIds.contains(voice.id)
+        let session    = vm.sessions.first { $0.voice == voice.id }
+        let spawning   = vm.spawningVoiceIds.contains(voice.id)
         let isSelected = vm.activeSession?.voice == voice.id && showingChat
-        let color     = voiceColor(voice.id)
-        let alive     = session != nil || spawning
-        let thinking  = session?.isThinking == true
+        let color      = voiceColor(voice.id)
+        let alive      = session != nil || spawning
+        let thinking   = session?.isThinking == true
+        let rc         = ringColor(session, spawning: spawning)
 
         return Button {
             if let s = session {
@@ -211,33 +207,47 @@ struct ContentView: View {
                 ZStack {
                     if thinking {
                         Circle()
-                            .strokeBorder(color.opacity(isPulsing ? 0.5 : 0.1), lineWidth: 7)
-                            .frame(width: 58, height: 58)
+                            .strokeBorder(color.opacity(isPulsing ? 0.45 : 0.05), lineWidth: 8)
+                            .frame(width: 60, height: 60)
                             .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: isPulsing)
                     }
                     Circle()
-                        .fill(color.opacity(alive ? 0.18 : 0.08))
+                        .fill(color.opacity(alive ? 0.16 : 0.06))
                         .frame(width: 46, height: 46)
                     if alive {
                         Circle()
-                            .strokeBorder(ringColor(session, spawning: spawning), lineWidth: 2)
+                            .strokeBorder(rc, lineWidth: 2)
                             .frame(width: 46, height: 46)
                     }
                     Image(systemName: voiceIcon(voice.id))
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(alive ? color : color.opacity(0.35))
+                        .foregroundStyle(alive ? color : color.opacity(0.30))
                 }
-                .frame(width: 58, height: 58)
+                .frame(width: 60, height: 60)
 
                 // Name + status
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(voice.name)
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
-                        .foregroundStyle(alive ? Color.cText : Color.cTextTer)
-                    Text(cardStatus(session, spawning: spawning))
-                        .font(.system(size: 12))
-                        .foregroundStyle(alive ? Color.cTextSec : Color.cTextTer)
-                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(voice.name)
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .foregroundStyle(alive ? Color.cText : Color.cTextTer)
+                        if let s = session, !s.project.isEmpty && !alive {
+                            Text(s.project)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(Color.cTextTer)
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(Color.cCard, in: Capsule())
+                        }
+                    }
+                    HStack(spacing: 4) {
+                        if alive {
+                            Circle().fill(rc).frame(width: 4, height: 4)
+                        }
+                        Text(cardStatus(session, spawning: spawning))
+                            .font(.system(size: 12))
+                            .foregroundStyle(alive ? Color.cTextSec : Color.cTextTer)
+                            .lineLimit(1)
+                    }
                 }
 
                 Spacer()
@@ -252,17 +262,16 @@ struct ContentView: View {
                 }
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(alive ? Color.cTextTer : Color(hex: 0x3A3A3C))
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(alive ? Color.cTextTer : Color(hex: 0x2A3A52))
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
+            .padding(.horizontal, 16).padding(.vertical, 13)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(isSelected ? color.opacity(0.12) : Color.glass)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(isSelected ? color.opacity(0.10) : Color.cCard)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .strokeBorder(isSelected ? color.opacity(0.30) : Color.glassBorder, lineWidth: 0.5)
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(isSelected ? color.opacity(0.28) : Color.cBorder, lineWidth: 0.5)
                     )
             )
         }
@@ -536,22 +545,11 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, alignment: role == "user" ? .trailing : .leading)
 
                 if role != "system" {
-                    HStack(spacing: 4) {
-                        if vm.voiceResponses {
-                            Button {
-                                vm.playMessageTTS(messageId: msg.id, text: msg.text, voice: vm.activeSession?.voice)
-                            } label: {
-                                Image(systemName: isPlaying ? "stop.fill" : "speaker.wave.2.fill")
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(isPlaying ? color : (role == "user" ? Color.white.opacity(0.5) : Color.cTextTer))
-                            }
-                        }
-                        Text(shortTime(msg.timestamp))
-                            .font(.system(size: 9))
-                            .foregroundStyle(role == "user" ? Color.white.opacity(0.5) : Color.cTextTer)
-                    }
-                    .padding(.horizontal, 11).padding(.bottom, 6)
-                    .frame(maxWidth: .infinity, alignment: role == "user" ? .trailing : .leading)
+                    Text(shortTime(msg.timestamp))
+                        .font(.system(size: 9))
+                        .foregroundStyle(role == "user" ? Color.white.opacity(0.45) : Color.cTextTer)
+                        .padding(.horizontal, 11).padding(.bottom, 6)
+                        .frame(maxWidth: .infinity, alignment: role == "user" ? .trailing : .leading)
                 }
             }
             .background(bubbleBg,
@@ -817,7 +815,14 @@ struct ContentView: View {
                 .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 4)
             }
             .padding(.horizontal, 12).padding(.vertical, 10).padding(.bottom, 4)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .background {
+                if #available(iOS 26, *) {
+                    Color.clear
+                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+                } else {
+                    RoundedRectangle(cornerRadius: 28, style: .continuous).fill(.ultraThinMaterial)
+                }
+            }
         }
         .padding(.horizontal, 8).padding(.bottom, 4)
     }
@@ -863,7 +868,14 @@ struct ContentView: View {
             }
             .padding(.horizontal, 12).padding(.bottom, 8)
         }
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .background {
+            if #available(iOS 26, *) {
+                Color.clear
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+            } else {
+                RoundedRectangle(cornerRadius: 28, style: .continuous).fill(.ultraThinMaterial)
+            }
+        }
         .padding(.horizontal, 8).padding(.bottom, 4)
     }
 
@@ -911,7 +923,14 @@ struct ContentView: View {
             }
             .padding(.horizontal, 14).padding(.bottom, 8)
         }
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background {
+            if #available(iOS 26, *) {
+                Color.clear
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            } else {
+                RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.ultraThinMaterial)
+            }
+        }
         .padding(.horizontal, 8).padding(.bottom, 4)
         .onAppear { pttTextFieldFocused = true }
     }
