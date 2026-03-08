@@ -666,17 +666,41 @@ def cmd_spawn(args):
 
 
 def _openclaw_deliver(to_name: str, message: str) -> None:
-    """Deliver a message to an OpenClaw agent by name.
-    Looks up the Telegram direct session first, falls back to default session.
-    Uses the sessionId UUID and lastChannel to route correctly."""
-    import subprocess, json as _json
+    """Deliver a message to an OpenClaw agent by triggering a proper agent turn
+    via the Gateway hooks/agent endpoint. Response is delivered back to Telegram.
+    Falls back to subprocess if hooks are not configured."""
+    import urllib.request, json as _json
+    config_path = os.path.expanduser("~/.openclaw/openclaw.json")
+    try:
+        cfg = _json.load(open(config_path))
+        hooks_cfg = cfg.get("hooks", {})
+        token = hooks_cfg.get("token", "")
+        gw_port = cfg.get("gateway", {}).get("port", 18789)
+        if hooks_cfg.get("enabled") and token:
+            payload = _json.dumps({
+                "message": message,
+                "name": "ClawMux",
+                "deliver": True,
+                "channel": "telegram",
+            }).encode()
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{gw_port}/hooks/agent",
+                data=payload,
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                method="POST",
+            )
+            urllib.request.urlopen(req, timeout=10)
+            return
+    except Exception:
+        pass
+    # Fallback: subprocess approach with session ID routing
+    import subprocess
     sessions_path = os.path.expanduser("~/.openclaw/agents/main/sessions/sessions.json")
     session_id = None
     channel = None
     if os.path.exists(sessions_path):
         try:
             sessions = _json.load(open(sessions_path))
-            # Prefer Telegram direct session — use the sessionId UUID + lastChannel
             tg_entry = next((v for k, v in sessions.items() if ":telegram:direct:" in k), None)
             entry = tg_entry or next(iter(sessions.values()), None)
             if entry:
