@@ -904,6 +904,59 @@ def _check_system_deps():
         print(f"Installed: {', '.join(installed)}")
 
 
+def _update_claude_code():
+    """Update Claude Code to the latest version via npm."""
+    import shutil
+    import platform
+
+    extra_paths = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+    lookup_path = os.environ.get("PATH", "") + os.pathsep + extra_paths
+
+    claude_bin = shutil.which("claude", path=lookup_path)
+    if not claude_bin:
+        print("Claude Code not found — skipping update.")
+        return
+
+    # Get current version
+    r = subprocess.run([claude_bin, "--version"], capture_output=True, text=True)
+    current = r.stdout.strip() if r.returncode == 0 else "unknown"
+
+    # Try the built-in updater first
+    r = subprocess.run([claude_bin, "update"], capture_output=True, text=True, timeout=30)
+    output = (r.stdout + r.stderr).strip()
+
+    # If managed by Homebrew (or built-in update failed), fall back to npm
+    if "Homebrew" in output or r.returncode != 0:
+        npm_bin = shutil.which("npm", path=lookup_path)
+        if not npm_bin:
+            print(f"Claude Code: {current} (npm not found, skipping update)")
+            return
+        print("Claude Code managed by Homebrew — updating via npm...")
+        r2 = subprocess.run(
+            [npm_bin, "install", "-g", "@anthropic-ai/claude-code", "--force"],
+            capture_output=True, text=True, timeout=60,
+        )
+        if r2.returncode == 0:
+            # Get new version
+            r3 = subprocess.run([claude_bin, "--version"], capture_output=True, text=True)
+            new_ver = r3.stdout.strip() if r3.returncode == 0 else "unknown"
+            if new_ver != current:
+                print(f"Claude Code updated: {current} → {new_ver}")
+            else:
+                print(f"Claude Code: {current} (already latest)")
+        else:
+            print(f"Warning: Claude Code npm update failed: {r2.stderr.strip()[:200]}")
+    elif "up to date" in output.lower() or "already" in output.lower():
+        print(f"Claude Code: {current} (already latest)")
+    else:
+        r2 = subprocess.run([claude_bin, "--version"], capture_output=True, text=True)
+        new_ver = r2.stdout.strip() if r2.returncode == 0 else "unknown"
+        if new_ver != current:
+            print(f"Claude Code updated: {current} → {new_ver}")
+        else:
+            print(f"Claude Code: {current} (already latest)")
+
+
 def cmd_update(args):
     """Pull latest code, reinstall deps, reinstall CLI, reload hub."""
     repo_dir = _find_repo_dir()
@@ -1008,6 +1061,9 @@ def cmd_update(args):
 
     # Ensure Claude Code hooks are configured
     _install_hooks(repo_dir)
+
+    # Update Claude Code to latest version
+    _update_claude_code()
 
     # Check if hub is running
     hub_running = False
