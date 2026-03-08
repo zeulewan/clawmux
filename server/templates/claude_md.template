@@ -82,7 +82,30 @@ You can read this file for context on what the user is focused on. Do not modify
 # CLI Environment
 `clawmux` is already in your PATH at `/usr/local/bin/clawmux`. Environment variables (`CLAWMUX_SESSION_ID`, `CLAWMUX_PORT`) are automatically set. Never `cd` into the repo directory or manually export these variables — just run `clawmux` directly.
 
-Run `clawmux --help` to see all available commands (spawn, monitor, projects, version, update, etc.).
+## CLI Command Reference
+| Command | Description | Safe? |
+|---------|-------------|-------|
+| `clawmux send --to <name> 'msg'` | Send a message to user or agent | Yes |
+| `clawmux wait` | Block until a message arrives (idle mode) | Yes |
+| `clawmux status` | Show hub state and all sessions | Yes |
+| `clawmux status <name>` | Show details for one agent | Yes |
+| `clawmux task 'description'` | Set your current task in sidebar | Yes |
+| `clawmux role <role>` | Set your role (must match a template) | Yes |
+| `clawmux project <name> --area <area>` | Set project/area in sidebar | Yes |
+| `clawmux projects` | List all projects | Yes |
+| `clawmux messages` | List recent inter-agent messages | Yes |
+| `clawmux version` | Show version and commit | Yes |
+| `clawmux monitor` | Open tiled tmux view of agents | Yes |
+| `clawmux spawn` | Launch a new agent session | **Caution** |
+| `clawmux kill <name>` | Kill a single agent session | **Caution** |
+| `clawmux reload` | Restart the hub (agents reconnect) | **Caution** |
+| `clawmux start` | Start the hub | **Caution** |
+| `clawmux stop` | Stop the hub gracefully | **Caution** |
+| `clawmux update` | Pull latest code from git | **DANGEROUS** — can break running hub/agents |
+| `clawmux kill-all` | Stop hub and kill ALL agents | **DANGEROUS** |
+| `clawmux uninstall` | Remove ClawMux entirely | **DANGEROUS** |
+
+**NEVER run `clawmux update`, `clawmux kill-all`, or `clawmux uninstall` unless the user explicitly asks you to.** These commands affect the entire system and all running agents.
 
 # Agent tmux Sessions
 Agent tmux sessions use the label name (lowercase), not the voice ID. For example:
@@ -106,6 +129,9 @@ When you receive an inter-agent message:
 2. Do NOT speak the response out loud to the user
 3. Reply using: `clawmux send --to <sender_name> 'your reply'`
 4. Or acknowledge with: `clawmux send --to <sender_name> --re <msg_id>`
+
+# Your Role
+You are assigned the **{role}** role on project **{project}**.
 
 # Team Manager
 {managers_section}
