@@ -1311,6 +1311,19 @@ def _parse_date_or_ts(val: str) -> str:
         die(f"invalid date/timestamp: {val} (use YYYY-MM-DD or unix timestamp)")
 
 
+def _fmt_msg_line(msg, vname, max_text=200):
+    """Format a single message for CLI output."""
+    from datetime import datetime
+    role = msg.get("role", "?")
+    ts = msg.get("ts", 0)
+    dt = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M") if ts else "?"
+    text = msg.get("text", "")
+    if len(text) > max_text:
+        text = text[:max_text] + "..."
+    text = text.replace("\n", " ")
+    return f"  [{dt}] {vname} ({role}): {text}"
+
+
 def cmd_search(args):
     """Search across agent conversation histories."""
     import urllib.parse
@@ -1323,6 +1336,8 @@ def cmd_search(args):
         params["after"] = _parse_date_or_ts(args.after)
     if args.before:
         params["before"] = _parse_date_or_ts(args.before)
+    if args.context:
+        params["context"] = str(args.context)
     qs = urllib.parse.urlencode(params)
     data = http_get(f"/api/search?{qs}")
     results = data.get("results", [])
@@ -1330,20 +1345,20 @@ def cmd_search(args):
         print("No results found.")
         return
 
-    from datetime import datetime
     print(f"Found {data.get('count', len(results))} result(s) for \"{args.query}\":\n")
-    for r in results:
-        msg = r["message"]
+    has_context = args.context and args.context > 0
+    for i, r in enumerate(results):
         vname = r.get("voice_name", r["voice_id"])
-        role = msg.get("role", "?")
-        ts = msg.get("ts", 0)
-        dt = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M") if ts else "?"
-        text = msg.get("text", "")
-        # Truncate long messages
-        if len(text) > 200:
-            text = text[:200] + "..."
-        text = text.replace("\n", " ")
-        print(f"  [{dt}] {vname} ({role}): {text}")
+        if has_context and "context" in r:
+            if i > 0:
+                print()
+            print(f"  --- {vname} ---")
+            for cm in r["context"]:
+                marker = ">>>" if cm.get("is_match") else "   "
+                line = _fmt_msg_line(cm, vname)
+                print(f"{marker}{line}")
+        else:
+            print(_fmt_msg_line(r["message"], vname))
     if data.get("count", 0) > len(results):
         print(f"\n  (showing {len(results)} of {data['count']} — use --limit to see more)")
 
@@ -2072,6 +2087,7 @@ examples:
     p.add_argument("--after", help="Only messages after this date/timestamp (YYYY-MM-DD or unix ts)")
     p.add_argument("--before", help="Only messages before this date/timestamp (YYYY-MM-DD or unix ts)")
     p.add_argument("--limit", type=int, default=50, help="Max results (default: 50, max: 200)")
+    p.add_argument("-C", "--context", type=int, default=0, help="Show N messages before and after each match (like grep -C)")
     p.set_defaults(func=cmd_search)
 
     # regenerate

@@ -311,6 +311,7 @@ async def lifespan(app: FastAPI):
     saved = _load_settings()
     import hub_config
     hub_config.CLAUDE_MODEL = saved.get("model", "opus")
+    hub_config.CLAUDE_EFFORT = saved.get("effort", "high")
     if saved.get("tts_url"):
         hub_config.KOKORO_URL = saved["tts_url"].rstrip("/")
     if saved.get("stt_url"):
@@ -554,6 +555,14 @@ async def handle_browser_message(data: dict) -> None:
         if model in ("opus", "sonnet", "haiku", ""):
             session.model = model
             log.info("[%s] Model restart requested: %s", session_id, model)
+            asyncio.create_task(session_mgr.restart_claude_with_model(session_id))
+
+    elif msg_type == "restart_effort":
+        # User changed effort level — requires restart
+        effort = data.get("effort", "")
+        if effort in ("low", "medium", "high"):
+            session.effort = effort
+            log.info("[%s] Effort restart requested: %s", session_id, effort)
             asyncio.create_task(session_mgr.restart_claude_with_model(session_id))
 
     elif msg_type == "user_ack":
@@ -1425,8 +1434,9 @@ async def search_history(request: Request):
     after_ts = float(request.query_params.get("after", 0)) or None
     before_ts = float(request.query_params.get("before", 0)) or None
     limit = min(int(request.query_params.get("limit", 50)), 200)
+    context = min(int(request.query_params.get("context", 0)), 20)
     results = await asyncio.to_thread(
-        history.search, q, voice_ids, roles, after_ts, before_ts, limit,
+        history.search, q, voice_ids, roles, after_ts, before_ts, limit, context=context,
     )
     return JSONResponse({"query": q, "count": len(results), "results": results})
 
@@ -1783,6 +1793,8 @@ async def update_settings(request: Request):
     # Apply model change at runtime
     if "model" in data and data["model"] in ("opus", "sonnet", "haiku"):
         hub_config.CLAUDE_MODEL = data["model"]
+    if "effort" in data and data["effort"] in ("low", "medium", "high"):
+        hub_config.CLAUDE_EFFORT = data["effort"]
     if "tts_url" in data and data["tts_url"]:
         hub_config.KOKORO_URL = data["tts_url"].rstrip("/")
         log.info("TTS URL changed to: %s", hub_config.KOKORO_URL)
@@ -1804,6 +1816,7 @@ def _load_settings() -> dict:
     settings_path = hub_config.DATA_DIR / "settings.json"
     defaults = {
         "model": "opus",
+        "effort": "high",
         "auto_record": False,
         "auto_end": True,
         "auto_interrupt": False,

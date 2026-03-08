@@ -163,30 +163,22 @@ class HistoryStore:
 
         return "\n".join(lines)
 
-    def search(
-        self,
-        query: str,
-        voice_ids: list[str] | None = None,
-        roles: list[str] | None = None,
-        after_ts: float | None = None,
-        before_ts: float | None = None,
-        limit: int = 50,
-        case_sensitive: bool = False,
-    ) -> list[dict]:
-        """Search across all agent histories for messages matching a query.
+    def _scan_histories(self, query: str, voice_ids: list[str] | None,
+                        roles: list[str] | None, after_ts: float | None,
+                        before_ts: float | None, case_sensitive: bool
+                        ) -> tuple[re.Pattern, dict[str, tuple[str, list[dict], list[int]]]]:
+        """Scan all history files and return compiled pattern + per-agent match data.
 
-        Returns a list of match dicts with voice_id, voice_name, and the message.
-        Results are sorted by timestamp (newest first).
+        Returns (pattern, matches) where matches maps voice_id to
+        (voice_name, messages_list, matching_indices).
         """
-        # Discover all history files
-        results = []
         flags = 0 if case_sensitive else re.IGNORECASE
         try:
             pattern = re.compile(query, flags)
         except re.error:
-            # Fall back to literal search if invalid regex
             pattern = re.compile(re.escape(query), flags)
 
+        matches: dict[str, tuple[str, list[dict], list[int]]] = {}
         for agent_dir in SESSIONS_DIR.iterdir():
             if not agent_dir.is_dir():
                 continue
@@ -201,7 +193,9 @@ class HistoryStore:
             except Exception:
                 continue
             vname = data.get("voice_name", vid)
-            for msg in data.get("messages", []):
+            messages = data.get("messages", [])
+            hit_indices = []
+            for i, msg in enumerate(messages):
                 text = msg.get("text", "")
                 if not text:
                     continue
@@ -214,13 +208,48 @@ class HistoryStore:
                 if before_ts and ts > before_ts:
                     continue
                 if pattern.search(text):
-                    results.append({
-                        "voice_id": vid,
-                        "voice_name": vname,
-                        "message": msg,
-                    })
+                    hit_indices.append(i)
+            if hit_indices:
+                matches[vid] = (vname, messages, hit_indices)
+        return pattern, matches
 
-        # Sort by timestamp descending (newest first)
+    def search(
+        self,
+        query: str,
+        voice_ids: list[str] | None = None,
+        roles: list[str] | None = None,
+        after_ts: float | None = None,
+        before_ts: float | None = None,
+        limit: int = 50,
+        case_sensitive: bool = False,
+        context: int = 0,
+    ) -> list[dict]:
+        """Search across all agent histories for messages matching a query.
+
+        Returns a list of match dicts with voice_id, voice_name, and the message.
+        When context > 0, each result includes a 'context' list of surrounding messages.
+        Results are sorted by timestamp (newest first).
+        """
+        _, matches = self._scan_histories(query, voice_ids, roles, after_ts, before_ts, case_sensitive)
+        results = []
+        for vid, (vname, messages, hit_indices) in matches.items():
+            for idx in hit_indices:
+                entry = {
+                    "voice_id": vid,
+                    "voice_name": vname,
+                    "message": messages[idx],
+                }
+                if context > 0:
+                    start = max(0, idx - context)
+                    end = min(len(messages), idx + context + 1)
+                    ctx = []
+                    for ci in range(start, end):
+                        m = dict(messages[ci])
+                        m["is_match"] = (ci == idx)
+                        ctx.append(m)
+                    entry["context"] = ctx
+                results.append(entry)
+
         results.sort(key=lambda r: r["message"].get("ts", 0), reverse=True)
         return results[:limit]
 
