@@ -354,9 +354,6 @@ function _updateSidebarCard(card, voiceId, state) {
   } else if (!isCompacting && compactEl) {
     compactEl.remove();
   }
-  // Update stop button visibility
-  const stopBtn = card.querySelector('.sb-stop');
-  if (stopBtn) stopBtn.style.display = (stateClass === 'working') ? '' : 'none';
   // Update closure refs
   card._voiceSession = session;
   card._voiceSpawning = isSpawning;
@@ -455,22 +452,8 @@ function _createAgentCard(voiceId, name, state) {
     info.appendChild(compactEl);
   }
   info.appendChild(statusEl2);
-  // Stop button (visible only when working)
-  const stopBtn = document.createElement('button');
-  stopBtn.className = 'sb-stop';
-  stopBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
-  stopBtn.title = 'Interrupt agent';
-  stopBtn.style.display = (state.stateClass === 'working') ? '' : 'none';
-  stopBtn.onclick = (e) => {
-    e.stopPropagation();
-    if (card._voiceSession) {
-      fetch(`/api/sessions/${card._voiceSession.session_id}/interrupt`, { method: 'POST' }).catch(() => {});
-    }
-  };
-
   card.appendChild(icon);
   card.appendChild(info);
-  card.appendChild(stopBtn);
   if (state.stateClass) card.classList.add(state.stateClass);
   if (state.isSelected) card.classList.add('selected');
   if (state.hasUnread) {
