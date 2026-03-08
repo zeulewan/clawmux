@@ -410,6 +410,8 @@ let _draggingProjectSlug = null;
 let _touchDrag = null; // { voiceId, ghost }
 
 function _touchDragStart(voiceId, touch) {
+  // Clean up any leaked ghost from a previous drag
+  document.querySelectorAll('.touch-drag-ghost').forEach(el => el.remove());
   const ghost = document.createElement('div');
   ghost.className = 'sidebar-card touch-drag-ghost';
   ghost.style.cssText = `position:fixed;left:${touch.clientX - 60}px;top:${touch.clientY - 20}px;` +
@@ -650,6 +652,13 @@ function _createAgentCard(voiceId, name, state) {
     e.preventDefault();
     _touchDragMove(touch);
   }, { passive: false });
+  const _cancelTouchDrag = () => {
+    if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+    if (touchDragging && _touchDrag) { _touchDrag.ghost.remove(); _touchDrag = null; }
+    document.querySelectorAll('.drag-above,.drag-below,.drag-over-group').forEach(el =>
+      el.classList.remove('drag-above', 'drag-below', 'drag-over-group'));
+    touchDragging = false; lpFired = false;
+  };
   card.addEventListener('touchend', (e) => {
     if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
     if (touchDragging) {
@@ -669,6 +678,7 @@ function _createAgentCard(voiceId, name, state) {
       lpFired = false;
     }
   });
+  card.addEventListener('touchcancel', _cancelTouchDrag);
   return card;
 }
 
