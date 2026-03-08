@@ -857,8 +857,10 @@ body {
   pointer-events: none;
   z-index: 10;
 }
-/* When badge is present: ensure enough margin below */
-.msg:has(.msg-ack-permanent) { margin-bottom: 30px !important; }
+/* Agent messages: badge inline next to the header, not below */
+.msg.agent-msg .msg-ack-permanent { position: static; display: inline; margin-left: 6px; vertical-align: baseline; bottom: auto; right: auto; }
+/* When badge is present on normal messages: ensure enough margin below */
+.msg:not(.agent-msg):has(.msg-ack-permanent) { margin-bottom: 30px !important; }
 /* Mirror action buttons: bottom-left on user messages */
 .msg.user .msg-actions { right: auto; left: 4px; }
 .msg .msg-action-btn.playing { color: var(--green); }
@@ -2217,7 +2219,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   <div class="debug-section">
     <div class="debug-title">Hub Sessions</div>
     <table class="debug-table" id="debug-sessions">
-      <thead><tr><th>ID</th><th>Voice</th><th>Status</th><th>Idle</th><th>Age</th><th>Work Dir</th></tr></thead>
+      <thead><tr><th>ID</th><th>Voice</th><th>Project</th><th>Status</th><th>Idle</th><th>Age</th><th>Work Dir</th></tr></thead>
       <tbody></tbody>
     </table>
     <div id="debug-no-sessions" style="color:var(--text-tertiary); padding:0.35rem; display:none;">No active sessions</div>
@@ -3252,7 +3254,8 @@ async function refreshDebug() {
     document.getElementById('debug-no-sessions').style.display = data.sessions.length ? 'none' : 'block';
     for (const s of data.sessions) {
       const sc = s.status === 'ready' ? 'up' : s.status === 'starting' ? 'voice' : 'down';
-      stb2.innerHTML += `<tr><td>${s.session_id}</td><td>${s.voice}</td><td><span class="debug-badge ${sc}">${s.status}</span></td><td>${debugDuration(s.idle_seconds)}</td><td>${debugDuration(s.age_seconds)}</td><td style="color:#555">${s.work_dir}</td></tr>`;
+      const proj = [s.project, s.project_area].filter(Boolean).join(' · ') || '—';
+      stb2.innerHTML += `<tr><td>${s.session_id}</td><td>${s.voice}</td><td style="color:var(--text-secondary)">${proj}</td><td><span class="debug-badge ${sc}">${s.status}</span></td><td>${debugDuration(s.idle_seconds)}</td><td>${debugDuration(s.age_seconds)}</td><td style="color:#555">${s.work_dir}</td></tr>`;
     }
 
     // tmux sessions
