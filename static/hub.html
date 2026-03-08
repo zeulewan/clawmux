@@ -2635,10 +2635,9 @@ function setSessionEffort(effort) {
   if (!activeSessionId || !ws || ws.readyState !== WebSocket.OPEN) return;
   document.getElementById('session-effort').blur();
   const s = sessions.get(activeSessionId);
-  const currentEffort = s?.effort || '';
-  if (effort === currentEffort) return;
   if (!confirm(`Switch to ${effort.charAt(0).toUpperCase() + effort.slice(1)} effort? This will restart the session. The conversation will be preserved.`)) {
-    document.getElementById('session-effort').value = currentEffort;
+    const cur = s?.effort || 'high';
+    document.getElementById('session-effort').value = cur;
     return;
   }
   ws.send(JSON.stringify({ session_id: activeSessionId, type: 'restart_effort', effort }));
