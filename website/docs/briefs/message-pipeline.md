@@ -50,14 +50,21 @@ Stop polling. Stop re-rendering. Adopt the standard messaging app pattern.
 
 Fix the competing-consumer race condition between hooks and `clawmux wait`.
 
-**Design principles:**
+**Implemented solution (v0.7.2+):**
 
-- **Single consumer** — only one thing should read and clear the inbox, eliminating contention.
-- **RAM-based queue** — move the live message queue from a JSON file into an in-memory Python list on the session object. Faster, no file locking needed, protected by the single-threaded asyncio event loop.
-- **JSON file as backup** — write messages to disk asynchronously for crash recovery. Not used for live delivery.
-- **Hooks deliver, wait blocks** — hooks peek at the queue and inject messages into Claude's context via `additionalContext`. `clawmux wait` blocks until a new message is pushed. If hooks already delivered messages since the last `wait`, `wait` returns immediately so Claude can process them.
+The core bug was that when PreToolUse/PostToolUse hooks delivered a message via `additionalContext`, the inbox was cleared — so the Stop hook saw an empty inbox and told Claude to go idle, even though Claude had just received a message it should respond to.
 
-**Detailed design TBD** — Phase 2 will be specced after Phase 1 is implemented and validated.
+The fix uses a sentinel file to coordinate between the hub and the Stop hook script:
+
+1. **Hub sets sentinel on hook delivery** — when PreToolUse/PostToolUse delivers inbox messages via `additionalContext`, the hub writes a `.hook_delivered` file to the session work directory and sets `session.hook_delivered_message = True`.
+
+2. **Stop hook checks sentinel first** — `hooks/stop-check-inbox.sh` checks for `.hook_delivered` before checking the inbox. If found, it deletes the file and tells Claude to process the message it already received (exit 2, which prevents Claude from stopping). If not found, it checks the inbox for new messages. If the inbox is also empty, it tells Claude to run `clawmux wait`.
+
+3. **Sentinel cleared on idle** — when the agent connects to the wait WebSocket, the hub clears both `session.hook_delivered_message` and the sentinel file, so state resets cleanly each cycle.
+
+**Why a sentinel file, not an API endpoint:** The Stop hook already makes one HTTP call to read the inbox. A sentinel file avoids a second round-trip and is simpler to reason about — it lives alongside the inbox in the session work directory.
+
+**Why command-type Stop hook:** HTTP hooks cannot block Claude from stopping. Only a command-type Stop hook with exit code 2 has this capability. HTTP `additionalContext` responses on Stop events are ignored by Claude Code.
 
 ## What Does Not Change
 

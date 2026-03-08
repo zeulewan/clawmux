@@ -247,7 +247,7 @@ async def context_poll_loop() -> None:
 
 
 # --- Usage poller (replaces per-session statusline polling) ---
-_USAGE_POLL_INTERVAL = 300  # 5 minutes
+_USAGE_POLL_INTERVAL = 1800  # 30 minutes
 _USAGE_CACHE_PATH = Path.home() / ".claude" / "usage-cache.json"
 _CREDENTIALS_PATH = Path.home() / ".claude" / ".credentials.json"
 _USAGE_API_URL = "https://api.anthropic.com/api/oauth/usage"
@@ -284,9 +284,10 @@ async def _fetch_usage_from_api() -> dict | None:
         return None
 
 async def usage_poll_loop() -> None:
-    """Poll Anthropic usage API every 5 minutes, update cache + sidecar."""
+    """Poll Anthropic usage API every 30 minutes, update cache + sidecar."""
     global _last_good_usage
-    await asyncio.sleep(5)  # initial delay to let hub finish starting
+    await asyncio.sleep(30)  # initial delay to let hub finish starting
+    backoff = _USAGE_POLL_INTERVAL
     while True:
         data = await _fetch_usage_from_api()
         if data:
@@ -296,10 +297,15 @@ async def usage_poll_loop() -> None:
             except Exception:
                 pass
             _save_usage_sidecar(data)
-            log.debug("Usage cache refreshed (5h: %.0f%%, 7d: %.0f%%)",
-                      data.get("five_hour", {}).get("utilization", 0),
-                      data.get("seven_day", {}).get("utilization", 0))
-        await asyncio.sleep(_USAGE_POLL_INTERVAL)
+            log.info("Usage cache refreshed (5h: %.0f%%, 7d: %.0f%%)",
+                     data.get("five_hour", {}).get("utilization", 0),
+                     data.get("seven_day", {}).get("utilization", 0))
+            backoff = _USAGE_POLL_INTERVAL
+        else:
+            # Back off on failure (rate limit or error) up to 2× poll interval
+            backoff = min(backoff * 2, _USAGE_POLL_INTERVAL * 2)
+            log.warning("Usage poll failed/rate-limited, backing off to %ds", backoff)
+        await asyncio.sleep(backoff)
 
 
 # --- FastAPI app ---
@@ -606,6 +612,9 @@ async def wait_websocket(ws: WebSocket, session_id: str):
     session.activity = ""
     session.tool_name = ""
     session.tool_input = {}
+    session.hook_delivered_message = False
+    if session.work_dir:
+        _clear_hook_delivered_sentinel(session.work_dir)
     session.set_state(AgentState.IDLE)
     await _save_activity(session, "Idle")
 
@@ -781,9 +790,11 @@ def _tool_activity_text(tool_name: str, tool_input: dict) -> str:
         path = tool_input.get("file_path", "")
         return f"Editing {Path(path).name}" if path else "Editing file"
     if tool_name == "Bash":
-        cmd = tool_input.get("command", "")
+        cmd = tool_input.get("command", "").strip()
         desc = tool_input.get("description", "")
-        preview = desc or cmd
+        if desc:
+            return f"Running {desc}"
+        preview = cmd[:60] + ("…" if len(cmd) > 60 else "")
         return f"Running {preview}" if preview else "Running command"
     if tool_name == "Grep":
         pattern = tool_input.get("pattern", "")
@@ -797,6 +808,27 @@ def _tool_activity_text(tool_name: str, tool_input: dict) -> str:
         except Exception:
             return "Fetching URL"
     return _TOOL_STATUS_MAP.get(tool_name, tool_name)
+
+
+_HOOK_DELIVERED_SENTINEL = ".hook_delivered"
+
+
+def _write_hook_delivered_sentinel(work_dir: str) -> None:
+    """Write a sentinel file so the Stop hook script knows a message was delivered via hooks."""
+    path = os.path.join(work_dir, _HOOK_DELIVERED_SENTINEL)
+    try:
+        open(path, "w").close()
+    except OSError:
+        pass
+
+
+def _clear_hook_delivered_sentinel(work_dir: str) -> None:
+    """Remove the sentinel file (called when agent enters idle via wait WS)."""
+    path = os.path.join(work_dir, _HOOK_DELIVERED_SENTINEL)
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        pass
 
 
 def _format_inbox_messages(messages: list[dict]) -> str:
@@ -849,6 +881,18 @@ async def hook_tool_status(request: Request):
         session.activity = ""
         session.tool_name = ""
         session.tool_input = {}
+        # Transition back to THINKING after each tool call — Claude is deciding next action
+        if session.state == AgentState.PROCESSING:
+            session.set_state(AgentState.THINKING)
+            await send_to_browser({
+                "type": "session_status",
+                "session_id": session.session_id,
+                "state": session.state.value,
+                "activity": session.activity,
+                "tool_name": session.tool_name,
+                "tool_input": session.tool_input,
+            })
+            await _save_activity(session, "Thinking")
         # Check inbox for pending messages — deliver via additionalContext
         if session.work_dir:
             messages = await asyncio.to_thread(inbox.read_and_clear, session.work_dir)
@@ -860,6 +904,8 @@ async def hook_tool_status(request: Request):
                         "additionalContext": formatted,
                     }
                 }
+                session.hook_delivered_message = True
+                _write_hook_delivered_sentinel(session.work_dir)
                 # Notify browser that inbox was cleared
                 await send_to_browser({
                     "type": "inbox_update",
@@ -867,7 +913,9 @@ async def hook_tool_status(request: Request):
                     "count": 0,
                 })
     elif event == "Stop":
-        # State does NOT change here — PROCESSING → IDLE only when wait WS connects
+        # State does NOT change here — PROCESSING → IDLE only when wait WS connects.
+        # The command-type Stop hook (stop-check-inbox.sh) handles message delivery
+        # and the hook_delivered sentinel file; HTTP Stop hooks cannot block Claude.
         pass
     elif event == "PreToolUse":
         # Skip activity updates while IDLE — wait WS is the sole authority
@@ -895,6 +943,8 @@ async def hook_tool_status(request: Request):
                         "additionalContext": formatted,
                     }
                 }
+                session.hook_delivered_message = True
+                _write_hook_delivered_sentinel(session.work_dir)
                 await send_to_browser({
                     "type": "inbox_update",
                     "session_id": session.session_id,

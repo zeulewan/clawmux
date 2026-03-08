@@ -53,10 +53,12 @@ def reload_pronunciation_overrides():
 
 
 def apply_pronunciation_overrides(text: str) -> str:
-    """Apply pronunciation overrides and regex patterns before TTS."""
-    for word, replacement in _pronunciation_overrides.items():
+    """Apply pronunciation overrides and regex patterns before TTS.
+    Re-reads from disk each time so edits take effect immediately."""
+    overrides, patterns = _load_pronunciation_rules()
+    for word, replacement in overrides.items():
         text = re.sub(re.escape(word), replacement, text, flags=re.IGNORECASE)
-    for pattern in _pronunciation_patterns:
+    for pattern in patterns:
         text = re.sub(pattern["find"], pattern["replace"], text)
     return text
 

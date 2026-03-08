@@ -55,7 +55,7 @@ class TemplateRenderer:
 
     def _load_rules(self, role: str) -> str:
         """Load role-specific rules from templates/rules/{role}.md."""
-        rules_file = RULES_DIR / f"{role}.md"
+        rules_file = RULES_DIR / f"{role.lower()}.md"
         if rules_file.exists():
             return rules_file.read_text().strip()
         return ""
@@ -68,7 +68,7 @@ class TemplateRenderer:
         # Find managers in the same project
         managers = []
         for vid, entry in self._store._agents.items():
-            if entry.project == project and entry.role == "manager":
+            if entry.project == project and entry.role.lower() == "manager":
                 name = voice_id_to_name(vid)
                 managers.append((name, vid))
 

@@ -7,6 +7,7 @@ Then run: clawmux wait
 - After being interrupted (Ctrl+C, Escape), always run `clawmux wait` to re-enter the message loop.
 - NEVER print text directly to the terminal chat. ALL communication must go through `clawmux send`. The user cannot see your terminal — they only see messages sent via ClawMux.
 - When you receive a message via hooks (while working), acknowledge it with `clawmux send` before continuing.
+- **Always include a `description` parameter on every Bash tool call.** This is what appears in the activity log and monitor. Keep it short and human-readable (e.g. `"Sending message to user"`, `"Waiting for messages"`, `"Restarting hub"`). Without it, the raw command is shown.
 
 # Formatting
 Use rich markdown formatting in your output whenever it adds clarity:
@@ -50,6 +51,8 @@ clawmux send --to sky --re msg-xxx
 clawmux wait
 ```
 Blocks until a message arrives (voice from user or inter-agent). The hub pushes messages in real-time. Always call this when you have no active work.
+
+**`clawmux wait` has no timeout** — it will block indefinitely until a message arrives. Do NOT add sleep loops, polling, or custom timeouts when waiting for messages or background task results. If you need to wait for a background task to complete, have the task send you a message via `clawmux send --to {session_id} 'done'` and then call `clawmux wait`. Never poll a file in a loop when you could just wait.
 
 ## Setting your project status
 ```bash

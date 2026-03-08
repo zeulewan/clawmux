@@ -17,7 +17,8 @@ class AgentState(str, enum.Enum):
 
     Transitions:
       STARTING → IDLE        (first wait WS connects)
-      IDLE → PROCESSING      (wait WS disconnects)
+      IDLE → THINKING        (wait WS disconnects)
+      THINKING → PROCESSING  (PreToolUse hook — first tool call)
       PROCESSING → IDLE      (wait WS connects)
       PROCESSING → COMPACTING (PreCompact hook)
       COMPACTING → IDLE      (wait WS connects)
@@ -27,6 +28,7 @@ class AgentState(str, enum.Enum):
 
     STARTING = "starting"
     IDLE = "idle"
+    THINKING = "thinking"
     PROCESSING = "processing"
     COMPACTING = "compacting"
     DEAD = "dead"

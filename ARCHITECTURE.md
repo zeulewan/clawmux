@@ -43,7 +43,7 @@ clawmux/
 │       ├── sidebar.js   # Sidebar rendering, agent status, drag-and-drop
 │       └── notes.js     # Notes panel (per-session scratch notes)
 ├── hooks/               # Claude Code hook scripts
-│   └── stop-check-inbox.sh  # Stop hook — checks inbox, prompts clawmux wait
+│   └── stop-check-inbox.sh  # Stop hook — checks sentinel + inbox, directs Claude
 ├── data/                # Runtime data directory (gitignored)
 ├── docs/                # Additional documentation
 ├── ios/                 # iOS app source (OpenClaw client)
@@ -112,7 +112,15 @@ Two mutually exclusive delivery paths, gated by `AgentState`:
 1. **IDLE (in wait):** Messages are pushed to `session._wait_queue` → delivered via wait WebSocket immediately.
 2. **PROCESSING (working):** Messages are written to the inbox file (`.inbox.jsonl`). PreToolUse/PostToolUse hooks read and clear the inbox, injecting messages via `additionalContext` in the hook response.
 
-The inbox file (`server/inbox.py`) uses `fcntl.flock` for process-safe read/write. The stop hook (`hooks/stop-check-inbox.sh`) checks the inbox when Claude finishes — if messages are pending, it prevents Claude from stopping (exit 2).
+The inbox file (`server/inbox.py`) uses `fcntl.flock` for process-safe read/write.
+
+**Stop hook coordination:** When PreToolUse/PostToolUse delivers a message via hooks, the hub writes a `.hook_delivered` sentinel file to the session work directory and sets `session.hook_delivered_message = True`. When Claude finishes a response, the command-type Stop hook (`hooks/stop-check-inbox.sh`) fires:
+
+1. If `.hook_delivered` exists → delete it, tell Claude to process the message it already received via hooks (exit 2, do not call `clawmux wait`)
+2. Else if inbox has new messages → deliver them to Claude (exit 2)
+3. Else → tell Claude to run `clawmux wait` to enter idle mode (exit 2)
+
+The sentinel file is also cleared when the agent connects to the wait WebSocket, so state resets cleanly each cycle. Note: HTTP hooks cannot block Claude from stopping — only the command-type Stop hook with exit code 2 has this capability.
 
 ### Inter-Agent Messaging (`server/message_broker.py`)
 
