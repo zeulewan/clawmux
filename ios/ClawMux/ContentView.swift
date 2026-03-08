@@ -640,7 +640,7 @@ struct ContentView: View {
         GeometryReader { geo in
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(spacing: 6) {
+                    VStack(spacing: 10) {
                         // Push content to bottom when there are few messages
                         Spacer(minLength: 0)
                             .frame(maxHeight: .infinity)
@@ -712,13 +712,13 @@ struct ContentView: View {
 
     private func messageGroupView(_ group: MessageGroup) -> some View {
         let color = vm.activeSession.flatMap { voiceColor($0.voice) } ?? Theme.textTertiary
-        return VStack(alignment: group.role == "user" ? .trailing : .leading, spacing: 2) {
+        return VStack(alignment: group.role == "user" ? .trailing : .leading, spacing: 3) {
             // Agent name header above first assistant bubble
             if group.role == "assistant", let s = vm.activeSession {
                 Text(s.label)
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(color.opacity(0.7))
-                    .padding(.leading, 4)
+                    .foregroundStyle(color.opacity(0.8))
+                    .padding(.leading, 6)
             }
             ForEach(Array(group.messages.enumerated()), id: \.element.id) { idx, msg in
                 chatBubble(msg,
@@ -733,68 +733,71 @@ struct ContentView: View {
         let color = vm.activeSession.flatMap { voiceColor($0.voice) } ?? Theme.textTertiary
         let isPlaying = vm.ttsPlayingMessageId == msg.id
 
-        // Corner radii: full rounding except the "tail" corner on the last bubble
-        let tl: CGFloat = role == "user" && isFirst ? 18 : (role == "user" ? 18 : (isFirst ? 4 : 18))
-        let tr: CGFloat = role == "user" && isFirst ? 4 : 18
+        // Tail corner on the last bubble of a group
+        let tl: CGFloat = role == "assistant" && isFirst && !isLast ? 4 : 18
         let bl: CGFloat = role == "assistant" && isLast ? 4 : 18
+        let tr: CGFloat = role == "user" && isFirst && !isLast ? 4 : 18
         let br: CGFloat = role == "user" && isLast ? 4 : 18
 
+        let bubbleBg: AnyShapeStyle = role == "user"
+            ? AnyShapeStyle(isPlaying ? Theme.blue.opacity(0.85) : Theme.blue)
+            : role == "assistant"
+                ? AnyShapeStyle(isPlaying ? color.opacity(0.26) : color.opacity(0.18))
+                : AnyShapeStyle(Color.clear)
+
         return HStack(alignment: .bottom, spacing: 0) {
-            if role == "user" { Spacer(minLength: 44) }
+            if role == "user" { Spacer(minLength: 52) }
             if role == "system" { Spacer() }
 
             VStack(alignment: role == "user" ? .trailing : .leading, spacing: 0) {
-                ZStack(alignment: role == "user" ? .bottomTrailing : .bottomLeading) {
-                    Text(msg.text)
-                        .font(role == "system" ? .caption : .system(size: 15))
-                        .lineSpacing(2)
-                        .foregroundStyle(role == "user" ? Color.white : (role == "system" ? Theme.textTertiary : Theme.textPrimary))
-                        .padding(.horizontal, 13)
-                        .padding(.top, 9)
-                        .padding(.bottom, role == "system" ? 9 : 6)
-                        .background(
-                            role == "user" ? AnyShapeStyle(Theme.blue) :
-                            role == "assistant" ? AnyShapeStyle(isPlaying ? color.opacity(0.28) : color.opacity(0.14)) :
-                            AnyShapeStyle(Color.clear),
-                            in: UnevenRoundedRectangle(
-                                topLeadingRadius: tl, bottomLeadingRadius: bl,
-                                bottomTrailingRadius: br, topTrailingRadius: tr,
-                                style: .continuous)
-                        )
-                        .overlay {
-                            if isPlaying {
-                                UnevenRoundedRectangle(
-                                    topLeadingRadius: tl, bottomLeadingRadius: bl,
-                                    bottomTrailingRadius: br, topTrailingRadius: tr,
-                                    style: .continuous)
-                                .strokeBorder(color.opacity(isPulsing ? 0.6 : 0.2), lineWidth: 1.5)
-                                .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isPulsing)
-                            }
-                        }
+                // Text content
+                Text(msg.text)
+                    .font(role == "system" ? .caption : .system(size: 15))
+                    .lineSpacing(2)
+                    .foregroundStyle(role == "user" ? Color.white : (role == "system" ? Theme.textTertiary : Theme.textPrimary))
+                    .padding(.horizontal, 13)
+                    .padding(.top, 9)
+                    .padding(.bottom, role == "system" ? 9 : 4)
+                    .frame(maxWidth: .infinity, alignment: role == "user" ? .trailing : .leading)
 
-                    // Timestamp + play button inline at bottom
-                    if role != "system" {
-                        HStack(spacing: 4) {
-                            if vm.voiceResponses {
-                                Button {
-                                    vm.playMessageTTS(messageId: msg.id, text: msg.text, voice: vm.activeSession?.voice)
-                                } label: {
-                                    Image(systemName: isPlaying ? "stop.fill" : "speaker.wave.2.fill")
-                                        .font(.system(size: 8))
-                                        .foregroundStyle(isPlaying ? color : (role == "user" ? Color.white.opacity(0.6) : Theme.textTertiary))
-                                }
+                // Timestamp row — below text, inside bubble
+                if role != "system" {
+                    HStack(spacing: 4) {
+                        if vm.voiceResponses {
+                            Button {
+                                vm.playMessageTTS(messageId: msg.id, text: msg.text, voice: vm.activeSession?.voice)
+                            } label: {
+                                Image(systemName: isPlaying ? "stop.fill" : "speaker.wave.2.fill")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(isPlaying ? color : (role == "user" ? Color.white.opacity(0.55) : Theme.textTertiary))
                             }
-                            Text(shortTime(msg.timestamp))
-                                .font(.system(size: 9))
-                                .foregroundStyle(role == "user" ? Color.white.opacity(0.6) : Theme.textTertiary)
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.bottom, 5)
+                        Text(shortTime(msg.timestamp))
+                            .font(.system(size: 9))
+                            .foregroundStyle(role == "user" ? Color.white.opacity(0.6) : Theme.textTertiary)
                     }
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 6)
+                    .frame(maxWidth: .infinity, alignment: role == "user" ? .trailing : .leading)
+                }
+            }
+            .background(bubbleBg,
+                in: UnevenRoundedRectangle(
+                    topLeadingRadius: tl, bottomLeadingRadius: bl,
+                    bottomTrailingRadius: br, topTrailingRadius: tr,
+                    style: .continuous))
+            .overlay {
+                if isPlaying {
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: tl, bottomLeadingRadius: bl,
+                        bottomTrailingRadius: br, topTrailingRadius: tr,
+                        style: .continuous)
+                    .strokeBorder(color.opacity(isPulsing ? 0.65 : 0.2), lineWidth: 1.5)
+                    .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isPulsing)
                 }
             }
 
-            if role == "assistant" { Spacer(minLength: 44) }
+            if role == "assistant" { Spacer(minLength: 52) }
             if role == "system" { Spacer() }
         }
     }
