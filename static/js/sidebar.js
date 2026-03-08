@@ -203,7 +203,8 @@ function toggleSidebarExpand() {
   if (sidebar.classList.contains('expanded')) {
     collapseSidebar();
   } else {
-    sidebar.classList.add('expanded');
+    sidebar.classList.add('no-transition', 'expanded');
+    requestAnimationFrame(() => sidebar.classList.remove('no-transition'));
     overlay.classList.add('visible');
     renderSidebar();
   }
@@ -213,7 +214,9 @@ function toggleSidebarExpand() {
 function collapseSidebar() {
   const sidebar = document.getElementById('sidebar');
   const overlay = document.getElementById('sidebar-overlay');
+  sidebar.classList.add('no-transition');
   sidebar.classList.remove('expanded');
+  requestAnimationFrame(() => sidebar.classList.remove('no-transition'));
   overlay.classList.remove('visible');
   // Scroll chat to bottom after layout settles
   const chat = document.getElementById('chat-area');

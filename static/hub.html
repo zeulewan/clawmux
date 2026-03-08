@@ -1567,7 +1567,10 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   /* Put connection dot inline with title */
   #header > div:has(#dot) { padding: 2px 6px !important; border-radius: var(--radius-xs); }
 
-  /* Sidebar: icon-only, absolutely positioned with smooth transition */
+  /* Instant expand/collapse — no width transition on mobile to prevent overflow clipping */
+  #sidebar.no-transition { transition: none !important; }
+
+  /* Sidebar: icon-only, absolutely positioned */
   #sidebar {
     width: 48px;
     min-width: 48px;
