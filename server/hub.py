@@ -1728,6 +1728,53 @@ async def send_external_message(request: Request):
     return JSONResponse({"id": msg.id})
 
 
+@app.post("/api/messages/external/outbound")
+async def log_external_outbound(request: Request):
+    """Log an outbound message from a ClawMux agent to an external system (e.g. OpenClaw).
+    Requires X-ClawMux-Token header. Records in sender's history and broadcasts to browser."""
+    from hub_config import EXTERNAL_TOKEN
+    token = request.headers.get("X-ClawMux-Token", "")
+    if not token or token != EXTERNAL_TOKEN:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    data = await request.json()
+    sender_name = data.get("sender", "").strip()
+    recipient_name = data.get("to", "external").strip() or "external"
+    content = data.get("message", "")
+    parent_id = data.get("parent_id", "")
+
+    if not sender_name or not content:
+        return JSONResponse({"error": "sender and message are required"}, status_code=400)
+
+    sender = _resolve_session(sender_name)
+    if not sender:
+        return JSONResponse({"error": f"sender '{sender_name}' not found"}, status_code=404)
+
+    msg_id = broker.generate_id(sender.session_id, recipient_name)
+    import dataclasses
+    from message_broker import Message, PENDING
+    msg = Message(
+        id=msg_id,
+        sender=sender.session_id,
+        recipient=recipient_name,
+        content=content,
+        sender_name=sender.label,
+        recipient_name=recipient_name.capitalize(),
+        parent_id=parent_id,
+        created_at=time.time(),
+    )
+    broker.messages[msg_id] = msg
+
+    await asyncio.to_thread(history.append, sender.voice, sender.label, "system",
+                   f"[Agent msg to {recipient_name.capitalize()}] {content}",
+                   _hist_prefix(sender),
+                   msg_id=msg_id, parent_id=parent_id or None)
+
+    await send_to_browser({"type": "agent_message", "message": msg.to_dict()})
+    log.info("Outbound external message from '%s' to '%s': %s", sender.session_id, recipient_name, msg_id)
+    return JSONResponse({"id": msg_id})
+
+
 @app.post("/api/messages/speak")
 async def speak_to_user(request: Request):
     """Agent speaks to user via TTS — fire and forget."""
