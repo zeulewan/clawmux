@@ -231,9 +231,18 @@ function updateChatStopButton() {
   if (voiceBtn) voiceBtn.style.display = isWorking ? '' : 'none';
 }
 
+let _interruptDebounce = false;
 function interruptActiveAgent() {
-  if (!activeSessionId) return;
+  if (!activeSessionId || _interruptDebounce) return;
+  _interruptDebounce = true;
   fetch(`/api/sessions/${activeSessionId}/interrupt`, { method: 'POST' }).catch(() => {});
+  // Disable for 2s to prevent double-tap (double Escape triggers exit prompt)
+  const btns = document.querySelectorAll('#text-stop, #voice-stop');
+  btns.forEach(b => { b.disabled = true; b.style.opacity = '0.3'; });
+  setTimeout(() => {
+    _interruptDebounce = false;
+    btns.forEach(b => { b.disabled = false; b.style.opacity = ''; });
+  }, 2000);
 }
 
 function markSessionUnread(sessionId) {

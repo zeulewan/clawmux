@@ -1029,6 +1029,22 @@ async def interrupt_session(session_id: str):
         log.error("Interrupt error for %s: %s", tmux_name, e)
         return JSONResponse({"error": str(e)}, status_code=500)
     log.info("Interrupted session %s (tmux: %s)", session_id, tmux_name)
+
+    # After interrupt, auto-send 'clawmux wait' so agent re-enters message loop
+    async def _auto_recover():
+        await asyncio.sleep(3)
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "tmux", "send-keys", "-t", tmux_name, "clawmux wait", "Enter",
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await proc.communicate()
+            log.info("Auto-recovery: sent 'clawmux wait' to %s", tmux_name)
+        except Exception:
+            pass
+    asyncio.create_task(_auto_recover())
+
     return JSONResponse({"status": "interrupted"})
 
 
