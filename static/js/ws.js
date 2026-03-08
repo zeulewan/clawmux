@@ -145,15 +145,11 @@ function handleMessage(data) {
             existing.toolStatusText = s.activity;
           }
           // Restore session state from server's canonical state field
-          const serverState = s.state || (s.in_wait ? 'idle' : (s.processing ? 'processing' : 'idle'));
-          if (serverState === 'idle') {
-            setSessionState(s.session_id, 'idle');
-          } else if (serverState === 'processing' || serverState === 'compacting') {
-            setSessionState(s.session_id, 'processing');
-          } else if (serverState === 'starting') {
-            setSessionState(s.session_id, 'idle');  // starting shows as idle in chat
+          const serverState = s.state;
+          if (serverState) {
+            existing.compacting = (serverState === 'compacting');
+            setSessionSidebarState(s.session_id, serverState);
           }
-          existing.compacting = (serverState === 'compacting');
         }
       }
     }
@@ -245,22 +241,23 @@ function handleMessage(data) {
       if ('tool_name' in data) {
         s.toolName = data.tool_name || '';
       }
-      // Use canonical state field if present
+      // Use canonical state field
       const serverState = data.state;
       if (serverState) {
-        s.serverState = serverState;
         s.compacting = (serverState === 'compacting');
-        if (serverState === 'idle') {
-          setSessionState(data.session_id, 'idle');
-        } else if (serverState === 'processing' || serverState === 'compacting') {
-          setSessionState(data.session_id, 'processing');
-        } else if (serverState === 'starting') {
-          // Starting state — don't override if already processing
+        setSessionSidebarState(data.session_id, serverState);
+        // Typing indicator
+        const isActive = ['thinking', 'processing', 'compacting', 'starting'].includes(serverState);
+        if (isActive) {
+          if (typeof showTypingIndicator === 'function') showTypingIndicator(data.session_id);
+        } else {
+          if (typeof hideTypingIndicator === 'function') hideTypingIndicator(data.session_id);
         }
       } else if (data.agent_idle) {
         // Legacy fallback: Stop hook without state field
         s.toolStatusText = '';
-        setSessionState(data.session_id, 'idle');
+        setSessionSidebarState(data.session_id, 'idle');
+        if (typeof hideTypingIndicator === 'function') hideTypingIndicator(data.session_id);
       }
       // Legacy status field (ready/starting)
       if (data.status) {
@@ -292,7 +289,7 @@ function handleMessage(data) {
     const s = sessions.get(data.session_id);
     if (s) {
       s.compacting = data.compacting;
-      s.serverState = data.compacting ? 'compacting' : 'processing';
+      setSessionSidebarState(data.session_id, data.compacting ? 'compacting' : 'processing');
       renderSidebar();
     }
     return;
@@ -345,6 +342,7 @@ function handleMessage(data) {
     return;
   }
   if (type === 'assistant_text') {
+    if (typeof hideTypingIndicator === 'function') hideTypingIndicator(session_id);
     if (data.fire_and_forget) {
       // Fire-and-forget speak: just add message to chat, don't change state
       if (data.text && data.text.trim()) {
@@ -374,9 +372,12 @@ function handleMessage(data) {
   } else if (type === 'audio') {
     s.status = 'active';
     setSessionState(session_id, 'speaking');
-    if (data.words && data.words.length) karaokeSetupMessage(session_id, data.words, data.msg_id);
+    // Setup karaoke spans on DOM and get words with el references
+    const karaokeWords = (data.words && data.words.length)
+      ? karaokeSetupMessage(session_id, data.words, data.msg_id)
+      : null;
     if (session_id === activeSessionId) {
-      enqueueAudio(session_id, data.data);
+      enqueueAudio(session_id, data.data, karaokeWords, data.msg_id);
       setStatus('Speaking...', session_id);
     } else {
       // Buffer audio for background session — don't play or ack

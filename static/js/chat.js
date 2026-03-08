@@ -271,6 +271,68 @@ function _getChatLimit(sid) {
   return _chatRenderLimit.get(sid) || _CHAT_BATCH;
 }
 
+// --- Activity line grouping ---
+// Groups consecutive activity lines into a collapsible dropdown.
+// First activity shows as a standalone line. Second+ collapse into a group.
+function _appendActivityLine(container, text) {
+  const lastChild = container.lastElementChild;
+
+  // Case 1: Last child is an activity-group — add to it
+  if (lastChild && lastChild.classList.contains('activity-group')) {
+    const items = lastChild.querySelector('.activity-group-items');
+    const line = document.createElement('div');
+    line.className = 'activity-line';
+    line.textContent = text;
+    items.appendChild(line);
+    // Update header to show latest tool call
+    const label = lastChild.querySelector('.activity-group-label');
+    label.textContent = text;
+    const count = lastChild.querySelector('.activity-group-count');
+    const total = items.children.length + 1; // +1 for the first line stored in data
+    count.textContent = '+' + (total - 1) + ' more';
+    return;
+  }
+
+  // Case 2: Last child is a standalone activity-line — convert to group
+  if (lastChild && lastChild.classList.contains('activity-line')) {
+    const firstText = lastChild.textContent;
+    const group = document.createElement('div');
+    group.className = 'activity-group';
+    const header = document.createElement('div');
+    header.className = 'activity-group-header';
+    header.onclick = () => group.classList.toggle('expanded');
+    const arrow = document.createElement('span');
+    arrow.className = 'activity-group-arrow';
+    arrow.textContent = '\u25B6';
+    const label = document.createElement('span');
+    label.className = 'activity-group-label';
+    label.textContent = text;
+    const countEl = document.createElement('span');
+    countEl.className = 'activity-group-count';
+    countEl.textContent = '+1 more';
+    header.appendChild(arrow);
+    header.appendChild(label);
+    header.appendChild(countEl);
+    const items = document.createElement('div');
+    items.className = 'activity-group-items';
+    // First line goes into the hidden items
+    const firstLine = document.createElement('div');
+    firstLine.className = 'activity-line';
+    firstLine.textContent = firstText;
+    items.appendChild(firstLine);
+    group.appendChild(header);
+    group.appendChild(items);
+    container.replaceChild(group, lastChild);
+    return;
+  }
+
+  // Case 3: No previous activity — add standalone line
+  const line = document.createElement('div');
+  line.className = 'activity-line';
+  line.textContent = text;
+  container.appendChild(line);
+}
+
 function renderChat(forceScroll = false) {
   // Check if user is near bottom BEFORE clearing DOM (scrollHeight resets after innerHTML='')
   const wasNearBottom = forceScroll || chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150;
@@ -307,10 +369,7 @@ function renderChat(forceScroll = false) {
   for (const msg of displayMessages) {
     if (replySet.has(msg)) continue;
     if (msg.role === 'activity') {
-      const line = document.createElement('div');
-      line.className = 'activity-line';
-      line.textContent = msg.text;
-      chatArea.appendChild(line);
+      _appendActivityLine(chatArea, msg.text);
       continue;
     }
     if (!showAgentMessages && msg.role === 'system' && /^\[Agent msg (from|to) /.test(msg.text)) continue;
@@ -471,13 +530,14 @@ function addMessage(sessionId, role, text, opts = {}) {
       const wasNearBottom = chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150;
       let el;
       if (role === 'activity') {
-        el = document.createElement('div');
-        el.className = 'activity-line';
-        el.textContent = text;
+        _appendActivityLine(chatArea, text);
       } else {
+        // Auto-collapse any open activity group when a real message arrives
+        const lastGroup = chatArea.querySelector('.activity-group.expanded');
+        if (lastGroup) lastGroup.classList.remove('expanded');
         el = createMsgEl(role, text, voiceColor(s.voice), s.voice, msgObj);
+        chatArea.appendChild(el);
       }
-      chatArea.appendChild(el);
       if (wasNearBottom) {
         chatArea.scrollTop = chatArea.scrollHeight;
       }
@@ -537,6 +597,28 @@ function applyInputMode() {
   }
 }
 
+// Typing indicator — show animated dots when agent is thinking/processing
+function showTypingIndicator(sessionId) {
+  if (sessionId !== activeSessionId) return;
+  const chatArea = document.getElementById('chat-area');
+  if (!chatArea || chatArea.style.display === 'none') return;
+  if (chatArea.querySelector('.msg-typing-indicator')) return; // already showing
+  const el = document.createElement('div');
+  el.className = 'msg assistant msg-typing-indicator';
+  el.dataset.typingFor = sessionId;
+  el.innerHTML = '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>';
+  chatArea.appendChild(el);
+  chatScrollToBottom(false);
+}
+
+function hideTypingIndicator(sessionId) {
+  const chatArea = document.getElementById('chat-area');
+  if (!chatArea) return;
+  chatArea.querySelectorAll('.msg-typing-indicator').forEach(el => {
+    if (!sessionId || el.dataset.typingFor === sessionId) el.remove();
+  });
+}
+
 // Auto-resize textarea
 textInput.addEventListener('input', () => {
   textInput.style.height = 'auto';
@@ -544,9 +626,10 @@ textInput.addEventListener('input', () => {
   textSendBtn.disabled = !textInput.value.trim();
 });
 
-// Send on Enter (Shift+Enter for newline)
+// Send on Enter (Shift+Enter for newline) — desktop only
+// On mobile, Enter inserts newline; the send button handles sending
 textInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
+  if (e.key === 'Enter' && !e.shiftKey && !isMobile) {
     e.preventDefault();
     sendTextMessage();
   }
