@@ -23,6 +23,7 @@ class AgentBackend(ABC):
         claude_session_id: str,
         resuming: bool,
         model: str,
+        effort: str = "high",
     ) -> None:
         """Create the agent runtime and start the AI process.
 
@@ -36,6 +37,7 @@ class AgentBackend(ABC):
             claude_session_id: Claude Code conversation UUID.
             resuming: True if resuming an existing conversation.
             model: Model to use (opus/sonnet/haiku).
+            effort: Effort level (low/medium/high).
         """
 
     @abstractmethod
@@ -80,8 +82,9 @@ class AgentBackend(ABC):
         voice_name: str,
         claude_session_id: str,
         model: str,
+        effort: str = "high",
     ) -> None:
-        """Kill and respawn the agent with a new model, resuming the conversation.
+        """Kill and respawn the agent with a new model/effort, resuming the conversation.
 
         Args:
             session_name: The session name passed to spawn().

@@ -49,6 +49,7 @@ class Session:
     text_mode: bool = False  # when True, skip TTS and just send text
     interjections: list[str] = field(default_factory=list)  # queued user messages sent while agent was busy
     model: str = ""  # per-session Claude model override (opus/sonnet/haiku); empty = use global default
+    effort: str = ""  # per-session effort level override (low/medium/high); empty = use global default
     pending_model_restart: bool = False  # True when model was changed and needs restart after current turn
     restarting: bool = False  # True while model restart is in progress (skip health checks)
     processing: bool = False  # DEPRECATED — derived from state during migration
@@ -66,7 +67,7 @@ class Session:
         """Transition to a new state, syncing deprecated boolean flags."""
         self.state = new_state
         # Sync legacy booleans for backward compat
-        self.processing = new_state == AgentState.PROCESSING
+        self.processing = new_state in (AgentState.PROCESSING, AgentState.THINKING)
         self.in_wait = new_state == AgentState.IDLE
         self.compacting = new_state == AgentState.COMPACTING
         # Sync legacy status string
@@ -103,6 +104,7 @@ class Session:
             "role": self.role,
             "task": self.task,
             "model": self.model,
+            "effort": self.effort,
             "unread_count": self.unread_count,
             "work_dir": self.work_dir,
             "project_slug": self.project_slug,
@@ -598,12 +600,15 @@ class SessionManager:
             import hub_config
             session_model = session.model or hub_config.CLAUDE_MODEL
             session.model = session_model  # Store effective model so browser can display it
+            session_effort = session.effort or hub_config.CLAUDE_EFFORT
+            session.effort = session_effort
             await self.backend.spawn(
                 session_name=tmux_name, work_dir=str(work_dir),
                 session_id=session_id, hub_port=HUB_PORT,
                 voice_id=voice_id, voice_name=voice_name,
                 claude_session_id=claude_session_id,
                 resuming=resuming, model=session_model,
+                effort=session_effort,
             )
 
             # State stays STARTING — transitions to IDLE when wait WS connects
@@ -643,10 +648,11 @@ class SessionManager:
         import hub_config
         session_model = session.model or hub_config.CLAUDE_MODEL
         session.model = session_model  # Store effective model
-        model_flag = f" --model {session_model}" if session_model != "opus" else ""
+        session_effort = session.effort or hub_config.CLAUDE_EFFORT
+        session.effort = session_effort
         claude_session_id = session.claude_session_id
 
-        log.info("[%s] Restarting Claude with model %s", session_id, session_model)
+        log.info("[%s] Restarting Claude with model %s, effort %s", session_id, session_model, session_effort)
         session.pending_model_restart = False
         session.restarting = True
         session.set_state(AgentState.STARTING)
@@ -671,6 +677,7 @@ class SessionManager:
             session_id=session_id, hub_port=HUB_PORT,
             voice_id=session.voice, voice_name=session.label,
             claude_session_id=claude_session_id, model=session_model,
+            effort=session_effort,
         )
 
         session.restarting = False
@@ -723,7 +730,7 @@ class SessionManager:
     async def _voice_watchdog(self, session_id: str, session: Session, now: float) -> None:
         """Detect agents that dropped out of voice mode and re-inject the wait command."""
         # Skip sessions that aren't in a watchdog-relevant state
-        if session.state not in (AgentState.IDLE, AgentState.PROCESSING):
+        if session.state not in (AgentState.IDLE, AgentState.THINKING, AgentState.PROCESSING):
             return
         if session.in_wait or session.processing or session.restarting or session.compacting:
             return

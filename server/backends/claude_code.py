@@ -24,6 +24,7 @@ class ClaudeCodeBackend(AgentBackend):
         claude_session_id: str,
         resuming: bool,
         model: str,
+        effort: str = "high",
     ) -> None:
         # Kill stale tmux session with same name
         await self._run(f"tmux kill-session -t {session_name} 2>/dev/null || true")
@@ -50,11 +51,12 @@ class ClaudeCodeBackend(AgentBackend):
 
         # Build Claude command
         model_flag = f" --model {model}" if model != "opus" else ""
+        effort_flag = f" --effort {effort}" if effort and effort != "high" else ""
         startup_prompt = "Run this exact command now: clawmux wait"
         if resuming:
-            claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag} --resume {claude_session_id} '{startup_prompt}'"
+            claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag}{effort_flag} --resume {claude_session_id} '{startup_prompt}'"
         else:
-            claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag} --session-id {claude_session_id} '{startup_prompt}'"
+            claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag}{effort_flag} --session-id {claude_session_id} '{startup_prompt}'"
         await self._run(f'tmux send-keys -t {session_name} "{claude_cmd}" Enter')
 
         # Wait for Claude to initialize (poll for input prompt AFTER marker)
@@ -88,6 +90,7 @@ class ClaudeCodeBackend(AgentBackend):
         voice_name: str,
         claude_session_id: str,
         model: str,
+        effort: str = "high",
     ) -> None:
         # Kill the entire tmux session
         await self.terminate(session_name)
@@ -113,8 +116,9 @@ class ClaudeCodeBackend(AgentBackend):
         await self._run(f'tmux send-keys -t {session_name} "echo {marker}" Enter')
 
         model_flag = f" --model {model}" if model != "opus" else ""
+        effort_flag = f" --effort {effort}" if effort and effort != "high" else ""
         startup_prompt = "Run this exact command now: clawmux wait"
-        claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag} --resume {claude_session_id} '{startup_prompt}'"
+        claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag}{effort_flag} --resume {claude_session_id} '{startup_prompt}'"
         await self._run(f'tmux send-keys -t {session_name} "{claude_cmd}" Enter')
 
         await self._wait_for_claude_init(session_name, marker)
@@ -125,15 +129,22 @@ class ClaudeCodeBackend(AgentBackend):
         except Exception:
             return ""
 
+    # Light-background agents that need black text for contrast
+    LIGHT_BG_VOICES = {
+        "af_alloy", "am_adam", "am_onyx", "bm_fable", "af_nova", "am_eric", "bf_lily",
+        "af_nicole", "bf_alice", "bm_lewis",
+    }
+
     async def apply_status_bar(self, session_name: str, label: str, voice_id: str) -> None:
         color = AGENT_COLORS.get(voice_id)
         if not color:
             return
+        fg = "colour16" if voice_id in self.LIGHT_BG_VOICES else "colour231"
         for opt, val in [
             ("status", "on"),
-            ("status-style", f"fg=#ffffff,bg={color}"),
+            ("status-style", f"fg={fg},bg={color},bold"),
             ("status-left", f" {label} "),
-            ("status-left-style", f"fg=#ffffff,bg={color},bold"),
+            ("status-left-style", f"fg={fg},bg={color},bold"),
             ("status-left-length", "20"),
             ("status-right", ""),
             ("status-right-length", "0"),

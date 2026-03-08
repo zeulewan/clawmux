@@ -19,6 +19,7 @@ SESSION_TIMEOUT_MINUTES = int(os.environ.get("VOICE_CHAT_TIMEOUT", "0"))  # 0 = 
 HEALTH_CHECK_INTERVAL_SECONDS = 15
 CLAUDE_BASE_COMMAND = "claude --dangerously-skip-permissions"
 CLAUDE_MODEL = os.environ.get("VOICE_CHAT_MODEL", "opus")  # opus, sonnet, haiku
+CLAUDE_EFFORT = os.environ.get("CLAWMUX_EFFORT", "high")  # low, medium, high
 TMUX_SESSION_PREFIX = "voice"
 WHISPER_URL = "http://127.0.0.1:2022"
 KOKORO_URL = "http://127.0.0.1:8880"
@@ -90,9 +91,9 @@ VOICE_POOL = [
 # Tmux status bar colors per voice (used for agent session styling)
 AGENT_COLORS = {
     # Project 1 (default)
-    "af_sky": "colour211",     # pink
-    "af_alloy": "colour75",    # blue
-    "af_sarah": "colour180",   # warm gold
+    "af_sky": "colour33",      # blue
+    "af_alloy": "colour208",   # orange
+    "af_sarah": "colour196",   # red
     "am_adam": "colour78",     # green
     "am_echo": "colour134",    # purple
     "am_onyx": "colour245",    # grey

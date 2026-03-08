@@ -136,6 +136,7 @@ function handleMessage(data) {
         if (existing) {
           existing.speed = s.speed || existing.speed;
           existing.model = s.model || existing.model;
+          existing.effort = s.effort || existing.effort;
           existing.project = s.project || existing.project || '';
           existing.project_area = s.project_area || existing.project_area || '';
           existing.unreadCount = s.unread_count || 0;

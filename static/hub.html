@@ -1175,6 +1175,45 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   line-height: 1.3;
   word-break: break-word;
 }
+.activity-group {
+  align-self: flex-start;
+  padding: 0 18px;
+  margin-top: -2px;
+  margin-bottom: -2px;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  opacity: 0.6;
+  line-height: 1.3;
+}
+.activity-group-header {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.activity-group-header:hover { opacity: 0.85; }
+.activity-group-arrow {
+  display: inline-block;
+  font-size: 0.55rem;
+  transition: transform 0.15s;
+}
+.activity-group.expanded .activity-group-arrow { transform: rotate(90deg); }
+.activity-group-count {
+  color: var(--text-tertiary);
+  font-size: 0.6rem;
+}
+.activity-group-items {
+  display: none;
+  padding-left: 12px;
+  margin-top: 2px;
+}
+.activity-group.expanded .activity-group-items { display: block; }
+.activity-group-items .activity-line {
+  padding: 0;
+  margin: 0;
+  opacity: 1;
+}
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
@@ -1514,6 +1553,12 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
     <option value="haiku">Haiku</option>
   </select>
   <span id="model-label" style="display:none; font-size:0.7rem; color:var(--text-secondary); cursor:pointer;" onclick="toggleModelPopup(event)"></span>
+  <select id="session-effort" tabindex="-1" style="display:none;" onchange="setSessionEffort(this.value)">
+    <option value="high">High</option>
+    <option value="medium">Medium</option>
+    <option value="low">Low</option>
+  </select>
+  <span id="effort-label" style="display:none; font-size:0.7rem; color:var(--text-secondary); cursor:pointer;" onclick="toggleEffortPopup(event)"></span>
   <select id="project-selector" tabindex="-1" style="display:none;" onchange="switchProject(this.value)">
     <option value="default">Default</option>
   </select>
@@ -1534,6 +1579,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   <!-- Debug link removed — accessible from Settings page -->
 </div>
 <div id="model-popup" style="display:none; position:fixed; background:#1a1a1a; border:1px solid #333; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.6); z-index:9999; min-width:100px; overflow:hidden;"></div>
+<div id="effort-popup" style="display:none; position:fixed; background:#1a1a1a; border:1px solid #333; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.6); z-index:9999; min-width:100px; overflow:hidden;"></div>
 
 <div id="app-body">
 
@@ -1667,6 +1713,14 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
           <option value="opus">Opus</option>
           <option value="sonnet">Sonnet</option>
           <option value="haiku">Haiku</option>
+        </select>
+      </div>
+      <div class="settings-inline" style="padding:8px 16px;">
+        <div class="toggle-info"><span class="toggle-name">Default Effort</span><span class="toggle-desc">Reasoning effort level for new agents</span></div>
+        <select id="default-effort-select" onchange="setDefaultEffort(this.value)" style="width:auto; padding:4px 8px; font-size:0.8rem;">
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
         </select>
       </div>
       <div class="settings-toggle" onclick="toggleSetting('silent_startup')">
@@ -1900,6 +1954,11 @@ function switchTab(sessionId, manual = false) {
       sessionModelEl.value = s.model || 'opus';
     }
     updateModelLabel();
+    const sessionEffortEl = document.getElementById('session-effort');
+    if (sessionEffortEl) {
+      sessionEffortEl.value = s.effort || 'high';
+    }
+    updateEffortLabel();
 
     // Resume thinking sound if this session is processing
     if (getSessionState(sessionId) === 'processing') startThinkingSound(sessionId);
@@ -2349,6 +2408,9 @@ async function loadSettings() {
     // Sync default model dropdown
     const dmSel = document.getElementById('default-model-select');
     if (dmSel) dmSel.value = s.model || 'opus';
+    // Sync default effort dropdown
+    const deSel = document.getElementById('default-effort-select');
+    if (deSel) deSel.value = s.effort || 'high';
   } catch (e) {
     console.error('Failed to load settings:', e);
   }
@@ -2367,6 +2429,16 @@ async function setDefaultModel(model) {
       body: JSON.stringify({ model }),
     });
   } catch (e) { console.error('Failed to save default model:', e); }
+}
+
+async function setDefaultEffort(effort) {
+  try {
+    await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ effort }),
+    });
+  } catch (e) { console.error('Failed to save default effort:', e); }
 }
 
 async function toggleSetting(key) {
@@ -2556,6 +2628,58 @@ function selectModelPopup(model) {
   document.getElementById('model-popup').style.display = 'none';
   document.getElementById('session-model').value = model;
   setSessionModel(model);
+}
+
+// --- Per-session effort ---
+function setSessionEffort(effort) {
+  if (!activeSessionId || !ws || ws.readyState !== WebSocket.OPEN) return;
+  document.getElementById('session-effort').blur();
+  const s = sessions.get(activeSessionId);
+  const currentEffort = s?.effort || 'high';
+  if (effort === currentEffort) return;
+  if (!confirm(`Switch to ${effort.charAt(0).toUpperCase() + effort.slice(1)} effort? This will restart the session. The conversation will be preserved.`)) {
+    document.getElementById('session-effort').value = currentEffort;
+    return;
+  }
+  ws.send(JSON.stringify({ session_id: activeSessionId, type: 'restart_effort', effort }));
+  if (s) s.effort = effort;
+  updateEffortLabel();
+}
+
+function updateEffortLabel() {
+  const label = document.getElementById('effort-label');
+  if (!label) return;
+  const s = activeSessionId ? sessions.get(activeSessionId) : null;
+  const effort = s?.effort || 'high';
+  label.textContent = effort.charAt(0).toUpperCase() + effort.slice(1) + ' ▾';
+  label.style.display = 'inline';
+}
+
+function toggleEffortPopup(e) {
+  e.stopPropagation();
+  const popup = document.getElementById('effort-popup');
+  if (popup.style.display !== 'none') { popup.style.display = 'none'; return; }
+  const s = activeSessionId ? sessions.get(activeSessionId) : null;
+  const current = s?.effort || 'high';
+  const efforts = ['high', 'medium', 'low'];
+  popup.innerHTML = efforts.map(ef => {
+    const sel = ef === current ? 'font-weight:700;color:#4a9eff;' : 'color:#e0e0e0;';
+    return `<div style="padding:8px 16px;cursor:pointer;${sel}" onmousedown="selectEffortPopup('${ef}')" ontouchstart="selectEffortPopup('${ef}')">${ef.charAt(0).toUpperCase() + ef.slice(1)}${ef === current ? ' ✓' : ''}</div>`;
+  }).join('');
+  const label = document.getElementById('effort-label');
+  const rect = label.getBoundingClientRect();
+  popup.style.position = 'fixed';
+  popup.style.top = rect.bottom + 4 + 'px';
+  popup.style.left = rect.left + 'px';
+  popup.style.display = 'block';
+  const close = () => { popup.style.display = 'none'; document.removeEventListener('click', close); };
+  setTimeout(() => document.addEventListener('click', close), 0);
+}
+
+function selectEffortPopup(effort) {
+  document.getElementById('effort-popup').style.display = 'none';
+  document.getElementById('session-effort').value = effort;
+  setSessionEffort(effort);
 }
 
 // --- Auto mode ---
