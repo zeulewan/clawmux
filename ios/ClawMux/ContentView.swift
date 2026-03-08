@@ -336,9 +336,9 @@ struct ContentView: View {
                         }
                     }
                     HStack(spacing: 4) {
-                        if alive { Circle().fill(rc).frame(width: 4, height: 4) }
+                        if alive { Circle().fill(rc).frame(width: 6, height: 6) }
                         Text(cardStatus(session, spawning: spawning))
-                            .font(.system(size: 10))
+                            .font(.system(size: 9))
                             .foregroundStyle(alive ? Color.cTextSec : Color.cTextTer)
                             .lineLimit(1)
                     }
