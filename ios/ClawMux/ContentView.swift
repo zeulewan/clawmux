@@ -86,6 +86,9 @@ struct ContentView: View {
     @State private var pttDragOffsetY: CGFloat = 0
     @State private var pttGestureCommitted     = false
     @FocusState private var pttTextFieldFocused: Bool
+    @State private var showCopiedToast         = false
+    @State private var thinkingExpanded        = true
+    @State private var collapsedProjects:       Set<String> = []
 
     var body: some View {
         ZStack {
@@ -170,16 +173,94 @@ struct ContentView: View {
             .padding(.bottom, 16)
 
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 10) {
-                    ForEach(ALL_VOICES) { voice in
-                        agentCard(voice)
+                VStack(spacing: 0) {
+                    let groups = projectGroups
+                    // Named project sections
+                    ForEach(groups.namedProjects, id: \.self) { project in
+                        projectSection(project, voices: groups.byProject[project] ?? [])
+                    }
+                    // Ungrouped agents
+                    if !groups.ungrouped.isEmpty {
+                        if !groups.namedProjects.isEmpty {
+                            HStack {
+                                Text("AGENTS")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(Color.cTextTer)
+                                    .tracking(0.8)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.top, 16).padding(.bottom, 6)
+                        }
+                        VStack(spacing: 6) {
+                            ForEach(groups.ungrouped) { voice in agentCard(voice) }
+                        }
+                        .padding(.horizontal, 16)
                     }
                 }
-                .padding(.horizontal, 16)
                 .padding(.bottom, 32)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    // MARK: - Project Grouping
+
+    private struct ProjectGroups {
+        let namedProjects: [String]
+        let byProject:     [String: [VoiceInfo]]
+        let ungrouped:     [VoiceInfo]
+    }
+
+    private var projectGroups: ProjectGroups {
+        var byProject: [String: [VoiceInfo]] = [:]
+        var ungrouped: [VoiceInfo] = []
+        for voice in ALL_VOICES {
+            let project = vm.sessions.first { $0.voice == voice.id }?.project ?? ""
+            if project.isEmpty { ungrouped.append(voice) }
+            else { byProject[project, default: []].append(voice) }
+        }
+        return ProjectGroups(namedProjects: byProject.keys.sorted(), byProject: byProject, ungrouped: ungrouped)
+    }
+
+    @ViewBuilder
+    private func projectSection(_ project: String, voices: [VoiceInfo]) -> some View {
+        let collapsed = collapsedProjects.contains(project)
+        VStack(spacing: 0) {
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                    if collapsed { collapsedProjects.remove(project) }
+                    else         { collapsedProjects.insert(project) }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(Color.cTextTer)
+                        .rotationEffect(.degrees(collapsed ? 0 : 90))
+                        .animation(.spring(response: 0.3), value: collapsed)
+                    Text(project.uppercased())
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Color.cTextTer)
+                        .tracking(0.8)
+                    Text("\(voices.count)")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.cTextTer.opacity(0.55))
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 16).padding(.bottom, 6)
+            }
+            .buttonStyle(.plain)
+
+            if !collapsed {
+                VStack(spacing: 6) {
+                    ForEach(voices) { voice in agentCard(voice) }
+                }
+                .padding(.horizontal, 16)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
     }
 
     private func agentCard(_ voice: VoiceInfo) -> some View {
@@ -218,6 +299,7 @@ struct ContentView: View {
                         Circle()
                             .strokeBorder(rc, lineWidth: 2)
                             .frame(width: 46, height: 46)
+                            .shadow(color: rc.opacity(0.45), radius: 5)
                     }
                     Image(systemName: voiceIcon(voice.id))
                         .font(.system(size: 17, weight: .semibold))
@@ -225,26 +307,30 @@ struct ContentView: View {
                 }
                 .frame(width: 60, height: 60)
 
-                // Name + status
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Text(voice.name)
-                            .font(.system(size: 15, weight: .semibold, design: .rounded))
-                            .foregroundStyle(alive ? Color.cText : Color.cTextTer)
-                        if let s = session, !s.project.isEmpty && !alive {
-                            Text(s.project)
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(Color.cTextTer)
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color.cCard, in: Capsule())
+                // Name + role/task + status
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(voice.name)
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(alive ? Color.cText : Color.cTextTer)
+                    if let s = session, alive {
+                        if !s.role.isEmpty {
+                            Text(s.role.uppercased())
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(color.opacity(0.75))
+                                .tracking(0.5)
+                                .lineLimit(1)
+                        }
+                        if !s.task.isEmpty {
+                            Text(s.task)
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color.cTextSec.opacity(0.75))
+                                .lineLimit(1).truncationMode(.tail)
                         }
                     }
                     HStack(spacing: 4) {
-                        if alive {
-                            Circle().fill(rc).frame(width: 4, height: 4)
-                        }
+                        if alive { Circle().fill(rc).frame(width: 4, height: 4) }
                         Text(cardStatus(session, spawning: spawning))
-                            .font(.system(size: 12))
+                            .font(.system(size: 11))
                             .foregroundStyle(alive ? Color.cTextSec : Color.cTextTer)
                             .lineLimit(1)
                     }
@@ -313,17 +399,32 @@ struct ContentView: View {
     // MARK: - Chat View
 
     private var chatView: some View {
-        VStack(spacing: 0) {
-            if vm.showDebug {
-                chatHeader
-                DebugView(vm: vm)
-            } else {
-                chatHeader
-                chatScrollArea
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                bottomInputArea
+        ZStack(alignment: .top) {
+            VStack(spacing: 0) {
+                if vm.showDebug {
+                    chatHeader
+                    DebugView(vm: vm)
+                } else {
+                    chatHeader
+                    chatScrollArea
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    bottomInputArea
+                }
+            }
+            // Copy toast
+            if showCopiedToast {
+                Text("Copied")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.cText)
+                    .padding(.horizontal, 18).padding(.vertical, 9)
+                    .background(Color.cCard, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Color.cBorder, lineWidth: 0.5))
+                    .shadow(color: .black.opacity(0.4), radius: 10)
+                    .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
+                    .padding(.top, 68)
             }
         }
+        .animation(.spring(response: 0.25, dampingFraction: 0.8), value: showCopiedToast)
     }
 
     // MARK: - Chat Header
@@ -522,10 +623,11 @@ struct ContentView: View {
         let tr: CGFloat = (role == "user"      && isFirst && !isLast) ? 4 : 18
         let br: CGFloat = (role == "user"      && isLast)             ? 4 : 18
 
+        let userBubbleColor = Color(hex: 0x2563EB)
         let bubbleBg: AnyShapeStyle = role == "user"
-            ? AnyShapeStyle(Color.cAccent)
+            ? AnyShapeStyle(userBubbleColor)
             : role == "assistant"
-                ? AnyShapeStyle(isPlaying ? color.opacity(0.22) : Color.glassBright)
+                ? AnyShapeStyle(isPlaying ? color.opacity(0.22) : Color.cCard)
                 : AnyShapeStyle(Color.clear)
 
         return HStack(alignment: .bottom, spacing: 0) {
@@ -533,16 +635,24 @@ struct ContentView: View {
             if role == "system" { Spacer() }
 
             VStack(alignment: role == "user" ? .trailing : .leading, spacing: 0) {
-                Text(msg.text)
-                    .font(role == "system" ? .caption : .system(size: 15))
-                    .lineSpacing(2)
-                    .foregroundStyle(
-                        role == "user"   ? Color.white :
-                        role == "system" ? Color.cTextTer :
-                        Color.cText
-                    )
-                    .padding(.horizontal, 13).padding(.top, 9).padding(.bottom, 4)
-                    .frame(maxWidth: .infinity, alignment: role == "user" ? .trailing : .leading)
+                Group {
+                    if role == "assistant" {
+                        MarkdownContentView(text: msg.text, foreground: Color.cText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else if role == "user" {
+                        Text(LocalizedStringKey(msg.text))
+                            .font(.system(size: 15))
+                            .lineSpacing(2)
+                            .foregroundStyle(Color.white)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    } else {
+                        Text(msg.text)
+                            .font(.caption)
+                            .foregroundStyle(Color.cTextTer)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                    }
+                }
+                .padding(.horizontal, 13).padding(.top, 9).padding(.bottom, 4)
 
                 if role != "system" {
                     Text(shortTime(msg.timestamp))
@@ -564,11 +674,22 @@ struct ContentView: View {
                         bottomTrailingRadius: br, topTrailingRadius: tr,
                         style: .continuous)
                     .strokeBorder(
-                        isPlaying ? color.opacity(isPulsing ? 0.7 : 0.2) : Color.glassBorder,
-                        lineWidth: 0.75)
+                        isPlaying ? color.opacity(isPulsing ? 0.7 : 0.2) : Color.cBorder,
+                        lineWidth: 0.5)
                     .animation(
                         isPlaying ? .easeInOut(duration: 1.0).repeatForever(autoreverses: true) : .default,
                         value: isPulsing)
+                }
+            }
+            .contextMenu {
+                Button {
+                    UIPasteboard.general.string = msg.text
+                    withAnimation { showCopiedToast = true }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        withAnimation { showCopiedToast = false }
+                    }
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
                 }
             }
 
@@ -588,36 +709,66 @@ struct ContentView: View {
     private var thinkingBubble: some View {
         let color   = vm.activeSession.map { voiceColor($0.voice) } ?? Color.cTextSec
         let session = vm.activeSession
+        let hasDetail = session.map { !$0.activity.isEmpty || !$0.toolName.isEmpty } ?? false
+
         return HStack(alignment: .bottom, spacing: 8) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    ForEach(0..<3, id: \.self) { i in
-                        Circle()
-                            .fill(color.opacity(0.75))
-                            .frame(width: 7, height: 7)
-                            .offset(y: isPulsing ? -4 : 4)
-                            .animation(
-                                .easeInOut(duration: 0.5).repeatForever(autoreverses: true).delay(Double(i) * 0.15),
-                                value: isPulsing)
+            VStack(alignment: .leading, spacing: 6) {
+                // Dots row + activity summary (always visible)
+                Button {
+                    guard hasDetail else { return }
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        thinkingExpanded.toggle()
                     }
-                }
-                if let s = session, !s.activity.isEmpty || !s.toolName.isEmpty {
-                    HStack(spacing: 4) {
-                        if !s.activity.isEmpty {
-                            Text(s.activity).font(.system(size: 10, weight: .medium)).foregroundStyle(color.opacity(0.9))
+                } label: {
+                    HStack(spacing: 8) {
+                        // Bouncing dots
+                        HStack(spacing: 5) {
+                            ForEach(0..<3, id: \.self) { i in
+                                Circle()
+                                    .fill(color.opacity(0.75))
+                                    .frame(width: 7, height: 7)
+                                    .offset(y: isPulsing ? -4 : 4)
+                                    .animation(
+                                        .easeInOut(duration: 0.5).repeatForever(autoreverses: true).delay(Double(i) * 0.18),
+                                        value: isPulsing)
+                            }
                         }
-                        if !s.activity.isEmpty && !s.toolName.isEmpty {
-                            Text("·").font(.system(size: 10)).foregroundStyle(Color.cTextTer)
-                        }
-                        if !s.toolName.isEmpty {
-                            Text(s.toolName).font(.system(size: 10)).foregroundStyle(Color.cTextTer)
+                        if hasDetail, let s = session {
+                            let summary = s.activity.isEmpty ? s.toolName : s.activity
+                            Text(summary)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(color.opacity(0.8))
                                 .lineLimit(1).truncationMode(.middle)
                         }
+                        if hasDetail {
+                            Image(systemName: thinkingExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(Color.cTextTer)
+                        }
                     }
                 }
+                .buttonStyle(.plain)
+
+                // Expanded detail
+                if thinkingExpanded, let s = session, hasDetail {
+                    VStack(alignment: .leading, spacing: 2) {
+                        if !s.activity.isEmpty {
+                            Text(s.activity)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(color.opacity(0.9))
+                        }
+                        if !s.toolName.isEmpty {
+                            Text(s.toolName)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(Color.cTextTer)
+                                .lineLimit(2).truncationMode(.middle)
+                        }
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
             }
-            .padding(.horizontal, 14).padding(.vertical, 12)
-            .background(Color.glassBright,
+            .padding(.horizontal, 14).padding(.vertical, 11)
+            .background(Color.cCard,
                 in: UnevenRoundedRectangle(
                     topLeadingRadius: 4, bottomLeadingRadius: 4,
                     bottomTrailingRadius: 18, topTrailingRadius: 18,
@@ -627,7 +778,7 @@ struct ContentView: View {
                     topLeadingRadius: 4, bottomLeadingRadius: 4,
                     bottomTrailingRadius: 18, topTrailingRadius: 18,
                     style: .continuous)
-                .strokeBorder(Color.glassBorder, lineWidth: 0.75))
+                .strokeBorder(Color.cBorder, lineWidth: 0.5))
             .onAppear  { isPulsing = true }
             .onDisappear { isPulsing = false }
 
@@ -997,6 +1148,139 @@ struct ContentView: View {
 
     private func effortIcon(_ e: String) -> String {
         switch e { case "low": "battery.25"; case "high": "bolt.fill"; default: "gauge.medium" }
+    }
+}
+
+// MARK: - Markdown Content View
+
+private struct MarkdownContentView: View {
+    let text: String
+    let foreground: Color
+
+    private enum Block {
+        case text(String)
+        case header(Int, String)
+        case bullet(String)
+        case numbered(String, String)
+        case code(String, String)   // (language, content)
+        case spacing
+    }
+
+    private func parse(_ raw: String) -> [Block] {
+        var result: [Block] = []
+        var lines  = raw.components(separatedBy: "\n")
+        var i = 0
+        while i < lines.count {
+            let line = lines[i]
+            // Code fence
+            if line.hasPrefix("```") {
+                let lang = String(line.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+                var codeLines: [String] = []
+                i += 1
+                while i < lines.count && !lines[i].hasPrefix("```") {
+                    codeLines.append(lines[i]); i += 1
+                }
+                if i < lines.count { i += 1 }
+                result.append(.code(lang, codeLines.joined(separator: "\n")))
+                continue
+            }
+            if line.hasPrefix("### ") { result.append(.header(3, String(line.dropFirst(4)))); i += 1; continue }
+            if line.hasPrefix("## ")  { result.append(.header(2, String(line.dropFirst(3)))); i += 1; continue }
+            if line.hasPrefix("# ")   { result.append(.header(1, String(line.dropFirst(2)))); i += 1; continue }
+            if line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("+ ") {
+                result.append(.bullet(String(line.dropFirst(2)))); i += 1; continue
+            }
+            if let m = line.firstMatch(of: /^(\d+)\. (.+)/) {
+                result.append(.numbered(String(m.output.1), String(m.output.2))); i += 1; continue
+            }
+            if line.trimmingCharacters(in: .whitespaces).isEmpty {
+                if case .spacing? = result.last {} else { result.append(.spacing) }
+                i += 1; continue
+            }
+            result.append(.text(line)); i += 1
+        }
+        return result
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(Array(parse(text).enumerated()), id: \.offset) { _, block in
+                blockView(block)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func blockView(_ block: Block) -> some View {
+        switch block {
+        case .spacing:
+            Color.clear.frame(height: 3)
+
+        case .text(let str):
+            Text(LocalizedStringKey(str))
+                .font(.system(size: 15))
+                .foregroundStyle(foreground)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+        case .header(let level, let str):
+            let sz: CGFloat = level == 1 ? 19 : level == 2 ? 16 : 14
+            let wt: Font.Weight = level <= 2 ? .bold : .semibold
+            Text(LocalizedStringKey(str))
+                .font(.system(size: sz, weight: wt))
+                .foregroundStyle(foreground)
+                .fixedSize(horizontal: false, vertical: true)
+
+        case .bullet(let str):
+            HStack(alignment: .top, spacing: 6) {
+                Text("•")
+                    .font(.system(size: 15))
+                    .foregroundStyle(Color.cTextSec)
+                    .frame(width: 10)
+                Text(LocalizedStringKey(str))
+                    .font(.system(size: 15))
+                    .foregroundStyle(foreground)
+                    .lineSpacing(1)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+        case .numbered(let num, let str):
+            HStack(alignment: .top, spacing: 6) {
+                Text("\(num).")
+                    .font(.system(size: 15))
+                    .foregroundStyle(Color.cTextSec)
+                    .frame(width: 22, alignment: .trailing)
+                Text(LocalizedStringKey(str))
+                    .font(.system(size: 15))
+                    .foregroundStyle(foreground)
+                    .lineSpacing(1)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+        case .code(let lang, let content):
+            VStack(alignment: .leading, spacing: 0) {
+                if !lang.isEmpty {
+                    Text(lang)
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Color.cTextTer)
+                        .padding(.horizontal, 10).padding(.top, 7).padding(.bottom, 2)
+                }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    Text(content)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(Color.cText)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, lang.isEmpty ? 10 : 0)
+                        .padding(.bottom, 8)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.canvas2, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(Color.cBorder, lineWidth: 0.5))
+        }
     }
 }
 
