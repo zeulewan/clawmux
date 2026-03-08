@@ -4,12 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>ClawMux</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%233a86ff'/><path d='M32 12a6 6 0 0 1 6 6v14a6 6 0 0 1-12 0V18a6 6 0 0 1 6-6z' fill='white'/><path d='M20 30a12 12 0 0 0 24 0' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/><line x1='32' y1='42' x2='32' y2='50' stroke='white' stroke-width='3' stroke-linecap='round'/><line x1='25' y1='50' x2='39' y2='50' stroke='white' stroke-width='3' stroke-linecap='round'/></svg>">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 :root {
   --bg: #000000;
   --bg-secondary: #0c0c0c;
+  --bg-glass: rgba(12, 12, 12, 0.75);
   --bg-card: #1c1c1e;
   --bg-card-hover: #2c2c2e;
   --border: #38383a;
@@ -59,6 +63,7 @@
   :root {
     --bg: #f2f2f7;
     --bg-secondary: #ffffff;
+    --bg-glass: rgba(255, 255, 255, 0.75);
     --bg-card: #ffffff;
     --bg-card-hover: #e5e5ea;
     --border: #c6c6c8;
@@ -89,7 +94,7 @@
   }
 }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
   background: var(--bg);
   color: var(--text);
   height: 100vh;
@@ -130,8 +135,10 @@ body {
 #sidebar {
   width: 220px;
   min-width: 140px;
-  background: var(--bg-secondary);
+  background: var(--bg-glass);
   border-right: 1px solid var(--border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -519,9 +526,10 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-  background: var(--bg-secondary);
+  background: var(--bg-glass);
   border-bottom: 1px solid var(--border);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   flex-shrink: 0;
 }
 #header h1 {
@@ -692,11 +700,11 @@ body {
 }
 .msg {
   max-width: 78%;
-  padding: 10px 16px;
+  padding: 12px 16px;
   border-radius: var(--radius);
   line-height: 1.55;
   font-size: 0.9rem;
-  animation: msgAppear 0.2s ease-out;
+  animation: msgAppear 0.25s var(--ease-out);
   overflow-wrap: break-word;
   word-break: break-word;
   position: relative;
@@ -730,8 +738,8 @@ body {
 .msg .msg-action-btn.playing { color: var(--green); }
 #chat-area { overflow-x: hidden; }
 @keyframes msgAppear {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 #chat-area.no-animate .msg { animation: none; }
 .msg.user {
@@ -747,6 +755,7 @@ body {
   background: var(--bg-card);
   color: var(--text);
   border-bottom-left-radius: 6px;
+  box-shadow: var(--shadow-sm);
   /* Voice color background applied via JS */
 }
 .karaoke-word { cursor: pointer; transition: transform 0.1s ease, text-shadow 0.1s ease, background 0.1s ease; display: inline-block; border-radius: 3px; }
@@ -1963,12 +1972,9 @@ function switchTab(sessionId, manual = false) {
     if (s.audioBuffer && s.audioBuffer.length > 0) {
       setStatus('Playing buffered audio...');
       // Restore karaoke words — re-apply spans after renderChat rebuilt the DOM.
-      // Check both s.karaokeWords (mid-playback stash) and _pendingKaraokeWords (pre-playback, from non-active tab).
-      const kWords = s.karaokeWords || (_pendingKaraokeWords.has(sessionId) ? _pendingKaraokeWords.get(sessionId) : null);
-      if (kWords && kWords.length > 0) {
+      if (s.karaokeWords && s.karaokeWords.length > 0) {
         const msgs = chatArea.querySelectorAll('.msg.assistant');
-        if (msgs.length) _applyKaraokeSpans(msgs[msgs.length - 1], kWords);
-        _pendingKaraokeWords.set(sessionId, kWords);
+        if (msgs.length) _applyKaraokeSpans(msgs[msgs.length - 1], s.karaokeWords);
         s.karaokeWords = null;
       }
       playBufferedAudio(sessionId, s.audioBuffer);
