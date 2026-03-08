@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct VoiceHubApp: App {
+struct ClawMuxApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()

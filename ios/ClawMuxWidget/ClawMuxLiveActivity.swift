@@ -2,9 +2,9 @@ import ActivityKit
 import SwiftUI
 import WidgetKit
 
-struct VoiceHubLiveActivity: Widget {
+struct ClawMuxLiveActivity: Widget {
     var body: some WidgetConfiguration {
-        ActivityConfiguration(for: VoiceHubActivityAttributes.self) { context in
+        ActivityConfiguration(for: ClawMuxActivityAttributes.self) { context in
             lockScreenView(context: context)
                 .widgetURL(URL(string: "voicehub://mic"))
         } dynamicIsland: { context in
@@ -66,7 +66,7 @@ struct VoiceHubLiveActivity: Widget {
 
     @ViewBuilder
     private func lockScreenView(
-        context: ActivityViewContext<VoiceHubActivityAttributes>
+        context: ActivityViewContext<ClawMuxActivityAttributes>
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -105,7 +105,7 @@ struct VoiceHubLiveActivity: Widget {
     // MARK: - Mode Button (Dynamic Island)
 
     @ViewBuilder
-    private func modeButton(inputMode: String, status: VoiceHubStatus) -> some View {
+    private func modeButton(inputMode: String, status: ClawMuxStatus) -> some View {
         switch inputMode {
         case "ptt":
             HStack(spacing: 5) {
@@ -142,7 +142,7 @@ struct VoiceHubLiveActivity: Widget {
     // MARK: - Lock Screen Button
 
     @ViewBuilder
-    private func lockScreenButton(inputMode: String, status: VoiceHubStatus) -> some View {
+    private func lockScreenButton(inputMode: String, status: ClawMuxStatus) -> some View {
         HStack(spacing: 8) {
             Image(systemName: inputMode == "typing" ? "keyboard" : "mic.fill")
                 .font(.system(size: 14, weight: .semibold))
@@ -165,7 +165,7 @@ struct VoiceHubLiveActivity: Widget {
         }
     }
 
-    private func statusColor(_ status: VoiceHubStatus) -> Color {
+    private func statusColor(_ status: ClawMuxStatus) -> Color {
         let hex = status.dotColorHex
         return Color(
             red: Double((hex >> 16) & 0xFF) / 255,

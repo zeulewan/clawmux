@@ -289,7 +289,7 @@ struct DebugTmuxSession: Identifiable {
 // MARK: - ViewModel
 
 @MainActor
-final class VoiceHubViewModel: NSObject, ObservableObject {
+final class ClawMuxViewModel: NSObject, ObservableObject {
 
     // Connection
     @Published var isConnected = false
@@ -542,7 +542,7 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
     private var debugRefreshTimer: Timer?
     private var pausedAudioSessionId: String?
     private var suppressNextAutoRecord = false
-    private var currentActivity: Activity<VoiceHubActivityAttributes>?
+    private var currentActivity: Activity<ClawMuxActivityAttributes>?
     private var silencePlayer: AVAudioPlayer?
     private var ttsPlayer: AVAudioPlayer?
     private var keepaliveEngine: AVAudioEngine?
@@ -2607,8 +2607,8 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         guard let session = sessions.first(where: { $0.id == sessionId }) else { return }
 
-        let attributes = VoiceHubActivityAttributes(sessionId: sessionId)
-        let state = VoiceHubActivityAttributes.ContentState(
+        let attributes = ClawMuxActivityAttributes(sessionId: sessionId)
+        let state = ClawMuxActivityAttributes.ContentState(
             voiceName: session.label,
             status: voiceHubStatus(for: session),
             lastMessage: session.messages.last(where: { $0.role == "assistant" })?
@@ -2633,7 +2633,7 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
             let session = sessions.first(where: { $0.id == sessionId })
         else { return }
 
-        let state = VoiceHubActivityAttributes.ContentState(
+        let state = ClawMuxActivityAttributes.ContentState(
             voiceName: session.label,
             status: voiceHubStatus(for: session),
             lastMessage: session.messages.last(where: { $0.role == "assistant" })?
@@ -2655,13 +2655,13 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
     private func endStaleLiveActivities() {
         // Clean up any activities left over from a previous launch (e.g. force-kill)
         Task {
-            for activity in Activity<VoiceHubActivityAttributes>.activities {
+            for activity in Activity<ClawMuxActivityAttributes>.activities {
                 await activity.end(nil, dismissalPolicy: .immediate)
             }
         }
     }
 
-    private func voiceHubStatus(for session: VoiceSession) -> VoiceHubStatus {
+    private func voiceHubStatus(for session: VoiceSession) -> ClawMuxStatus {
         let st = session.statusText
         if st == "Speaking..." || st == "Playing..." { return .speaking }
         if st == "Recording..." || st == "Tap Record" || session.pendingListen { return .listening }
@@ -2687,7 +2687,7 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
 
 // MARK: - URLSessionWebSocketDelegate
 
-extension VoiceHubViewModel: URLSessionWebSocketDelegate {
+extension ClawMuxViewModel: URLSessionWebSocketDelegate {
     nonisolated func urlSession(
         _ session: URLSession,
         webSocketTask: URLSessionWebSocketTask,
@@ -2726,7 +2726,7 @@ extension VoiceHubViewModel: URLSessionWebSocketDelegate {
 
 // MARK: - AVAudioPlayerDelegate
 
-extension VoiceHubViewModel: AVAudioPlayerDelegate {
+extension ClawMuxViewModel: AVAudioPlayerDelegate {
     nonisolated func audioPlayerDidFinishPlaying(
         _ player: AVAudioPlayer, successfully flag: Bool
     ) {

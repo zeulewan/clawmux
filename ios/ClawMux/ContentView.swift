@@ -30,7 +30,7 @@ private enum Theme {
 }
 
 struct ContentView: View {
-    @StateObject private var vm = VoiceHubViewModel()
+    @StateObject private var vm = ClawMuxViewModel()
     @State private var isPulsing = false
     @State private var resetVoiceId: String?
     @State private var showResetConfirm = false
@@ -1100,7 +1100,7 @@ struct ContentView: View {
 // MARK: - Debug View
 
 struct DebugView: View {
-    @ObservedObject var vm: VoiceHubViewModel
+    @ObservedObject var vm: ClawMuxViewModel
 
     var body: some View {
         ScrollView {
@@ -1292,7 +1292,7 @@ struct DebugView: View {
 // MARK: - Settings Root
 
 struct SettingsView: View {
-    @ObservedObject var vm: VoiceHubViewModel
+    @ObservedObject var vm: ClawMuxViewModel
     @Environment(\.dismiss) var dismiss
     @State private var draftURL: String = ""
 
@@ -1462,7 +1462,7 @@ struct SettingsView: View {
 // MARK: - Auto Mode Settings
 
 struct AutoModeSettingsView: View {
-    @ObservedObject var vm: VoiceHubViewModel
+    @ObservedObject var vm: ClawMuxViewModel
 
     var body: some View {
         Form {
@@ -1536,7 +1536,7 @@ struct AutoModeSettingsView: View {
 // MARK: - PTT Mode Settings
 
 struct PTTModeSettingsView: View {
-    @ObservedObject var vm: VoiceHubViewModel
+    @ObservedObject var vm: ClawMuxViewModel
 
     var body: some View {
         Form {
@@ -1579,7 +1579,7 @@ struct PTTModeSettingsView: View {
 // MARK: - Typing Mode Settings
 
 struct TypingModeSettingsView: View {
-    @ObservedObject var vm: VoiceHubViewModel
+    @ObservedObject var vm: ClawMuxViewModel
 
     var body: some View {
         Form {

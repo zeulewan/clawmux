@@ -2,8 +2,8 @@ import SwiftUI
 import WidgetKit
 
 @main
-struct VoiceHubWidgetBundle: WidgetBundle {
+struct ClawMuxWidgetBundle: WidgetBundle {
     var body: some Widget {
-        VoiceHubLiveActivity()
+        ClawMuxLiveActivity()
     }
 }

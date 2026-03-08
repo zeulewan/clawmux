@@ -5,14 +5,14 @@ options:
     iOS: "17.0"
   developmentLanguage: en
 targets:
-  VoiceHub:
+  ClawMux:
     type: application
     platform: iOS
     sources:
-      - VoiceHub
-      - VoiceHubShared
+      - ClawMux
+      - ClawMuxShared
     dependencies:
-      - target: VoiceHubWidgetExtension
+      - target: ClawMuxWidgetExtension
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.zeul.clawmux
@@ -20,14 +20,14 @@ targets:
         DEVELOPMENT_TEAM: 25QMAKVCBN
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "6.0"
-        INFOPLIST_FILE: VoiceHub/Info.plist
+        INFOPLIST_FILE: ClawMux/Info.plist
 
-  VoiceHubWidgetExtension:
+  ClawMuxWidgetExtension:
     type: app-extension
     platform: iOS
     sources:
-      - VoiceHubWidget
-      - VoiceHubShared
+      - ClawMuxWidget
+      - ClawMuxShared
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.zeul.clawmux.widget
@@ -35,4 +35,4 @@ targets:
         DEVELOPMENT_TEAM: 25QMAKVCBN
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "6.0"
-        INFOPLIST_FILE: VoiceHubWidget/Info.plist
+        INFOPLIST_FILE: ClawMuxWidget/Info.plist
