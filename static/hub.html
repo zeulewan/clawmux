@@ -1506,10 +1506,10 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
     <span id="usage-5h" style="white-space:nowrap;"></span>
     <span id="usage-7d" style="white-space:nowrap;"></span>
   </div>
-  <select id="mic-select" onchange="changeMicDevice(this.value)" title="Microphone" style="width:auto; max-width:160px; padding:3px 6px; font-size:0.7rem; background:rgba(128,128,128,0.08); color:var(--text-secondary); border:1px solid var(--border); border-radius:8px; font-family:inherit; cursor:pointer;">
+  <select id="mic-select" tabindex="-1" onchange="changeMicDevice(this.value)" title="Microphone" style="width:auto; max-width:160px; padding:3px 6px; font-size:0.7rem; background:rgba(128,128,128,0.08); color:var(--text-secondary); border:1px solid var(--border); border-radius:8px; font-family:inherit; cursor:pointer;">
     <option value="">Mic: Default</option>
   </select>
-  <select id="speaker-select" onchange="changeSpeakerDevice(this.value)" title="Speaker" style="width:auto; max-width:160px; padding:3px 6px; font-size:0.7rem; background:rgba(128,128,128,0.08); color:var(--text-secondary); border:1px solid var(--border); border-radius:8px; font-family:inherit; cursor:pointer;">
+  <select id="speaker-select" tabindex="-1" onchange="changeSpeakerDevice(this.value)" title="Speaker" style="width:auto; max-width:160px; padding:3px 6px; font-size:0.7rem; background:rgba(128,128,128,0.08); color:var(--text-secondary); border:1px solid var(--border); border-radius:8px; font-family:inherit; cursor:pointer;">
     <option value="">Speaker: Default</option>
   </select>
   <div style="display:flex;align-items:center;gap:6px;padding:4px 12px;background:rgba(128,128,128,0.08);border-radius:12px;">
