@@ -308,30 +308,37 @@ struct ContentView: View {
                 }
                 .frame(width: 60, height: 60)
 
-                // Name + role/task + status
-                VStack(alignment: .leading, spacing: 3) {
+                // Name + area + role + task + status  (hub.html hierarchy)
+                VStack(alignment: .leading, spacing: 2) {
                     Text(voice.name)
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .foregroundStyle(alive ? Color.cText : Color.cTextTer)
+                        .lineLimit(1)
                     if let s = session, alive {
+                        if !s.projectArea.isEmpty {
+                            Text(s.projectArea.uppercased())
+                                .font(.system(size: 8, weight: .semibold))
+                                .foregroundStyle(Color.cAccent.opacity(0.85))
+                                .tracking(0.6)
+                                .lineLimit(1)
+                        }
                         if !s.role.isEmpty {
-                            Text(s.role.uppercased())
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundStyle(color.opacity(0.75))
-                                .tracking(0.5)
+                            Text(s.role)
+                                .font(.system(size: 9))
+                                .foregroundStyle(Color.cTextSec)
                                 .lineLimit(1)
                         }
                         if !s.task.isEmpty {
                             Text(s.task)
-                                .font(.system(size: 10))
-                                .foregroundStyle(Color.cTextSec.opacity(0.75))
+                                .font(.system(size: 9))
+                                .foregroundStyle(Color.cTextTer)
                                 .lineLimit(1).truncationMode(.tail)
                         }
                     }
                     HStack(spacing: 4) {
                         if alive { Circle().fill(rc).frame(width: 4, height: 4) }
                         Text(cardStatus(session, spawning: spawning))
-                            .font(.system(size: 11))
+                            .font(.system(size: 10))
                             .foregroundStyle(alive ? Color.cTextSec : Color.cTextTer)
                             .lineLimit(1)
                     }
@@ -352,14 +359,24 @@ struct ContentView: View {
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(alive ? Color.cTextTer : Color(hex: 0x2A3A52))
             }
-            .padding(.horizontal, 16).padding(.vertical, 13)
+            .padding(.horizontal, 14).padding(.vertical, 10)
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(isSelected ? color.opacity(0.10) : Color.cCard)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .strokeBorder(isSelected ? color.opacity(0.28) : Color.cBorder, lineWidth: 0.5)
-                    )
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(isSelected ? color.opacity(0.08) : Color.cCard)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .strokeBorder(isSelected ? color.opacity(0.3) : Color.cBorder, lineWidth: 0.5)
+                        )
+                    // Left accent bar (hub.html selected indicator)
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: 2, style: .continuous)
+                            .fill(color)
+                            .frame(width: 3)
+                            .padding(.vertical, 10)
+                            .shadow(color: color.opacity(0.6), radius: 4)
+                    }
+                }
             )
         }
         .buttonStyle(.plain)
@@ -883,7 +900,18 @@ struct ContentView: View {
 
                 // Main row: cancel / mic / text-hint
                 HStack(alignment: .center) {
-                    if vm.isRecording && !vm.pushToTalk {
+                    if vm.isPlaying {
+                        // Stop TTS playback
+                        Button { vm.interruptPlayback() } label: {
+                            Image(systemName: "stop.fill")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(Color.cDanger)
+                                .frame(width: 44, height: 44)
+                                .background(Color.cDanger.opacity(0.12), in: Circle())
+                                .overlay(Circle().strokeBorder(Color.cDanger.opacity(0.25), lineWidth: 0.5))
+                        }
+                        .transition(.scale.combined(with: .opacity))
+                    } else if vm.isRecording && !vm.pushToTalk {
                         Button { vm.cancelRecording() } label: {
                             Image(systemName: "xmark").font(.system(size: 14, weight: .bold))
                                 .foregroundStyle(Color.cDanger)
@@ -1126,33 +1154,47 @@ struct ContentView: View {
     // MARK: - Waveform
 
     private var waveformView: some View {
-        let color = vm.activeSession.map { voiceColor($0.voice) } ?? Color.cSuccess
-        return HStack(alignment: .center, spacing: 2.5) {
+        HStack(alignment: .center, spacing: 3) {
             ForEach(Array(vm.audioLevels.enumerated()), id: \.offset) { _, level in
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(color.opacity(0.5 + Double(level) * 0.5))
-                    .frame(width: 3, height: max(3, level * 28))
+                    .fill(Color.white.opacity(0.65 + Double(level) * 0.35))
+                    .frame(width: 3, height: max(4, level * 32))
+                    .animation(.easeOut(duration: 0.08), value: level)
             }
         }
-        .frame(height: 32).frame(maxWidth: .infinity)
-        .padding(.horizontal, 16).padding(.vertical, 8)
+        .frame(height: 36).frame(maxWidth: .infinity)
+        .padding(.horizontal, 20).padding(.vertical, 6)
     }
 
     // MARK: - Mic Button
 
     private var micButtonVisual: some View {
         ZStack {
+            // Pulsing glow ring during tap-to-record
             if vm.isRecording && !vm.pushToTalk {
                 Circle()
-                    .fill(Color.cSuccess.opacity(0.15)).frame(width: 84, height: 84)
-                    .scaleEffect(isPulsing ? 1.18 : 1.0)
-                    .animation(.easeInOut(duration: 1.0).repeatForever(), value: isPulsing)
+                    .fill(micColor.opacity(0.18)).frame(width: 88, height: 88)
+                    .scaleEffect(isPulsing ? 1.15 : 1.0)
+                    .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: isPulsing)
+                Circle()
+                    .strokeBorder(micColor.opacity(isPulsing ? 0.5 : 0.1), lineWidth: 1.5)
+                    .frame(width: 88, height: 88)
+                    .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: isPulsing)
             }
+            // Main button circle
             Circle()
-                .fill(micColor).frame(width: 68, height: 68)
-                .shadow(color: micColor.opacity(0.45), radius: 20, y: 4)
+                .fill(micColor)
+                .frame(width: 68, height: 68)
+                .shadow(color: micColor.opacity(0.5), radius: 16, y: 4)
+            // Inner highlight
+            Circle()
+                .fill(LinearGradient(
+                    colors: [.white.opacity(0.18), .clear],
+                    startPoint: .topLeading, endPoint: .bottomTrailing))
+                .frame(width: 68, height: 68)
             Image(systemName: micIcon)
-                .font(.system(size: 24, weight: .semibold)).foregroundStyle(.white)
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(.white)
         }
         .frame(width: 92, height: 92)
     }

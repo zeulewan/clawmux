@@ -894,7 +894,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     guard let role = msg["role"] as? String,
                         let text = msg["text"] as? String
                     else { return nil }
-                    return ChatMessage(role: role, text: text)
+                    var m = ChatMessage(role: role, text: text)
+                    if let ts = msg["ts"] as? Double { m.timestamp = Date(timeIntervalSince1970: ts) }
+                    return m
                 }
                 if !chatMessages.isEmpty {
                     // Keep any system messages, prepend history
@@ -1128,10 +1130,16 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 for s in sessions where !liveIds.contains(s.id) {
                     removeSession(s.id)
                 }
-                // Add new sessions
+                // Add new sessions; re-sync history for already-tracked ones (handles reconnect)
                 for s in list {
-                    if let sid = s["session_id"] as? String, sessionIndex(sid) == nil {
-                        addSessionFromDict(s)
+                    if let sid = s["session_id"] as? String {
+                        if sessionIndex(sid) == nil {
+                            addSessionFromDict(s)
+                        } else if let voice = s["voice"] as? String,
+                            let idx = sessionIndex(sid), sessions[idx].messages.isEmpty {
+                            // Already tracked but no messages loaded — sync history
+                            fetchHistory(voiceId: voice, sessionId: sid)
+                        }
                     }
                 }
                 // Restore saved active session if it still exists
