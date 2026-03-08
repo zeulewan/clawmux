@@ -75,7 +75,14 @@ struct ContentView: View {
             sidebarView
                 .frame(width: sidebarExpanded ? 200 : 56)
                 .frame(maxHeight: .infinity)
-                .background(Theme.bgSecondary.ignoresSafeArea())
+                .background {
+                    if #available(iOS 26, *) {
+                        Color.clear.ignoresSafeArea()
+                            .glassEffect(.regular, in: .rect)
+                    } else {
+                        Theme.bgSecondary.ignoresSafeArea()
+                    }
+                }
                 .shadow(color: sidebarExpanded ? .black.opacity(0.2) : .clear, radius: 12, x: 4)
                 .zIndex(10)
         }
@@ -192,14 +199,22 @@ struct ContentView: View {
         let hasUnread = (activeForVoice?.unreadCount ?? 0) > 0
 
         // Icon column — always 56px, icon never moves
+        let isThinkingNow = activeForVoice?.isThinking == true
         let iconView = ZStack(alignment: .topTrailing) {
             ZStack {
+                // Pulsing outer ring for thinking/processing states
+                if isAlive && isThinkingNow {
+                    Circle()
+                        .strokeBorder(ringColor.opacity(isPulsing ? 0.45 : 0.0), lineWidth: 5)
+                        .frame(width: 44, height: 44)
+                        .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: isPulsing)
+                }
                 Circle()
                     .fill(color.opacity(isAlive ? 0.18 : 0.08))
                     .frame(width: 36, height: 36)
                 if isAlive {
                     Circle()
-                        .strokeBorder(ringColor, lineWidth: 2)
+                        .strokeBorder(ringColor, lineWidth: isThinkingNow ? 2.5 : 2)
                         .frame(width: 36, height: 36)
                 }
                 Image(systemName: voiceIconName(voice.id))
@@ -372,17 +387,38 @@ struct ContentView: View {
                     .font(.system(size: 17, weight: .bold, design: .rounded))
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
-                if let proj = vm.activeSession?.project, !proj.isEmpty {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(proj)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(Theme.textTertiary)
-                            .lineLimit(1)
-                        if let area = vm.activeSession?.projectArea, !area.isEmpty {
-                            Text(area)
+                if let s = vm.activeSession {
+                    if !s.role.isEmpty || !s.task.isEmpty {
+                        HStack(spacing: 4) {
+                            if !s.role.isEmpty {
+                                Text(s.role)
+                                    .font(.system(size: 10, weight: .medium))
+                                    .italic()
+                                    .foregroundStyle(voiceColor(s.voice).opacity(0.8))
+                            }
+                            if !s.role.isEmpty && !s.task.isEmpty {
+                                Text("·").font(.system(size: 10)).foregroundStyle(Theme.textTertiary)
+                            }
+                            if !s.task.isEmpty {
+                                Text(s.task)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(Theme.textTertiary)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                            }
+                        }
+                    } else if !s.project.isEmpty {
+                        HStack(spacing: 0) {
+                            Text(s.project)
                                 .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(Theme.textTertiary.opacity(0.7))
+                                .foregroundStyle(Theme.textTertiary)
                                 .lineLimit(1)
+                            if !s.projectArea.isEmpty {
+                                Text(" · \(s.projectArea)")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(Theme.textTertiary.opacity(0.7))
+                                    .lineLimit(1)
+                            }
                         }
                     }
                 }
@@ -486,6 +522,35 @@ struct ContentView: View {
                 }
             }
 
+            // Effort picker
+            if let s = vm.activeSession {
+                Menu {
+                    ForEach(["low", "medium", "high"], id: \.self) { level in
+                        Button {
+                            vm.sendEffort(level)
+                        } label: {
+                            HStack {
+                                Text(level.capitalized)
+                                if s.effort == level { Image(systemName: "checkmark") }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: effortIcon(s.effort))
+                            .font(.system(size: 9))
+                        if !s.effort.isEmpty {
+                            Text(s.effort.capitalized)
+                                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        }
+                    }
+                    .foregroundStyle(.primary.opacity(0.75))
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background(.ultraThinMaterial, in: Capsule())
+                }
+            }
+
             // Mic mute (auto mode, in session)
             if vm.activeSessionId != nil && vm.isAutoMode {
                 Button { vm.micMuted.toggle() } label: {
@@ -515,6 +580,14 @@ struct ContentView: View {
         case "sonnet": return "Sonnet"
         case "haiku": return "Haiku"
         default: return "Opus"
+        }
+    }
+
+    private func effortIcon(_ effort: String) -> String {
+        switch effort {
+        case "low": return "battery.25"
+        case "high": return "bolt.fill"
+        default: return "gauge.medium"
         }
     }
 
@@ -567,17 +640,17 @@ struct ContentView: View {
         GeometryReader { geo in
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(spacing: 10) {
+                    VStack(spacing: 6) {
                         // Push content to bottom when there are few messages
                         Spacer(minLength: 0)
                             .frame(maxHeight: .infinity)
 
-                        ForEach(vm.activeMessages) { msg in
-                            chatBubble(msg)
-                                .id(msg.id)
+                        ForEach(messageGroups) { group in
+                            messageGroupView(group)
+                                .id(group.id)
                         }
                         if vm.activeSession?.isThinking == true {
-                            thinkingIndicator
+                            thinkingBubble
                                 .id("thinking")
                         }
                     }
@@ -595,6 +668,9 @@ struct ContentView: View {
                 .onChange(of: vm.activeSession?.isThinking) { _, _ in
                     scrollToBottom(proxy, to: "content")
                 }
+                .onChange(of: vm.activeSession?.activity) { _, _ in
+                    scrollToBottom(proxy, to: "content")
+                }
             }
         }
     }
@@ -605,87 +681,198 @@ struct ContentView: View {
         }
     }
 
-    private func chatBubble(_ msg: ChatMessage) -> some View {
-        HStack {
-            if msg.role == "user" { Spacer(minLength: 30) }
-            if msg.role == "system" { Spacer() }
+    // MARK: - Message Grouping
 
-            VStack(alignment: msg.role == "user" ? .trailing : .leading, spacing: 4) {
-                Text(msg.text)
-                    .font(msg.role == "system" ? .caption : .system(size: 14))
-                    .lineSpacing(2)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 9)
-                    .foregroundStyle(bubbleForeground(msg.role))
-                    .background(bubbleBackground(msg.role), in: bubbleShape)
+    private struct MessageGroup: Identifiable {
+        let id = UUID()
+        let role: String
+        let messages: [ChatMessage]
+    }
 
-                if msg.role != "system" && vm.voiceResponses {
-                    let isPlaying = vm.ttsPlayingMessageId == msg.id
-                    Button {
-                        vm.playMessageTTS(messageId: msg.id, text: msg.text, voice: vm.activeSession?.voice)
-                    } label: {
-                        Image(systemName: isPlaying ? "stop.fill" : "play.fill")
-                            .font(.system(size: 10))
-                            .foregroundStyle(isPlaying ? Theme.green : Theme.textTertiary)
+    private var messageGroups: [MessageGroup] {
+        var groups: [MessageGroup] = []
+        var currentRole: String? = nil
+        var currentBatch: [ChatMessage] = []
+        for msg in vm.activeMessages {
+            if msg.role == currentRole {
+                currentBatch.append(msg)
+            } else {
+                if !currentBatch.isEmpty {
+                    groups.append(MessageGroup(role: currentRole!, messages: currentBatch))
+                }
+                currentRole = msg.role
+                currentBatch = [msg]
+            }
+        }
+        if !currentBatch.isEmpty {
+            groups.append(MessageGroup(role: currentRole!, messages: currentBatch))
+        }
+        return groups
+    }
+
+    private func messageGroupView(_ group: MessageGroup) -> some View {
+        let color = vm.activeSession.flatMap { voiceColor($0.voice) } ?? Theme.textTertiary
+        return VStack(alignment: group.role == "user" ? .trailing : .leading, spacing: 2) {
+            // Agent name header above first assistant bubble
+            if group.role == "assistant", let s = vm.activeSession {
+                Text(s.label)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(color.opacity(0.7))
+                    .padding(.leading, 4)
+            }
+            ForEach(Array(group.messages.enumerated()), id: \.element.id) { idx, msg in
+                chatBubble(msg,
+                    isFirst: idx == 0,
+                    isLast: idx == group.messages.count - 1,
+                    role: group.role)
+            }
+        }
+    }
+
+    private func chatBubble(_ msg: ChatMessage, isFirst: Bool, isLast: Bool, role: String) -> some View {
+        let color = vm.activeSession.flatMap { voiceColor($0.voice) } ?? Theme.textTertiary
+        let isPlaying = vm.ttsPlayingMessageId == msg.id
+
+        // Corner radii: full rounding except the "tail" corner on the last bubble
+        let tl: CGFloat = role == "user" && isFirst ? 18 : (role == "user" ? 18 : (isFirst ? 4 : 18))
+        let tr: CGFloat = role == "user" && isFirst ? 4 : 18
+        let bl: CGFloat = role == "assistant" && isLast ? 4 : 18
+        let br: CGFloat = role == "user" && isLast ? 4 : 18
+
+        return HStack(alignment: .bottom, spacing: 0) {
+            if role == "user" { Spacer(minLength: 44) }
+            if role == "system" { Spacer() }
+
+            VStack(alignment: role == "user" ? .trailing : .leading, spacing: 0) {
+                ZStack(alignment: role == "user" ? .bottomTrailing : .bottomLeading) {
+                    Text(msg.text)
+                        .font(role == "system" ? .caption : .system(size: 15))
+                        .lineSpacing(2)
+                        .foregroundStyle(role == "user" ? Color.white : (role == "system" ? Theme.textTertiary : Theme.textPrimary))
+                        .padding(.horizontal, 13)
+                        .padding(.top, 9)
+                        .padding(.bottom, role == "system" ? 9 : 6)
+                        .background(
+                            role == "user" ? AnyShapeStyle(Theme.blue) :
+                            role == "assistant" ? AnyShapeStyle(isPlaying ? color.opacity(0.28) : color.opacity(0.14)) :
+                            AnyShapeStyle(Color.clear),
+                            in: UnevenRoundedRectangle(
+                                topLeadingRadius: tl, bottomLeadingRadius: bl,
+                                bottomTrailingRadius: br, topTrailingRadius: tr,
+                                style: .continuous)
+                        )
+                        .overlay {
+                            if isPlaying {
+                                UnevenRoundedRectangle(
+                                    topLeadingRadius: tl, bottomLeadingRadius: bl,
+                                    bottomTrailingRadius: br, topTrailingRadius: tr,
+                                    style: .continuous)
+                                .strokeBorder(color.opacity(isPulsing ? 0.6 : 0.2), lineWidth: 1.5)
+                                .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isPulsing)
+                            }
+                        }
+
+                    // Timestamp + play button inline at bottom
+                    if role != "system" {
+                        HStack(spacing: 4) {
+                            if vm.voiceResponses {
+                                Button {
+                                    vm.playMessageTTS(messageId: msg.id, text: msg.text, voice: vm.activeSession?.voice)
+                                } label: {
+                                    Image(systemName: isPlaying ? "stop.fill" : "speaker.wave.2.fill")
+                                        .font(.system(size: 8))
+                                        .foregroundStyle(isPlaying ? color : (role == "user" ? Color.white.opacity(0.6) : Theme.textTertiary))
+                                }
+                            }
+                            Text(shortTime(msg.timestamp))
+                                .font(.system(size: 9))
+                                .foregroundStyle(role == "user" ? Color.white.opacity(0.6) : Theme.textTertiary)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.bottom, 5)
                     }
-                    .padding(.horizontal, 12)
                 }
             }
 
-            if msg.role == "assistant" { Spacer(minLength: 30) }
-            if msg.role == "system" { Spacer() }
+            if role == "assistant" { Spacer(minLength: 44) }
+            if role == "system" { Spacer() }
         }
     }
 
-    private var bubbleShape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: 18, style: .continuous)
+    private func shortTime(_ date: Date) -> String {
+        let cal = Calendar.current
+        let fmt = DateFormatter()
+        fmt.dateFormat = cal.isDateInToday(date) ? "h:mm a" : "MMM d, h:mm a"
+        return fmt.string(from: date)
     }
 
-    private func bubbleBackground(_ role: String) -> some ShapeStyle {
-        switch role {
-        case "user":
-            return AnyShapeStyle(Theme.blue)
-        case "assistant":
-            if let voice = vm.activeSession?.voice {
-                return AnyShapeStyle(voiceColor(voice).opacity(0.20))
-            }
-            return AnyShapeStyle(Theme.bgSecondary)
-        default:
-            return AnyShapeStyle(Color.clear)
-        }
-    }
-
-    private func bubbleForeground(_ role: String) -> Color {
-        switch role {
-        case "user": .white
-        case "system": Theme.textTertiary
-        default: Theme.textPrimary
-        }
-    }
-
-    private var thinkingIndicator: some View {
+    private var thinkingBubble: some View {
         let color = vm.activeSession.flatMap { voiceColor($0.voice) } ?? Theme.textTertiary
+        let session = vm.activeSession
 
-        return HStack {
-            HStack(spacing: 6) {
-                ForEach(0..<3, id: \.self) { i in
-                    Circle()
-                        .fill(color.opacity(0.6))
-                        .frame(width: 7, height: 7)
-                        .offset(y: isPulsing ? -4 : 4)
-                        .animation(
-                            .easeInOut(duration: 0.5)
-                                .repeatForever(autoreverses: true)
-                                .delay(Double(i) * 0.15),
-                            value: isPulsing
-                        )
+        return HStack(alignment: .bottom, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
+                // Animated dots
+                HStack(spacing: 6) {
+                    ForEach(0..<3, id: \.self) { i in
+                        Circle()
+                            .fill(color.opacity(0.7))
+                            .frame(width: 7, height: 7)
+                            .offset(y: isPulsing ? -4 : 4)
+                            .animation(
+                                .easeInOut(duration: 0.5)
+                                    .repeatForever(autoreverses: true)
+                                    .delay(Double(i) * 0.15),
+                                value: isPulsing
+                            )
+                    }
+                }
+
+                // Activity + tool pill
+                if let s = session, !s.activity.isEmpty || !s.toolName.isEmpty {
+                    HStack(spacing: 4) {
+                        if !s.activity.isEmpty {
+                            Text(s.activity)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(color.opacity(0.8))
+                        }
+                        if !s.activity.isEmpty && !s.toolName.isEmpty {
+                            Text("·").font(.system(size: 10)).foregroundStyle(Theme.textTertiary)
+                        }
+                        if !s.toolName.isEmpty {
+                            Text(s.toolName)
+                                .font(.system(size: 10))
+                                .foregroundStyle(Theme.textTertiary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(color.opacity(0.10), in: Capsule())
                 }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(color.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(
+                color.opacity(0.10),
+                in: UnevenRoundedRectangle(
+                    topLeadingRadius: 4, bottomLeadingRadius: 4,
+                    bottomTrailingRadius: 18, topTrailingRadius: 18,
+                    style: .continuous)
+            )
             .onAppear { isPulsing = true }
             .onDisappear { isPulsing = false }
+
+            // Stop / interrupt button
+            Button { vm.sendInterrupt() } label: {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.red.opacity(0.85))
+                    .frame(width: 30, height: 30)
+                    .background(Theme.red.opacity(0.12), in: Circle())
+            }
+
             Spacer(minLength: 40)
         }
     }
@@ -863,9 +1050,22 @@ struct ContentView: View {
                 bottomStatusBar
                     .padding(.top, 12)
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
             .padding(.bottom, 4)
+            .background {
+                if #available(iOS 26, *) {
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .fill(.clear)
+                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+                } else {
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                }
+            }
         }
         .padding(.horizontal, 8)
+        .padding(.bottom, 4)
     }
 
     // MARK: - Text Input Bar

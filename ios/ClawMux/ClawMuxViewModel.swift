@@ -10,6 +10,7 @@ struct ChatMessage: Identifiable, Equatable {
     let id = UUID()
     let role: String  // "user", "assistant", "system"
     let text: String
+    let timestamp: Date = Date()
 }
 
 /// Canonical agent state matching the backend AgentState enum.
@@ -1087,6 +1088,17 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             sessions[idx].model = model
             sessions[idx].state = .starting
         }
+    }
+
+    func sendInterrupt() {
+        guard let sid = activeSessionId else { return }
+        sendJSON(["session_id": sid, "type": "interrupt"])
+    }
+
+    func sendEffort(_ effort: String) {
+        guard let sid = activeSessionId else { return }
+        sendJSON(["session_id": sid, "type": "set_effort", "effort": effort])
+        if let idx = sessionIndex(sid) { sessions[idx].effort = effort }
     }
 
     // MARK: - Hub Protocol
