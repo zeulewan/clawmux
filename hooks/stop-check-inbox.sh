@@ -19,7 +19,10 @@ set -euo pipefail
 [ -z "${CLAWMUX_SESSION_ID:-}" ] && exit 0
 [ -z "${CLAWMUX_PORT:-}" ] && exit 0
 
-WORK_DIR="${HOME}/.clawmux/sessions/${CLAWMUX_SESSION_ID}"
+# CLAWMUX_WORK_DIR is the canonical voice_id-based session directory.
+# CLAWMUX_SESSION_ID is the shorter label (e.g. "sky" vs "af_sky").
+# Fall back to label-based path only for backwards compatibility.
+WORK_DIR="${CLAWMUX_WORK_DIR:-${HOME}/.clawmux/sessions/${CLAWMUX_SESSION_ID}}"
 SENTINEL="${WORK_DIR}/.hook_delivered"
 
 # Check if a message was already delivered via hooks this cycle

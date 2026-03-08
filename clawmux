@@ -190,8 +190,10 @@ def cmd_wait(args):
     session_id = require_session_id()
 
     # Write .waiting sentinel immediately so stop hook can detect intent without polling.
+    # Use CLAWMUX_WORK_DIR (voice_id-based) if set; fall back to session_id-based path.
     clawmux_home = os.environ.get("CLAWMUX_HOME", os.path.expanduser("~/.clawmux"))
-    sentinel_path = os.path.join(clawmux_home, "sessions", session_id, ".waiting")
+    work_dir = os.environ.get("CLAWMUX_WORK_DIR") or os.path.join(clawmux_home, "sessions", session_id)
+    sentinel_path = os.path.join(work_dir, ".waiting")
     try:
         with open(sentinel_path, "w") as _f:
             _f.write(str(os.getpid()))

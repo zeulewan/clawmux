@@ -41,6 +41,7 @@ class ClaudeCodeBackend(AgentBackend):
         await self._run(
             f'tmux send-keys -t {session_name} '
             f'"unset CLAUDECODE && export CLAWMUX_SESSION_ID={session_id} '
+            f'&& export CLAWMUX_WORK_DIR={work_dir} '
             f'&& export CLAWMUX_PORT={hub_port}" Enter'
         )
 
@@ -107,6 +108,7 @@ class ClaudeCodeBackend(AgentBackend):
         await self._run(
             f'tmux send-keys -t {session_name} '
             f'"unset CLAUDECODE && export CLAWMUX_SESSION_ID={session_id} '
+            f'&& export CLAWMUX_WORK_DIR={work_dir} '
             f'&& export CLAWMUX_PORT={hub_port}" Enter'
         )
 
