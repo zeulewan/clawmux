@@ -887,14 +887,12 @@ async def hook_tool_status(request: Request):
         cwd = data.get("cwd", "")
         session = _session_from_cwd(cwd)
     if not session:
+        log.warning("[hook] %s: session not found (header=%r, known=%s)", event, clawmux_sid, list(session_mgr.sessions.keys()))
         return JSONResponse({})
 
     response_json = {}
 
     if event in ("PostToolUse", "PostToolUseFailure"):
-        # Skip activity updates while IDLE — wait WS is the sole authority
-        if session.state == AgentState.IDLE:
-            return JSONResponse(response_json)
         # Skip entirely for clawmux wait — wait WS handles all state transitions
         tool_name = data.get("tool_name", "")
         tool_input = data.get("tool_input", {})
@@ -904,7 +902,8 @@ async def hook_tool_status(request: Request):
         session.tool_name = ""
         session.tool_input = {}
         # Transition back to THINKING after each tool call — Claude is deciding next action
-        if session.state == AgentState.PROCESSING:
+        # Include IDLE: background clawmux wait WS can flip state to IDLE mid-tool-call
+        if session.state in (AgentState.PROCESSING, AgentState.IDLE):
             session.set_state(AgentState.THINKING)
             await send_to_browser({
                 "type": "session_status",
@@ -940,11 +939,9 @@ async def hook_tool_status(request: Request):
         # and the hook_delivered sentinel file; HTTP Stop hooks cannot block Claude.
         pass
     elif event == "PreToolUse":
-        # Skip activity updates while IDLE — wait WS is the sole authority
-        if session.state == AgentState.IDLE:
-            return JSONResponse(response_json)
-        # Transition THINKING → PROCESSING on first tool call
-        if session.state == AgentState.THINKING:
+        # PreToolUse means the agent is actively making a tool call — cannot be truly idle.
+        # If session is IDLE (e.g. background clawmux wait WS is connected), override to PROCESSING.
+        if session.state in (AgentState.IDLE, AgentState.THINKING):
             session.set_state(AgentState.PROCESSING)
         tool_name = data.get("tool_name", "")
         tool_input = data.get("tool_input", {})
