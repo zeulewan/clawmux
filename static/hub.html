@@ -13,7 +13,7 @@
 :root {
   --bg: #06090f;
   --bg-secondary: #0d1117;
-  --bg-glass: rgba(10, 13, 22, 0.82);
+  --bg-glass: rgba(10, 13, 22, 0.55);
   --bg-card: #141b26;
   --bg-card-hover: #1e2535;
   --border: #1e2a3d;
@@ -98,16 +98,12 @@
   }
 }
 @media (prefers-color-scheme: light) {
-  body {
-    background-image: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(60, 100, 255, 0.08), transparent);
-  }
+  body::before { background: rgba(100, 60, 200, 0.12); }
+  body::after { background: rgba(20, 150, 180, 0.08); }
 }
 body {
   font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: var(--bg);
-  background-image:
-    radial-gradient(ellipse 800px 600px at 20% 20%, rgba(120, 80, 220, 0.14), transparent),
-    radial-gradient(ellipse 600px 500px at 80% 70%, rgba(20, 180, 200, 0.10), transparent);
   color: var(--text);
   height: 100vh;
   height: 100dvh;
@@ -118,6 +114,44 @@ body {
   touch-action: manipulation;
   -webkit-text-size-adjust: 100%;
 }
+/* Ambient glow layers — fixed behind all content, blurred as independent shapes */
+body::before, body::after {
+  content: '';
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+}
+body::before {
+  width: 700px;
+  height: 900px;
+  background: rgba(120, 80, 220, 0.22);
+  filter: blur(100px);
+  top: -300px;
+  left: -150px;
+  animation: drift-a 28s ease-in-out infinite;
+}
+body::after {
+  width: 650px;
+  height: 650px;
+  background: rgba(20, 180, 200, 0.16);
+  filter: blur(90px);
+  bottom: -200px;
+  right: -100px;
+  animation: drift-b 22s ease-in-out infinite;
+}
+@keyframes drift-a {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(80px, 60px) scale(1.12); }
+  66% { transform: translate(-40px, 100px) scale(0.9); }
+}
+@keyframes drift-b {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(-60px, -40px) scale(1.08); }
+  66% { transform: translate(40px, 30px) scale(0.94); }
+}
+/* Make all app structure sit above the glow layers */
+#header, #app-body { position: relative; z-index: 1; }
 
 /* App layout: header + body (sidebar + main) */
 #app-body {
