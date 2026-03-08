@@ -812,20 +812,43 @@ body::after {
   padding: 20px 24px 110px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0;
 }
 .msg {
   max-width: 75%;
-  padding: 11px 16px;
+  padding: 10px 15px;
   border-radius: var(--radius);
   line-height: 1.6;
   font-size: 0.92rem;
   letter-spacing: -0.01em;
-  animation: msgAppear 0.25s var(--ease-out);
+  animation: msgAppear 0.2s var(--ease-out);
   overflow-wrap: break-word;
   word-break: break-word;
   position: relative;
+  margin-top: 10px;
 }
+.msg:first-child { margin-top: 0; }
+
+/* Message grouping — tight spacing between consecutive same-speaker messages */
+.msg.user + .msg.user {
+  margin-top: 3px;
+  border-top-right-radius: var(--radius-xs);
+}
+.msg.assistant + .msg.assistant {
+  margin-top: 3px;
+  border-top-left-radius: var(--radius-xs);
+}
+/* Extra space when speaker changes */
+.msg.user + .msg.assistant,
+.msg.assistant + .msg.user {
+  margin-top: 16px;
+}
+/* Flatten the bottom corner of non-final messages in a group */
+.msg.user:has(+ .msg.user) { border-bottom-right-radius: var(--radius-xs); }
+.msg.assistant:has(+ .msg.assistant) { border-bottom-left-radius: var(--radius-xs); }
+/* Restore tail on last message of group */
+.msg.user:not(:has(+ .msg.user)) { border-bottom-right-radius: 5px; }
+.msg.assistant:not(:has(+ .msg.assistant)) { border-bottom-left-radius: 5px; }
 .msg .msg-actions {
   position: absolute;
   bottom: 4px;
