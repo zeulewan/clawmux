@@ -46,6 +46,8 @@ clawmux send --to sky --re msg-xxx 'Here is the answer'
 clawmux send --to sky --re msg-xxx
 ```
 
+**When the user sends a short affirmative** ("alright", "ok", "sounds good", "thanks", etc.) and no response is needed, ACK the message with a thumbs up instead of sending a reply. Use `clawmux send --to user --re <msg_id>` with no message body.
+
 ## Waiting for messages (idle mode)
 ```bash
 clawmux wait
