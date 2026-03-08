@@ -198,9 +198,11 @@ function stopActiveAudio({ stashForResume = false } = {}) {
           remaining.push(currentAudio.b64data);
         }
       }
-      // Stash queued chunks (no offset needed)
+      // Stash queued chunks (no offset needed) — convert from {data, words} to {b64data, words}
       const queued = _audioPlayQueue.get(stoppedSessionId) || [];
-      remaining.push(...queued);
+      for (const item of queued) {
+        remaining.push({ b64data: item.data, words: item.words || null });
+      }
       if (remaining.length > 0) {
         sess.audioBuffer = [...remaining, ...(sess.audioBuffer || [])];
       }
@@ -843,41 +845,43 @@ function stopThinkingSound() {
 // --- Audio Playback, Karaoke, Buffered (from hub.html) ---
 // --- Audio playback (Web Audio API for Safari autoplay compatibility) ---
 // Per-session playback queue: if audio is already playing, queue the next chunk
-const _audioPlayQueue = new Map(); // sessionId -> [b64data, ...]
+// Each item is {data, words, msgId} to keep audio and karaoke paired
+const _audioPlayQueue = new Map(); // sessionId -> [{data, words, msgId}, ...]
 let _audioPlaying = false; // true while a playAudio decode+play is active
 
-function enqueueAudio(sessionId, b64data) {
+function enqueueAudio(sessionId, b64data, karaokeWords, msgId) {
+  const item = { data: b64data, words: karaokeWords || null, msgId: msgId || null };
   // Buffer audio while user is recording — play after they stop
   if (recording) {
     if (!_audioPlayQueue.has(sessionId)) _audioPlayQueue.set(sessionId, []);
-    _audioPlayQueue.get(sessionId).push(b64data);
+    _audioPlayQueue.get(sessionId).push(item);
     return;
   }
   if (!_audioPlaying && !currentAudio) {
     // Nothing playing — play immediately
     _audioPlaying = true;
-    playAudio(sessionId, b64data);
+    playAudio(sessionId, b64data, 0, karaokeWords);
   } else {
     // Something is playing — queue it
     if (!_audioPlayQueue.has(sessionId)) _audioPlayQueue.set(sessionId, []);
-    _audioPlayQueue.get(sessionId).push(b64data);
+    _audioPlayQueue.get(sessionId).push(item);
   }
 }
 
 function _playNextQueued(sessionId) {
   const queue = _audioPlayQueue.get(sessionId);
   if (queue && queue.length > 0) {
-    const next = queue.shift();
+    const item = queue.shift();
     if (queue.length === 0) _audioPlayQueue.delete(sessionId);
     _audioPlaying = true;
-    playAudio(sessionId, next);
+    playAudio(sessionId, item.data, 0, item.words);
   } else {
     _audioPlaying = false;
     _audioPlayQueue.delete(sessionId);
   }
 }
 
-function playAudio(sessionId, b64data, startOffset = 0) {
+function playAudio(sessionId, b64data, startOffset = 0, karaokeWords = null) {
   const bytes = Uint8Array.from(atob(b64data), c => c.charCodeAt(0));
   const buffer = bytes.buffer;
 
@@ -886,11 +890,8 @@ function playAudio(sessionId, b64data, startOffset = 0) {
   currentAudio = { playbackId, sessionId, source: null, b64data, _startTime: null };
   if (sessionId === activeSessionId) updateMicUI();
 
-  // Capture pending karaoke words NOW (synchronously) before async decode,
-  // to avoid race where a new message's karaokeSetupMessage overwrites them
-  const queue = _pendingKaraokeWords.get(sessionId);
-  const capturedKaraokeWords = (queue && queue.length > 0) ? queue.shift() : null;
-  if (queue && queue.length === 0) _pendingKaraokeWords.delete(sessionId);
+  // Karaoke words are passed directly from the queue item — no separate queue to shift from
+  const capturedKaraokeWords = karaokeWords || null;
 
   const cleanup = () => {
     if (currentAudio && currentAudio.playbackId === playbackId) currentAudio = null;
@@ -969,29 +970,27 @@ let _karaokeAudioRef = null; // reference to currentAudio at karaoke start
 let _pausedKaraokeWords = null; // saved karaoke words across transport pause/resume
 let _karaokeActiveIdx = -1;
 
-// Per-session pending words (waiting for audio to start)
-const _pendingKaraokeWords = new Map(); // sessionId -> words[][] (queue of word sets)
-
+// Prepare karaoke spans on the DOM message element and return filtered words with el references.
+// Words are returned (not queued) so the caller can pair them with their audio data.
 function karaokeSetupMessage(sessionId, words, msgId) {
-  if (!ttsEnabled) return;
+  if (!ttsEnabled) return null;
   // Filter to real (non-punctuation/symbol) words only
   const realWords = words.filter(w => /[\p{L}\p{N}]/u.test(w.word));
-  if (realWords.length === 0) return;
-  if (!_pendingKaraokeWords.has(sessionId)) _pendingKaraokeWords.set(sessionId, []);
-  _pendingKaraokeWords.get(sessionId).push(realWords);
+  if (realWords.length === 0) return null;
 
   // Find the specific message element by msg_id, or fall back to last assistant message
-  if (sessionId !== activeSessionId) return;
+  if (sessionId !== activeSessionId) return realWords;
   let msgEl = null;
   if (msgId) {
     msgEl = chatArea.querySelector(`[data-msg-id="${CSS.escape(msgId)}"]`);
   }
   if (!msgEl) {
     const msgs = chatArea.querySelectorAll('.msg.assistant');
-    if (!msgs.length) return;
+    if (!msgs.length) return realWords;
     msgEl = msgs[msgs.length - 1];
   }
   _applyKaraokeSpans(msgEl, realWords);
+  return realWords;
 }
 
 function _applyKaraokeSpans(msgEl, realWords) {
@@ -1328,7 +1327,7 @@ function playBufferedAudio(sessionId, chunks) {
       return;
     }
     const chunk = chunks[i++];
-    const b64data = (typeof chunk === 'string') ? chunk : chunk.b64data;
+    const b64data = (typeof chunk === 'string') ? chunk : (chunk.b64data || chunk.data);
     const startOffset = (typeof chunk === 'object' && chunk.offset) ? chunk.offset : 0;
     const bytes = Uint8Array.from(atob(b64data), c => c.charCodeAt(0));
     const buffer = bytes.buffer;
@@ -1345,11 +1344,10 @@ function playBufferedAudio(sessionId, chunks) {
         currentAudio = { source, sessionId, decodedBuffer: decoded, b64data, _startTime: audioCtx.currentTime - offset };
         playbackStartTime = audioCtx.currentTime;
         playbackPaused = false;
-        // Start karaoke if pending words exist (e.g. restored after tab switch)
-        const pendingQueue = _pendingKaraokeWords.get(sessionId);
-        const pendingWords = (pendingQueue && pendingQueue.length > 0) ? pendingQueue.shift() : null;
-        if (pendingQueue && pendingQueue.length === 0) _pendingKaraokeWords.delete(sessionId);
-        if (pendingWords) { karaokeStart(currentAudio, pendingWords); }
+        // Karaoke for buffered audio (background tab) — words are stashed on s.karaokeWords
+        if (typeof chunk === 'object' && chunk.words) {
+          karaokeStart(currentAudio, chunk.words);
+        }
         const _onended = () => { if (!playbackPaused) { currentAudio = null; playNext(); } };
         source.onended = _onended;
         currentAudio._onended = _onended;
