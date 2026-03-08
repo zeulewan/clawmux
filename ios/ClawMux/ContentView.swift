@@ -22,18 +22,20 @@ private enum Theme {
 // MARK: - Canvas Colors (dark atmospheric palette)
 
 private extension Color {
-    static let canvas1    = Color(hex: 0x07090F)   // deep navy
-    static let canvas2    = Color(hex: 0x0C1221)   // dark steel blue
-    static let glass      = Color.white.opacity(0.07)
-    static let glassBright = Color.white.opacity(0.11)
-    static let glassBorder = Color.white.opacity(0.09)
-    static let cText      = Color.white
-    static let cTextSec   = Color.white.opacity(0.60)
-    static let cTextTer   = Color.white.opacity(0.35)
-    static let cAccent    = Color(hex: 0x2F7AFF)
-    static let cDanger    = Color(hex: 0xFF3B30)
-    static let cSuccess   = Color(hex: 0x30D158)
-    static let cWarning   = Color(hex: 0xFF9F0A)
+    static let canvas1     = Color(hex: 0x06090F)   // deep navy (matches browser --bg)
+    static let canvas2     = Color(hex: 0x0D1117)   // dark steel (matches browser --bg-secondary)
+    static let glass       = Color.white.opacity(0.06)
+    static let glassBright = Color.white.opacity(0.10)
+    static let glassBorder = Color.white.opacity(0.08)
+    static let cText       = Color(hex: 0xEEF2FF)   // browser --text
+    static let cTextSec    = Color(hex: 0x94A3B8)   // browser --text-secondary
+    static let cTextTer    = Color(hex: 0x7A8BA3)   // browser --text-tertiary
+    static let cAccent     = Color(hex: 0x818CF8)   // browser --blue (indigo, not blue!)
+    static let cDanger     = Color(hex: 0xFF453A)   // browser --red
+    static let cSuccess    = Color(hex: 0x30D158)
+    static let cWarning    = Color(hex: 0xFF9F0A)
+    static let cCard       = Color(hex: 0x141B26)   // browser --bg-card
+    static let cBorder     = Color(hex: 0x1E2A3D)   // browser --border
 }
 
 // MARK: - File-level Helpers
@@ -319,7 +321,7 @@ struct ContentView: View {
 
     private var chatHeader: some View {
         let color = vm.activeSession.map { voiceColor($0.voice) } ?? Color.cTextSec
-        return HStack(spacing: 10) {
+        return HStack(spacing: 12) {
             // Back
             Button {
                 withAnimation { showingChat = false }
@@ -329,20 +331,20 @@ struct ContentView: View {
                     .foregroundStyle(Color.cTextSec)
                     .frame(width: 36, height: 36)
                     .background(Color.glass, in: Circle())
-                    .overlay(Circle().strokeBorder(Color.glassBorder, lineWidth: 0.5))
+                    .overlay(Circle().strokeBorder(Color.cBorder, lineWidth: 0.5))
             }
 
             if let s = vm.activeSession {
                 // Agent avatar
                 ZStack {
-                    Circle().fill(color.opacity(0.18)).frame(width: 34, height: 34)
+                    Circle().fill(color.opacity(0.16)).frame(width: 36, height: 36)
                     Image(systemName: voiceIcon(s.voice))
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(color)
                 }
 
                 // Name + subtitle
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(vm.showDebug ? "Debug" : s.label)
                         .font(.system(size: 16, weight: .semibold, design: .rounded))
                         .foregroundStyle(Color.cText)
@@ -364,8 +366,12 @@ struct ContentView: View {
                             Text(s.projectArea.isEmpty ? s.project : "\(s.project) · \(s.projectArea)")
                                 .foregroundStyle(Color.cTextTer).lineLimit(1)
                         } else {
-                            Text(s.statusText.isEmpty ? "Idle" : s.statusText)
-                                .foregroundStyle(ringColor(s, spawning: false).opacity(0.85))
+                            let stateColor = ringColor(s, spawning: false)
+                            HStack(spacing: 4) {
+                                Circle().fill(stateColor).frame(width: 5, height: 5)
+                                Text(s.statusText.isEmpty ? "Idle" : s.statusText)
+                                    .foregroundStyle(Color.cTextTer)
+                            }
                         }
                     }
                     .font(.system(size: 11))
@@ -373,18 +379,6 @@ struct ContentView: View {
             }
 
             Spacer()
-
-            // Usage pill
-            if vm.usage5hPct != nil || vm.usage7dPct != nil || vm.contextPct != nil {
-                VStack(alignment: .trailing, spacing: 2) {
-                    if let p = vm.contextPct  { usageRow("ctx", pct: p) }
-                    if let p = vm.usage5hPct  { usageRow("5h",  pct: p) }
-                    if let p = vm.usage7dPct  { usageRow("7d",  pct: p) }
-                }
-                .padding(.horizontal, 8).padding(.vertical, 4)
-                .background(Color.glass, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
-            }
 
             // Model picker
             if vm.activeSessionId != nil {
@@ -405,41 +399,28 @@ struct ContentView: View {
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundStyle(Color.cTextSec)
                         .padding(.horizontal, 10).padding(.vertical, 6)
-                        .background(Color.glass, in: Capsule())
-                        .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
-                }
-            }
-
-            // Mic mute (auto mode)
-            if vm.activeSessionId != nil && vm.isAutoMode {
-                Button { vm.micMuted.toggle() } label: {
-                    Image(systemName: vm.micMuted ? "mic.slash.fill" : "mic.fill")
-                        .font(.system(size: 13))
-                        .foregroundStyle(vm.micMuted ? Color.cDanger : Color.cTextSec)
-                        .frame(width: 34, height: 34)
-                        .background(Color.glass, in: Circle())
-                        .overlay(Circle().strokeBorder(Color.glassBorder, lineWidth: 0.5))
+                        .background(Color.cCard, in: Capsule())
+                        .overlay(Capsule().strokeBorder(Color.cBorder, lineWidth: 0.5))
                 }
             }
 
             // Settings
             Button { vm.showSettings = true } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color.cTextTer)
-                    .frame(width: 34, height: 34)
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color.cTextSec)
+                    .frame(width: 36, height: 36)
                     .background(Color.glass, in: Circle())
-                    .overlay(Circle().strokeBorder(Color.glassBorder, lineWidth: 0.5))
+                    .overlay(Circle().strokeBorder(Color.cBorder, lineWidth: 0.5))
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
-        .background(.ultraThinMaterial)
-    }
-
-    private func usageRow(_ label: String, pct: Int) -> some View {
-        HStack(spacing: 3) {
-            Text(label).font(.system(size: 8, weight: .medium)).foregroundStyle(Color.cTextTer)
-            Text("\(pct)%").font(.system(size: 9, weight: .bold, design: .monospaced)).foregroundStyle(usageColor(pct))
+        .background {
+            if #available(iOS 26, *) {
+                Color.clear.glassEffect(.regular, in: .rect)
+            } else {
+                Color.canvas1.opacity(0.95)
+            }
         }
     }
 
