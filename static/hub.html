@@ -2635,7 +2635,7 @@ function setSessionEffort(effort) {
   if (!activeSessionId || !ws || ws.readyState !== WebSocket.OPEN) return;
   document.getElementById('session-effort').blur();
   const s = sessions.get(activeSessionId);
-  const currentEffort = s?.effort || 'high';
+  const currentEffort = s?.effort || '';
   if (effort === currentEffort) return;
   if (!confirm(`Switch to ${effort.charAt(0).toUpperCase() + effort.slice(1)} effort? This will restart the session. The conversation will be preserved.`)) {
     document.getElementById('session-effort').value = currentEffort;
@@ -2650,6 +2650,8 @@ function updateEffortLabel() {
   const label = document.getElementById('effort-label');
   if (!label) return;
   const s = activeSessionId ? sessions.get(activeSessionId) : null;
+  const model = s?.model || 'opus';
+  if (model === 'haiku') { label.style.display = 'none'; return; }
   const effort = s?.effort || 'high';
   label.textContent = effort.charAt(0).toUpperCase() + effort.slice(1) + ' ▾';
   label.style.display = 'inline';
