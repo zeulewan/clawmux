@@ -73,6 +73,7 @@ function _scheduleSaveNotes() {
 }
 
 async function saveNotes() {
+  if (!_notesLoaded) return;  // Don't save before notes are loaded from server
   _notesData.now = document.getElementById('notes-now').value;
   _notesData.later = document.getElementById('notes-later').value;
   try {
