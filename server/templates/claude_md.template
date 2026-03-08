@@ -63,6 +63,16 @@ clawmux task 'Short description of current work'
 ```
 Update this whenever your focus changes — starting a new task, finishing one, or switching context.
 
+## Searching conversation history
+Search across all agent histories for past messages:
+```bash
+clawmux search 'keyword'                          # Basic search
+clawmux search 'error' --agent af_sky             # Filter by agent
+clawmux search 'deploy' --role assistant -C 3      # With 3 lines of context
+clawmux search 'API.*endpoint' --after 2025-03-01  # Regex + date filter
+```
+Options: `--agent`, `--role` (user/assistant/system), `--after`/`--before` (YYYY-MM-DD), `--limit N`, `-C N` (context lines). Supports regex.
+
 IMPORTANT: Always use `clawmux send --to user` for ALL output to the user. Never just print text to the terminal. Text printed directly to Claude Code chat is NOT visible to the user in the browser.
 
 # Message Delivery
@@ -94,6 +104,7 @@ You can read this file for context on what the user is focused on. Do not modify
 | `clawmux project <name> --area <area>` | Set project/area in sidebar | Yes |
 | `clawmux projects` | List all projects | Yes |
 | `clawmux messages` | List recent inter-agent messages | Yes |
+| `clawmux search '<query>'` | Search all agent conversation histories | Yes |
 | `clawmux version` | Show version and commit | Yes |
 | `clawmux monitor` | Open tiled tmux view of agents | Yes |
 | `clawmux spawn` | Launch a new agent session | **Caution** |
