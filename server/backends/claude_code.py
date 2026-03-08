@@ -2,7 +2,13 @@
 
 import asyncio
 import logging
+import os
 import time
+
+# Ensure Homebrew and local bin are in PATH for subprocess calls (macOS).
+_EXTRA_PATH = "/opt/homebrew/bin:/usr/local/bin"
+_SUBPROCESS_ENV = os.environ.copy()
+_SUBPROCESS_ENV["PATH"] = _EXTRA_PATH + ":" + _SUBPROCESS_ENV.get("PATH", "")
 
 from hub_config import AGENT_COLORS, CLAUDE_BASE_COMMAND
 from .base import AgentBackend
@@ -74,6 +80,7 @@ class ClaudeCodeBackend(AgentBackend):
             "tmux", "has-session", "-t", session_name,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
+            env=_SUBPROCESS_ENV,
         )
         await proc.wait()
         return proc.returncode == 0
@@ -162,6 +169,7 @@ class ClaudeCodeBackend(AgentBackend):
                 "tmux", "list-sessions", "-F", "#{session_name}",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
+                env=_SUBPROCESS_ENV,
             )
             stdout, _ = await proc.communicate()
             if proc.returncode == 0:
@@ -217,12 +225,14 @@ class ClaudeCodeBackend(AgentBackend):
             "tmux", "send-keys", "-t", session_name, "-l", text,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=_SUBPROCESS_ENV,
         )
         await proc.communicate()
         proc = await asyncio.create_subprocess_exec(
             "tmux", "send-keys", "-t", session_name, "Enter",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=_SUBPROCESS_ENV,
         )
         await proc.communicate()
 
@@ -231,6 +241,7 @@ class ClaudeCodeBackend(AgentBackend):
             cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=_SUBPROCESS_ENV,
         )
         stdout, stderr = await proc.communicate()
         if proc.returncode != 0:
