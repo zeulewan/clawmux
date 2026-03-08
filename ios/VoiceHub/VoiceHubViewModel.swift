@@ -12,8 +12,25 @@ struct ChatMessage: Identifiable, Equatable {
     let text: String
 }
 
-enum SessionStatus: String {
-    case starting, ready, active
+/// Canonical agent state matching the backend AgentState enum.
+enum AgentState: String {
+    case starting, idle, thinking, processing, compacting, dead
+
+    /// True when the agent is busy and not waiting for user input.
+    var isWorking: Bool { self == .thinking || self == .processing || self == .compacting }
+    /// True when the agent is ready to receive user input.
+    var isIdle: Bool { self == .idle }
+
+    var displayLabel: String {
+        switch self {
+        case .starting: return "Starting..."
+        case .idle: return "Ready"
+        case .thinking: return "Thinking..."
+        case .processing: return "Working..."
+        case .compacting: return "Compacting..."
+        case .dead: return "Offline"
+        }
+    }
 }
 
 struct VoiceSession: Identifiable {
@@ -21,18 +38,27 @@ struct VoiceSession: Identifiable {
     var label: String
     var voice: String
     var speed: Double
-    var status: SessionStatus = .starting
+    var state: AgentState = .starting
     var messages: [ChatMessage] = []
     var tmuxSession: String = ""
-    var isThinking: Bool = false
     var pendingListen: Bool = false
     var statusText: String = ""
     var audioBuffer: [Data] = []
     var project: String = ""
     var projectArea: String = ""
-    var model: String = ""  // per-session model (opus/sonnet/haiku); empty = global default
+    var role: String = ""
+    var task: String = ""
+    var model: String = ""
+    var effort: String = ""
+    var activity: String = ""
+    var toolName: String = ""
     var unreadCount: Int = 0
-    var awaitingInput: Bool = false
+
+    // Derived helpers
+    var isThinking: Bool { state == .thinking || state == .processing || state == .compacting }
+    var awaitingInput: Bool { state == .idle }
+    var isReady: Bool { state == .idle || state == .thinking || state == .processing || state == .compacting }
+    var isDead: Bool { state == .dead }
 }
 
 struct VoiceInfo: Identifiable {
@@ -245,7 +271,7 @@ struct DebugHubSession: Identifiable {
     var id: String { sessionId }
     let sessionId: String
     let voice: String
-    let status: String
+    let state: String
     let mcpConnected: Bool
     let idleSeconds: Int
     let ageSeconds: Int
@@ -1121,21 +1147,35 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
             }
 
         case "session_status":
-            if let sid = sessionId, let statusStr = json["status"] as? String,
-                let status = SessionStatus(rawValue: statusStr),
-                let idx = sessionIndex(sid)
-            {
-                sessions[idx].status = status
-                if status == .ready {
+            if let sid = sessionId, let idx = sessionIndex(sid) {
+                let newState = AgentState(rawValue: json["state"] as? String ?? "") ?? sessions[idx].state
+                let prevState = sessions[idx].state
+                sessions[idx].state = newState
+                sessions[idx].activity = json["activity"] as? String ?? ""
+                sessions[idx].toolName = json["tool_name"] as? String ?? ""
+
+                // First time becoming idle from starting = session just connected
+                if prevState == .starting && newState != .starting && newState != .dead {
                     addMessage(sid, role: "system", text: "Claude connected.")
-                    // Show thinking indicator while waiting for agent's first message
-                    sessions[idx].isThinking = true
                     if globalSounds, (isAutoMode && soundReadyAuto) || (pushToTalk && soundReadyPTT) {
                         tonePlayer.cueSessionReady()
                     }
                     if (isAutoMode && hapticsSessionAuto) || (pushToTalk && hapticsSessionPTT)
                         || (typingMode && hapticsSessionTyping)
                     { haptic(.success) }
+                }
+
+                if sid == activeSessionId {
+                    updateStatusText(newState.displayLabel, for: sid)
+                    switch newState {
+                    case .thinking, .processing, .compacting:
+                        if !typingMode { startThinkingSound() }
+                    case .idle, .dead:
+                        stopThinkingSound()
+                    default:
+                        break
+                    }
+                    updateLiveActivity()
                 }
             }
 
@@ -1147,10 +1187,9 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
             statusText = "Error: \(msg)"
 
         case "thinking":
-            // Hub is about to speak - show thinking indicator
+            // Legacy event — map to thinking state
             if let sid = sessionId, let idx = sessionIndex(sid) {
-                sessions[idx].isThinking = true
-                sessions[idx].awaitingInput = false
+                sessions[idx].state = .thinking
                 updateStatusText("Thinking...", for: sid)
                 if sid == activeSessionId {
                     if !typingMode { startThinkingSound() }
@@ -1161,15 +1200,8 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
         // Session-scoped messages
         case "assistant_text":
             if let sid = sessionId, let t = json["text"] as? String {
-                if let idx = sessionIndex(sid) {
-                    sessions[idx].isThinking = false
-                    sessions[idx].awaitingInput = true
-                    // In voice modes, audio will follow and set "Speaking..."
-                    // In typing mode, go straight to ready-ish state
-                    if typingMode {
-                        updateStatusText("Ready", for: sid)
-                    }
-                }
+                // In typing mode there is no audio follow-up — go straight to ready
+                if typingMode { updateStatusText("Ready", for: sid) }
                 stopThinkingSound()
                 addMessage(sid, role: "assistant", text: t)
                 if sid == activeSessionId {
@@ -1194,28 +1226,45 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
         case "user_text":
             if let sid = sessionId, let t = json["text"] as? String {
                 addMessage(sid, role: "user", text: t)
-                // Clear transcript preview now that hub confirmed the text
                 if sid == activeSessionId && showTranscriptPreview {
                     clearTranscriptPreview()
                 }
-                if let idx = sessionIndex(sid) {
-                    sessions[idx].isThinking = true
-                    sessions[idx].statusText = "Thinking..."
-                }
                 if sid == activeSessionId {
                     isProcessing = false
-                    if !typingMode { startThinkingSound() }
                     updateLiveActivity()
                 }
             }
+
+        case "activity_text":
+            // Tool call log entry — ignore for now (future: show in activity feed)
+            break
+
+        case "compaction_status":
+            if let sid = sessionId, let idx = sessionIndex(sid) {
+                let compacting = json["compacting"] as? Bool ?? false
+                sessions[idx].state = compacting ? .compacting : .idle
+                if sid == activeSessionId { updateLiveActivity() }
+            }
+
+        case "agent_message":
+            // Inter-agent message delivered to this session — show as system message
+            if let sid = sessionId, let content = json["content"] as? String,
+                let from = json["from"] as? String
+            {
+                addMessage(sid, role: "system", text: "[\(from)]: \(content)")
+                if sid != activeSessionId, let idx = sessionIndex(sid) {
+                    sessions[idx].unreadCount += 1
+                }
+            }
+
+        case "inbox_update":
+            // Badge update — unread_count already tracked per-session via session_status
+            break
 
         case "audio":
             if let sid = sessionId, let b64 = json["data"] as? String,
                 let audioData = Data(base64Encoded: b64)
             {
-                if let idx = sessionIndex(sid) {
-                    sessions[idx].status = .active
-                }
                 updateStatusText("Speaking...", for: sid)
                 if sid == activeSessionId {
                     // Play audio for active session (works in foreground and background)
@@ -1236,7 +1285,7 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
 
         case "listening":
             if let sid = sessionId {
-                if let idx = sessionIndex(sid) { sessions[idx].awaitingInput = true }
+                if let idx = sessionIndex(sid) { sessions[idx].state = .idle }
                 // Skip if already recording for this session
                 if isRecording, recordingSessionId == sid { break }
 
@@ -1300,19 +1349,13 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
 
         case "done":
             if let sid = sessionId, let idx = sessionIndex(sid) {
-                sessions[idx].status = .ready
                 let stillProcessing = json["processing"] as? Bool ?? false
+                sessions[idx].state = stillProcessing ? .thinking : .idle
                 if stillProcessing {
-                    // Agent is still processing (e.g. wait_for_response=false)
-                    sessions[idx].isThinking = true
                     updateStatusText("Thinking...", for: sid)
-                    if sid == activeSessionId {
-                        if !typingMode { startThinkingSound() }
-                    }
+                    if sid == activeSessionId, !typingMode { startThinkingSound() }
                 } else {
-                    sessions[idx].isThinking = false
                     stopThinkingSound()
-                    // Don't override status if user still needs to respond
                     if !sessions[idx].pendingListen {
                         updateStatusText("Ready", for: sid)
                     }
@@ -1324,11 +1367,9 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
             }
 
         case "session_ended":
-            // Agent finished a fire-and-forget turn (wait_for_response=False).
-            // Do NOT terminate — the hub session is still alive; Claude may return.
-            // Just reset processing state so the UI isn't stuck.
+            // Fire-and-forget turn done — session still alive, reset to idle
             if let sid = sessionId, let idx = sessionIndex(sid) {
-                sessions[idx].isThinking = false
+                sessions[idx].state = .idle
                 updateStatusText("Ready", for: sid)
                 if sid == activeSessionId {
                     isProcessing = false
@@ -1342,6 +1383,8 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
             if let sid = sessionId, let idx = sessionIndex(sid) {
                 sessions[idx].project = json["project"] as? String ?? ""
                 sessions[idx].projectArea = json["area"] as? String ?? ""
+                sessions[idx].role = json["role"] as? String ?? ""
+                sessions[idx].task = json["task"] as? String ?? ""
             }
 
         default:
@@ -1356,10 +1399,11 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
         let voice = dict["voice"] as? String ?? "af_sky"
         let label =
             ALL_VOICES.first { $0.id == voice }?.name ?? dict["label"] as? String ?? "Session"
-        let statusStr = dict["status"] as? String ?? "starting"
-        let status = SessionStatus(rawValue: statusStr) ?? .starting
         let tmux = dict["tmux_session"] as? String ?? sid
-        let isReady = status == .ready || dict["mcp_connected"] as? Bool == true
+
+        // Canonical state from backend; fall back to legacy status field
+        let stateStr = dict["state"] as? String ?? dict["status"] as? String ?? "starting"
+        let agentState = AgentState(rawValue: stateStr) ?? .starting
 
         // Restore saved voice/speed preferences
         let savedPrefs = loadSessionPrefs(sid)
@@ -1369,29 +1413,27 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
 
         var session = VoiceSession(
             id: sid, label: sessionLabel, voice: sessionVoice, speed: sessionSpeed,
-            status: isReady ? .ready : status, tmuxSession: tmux)
+            state: agentState, tmuxSession: tmux)
         session.project = dict["project"] as? String ?? ""
         session.projectArea = dict["project_area"] as? String ?? ""
+        session.role = dict["role"] as? String ?? ""
+        session.task = dict["task"] as? String ?? ""
         session.model = dict["model"] as? String ?? ""
+        session.effort = dict["effort"] as? String ?? ""
+        session.activity = dict["activity"] as? String ?? ""
+        session.toolName = dict["tool_name"] as? String ?? ""
         session.unreadCount = dict["unread_count"] as? Int ?? 0
 
-        if isReady {
+        let isConnected = agentState != .starting && agentState != .dead
+        if isConnected {
             session.messages.append(ChatMessage(role: "system", text: "Claude connected."))
         } else {
             session.messages.append(
                 ChatMessage(role: "system", text: "Session started. Waiting for Claude..."))
         }
 
-        // Restore thinking state from server
-        if dict["processing"] as? Bool == true {
-            session.isThinking = true
-        }
-
-        // Restore awaiting input state: if session is ready but not processing,
-        // the agent is waiting for user input
-        let inConverse = dict["in_converse"] as? Bool ?? false
-        if isReady && !inConverse && !(dict["processing"] as? Bool ?? false) {
-            session.awaitingInput = true
+        // If idle and not in an active conversation, agent is waiting for input
+        if agentState == .idle {
             session.pendingListen = true
         }
 
@@ -1433,14 +1475,12 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
         }
 
         if let session = activeSession {
-            statusText = session.statusText.isEmpty
-                ? (session.status == .ready ? "Ready" : "Waiting for Claude...")
-                : session.statusText
+            statusText = session.statusText.isEmpty ? session.state.displayLabel : session.statusText
 
             // Derive processing state from session (don't carry over from previous session)
-            isProcessing = session.statusText == "Processing..."
+            isProcessing = session.state.isWorking
 
-            // Resume thinking sound if session is thinking (not in typing mode)
+            // Resume thinking sound if session is busy (not in typing mode)
             if session.isThinking && !typingMode {
                 startThinkingSound()
             }
@@ -2516,7 +2556,7 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
                         DebugHubSession(
                             sessionId: s["session_id"] as? String ?? "?",
                             voice: s["voice"] as? String ?? "?",
-                            status: s["status"] as? String ?? "?",
+                            state: s["state"] as? String ?? s["status"] as? String ?? "?",
                             mcpConnected: s["mcp_connected"] as? Bool ?? false,
                             idleSeconds: s["idle_seconds"] as? Int ?? 0,
                             ageSeconds: s["age_seconds"] as? Int ?? 0
@@ -2622,11 +2662,14 @@ final class VoiceHubViewModel: NSObject, ObservableObject {
     }
 
     private func voiceHubStatus(for session: VoiceSession) -> VoiceHubStatus {
-        if session.isThinking { return .thinking }
         let st = session.statusText
         if st == "Speaking..." || st == "Playing..." { return .speaking }
         if st == "Recording..." || st == "Tap Record" || session.pendingListen { return .listening }
-        return .ready
+        switch session.state {
+        case .thinking, .processing, .compacting: return .thinking
+        case .idle: return .ready
+        default: return .ready
+        }
     }
 
     // MARK: - Haptics
