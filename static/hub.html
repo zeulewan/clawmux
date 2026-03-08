@@ -2362,11 +2362,22 @@ function switchTab(sessionId, manual = false) {
     // Play buffered audio if any accumulated while tab was inactive
     if (s.audioBuffer && s.audioBuffer.length > 0) {
       setStatus('Playing buffered audio...');
-      // Restore karaoke words — re-apply spans after renderChat rebuilt the DOM.
+      // Re-apply karaoke spans now that the chat DOM is rendered (renderChat was called above).
+      // s.karaokeWords: words for the currently-playing chunk stashed on tab-away mid-play.
       if (s.karaokeWords && s.karaokeWords.length > 0) {
         const msgs = chatArea.querySelectorAll('.msg.assistant');
         if (msgs.length) _applyKaraokeSpans(msgs[msgs.length - 1], s.karaokeWords);
         s.karaokeWords = null;
+      }
+      // Freshly-buffered chunks (stored as {data,words,msgId}): apply spans so playBufferedAudio
+      // can call karaokeStart with live .el references.
+      for (const chunk of s.audioBuffer) {
+        if (!chunk || !chunk.words || !chunk.words.length) continue;
+        let msgEl = chunk.msgId
+          ? chatArea.querySelector(`[data-msg-id="${CSS.escape(chunk.msgId)}"]`)
+          : null;
+        if (!msgEl) { const msgs = chatArea.querySelectorAll('.msg.assistant'); if (msgs.length) msgEl = msgs[msgs.length - 1]; }
+        if (msgEl) _applyKaraokeSpans(msgEl, chunk.words);
       }
       playBufferedAudio(sessionId, s.audioBuffer);
       s.audioBuffer = [];

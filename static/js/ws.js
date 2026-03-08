@@ -384,18 +384,18 @@ function handleMessage(data) {
     setSessionState(session_id, 'processing');
   } else if (type === 'audio') {
     setSessionState(session_id, 'speaking');
-    // Setup karaoke spans on DOM and get words with el references
-    const karaokeWords = (data.words && data.words.length)
-      ? karaokeSetupMessage(session_id, data.words, data.msg_id)
-      : null;
     if (session_id === activeSessionId) {
+      // Setup karaoke spans on DOM and get words with el references (DOM is rendered for active session)
+      const karaokeWords = (data.words && data.words.length)
+        ? karaokeSetupMessage(session_id, data.words, data.msg_id)
+        : null;
       enqueueAudio(session_id, data.data, karaokeWords, data.msg_id);
       setStatus('Speaking...', session_id);
     } else {
-      // Buffer audio for background session — don't play or ack
+      // Buffer audio as rich object — words and msgId preserved for karaoke on tab switch
       s.statusText = 'Speaking...';
       if (!s.audioBuffer) s.audioBuffer = [];
-      s.audioBuffer.push(data.data);
+      s.audioBuffer.push({ data: data.data, words: data.words || null, msgId: data.msg_id || null });
     }
   } else if (type === 'listening') {
     // Defer transition to listening if audio is still playing (speak → wait race)
