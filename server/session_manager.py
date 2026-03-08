@@ -575,14 +575,10 @@ class SessionManager:
                 "4. Or acknowledge with: `clawmux send --to <sender_name> --re <msg_id>`\n"
             )
 
-            # Manager role instructions
+            # Team Manager section — no agent-specific managers assigned
             identity += (
                 "\n# Team Manager\n"
-                "- **Manager 1 (Primary):** Sky — primary communication with Zeul, coordinates all agents\n"
-                "- **Manager 2 (Secondary):** Sarah — can delegate tasks, spin up agents, and communicate with Zeul if Manager 1 is unavailable\n\n"
-                "Do NOT use `send --to user` to speak to Zeul directly — only the manager speaks to Zeul. "
-                "Route all status updates, questions, and task requests through the manager. "
-                "If Zeul speaks to you directly, you may respond via `send --to user`.\n"
+                "No manager currently assigned. Speak to the user directly via `clawmux send --to user`.\n"
             )
 
             # Inject context summary from previous session history
