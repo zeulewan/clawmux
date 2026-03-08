@@ -1,0 +1,458 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		057E70767F82590897BCF87E /* VoiceHubActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = C16AF3DE31DDE376D6830951 /* VoiceHubActivityAttributes.swift */; };
+		121619471040664577D1CD95 /* VoiceHubLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0403D969A4D676550C191E63 /* VoiceHubLiveActivity.swift */; };
+		19F890FB21F7BD55276C80D7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4518955585420C1F5762C1B1 /* Assets.xcassets */; };
+		1FD9B0116CE2D0801820F0E3 /* VoiceHubWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4863F823EAD84A9752B0EA81 /* VoiceHubWidgetBundle.swift */; };
+		41A4706C5FFF655B3D3F3F52 /* VoiceHubApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 212A339BF12928E4D9FD7D06 /* VoiceHubApp.swift */; };
+		83E961DBB805916985A95CE5 /* VoiceHubViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6BBD3A31FF9C91E6E21AD92 /* VoiceHubViewModel.swift */; };
+		848C20953BD86104C8796C42 /* VoiceHubWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CE1D93E2204CB06F51E55707 /* VoiceHubWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		88AD50DD7B16A8E57363D6E2 /* VoiceHubActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = C16AF3DE31DDE376D6830951 /* VoiceHubActivityAttributes.swift */; };
+		952D49B7AF72026A9FD7E940 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62E66789806E1949FD2F0B7F /* ContentView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		DF50F56C94D70026EAAE676B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1233FB51CCDC765E2EFD7407 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 78C81647755F46D4D951BAA8;
+			remoteInfo = VoiceHubWidgetExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		0145A062FBD092770E5383FC /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				848C20953BD86104C8796C42 /* VoiceHubWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		0403D969A4D676550C191E63 /* VoiceHubLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceHubLiveActivity.swift; sourceTree = "<group>"; };
+		212A339BF12928E4D9FD7D06 /* VoiceHubApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceHubApp.swift; sourceTree = "<group>"; };
+		2D8ACF330B6F874272F0EB4B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		4518955585420C1F5762C1B1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		4863F823EAD84A9752B0EA81 /* VoiceHubWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceHubWidgetBundle.swift; sourceTree = "<group>"; };
+		50FE6EC203C33D6568FF7183 /* VoiceHub.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = VoiceHub.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5B49E492A8718E5B03A32472 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		62E66789806E1949FD2F0B7F /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		B6BBD3A31FF9C91E6E21AD92 /* VoiceHubViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceHubViewModel.swift; sourceTree = "<group>"; };
+		C16AF3DE31DDE376D6830951 /* VoiceHubActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceHubActivityAttributes.swift; sourceTree = "<group>"; };
+		CE1D93E2204CB06F51E55707 /* VoiceHubWidgetExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = VoiceHubWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		21417B59CE87527676224F8B /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				50FE6EC203C33D6568FF7183 /* VoiceHub.app */,
+				CE1D93E2204CB06F51E55707 /* VoiceHubWidgetExtension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		62C739D9963463BF33F14C19 /* VoiceHubShared */ = {
+			isa = PBXGroup;
+			children = (
+				C16AF3DE31DDE376D6830951 /* VoiceHubActivityAttributes.swift */,
+			);
+			path = VoiceHubShared;
+			sourceTree = "<group>";
+		};
+		D030F023DC31CCB4027A3D7B = {
+			isa = PBXGroup;
+			children = (
+				DB83D62176BF8C5D5399B415 /* VoiceHub */,
+				62C739D9963463BF33F14C19 /* VoiceHubShared */,
+				D4EE7BE1DA33A32B8FEB7EF7 /* VoiceHubWidget */,
+				21417B59CE87527676224F8B /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		D4EE7BE1DA33A32B8FEB7EF7 /* VoiceHubWidget */ = {
+			isa = PBXGroup;
+			children = (
+				2D8ACF330B6F874272F0EB4B /* Info.plist */,
+				0403D969A4D676550C191E63 /* VoiceHubLiveActivity.swift */,
+				4863F823EAD84A9752B0EA81 /* VoiceHubWidgetBundle.swift */,
+			);
+			path = VoiceHubWidget;
+			sourceTree = "<group>";
+		};
+		DB83D62176BF8C5D5399B415 /* VoiceHub */ = {
+			isa = PBXGroup;
+			children = (
+				4518955585420C1F5762C1B1 /* Assets.xcassets */,
+				62E66789806E1949FD2F0B7F /* ContentView.swift */,
+				5B49E492A8718E5B03A32472 /* Info.plist */,
+				212A339BF12928E4D9FD7D06 /* VoiceHubApp.swift */,
+				B6BBD3A31FF9C91E6E21AD92 /* VoiceHubViewModel.swift */,
+			);
+			path = VoiceHub;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		76EE1313364C0CBA15E2DA8E /* VoiceHub */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8843513383EA8FFF68E64067 /* Build configuration list for PBXNativeTarget "VoiceHub" */;
+			buildPhases = (
+				1165D894B3BB47E2A9C3E2A6 /* Sources */,
+				A17433B0721E9E9CA8CB3C0F /* Resources */,
+				0145A062FBD092770E5383FC /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				7DE4B203D9D1FBEFD07FC50C /* PBXTargetDependency */,
+			);
+			name = VoiceHub;
+			packageProductDependencies = (
+			);
+			productName = VoiceHub;
+			productReference = 50FE6EC203C33D6568FF7183 /* VoiceHub.app */;
+			productType = "com.apple.product-type.application";
+		};
+		78C81647755F46D4D951BAA8 /* VoiceHubWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 16DF044E38330169D850EEF2 /* Build configuration list for PBXNativeTarget "VoiceHubWidgetExtension" */;
+			buildPhases = (
+				0C13E5B99914FD4164BE6D99 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VoiceHubWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = VoiceHubWidgetExtension;
+			productReference = CE1D93E2204CB06F51E55707 /* VoiceHubWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1233FB51CCDC765E2EFD7407 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					76EE1313364C0CBA15E2DA8E = {
+						DevelopmentTeam = 25QMAKVCBN;
+						ProvisioningStyle = Automatic;
+					};
+					78C81647755F46D4D951BAA8 = {
+						DevelopmentTeam = 25QMAKVCBN;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 687D473292DEA4611B3C487A /* Build configuration list for PBXProject "VoiceHub" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = D030F023DC31CCB4027A3D7B;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 21417B59CE87527676224F8B /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				76EE1313364C0CBA15E2DA8E /* VoiceHub */,
+				78C81647755F46D4D951BAA8 /* VoiceHubWidgetExtension */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A17433B0721E9E9CA8CB3C0F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				19F890FB21F7BD55276C80D7 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		0C13E5B99914FD4164BE6D99 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				88AD50DD7B16A8E57363D6E2 /* VoiceHubActivityAttributes.swift in Sources */,
+				121619471040664577D1CD95 /* VoiceHubLiveActivity.swift in Sources */,
+				1FD9B0116CE2D0801820F0E3 /* VoiceHubWidgetBundle.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1165D894B3BB47E2A9C3E2A6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				952D49B7AF72026A9FD7E940 /* ContentView.swift in Sources */,
+				057E70767F82590897BCF87E /* VoiceHubActivityAttributes.swift in Sources */,
+				41A4706C5FFF655B3D3F3F52 /* VoiceHubApp.swift in Sources */,
+				83E961DBB805916985A95CE5 /* VoiceHubViewModel.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		7DE4B203D9D1FBEFD07FC50C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 78C81647755F46D4D951BAA8 /* VoiceHubWidgetExtension */;
+			targetProxy = DF50F56C94D70026EAAE676B /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		3DE0E14AE227F60F4E973AC8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 25QMAKVCBN;
+				INFOPLIST_FILE = VoiceHub/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.zeul.voicehub;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		64D1EE0C3B1B6E74D0745FAC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 25QMAKVCBN;
+				INFOPLIST_FILE = VoiceHubWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.zeul.voicehub.widget;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		741C28C892B463FC5C5D5D27 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 25QMAKVCBN;
+				INFOPLIST_FILE = VoiceHubWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.zeul.voicehub.widget;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		A6AF3613AD57B5E564EEB53A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		DC1E944ED3991C2A16B11CB1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 25QMAKVCBN;
+				INFOPLIST_FILE = VoiceHub/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.zeul.voicehub;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		DF5286D1F9ADF8C7BFD10B1B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		16DF044E38330169D850EEF2 /* Build configuration list for PBXNativeTarget "VoiceHubWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				741C28C892B463FC5C5D5D27 /* Debug */,
+				64D1EE0C3B1B6E74D0745FAC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		687D473292DEA4611B3C487A /* Build configuration list for PBXProject "VoiceHub" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DF5286D1F9ADF8C7BFD10B1B /* Debug */,
+				A6AF3613AD57B5E564EEB53A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		8843513383EA8FFF68E64067 /* Build configuration list for PBXNativeTarget "VoiceHub" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3DE0E14AE227F60F4E973AC8 /* Debug */,
+				DC1E944ED3991C2A16B11CB1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 1233FB51CCDC765E2EFD7407 /* Project object */;
+}
