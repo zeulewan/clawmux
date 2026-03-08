@@ -538,6 +538,35 @@ body {
   cursor: pointer;
   max-width: 180px;
 }
+.header-label {
+  display: none;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.header-spacer { flex: 1; }
+.header-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: var(--neutral);
+  border-radius: var(--radius-md);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+#usage-bar {
+  display: none;
+  cursor: pointer;
+}
+#usage-bar span { white-space: nowrap; }
+#header-project-status {
+  font-size: 0.65rem;
+  color: var(--text-tertiary);
+  text-align: right;
+  max-width: 200px;
+  line-height: 1.4;
+}
 #header-project-status { display: none; }
 #dot {
   width: 8px;
@@ -1005,6 +1034,19 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 #mic-cancel:hover { background: var(--red-dim); color: #ff6b7f; }
 /* Options menu */
 /* Context menu */
+/* Shared popup styling */
+.popup {
+  display: none;
+  position: fixed;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  box-shadow: var(--shadow-lg);
+  z-index: var(--z-dropdown);
+  min-width: 100px;
+  overflow: hidden;
+  backdrop-filter: blur(16px);
+}
 #context-menu {
   display: none;
   position: fixed;
@@ -1014,7 +1056,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   padding: 4px 0;
   min-width: 180px;
   box-shadow: var(--shadow-lg);
-  z-index: 200;
+  z-index: var(--z-modal);
   backdrop-filter: blur(16px);
 }
 #context-menu.visible { display: block; }
@@ -1495,25 +1537,25 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
     <option value="sonnet">Sonnet</option>
     <option value="haiku">Haiku</option>
   </select>
-  <span id="model-label" style="display:none; font-size:0.7rem; color:var(--text-secondary); cursor:pointer;" onclick="toggleModelPopup(event)"></span>
+  <span id="model-label" class="header-label" onclick="toggleModelPopup(event)"></span>
   <select id="session-effort" tabindex="-1" style="display:none;" onchange="setSessionEffort(this.value)">
     <option value="high">High</option>
     <option value="medium">Medium</option>
     <option value="low">Low</option>
   </select>
-  <span id="effort-label" style="display:none; font-size:0.7rem; color:var(--text-secondary); cursor:pointer;" onclick="toggleEffortPopup(event)"></span>
+  <span id="effort-label" class="header-label" onclick="toggleEffortPopup(event)"></span>
   <select id="project-selector" tabindex="-1" style="display:none;" onchange="switchProject(this.value)">
     <option value="default">Default</option>
   </select>
   <button id="mode-toggle" onclick="cycleInputMode()"><span class="mode-value">Voice</span><span class="mode-label">Mode</span></button>
-  <div style="flex:1;"></div>
-  <div id="header-project-status" style="font-size:0.65rem; color:var(--text-tertiary); text-align:right; max-width:200px; line-height:1.4;"></div>
-  <div id="usage-bar" style="display:none;align-items:center;gap:8px;padding:4px 12px;background:rgba(128,128,128,0.08);border-radius:12px;font-size:0.7rem;color:var(--text-secondary);cursor:pointer;" onclick="toggleUsageDetail()" title="Claude usage">
-    <span id="usage-ctx" style="white-space:nowrap;"></span>
-    <span id="usage-5h" style="white-space:nowrap;"></span>
-    <span id="usage-7d" style="white-space:nowrap;"></span>
+  <div class="header-spacer"></div>
+  <div id="header-project-status"></div>
+  <div id="usage-bar" class="header-pill" onclick="toggleUsageDetail()" title="Claude usage">
+    <span id="usage-ctx"></span>
+    <span id="usage-5h"></span>
+    <span id="usage-7d"></span>
   </div>
-  <div style="display:flex;align-items:center;gap:6px;padding:4px 12px;background:rgba(128,128,128,0.08);border-radius:12px;">
+  <div class="header-pill">
     <div id="dot" class="connecting"></div>
     <span id="conn-label">Connecting...</span>
   </div>
@@ -1521,8 +1563,8 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   <span id="settings-link" onclick="showSettingsPage()">Settings</span>
   <!-- Debug link removed — accessible from Settings page -->
 </div>
-<div id="model-popup" style="display:none; position:fixed; background:#1a1a1a; border:1px solid #333; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.6); z-index:9999; min-width:100px; overflow:hidden;"></div>
-<div id="effort-popup" style="display:none; position:fixed; background:#1a1a1a; border:1px solid #333; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.6); z-index:9999; min-width:100px; overflow:hidden;"></div>
+<div id="model-popup" class="popup"></div>
+<div id="effort-popup" class="popup"></div>
 
 <div id="app-body">
 
