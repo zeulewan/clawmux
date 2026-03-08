@@ -500,7 +500,10 @@ def _print_status_table(file=None):
         print(f"  {'-' * 140}")
         for s in sorted(by_project[slug], key=lambda s: s.get("label", "")):
             name = s.get("label", s.get("voice", "?"))
+            area = s.get("project_area", "")
             role = s.get("role", "")
+            if area:
+                role = f"{role} · {area}" if role else area
             if len(role) > 18:
                 role = role[:16] + ".."
             task = s.get("task", "")
