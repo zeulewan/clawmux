@@ -1085,7 +1085,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         sendJSON(["session_id": sid, "type": "restart_model", "model": model])
         if let idx = sessionIndex(sid) {
             sessions[idx].model = model
-            sessions[idx].status = .starting
+            sessions[idx].state = .starting
         }
     }
 

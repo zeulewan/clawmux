@@ -307,7 +307,7 @@ struct ContentView: View {
     private func sidebarRingColor(active: VoiceSession?, spawning: Bool) -> Color {
         if spawning { return Theme.yellow }
         guard let s = active else { return Theme.gray3 }
-        if s.status == .starting { return Theme.yellow }
+        if s.state == .starting { return Theme.yellow }
         if s.unreadCount > 0 { return Theme.red }
         if s.isThinking { return Theme.orange }
         let isActive = s.id == vm.activeSessionId
@@ -319,7 +319,7 @@ struct ContentView: View {
     private func sidebarStatusLabel(active: VoiceSession?, spawning: Bool) -> String {
         if spawning { return "Starting..." }
         guard let s = active else { return "Offline" }
-        if s.status == .starting { return "Starting..." }
+        if s.state == .starting { return "Starting..." }
         if s.isThinking { return "Thinking..." }
         if s.unreadCount > 1 { return "\(s.unreadCount) New Messages" }
         if s.unreadCount == 1 { return "1 New Message" }
@@ -1158,8 +1158,8 @@ struct DebugView: View {
                                         .font(.system(size: 11, design: .monospaced))
                                         .lineLimit(1)
                                     debugBadge(
-                                        s.status,
-                                        style: s.status == "ready" ? .up : .starting)
+                                        s.state,
+                                        style: s.state == "ready" ? .up : .starting)
                                     debugBadge(
                                         s.mcpConnected ? "mcp" : "no mcp",
                                         style: s.mcpConnected ? .up : .down)
