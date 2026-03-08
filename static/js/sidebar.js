@@ -218,6 +218,21 @@ function setSessionSidebarState(sessionId, newState) {
   if (prev === newState) return;
   s.sidebarState = newState;
   renderSidebar();
+  // Update chat input stop button for active session
+  if (sessionId === activeSessionId) updateChatStopButton();
+}
+
+function updateChatStopButton() {
+  const btn = document.getElementById('text-stop');
+  if (!btn) return;
+  const s = activeSessionId ? sessions.get(activeSessionId) : null;
+  const isWorking = s && (s.sidebarState === 'working' || s.sidebarState === 'starting');
+  btn.style.display = isWorking ? '' : 'none';
+}
+
+function interruptActiveAgent() {
+  if (!activeSessionId) return;
+  fetch(`/api/sessions/${activeSessionId}/interrupt`, { method: 'POST' }).catch(() => {});
 }
 
 function markSessionUnread(sessionId) {
