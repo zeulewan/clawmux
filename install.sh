@@ -255,7 +255,7 @@ except (FileNotFoundError, json.JSONDecodeError):
     d = {}
 
 hook = {'hooks': [{'type': 'http', 'url': 'http://localhost:${HUB_PORT}/api/hooks/tool-status', 'timeout': 5, 'headers': {'ClawMux-Session': '\$CLAWMUX_SESSION_ID'}, 'allowedEnvVars': ['CLAWMUX_SESSION_ID']}]}
-stop_hook = {'hooks': [{'type': 'command', 'command': '${INSTALL_DIR}/hooks/stop-check-inbox.sh', 'timeout': 10, 'allowedEnvVars': ['CLAWMUX_SESSION_ID', 'CLAWMUX_PORT']}]}
+stop_hook = {'hooks': [{'type': 'command', 'command': '${INSTALL_DIR}/hooks/stop-check-inbox.sh', 'timeout': 10, 'allowedEnvVars': ['CLAWMUX_SESSION_ID', 'CLAWMUX_PORT', 'CLAWMUX_WORK_DIR']}]}
 d['hooks'] = {'PreToolUse': [hook], 'PostToolUse': [hook], 'PostToolUseFailure': [hook], 'PreCompact': [hook], 'Stop': [stop_hook]}
 with open(settings_path, 'w') as f:
     json.dump(d, f, indent=2)
