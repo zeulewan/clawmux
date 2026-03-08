@@ -31,7 +31,7 @@
   --teal: #64d2ff;
   --radius: 16px;
   --radius-sm: 10px;
-  --radius-xs: 6px;
+  --radius-xs: 8px;
   --radius-md: 12px;
   --radius-full: 9999px;
   --hover-bg: rgba(255,255,255,0.05);
@@ -388,7 +388,7 @@ body {
 .sidebar-focus-icon {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: var(--radius-xs);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -534,7 +534,7 @@ body {
   background: var(--bg-primary);
   color: var(--text-primary);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
   max-width: 180px;
 }
@@ -563,7 +563,7 @@ body {
   cursor: pointer;
   user-select: none;
   padding: 4px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-xs);
   transition: all 0.15s;
 }
 #debug-link:hover, #settings-link:hover, #notes-link:hover {
@@ -661,7 +661,7 @@ body {
 .msg {
   max-width: 78%;
   padding: 10px 16px;
-  border-radius: 20px;
+  border-radius: var(--radius);
   line-height: 1.55;
   font-size: 0.9rem;
   animation: msgAppear 0.2s ease-out;
@@ -789,7 +789,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   align-items: center;
   font-weight: 600;
   color: var(--text-secondary);
-  background: rgba(128,128,128,0.08);
+  background: var(--neutral);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 1px 6px;
@@ -801,7 +801,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 }
 #mode-toggle .mode-label { font-size: 0.45rem; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.7; }
 #mode-toggle .mode-value { font-size: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; }
-#mode-toggle:hover { color: var(--text); background: rgba(128,128,128,0.15); border-color: var(--border-light); }
+#mode-toggle:hover { color: var(--text); background: var(--neutral-strong); border-color: var(--border-light); }
 
 /* Text input bar */
 #text-input-bar {
@@ -819,7 +819,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   flex: 1;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 20px;
+  border-radius: var(--radius);
   padding: 10px 16px;
   color: var(--text);
   font-size: 0.9rem;
@@ -1010,10 +1010,10 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   position: fixed;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 4px 0;
   min-width: 180px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  box-shadow: var(--shadow-lg);
   z-index: 200;
   backdrop-filter: blur(16px);
 }
@@ -1035,10 +1035,10 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   top: -4px;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 4px 0;
   min-width: 160px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  box-shadow: var(--shadow-lg);
   backdrop-filter: blur(16px);
 }
 #context-menu .ctx-has-submenu:hover > .ctx-submenu { display: block; }
@@ -1062,9 +1062,9 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   background: var(--bg-card);
   color: var(--text);
   padding: 8px 18px;
-  border-radius: 20px;
+  border-radius: var(--radius);
   font-size: 0.8rem;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  box-shadow: var(--shadow-md);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s, transform 0.2s;
@@ -1076,7 +1076,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 }
 /* Long-press highlight */
 .msg.long-press-active {
-  background: rgba(128,128,128,0.15) !important;
+  background: var(--neutral-strong) !important;
 }
 /* Long-press context menu */
 .msg-context-menu {
@@ -1084,11 +1084,11 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   z-index: 100;
   background: var(--bg-card, #2a2a2e);
   border: 1px solid rgba(128,128,128,0.3);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 4px;
   display: flex;
   gap: 2px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  box-shadow: var(--shadow-md);
   animation: msgAppear 0.15s ease-out;
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
 }
@@ -1098,7 +1098,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   color: var(--text);
   font-size: 0.8rem;
   padding: 8px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -1169,7 +1169,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 .debug-section {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 14px;
   margin-bottom: 12px;
 }
@@ -1237,7 +1237,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   #settings-link::before { content: '⚙'; font-size: 14px; }
   #conn-label { display: none; }
   /* Put connection dot inline with title */
-  #header > div:has(#dot) { padding: 2px 6px !important; border-radius: 8px; }
+  #header > div:has(#dot) { padding: 2px 6px !important; border-radius: var(--radius-xs); }
 
   /* Sidebar: icon-only, absolutely positioned with smooth transition */
   #sidebar {
@@ -1422,7 +1422,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   color: var(--text);
 }
 .msg.assistant .md-content pre {
-  background: var(--md-pre-bg, rgba(0,0,0,0.4)); border-radius: 8px; padding: 10px 14px;
+  background: var(--md-pre-bg, rgba(0,0,0,0.4)); border-radius: var(--radius-xs); padding: 10px 14px;
   margin: 0.4em 0; overflow-x: auto; position: relative;
 }
 .msg.assistant .md-content pre .code-copy-btn {
