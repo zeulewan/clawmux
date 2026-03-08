@@ -661,7 +661,11 @@ def cmd_spawn(args):
 
 def cmd_send(args):
     """Send a message to another agent or to the user."""
-    session_id = require_session_id()
+    sender_override = getattr(args, "sender_override", None)
+    if sender_override:
+        session_id = sender_override
+    else:
+        session_id = require_session_id()
     message = args.message or ""
 
     # Bare ack: --re with no content
@@ -2037,6 +2041,8 @@ examples:
     p.add_argument("--to", required=True, help="Recipient: agent name (e.g. sky, echo) or 'user' for TTS")
     p.add_argument("message", nargs="?", default="", help="Message text (optional with --re for bare acknowledgment)")
     p.add_argument("--re", help="Parent message ID for threaded reply (e.g. msg-abc123)")
+    p.add_argument("--from", dest="sender_override", metavar="NAME",
+                   help="Override sender identity (for external senders without CLAWMUX_SESSION_ID)")
     p.set_defaults(func=cmd_send)
 
     # status
