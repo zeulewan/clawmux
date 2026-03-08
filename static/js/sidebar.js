@@ -98,7 +98,13 @@ function setConnected(state) {
 }
 
 function setStatus(text, sessionId) {
-  statusEl.textContent = text;
+  if (statusEl.textContent !== text) {
+    statusEl.style.opacity = '0';
+    requestAnimationFrame(() => {
+      statusEl.textContent = text;
+      requestAnimationFrame(() => { statusEl.style.opacity = ''; });
+    });
+  }
   // Update session statusText so voice grid stays in sync
   const sid = sessionId || activeSessionId;
   if (sid) {

@@ -520,16 +520,8 @@ function addMessage(sessionId, role, text, opts = {}) {
       const vc = voiceColor(s.voice);
       const parentEl = chatArea.querySelector(`[data-msg-id="${CSS.escape(opts.parentId)}"]`);
       if (parentEl) {
-        // Find or create thread container around the parent
-        let threadCtr = parentEl.closest('.thread-container');
-        if (!threadCtr) {
-          threadCtr = document.createElement('div');
-          threadCtr.className = 'thread-container';
-          parentEl.before(threadCtr);
-          threadCtr.appendChild(parentEl);
-        }
         if (opts.isBareAck) {
-          // Add/update ack badge on parent
+          // Bare ack: just add/update badge on parent — NO thread container
           let badge = parentEl.querySelector('.thread-ack-badge');
           if (badge) {
             const cur = parseInt(badge.dataset.count || '1') + 1;
@@ -547,12 +539,20 @@ function addMessage(sessionId, role, text, opts = {}) {
             if (ackBtn) ackBtn.style.display = 'none';
           }
         } else {
+          // Threaded reply: find or create thread container
+          let threadCtr = parentEl.closest('.thread-container');
+          if (!threadCtr) {
+            threadCtr = document.createElement('div');
+            threadCtr.className = 'thread-container';
+            parentEl.before(threadCtr);
+            threadCtr.appendChild(parentEl);
+          }
           const replyEl = createMsgEl(role, text, vc, s.voice, msgObj);
           replyEl.classList.add('thread-reply');
           threadCtr.appendChild(replyEl);
         }
-      } else {
-        // Parent not in DOM — append at bottom as a normal message
+      } else if (!opts.isBareAck) {
+        // Parent not in DOM — append at bottom as a normal message (skip for bare acks)
         const el = createMsgEl(role, text, vc, s.voice, msgObj);
         chatArea.appendChild(el);
       }
@@ -572,12 +572,14 @@ function addMessage(sessionId, role, text, opts = {}) {
         const lastGroup = chatArea.querySelector('.activity-group.expanded');
         if (lastGroup) lastGroup.classList.remove('expanded');
         el = createMsgEl(role, text, voiceColor(s.voice), s.voice, msgObj);
-        // Append message BEFORE removing indicator — net height change stays positive so
-        // the browser never needs to clamp scrollTop (prevents the snap/bonk on indicator dismiss)
+        // Append message BEFORE fading out indicator — net height stays positive so no scroll clamp
         chatArea.appendChild(el);
         if (role === 'assistant') {
-          chatArea.querySelectorAll('.msg-typing-indicator').forEach(e => e.remove());
           if (sessionId) _activityLogStore.delete(sessionId);
+          chatArea.querySelectorAll('.msg-typing-indicator').forEach(e => {
+            e.classList.add('fade-out');
+            setTimeout(() => e.remove(), 220);
+          });
         }
       }
       if (wasNearBottom) chatScrollToBottom(false);

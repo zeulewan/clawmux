@@ -899,6 +899,14 @@ body {
   opacity: 0.7;
 }
 
+@keyframes typingFadeOut {
+  to { opacity: 0; transform: scale(0.95); }
+}
+.msg-typing-indicator.fade-out {
+  animation: typingFadeOut 0.18s ease forwards;
+  pointer-events: none;
+}
+
 /* Typing indicator */
 .msg-typing-indicator {
   display: flex;
@@ -1025,7 +1033,11 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 .thread-container { display: flex; flex-direction: column; gap: 0; margin: 2px 0; border-left: 2px solid var(--text-tertiary, #555); padding-left: 8px; border-radius: 4px; }
 .thread-reply { margin-left: 16px; padding-left: 8px; opacity: 0.85; }
 .thread-reply .msg.system { font-size: 0.72rem; }
-.thread-ack-badge { position: absolute; bottom: 2px; right: 8px; font-size: 0.75rem; opacity: 0.7; pointer-events: none; }
+/* Ack badge — below the bubble, outer edge, full opacity */
+.thread-ack-badge { position: absolute; bottom: -22px; left: 4px; font-size: 0.72rem; opacity: 0.9; pointer-events: none; z-index: 10; }
+.msg.user .thread-ack-badge { left: 4px; right: auto; }
+.msg.assistant .thread-ack-badge { left: 4px; right: auto; }
+.msg.system .thread-ack-badge { filter: grayscale(1); opacity: 0.4; }
 .msg.agent-msg .thread-ack-badge { position: static; display: inline; margin-left: 6px; vertical-align: baseline; }
 .msg.agent-msg .agent-msg-body { line-height: 1.3; }
 .msg.agent-msg .agent-msg-body p { margin: 0.15em 0; }
@@ -1033,8 +1045,6 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 .msg.agent-msg .agent-msg-body li { margin: 0.05em 0; }
 .msg.agent-msg .agent-msg-body pre { margin: 0.2em 0; }
 .msg.agent-msg .agent-msg-body h1, .msg.agent-msg .agent-msg-body h2, .msg.agent-msg .agent-msg-body h3 { margin: 0.3em 0 0.1em; }
-.msg.user .thread-ack-badge { right: auto; left: 8px; }
-.msg.system .thread-ack-badge { filter: grayscale(1); opacity: 0.4; }
 .thread-toggle {
   align-self: flex-start; background: none; border: 1px solid var(--text-tertiary, #555);
   border-radius: 10px; color: var(--text-tertiary, #999); font-size: 0.65rem;
@@ -1807,8 +1817,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   .msg:hover .msg-actions { display: none !important; }
 
   /* Ack badge: ensure visible on mobile */
-  .thread-ack-badge { font-size: 0.7rem; bottom: 1px; }
-  .msg.user .thread-ack-badge { right: auto; left: 6px; }
+  .thread-ack-badge { font-size: 0.7rem; bottom: -22px; left: 4px; }
 }
 /* --- Markdown message styles --- */
 .msg.assistant .md-content { line-height: 1.6; color: var(--text); }
@@ -2252,6 +2261,9 @@ function _easedScrollTo(el) {
   }
   _scrollRaf = requestAnimationFrame(step);
 }
+// Cancel eased scroll on any user-initiated scroll input so it doesn't fight manual scrolling
+chatArea.addEventListener('wheel', () => { if (_scrollRaf) { cancelAnimationFrame(_scrollRaf); _scrollRaf = null; } }, { passive: true });
+chatArea.addEventListener('touchstart', () => { if (_scrollRaf) { cancelAnimationFrame(_scrollRaf); _scrollRaf = null; } }, { passive: true });
 function chatScrollToBottom(force = false) {
   if (force || chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150) {
     if (force) {
