@@ -755,8 +755,9 @@ function setSessionState(sessionId, newState) {
   } else if (newState === 'processing') {
     showThinking(sessionId);  // reuses status indicator, switches to processing style
     startThinkingSound(sessionId);
-    setSessionSidebarState(sessionId, 'working');
+    setSessionSidebarState(sessionId, 'processing');
     if (sessionId === activeSessionId) {
+      if (typeof showTypingIndicator === 'function') showTypingIndicator(sessionId);
       setStatus(isMobile ? 'Tap to Record' : 'Tap or Hold Space', sessionId);
       startThinkingVAD(sessionId);
     }

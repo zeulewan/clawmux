@@ -2174,13 +2174,13 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 // --- DOM refs (loaded before audio.js which references these) ---
 const chatArea = document.getElementById('chat-area');
 let _scrollRaf = null;
-function _easedScrollTo(el, target) {
-  if (_scrollRaf) { cancelAnimationFrame(_scrollRaf); _scrollRaf = null; }
+function _easedScrollTo(el) {
+  if (_scrollRaf) return; // already running — will reach bottom naturally as content grows
   function step() {
-    const dest = Math.max(target, el.scrollHeight);
+    const dest = el.scrollHeight - el.clientHeight;
     const remaining = dest - el.scrollTop;
     if (remaining < 1) { el.scrollTop = dest; _scrollRaf = null; return; }
-    el.scrollTop += remaining * 0.25;
+    el.scrollTop += remaining * 0.05;
     _scrollRaf = requestAnimationFrame(step);
   }
   _scrollRaf = requestAnimationFrame(step);
@@ -2191,7 +2191,7 @@ function chatScrollToBottom(force = false) {
       if (_scrollRaf) { cancelAnimationFrame(_scrollRaf); _scrollRaf = null; }
       chatArea.scrollTop = chatArea.scrollHeight;
     } else {
-      _easedScrollTo(chatArea, chatArea.scrollHeight);
+      _easedScrollTo(chatArea);
     }
   }
 }
@@ -2285,8 +2285,8 @@ function switchTab(sessionId, manual = false) {
     updateEffortLabel();
 
     // Resume thinking sound and typing indicator if this session is already active
-    const curState = getSessionState(sessionId);
-    if (curState === 'processing' || curState === 'thinking') {
+    const ss = s.sidebarState || 'idle';
+    if (['thinking', 'processing', 'compacting', 'starting'].includes(ss)) {
       startThinkingSound(sessionId);
       if (typeof showTypingIndicator === 'function') showTypingIndicator(sessionId);
     }
@@ -2398,7 +2398,7 @@ async function addSession(data, autoSwitch = false) {
     statusText: data.status_text || (isReady ? 'Ready' : 'Starting...'),
     toolStatusText: data.status_text || '',
     serverState: data.state || (data.in_wait ? 'idle' : (isReady ? 'idle' : 'starting')),
-    sidebarState: (data.state === 'idle' || data.in_wait ? 'idle' : (data.state === 'processing' || data.state === 'compacting' ? 'working' : (isReady ? 'idle' : 'starting'))),
+    sidebarState: (data.state === 'idle' || data.in_wait ? 'idle' : (data.state === 'thinking' ? 'thinking' : (data.state === 'processing' ? 'processing' : (data.state === 'compacting' ? 'compacting' : (isReady ? 'idle' : 'starting'))))),
     unreadCount: data.unread_count || 0,
     compacting: (data.state === 'compacting') || (data.compacting ?? false),
   });
@@ -2428,9 +2428,10 @@ async function addSession(data, autoSwitch = false) {
     if (sess) { sess.sessionState = 'idle'; sess.sidebarState = 'idle'; }
   } else if (serverState === 'processing' || serverState === 'compacting' || serverState === 'thinking') {
     const sess = sessions.get(data.session_id);
-    if (sess) { sess.sessionState = 'processing'; sess.sidebarState = 'working'; }
+    if (sess) { sess.sessionState = 'processing'; sess.sidebarState = serverState; }
     showThinking(data.session_id);
     startThinkingSound(data.session_id);
+    if (data.session_id === activeSessionId && typeof showTypingIndicator === 'function') showTypingIndicator(data.session_id);
   } else if (serverState === 'starting') {
     const sess = sessions.get(data.session_id);
     if (sess && !sess.sessionState) { sess.sessionState = 'idle'; sess.sidebarState = 'starting'; }
