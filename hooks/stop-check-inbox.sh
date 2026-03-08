@@ -42,7 +42,7 @@ if [ "$COUNT" = "0" ]; then
     # If already waiting on WebSocket, Claude can stop — the wait process will receive messages.
     # Poll briefly to allow a just-started background wait to connect.
     for _i in 1 2 3; do
-        IN_WAIT=$(curl -sf "http://localhost:${CLAWMUX_PORT}/api/sessions" 2>/dev/null \
+        IN_WAIT=$(curl -sf --max-time 1 "http://localhost:${CLAWMUX_PORT}/api/sessions" 2>/dev/null \
             | python3 -c "
 import sys, json
 try:
@@ -54,7 +54,7 @@ except Exception:
     print('false')
 " 2>/dev/null) || IN_WAIT=false
         [ "$IN_WAIT" = "true" ] && exit 0
-        sleep 0.4
+        sleep 0.2
     done
     echo "No pending messages. Run \`clawmux wait\` to enter idle mode and receive messages." >&2
     exit 2
