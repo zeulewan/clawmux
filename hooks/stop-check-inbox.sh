@@ -8,7 +8,8 @@
 # 1. If hub delivered a message via hooks during this work cycle (.hook_delivered
 #    sentinel file exists) → tell Claude to process it, don't go idle.
 # 2. If inbox has new messages (arrived after last hook delivery) → deliver them.
-# 3. No messages → exit 2 with "run clawmux wait" (keeps Claude alive; wait WS sets state to IDLE).
+# 3. No messages → check .waiting PID sentinel (written by clawmux wait on startup).
+#    If the wait process is alive, exit 0 (it will receive messages). Otherwise exit 2.
 #
 # Requires: CLAWMUX_SESSION_ID and CLAWMUX_PORT env vars.
 
@@ -37,25 +38,19 @@ RESPONSE=$(curl -sf "http://localhost:${CLAWMUX_PORT}/api/inbox/${CLAWMUX_SESSIO
 MESSAGES=$(echo "$RESPONSE" | jq -r '.messages // []')
 COUNT=$(echo "$MESSAGES" | jq 'length')
 
-# No messages → check if already in_wait before forcing Claude to run wait
+# No messages → check if a clawmux wait process is already running via PID sentinel.
+# clawmux wait writes ~/.clawmux/sessions/{ID}/.waiting containing its PID on startup,
+# before the WebSocket connects. A live PID means wait will receive incoming messages.
 if [ "$COUNT" = "0" ]; then
-    # If already waiting on WebSocket, Claude can stop — the wait process will receive messages.
-    # Poll briefly to allow a just-started background wait to connect.
-    for _i in 1 2 3; do
-        IN_WAIT=$(curl -sf --max-time 1 "http://localhost:${CLAWMUX_PORT}/api/sessions" 2>/dev/null \
-            | python3 -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    sid = '${CLAWMUX_SESSION_ID}'
-    sess = [s for s in data if s.get('session_id') == sid]
-    print('true' if sess and sess[0].get('in_wait') else 'false')
-except Exception:
-    print('false')
-" 2>/dev/null) || IN_WAIT=false
-        [ "$IN_WAIT" = "true" ] && exit 0
-        sleep 0.2
-    done
+    SENTINEL_WAIT="${WORK_DIR}/.waiting"
+    if [ -f "$SENTINEL_WAIT" ]; then
+        WAIT_PID=$(cat "$SENTINEL_WAIT" 2>/dev/null)
+        if [ -n "$WAIT_PID" ] && kill -0 "$WAIT_PID" 2>/dev/null; then
+            exit 0  # wait process is alive; it will receive any incoming messages
+        else
+            rm -f "$SENTINEL_WAIT"  # stale sentinel (process crashed/killed), clean up
+        fi
+    fi
     echo "No pending messages. Run \`clawmux wait\` to enter idle mode and receive messages." >&2
     exit 2
 fi

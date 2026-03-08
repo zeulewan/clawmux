@@ -184,7 +184,28 @@ def http_delete(path: str) -> dict:
 
 def cmd_wait(args):
     """Block until an inbox message arrives, then print it."""
+    import atexit
+    import signal
+
     session_id = require_session_id()
+
+    # Write .waiting sentinel immediately so stop hook can detect intent without polling.
+    clawmux_home = os.environ.get("CLAWMUX_HOME", os.path.expanduser("~/.clawmux"))
+    sentinel_path = os.path.join(clawmux_home, "sessions", session_id, ".waiting")
+    try:
+        with open(sentinel_path, "w") as _f:
+            _f.write(str(os.getpid()))
+    except OSError:
+        pass  # non-fatal; stop hook falls back to exit 2
+
+    def _remove_sentinel():
+        try:
+            os.unlink(sentinel_path)
+        except OSError:
+            pass
+
+    atexit.register(_remove_sentinel)
+    signal.signal(signal.SIGTERM, lambda _s, _f: sys.exit(0))
 
     async def _wait():
         from websockets.asyncio.client import connect as ws_connect
