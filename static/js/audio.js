@@ -888,8 +888,9 @@ function playAudio(sessionId, b64data, startOffset = 0) {
 
   // Capture pending karaoke words NOW (synchronously) before async decode,
   // to avoid race where a new message's karaokeSetupMessage overwrites them
-  const capturedKaraokeWords = _pendingKaraokeWords.get(sessionId) || null;
-  if (capturedKaraokeWords) _pendingKaraokeWords.delete(sessionId);
+  const queue = _pendingKaraokeWords.get(sessionId);
+  const capturedKaraokeWords = (queue && queue.length > 0) ? queue.shift() : null;
+  if (queue && queue.length === 0) _pendingKaraokeWords.delete(sessionId);
 
   const cleanup = () => {
     if (currentAudio && currentAudio.playbackId === playbackId) currentAudio = null;
@@ -969,14 +970,15 @@ let _pausedKaraokeWords = null; // saved karaoke words across transport pause/re
 let _karaokeActiveIdx = -1;
 
 // Per-session pending words (waiting for audio to start)
-const _pendingKaraokeWords = new Map(); // sessionId -> words[]
+const _pendingKaraokeWords = new Map(); // sessionId -> words[][] (queue of word sets)
 
 function karaokeSetupMessage(sessionId, words, msgId) {
   if (!ttsEnabled) return;
   // Filter to real (non-punctuation/symbol) words only
   const realWords = words.filter(w => /[\p{L}\p{N}]/u.test(w.word));
   if (realWords.length === 0) return;
-  _pendingKaraokeWords.set(sessionId, realWords);
+  if (!_pendingKaraokeWords.has(sessionId)) _pendingKaraokeWords.set(sessionId, []);
+  _pendingKaraokeWords.get(sessionId).push(realWords);
 
   // Find the specific message element by msg_id, or fall back to last assistant message
   if (sessionId !== activeSessionId) return;
@@ -1344,8 +1346,10 @@ function playBufferedAudio(sessionId, chunks) {
         playbackStartTime = audioCtx.currentTime;
         playbackPaused = false;
         // Start karaoke if pending words exist (e.g. restored after tab switch)
-        const pendingWords = _pendingKaraokeWords.get(sessionId);
-        if (pendingWords) { _pendingKaraokeWords.delete(sessionId); karaokeStart(currentAudio, pendingWords); }
+        const pendingQueue = _pendingKaraokeWords.get(sessionId);
+        const pendingWords = (pendingQueue && pendingQueue.length > 0) ? pendingQueue.shift() : null;
+        if (pendingQueue && pendingQueue.length === 0) _pendingKaraokeWords.delete(sessionId);
+        if (pendingWords) { karaokeStart(currentAudio, pendingWords); }
         const _onended = () => { if (!playbackPaused) { currentAudio = null; playNext(); } };
         source.onended = _onended;
         currentAudio._onended = _onended;
