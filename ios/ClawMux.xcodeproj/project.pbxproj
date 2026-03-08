@@ -7,35 +7,35 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		057E70767F82590897BCF87E /* VoiceHubActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = C16AF3DE31DDE376D6830951 /* VoiceHubActivityAttributes.swift */; };
-		121619471040664577D1CD95 /* VoiceHubLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0403D969A4D676550C191E63 /* VoiceHubLiveActivity.swift */; };
-		19F890FB21F7BD55276C80D7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4518955585420C1F5762C1B1 /* Assets.xcassets */; };
-		1FD9B0116CE2D0801820F0E3 /* VoiceHubWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4863F823EAD84A9752B0EA81 /* VoiceHubWidgetBundle.swift */; };
-		41A4706C5FFF655B3D3F3F52 /* VoiceHubApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 212A339BF12928E4D9FD7D06 /* VoiceHubApp.swift */; };
-		83E961DBB805916985A95CE5 /* VoiceHubViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6BBD3A31FF9C91E6E21AD92 /* VoiceHubViewModel.swift */; };
-		848C20953BD86104C8796C42 /* VoiceHubWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CE1D93E2204CB06F51E55707 /* VoiceHubWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		88AD50DD7B16A8E57363D6E2 /* VoiceHubActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = C16AF3DE31DDE376D6830951 /* VoiceHubActivityAttributes.swift */; };
-		952D49B7AF72026A9FD7E940 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62E66789806E1949FD2F0B7F /* ContentView.swift */; };
+		34708E5BA49DCFE09A2770E8 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 472435D7BEC5E6A66C89A71A /* ContentView.swift */; };
+		5A53815B6D61991600040435 /* ClawMuxLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B4CFDC5835A92120A013FE1 /* ClawMuxLiveActivity.swift */; };
+		819F94636A67C9D060539C09 /* ClawMuxActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ECE0D61F0C08405ECE874C8 /* ClawMuxActivityAttributes.swift */; };
+		8EBD594CEA424C07342CD79A /* ClawMuxViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72290AAFED98C8436AD778EF /* ClawMuxViewModel.swift */; };
+		CE452A75046106310CA1884D /* ClawMuxActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ECE0D61F0C08405ECE874C8 /* ClawMuxActivityAttributes.swift */; };
+		CF4F0E703E3527B992A03CDD /* ClawMuxWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 00A4C7BB4CA3E05A29B0F976 /* ClawMuxWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		D8A747936F0FDA5E95EA77BB /* ClawMuxApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFF810E4C0B9F68B1E4AA4AD /* ClawMuxApp.swift */; };
+		DCDC60E202EB951E0C20A61E /* ClawMuxWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC5EB4981879BDC3BE644216 /* ClawMuxWidgetBundle.swift */; };
+		F138DA556E94E3230F50457B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4678CAE85F0CB0CD3AC78DD6 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		DF50F56C94D70026EAAE676B /* PBXContainerItemProxy */ = {
+		3951751B91CF08FA4D088BBC /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
-			containerPortal = 1233FB51CCDC765E2EFD7407 /* Project object */;
+			containerPortal = E0B23EC30C301FA1C780E9AC /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = 78C81647755F46D4D951BAA8;
-			remoteInfo = VoiceHubWidgetExtension;
+			remoteGlobalIDString = 4069D4417606EAB0783EA23F;
+			remoteInfo = ClawMuxWidgetExtension;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		0145A062FBD092770E5383FC /* Embed Foundation Extensions */ = {
+		6B116D902C5AE7661A35DD62 /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				848C20953BD86104C8796C42 /* VoiceHubWidgetExtension.appex in Embed Foundation Extensions */,
+				CF4F0E703E3527B992A03CDD /* ClawMuxWidgetExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -43,200 +43,200 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		0403D969A4D676550C191E63 /* VoiceHubLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceHubLiveActivity.swift; sourceTree = "<group>"; };
-		212A339BF12928E4D9FD7D06 /* VoiceHubApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceHubApp.swift; sourceTree = "<group>"; };
-		2D8ACF330B6F874272F0EB4B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		4518955585420C1F5762C1B1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		4863F823EAD84A9752B0EA81 /* VoiceHubWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceHubWidgetBundle.swift; sourceTree = "<group>"; };
-		50FE6EC203C33D6568FF7183 /* VoiceHub.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = VoiceHub.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		5B49E492A8718E5B03A32472 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		62E66789806E1949FD2F0B7F /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		B6BBD3A31FF9C91E6E21AD92 /* VoiceHubViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceHubViewModel.swift; sourceTree = "<group>"; };
-		C16AF3DE31DDE376D6830951 /* VoiceHubActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceHubActivityAttributes.swift; sourceTree = "<group>"; };
-		CE1D93E2204CB06F51E55707 /* VoiceHubWidgetExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = VoiceHubWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		00A4C7BB4CA3E05A29B0F976 /* ClawMuxWidgetExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = ClawMuxWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		2A65E8C4E54083EB652BA8A9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		4678CAE85F0CB0CD3AC78DD6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		472435D7BEC5E6A66C89A71A /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		72290AAFED98C8436AD778EF /* ClawMuxViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMuxViewModel.swift; sourceTree = "<group>"; };
+		7B4CFDC5835A92120A013FE1 /* ClawMuxLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMuxLiveActivity.swift; sourceTree = "<group>"; };
+		7ECE0D61F0C08405ECE874C8 /* ClawMuxActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMuxActivityAttributes.swift; sourceTree = "<group>"; };
+		A98C93E4123AFD12DB5663DE /* ClawMux.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ClawMux.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BC5EB4981879BDC3BE644216 /* ClawMuxWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMuxWidgetBundle.swift; sourceTree = "<group>"; };
+		D7C804BA345F7AE206CF5AF7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		DFF810E4C0B9F68B1E4AA4AD /* ClawMuxApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMuxApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
-		21417B59CE87527676224F8B /* Products */ = {
+		08FC952502613A3B738FA293 /* ClawMux */ = {
 			isa = PBXGroup;
 			children = (
-				50FE6EC203C33D6568FF7183 /* VoiceHub.app */,
-				CE1D93E2204CB06F51E55707 /* VoiceHubWidgetExtension.appex */,
+				4678CAE85F0CB0CD3AC78DD6 /* Assets.xcassets */,
+				DFF810E4C0B9F68B1E4AA4AD /* ClawMuxApp.swift */,
+				72290AAFED98C8436AD778EF /* ClawMuxViewModel.swift */,
+				472435D7BEC5E6A66C89A71A /* ContentView.swift */,
+				D7C804BA345F7AE206CF5AF7 /* Info.plist */,
+			);
+			path = ClawMux;
+			sourceTree = "<group>";
+		};
+		567539E909D84E327B42B1AB /* ClawMuxShared */ = {
+			isa = PBXGroup;
+			children = (
+				7ECE0D61F0C08405ECE874C8 /* ClawMuxActivityAttributes.swift */,
+			);
+			path = ClawMuxShared;
+			sourceTree = "<group>";
+		};
+		6802FEA71CF56CFC9E5FA1B9 = {
+			isa = PBXGroup;
+			children = (
+				08FC952502613A3B738FA293 /* ClawMux */,
+				567539E909D84E327B42B1AB /* ClawMuxShared */,
+				68E4BB661F09CF90F977DE30 /* ClawMuxWidget */,
+				E4CEA8DE9DC00C53FB1E0E5D /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		68E4BB661F09CF90F977DE30 /* ClawMuxWidget */ = {
+			isa = PBXGroup;
+			children = (
+				7B4CFDC5835A92120A013FE1 /* ClawMuxLiveActivity.swift */,
+				BC5EB4981879BDC3BE644216 /* ClawMuxWidgetBundle.swift */,
+				2A65E8C4E54083EB652BA8A9 /* Info.plist */,
+			);
+			path = ClawMuxWidget;
+			sourceTree = "<group>";
+		};
+		E4CEA8DE9DC00C53FB1E0E5D /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A98C93E4123AFD12DB5663DE /* ClawMux.app */,
+				00A4C7BB4CA3E05A29B0F976 /* ClawMuxWidgetExtension.appex */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		62C739D9963463BF33F14C19 /* VoiceHubShared */ = {
-			isa = PBXGroup;
-			children = (
-				C16AF3DE31DDE376D6830951 /* VoiceHubActivityAttributes.swift */,
-			);
-			path = VoiceHubShared;
-			sourceTree = "<group>";
-		};
-		D030F023DC31CCB4027A3D7B = {
-			isa = PBXGroup;
-			children = (
-				DB83D62176BF8C5D5399B415 /* VoiceHub */,
-				62C739D9963463BF33F14C19 /* VoiceHubShared */,
-				D4EE7BE1DA33A32B8FEB7EF7 /* VoiceHubWidget */,
-				21417B59CE87527676224F8B /* Products */,
-			);
-			sourceTree = "<group>";
-		};
-		D4EE7BE1DA33A32B8FEB7EF7 /* VoiceHubWidget */ = {
-			isa = PBXGroup;
-			children = (
-				2D8ACF330B6F874272F0EB4B /* Info.plist */,
-				0403D969A4D676550C191E63 /* VoiceHubLiveActivity.swift */,
-				4863F823EAD84A9752B0EA81 /* VoiceHubWidgetBundle.swift */,
-			);
-			path = VoiceHubWidget;
-			sourceTree = "<group>";
-		};
-		DB83D62176BF8C5D5399B415 /* VoiceHub */ = {
-			isa = PBXGroup;
-			children = (
-				4518955585420C1F5762C1B1 /* Assets.xcassets */,
-				62E66789806E1949FD2F0B7F /* ContentView.swift */,
-				5B49E492A8718E5B03A32472 /* Info.plist */,
-				212A339BF12928E4D9FD7D06 /* VoiceHubApp.swift */,
-				B6BBD3A31FF9C91E6E21AD92 /* VoiceHubViewModel.swift */,
-			);
-			path = VoiceHub;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		76EE1313364C0CBA15E2DA8E /* VoiceHub */ = {
+		4069D4417606EAB0783EA23F /* ClawMuxWidgetExtension */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 8843513383EA8FFF68E64067 /* Build configuration list for PBXNativeTarget "VoiceHub" */;
+			buildConfigurationList = D3D7F2AFAD67DE202FE90F09 /* Build configuration list for PBXNativeTarget "ClawMuxWidgetExtension" */;
 			buildPhases = (
-				1165D894B3BB47E2A9C3E2A6 /* Sources */,
-				A17433B0721E9E9CA8CB3C0F /* Resources */,
-				0145A062FBD092770E5383FC /* Embed Foundation Extensions */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				7DE4B203D9D1FBEFD07FC50C /* PBXTargetDependency */,
-			);
-			name = VoiceHub;
-			packageProductDependencies = (
-			);
-			productName = VoiceHub;
-			productReference = 50FE6EC203C33D6568FF7183 /* VoiceHub.app */;
-			productType = "com.apple.product-type.application";
-		};
-		78C81647755F46D4D951BAA8 /* VoiceHubWidgetExtension */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 16DF044E38330169D850EEF2 /* Build configuration list for PBXNativeTarget "VoiceHubWidgetExtension" */;
-			buildPhases = (
-				0C13E5B99914FD4164BE6D99 /* Sources */,
+				56FBAD0E73F7C0166DD19AE0 /* Sources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
-			name = VoiceHubWidgetExtension;
+			name = ClawMuxWidgetExtension;
 			packageProductDependencies = (
 			);
-			productName = VoiceHubWidgetExtension;
-			productReference = CE1D93E2204CB06F51E55707 /* VoiceHubWidgetExtension.appex */;
+			productName = ClawMuxWidgetExtension;
+			productReference = 00A4C7BB4CA3E05A29B0F976 /* ClawMuxWidgetExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
+		};
+		A4CB1E317D272DAE57533487 /* ClawMux */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5BCF160C98FB4CBDE4AC451B /* Build configuration list for PBXNativeTarget "ClawMux" */;
+			buildPhases = (
+				8216CD92EC86B17D67C3CBCE /* Sources */,
+				70777560356440824A9DAAE3 /* Resources */,
+				6B116D902C5AE7661A35DD62 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				54A951DF911FB058784B93C7 /* PBXTargetDependency */,
+			);
+			name = ClawMux;
+			packageProductDependencies = (
+			);
+			productName = ClawMux;
+			productReference = A98C93E4123AFD12DB5663DE /* ClawMux.app */;
+			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		1233FB51CCDC765E2EFD7407 /* Project object */ = {
+		E0B23EC30C301FA1C780E9AC /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
-					76EE1313364C0CBA15E2DA8E = {
+					4069D4417606EAB0783EA23F = {
 						DevelopmentTeam = 25QMAKVCBN;
 						ProvisioningStyle = Automatic;
 					};
-					78C81647755F46D4D951BAA8 = {
+					A4CB1E317D272DAE57533487 = {
 						DevelopmentTeam = 25QMAKVCBN;
 						ProvisioningStyle = Automatic;
 					};
 				};
 			};
-			buildConfigurationList = 687D473292DEA4611B3C487A /* Build configuration list for PBXProject "VoiceHub" */;
+			buildConfigurationList = F040AAA68B25E3F5F0637A53 /* Build configuration list for PBXProject "ClawMux" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				Base,
 				en,
 			);
-			mainGroup = D030F023DC31CCB4027A3D7B;
+			mainGroup = 6802FEA71CF56CFC9E5FA1B9;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
-			productRefGroup = 21417B59CE87527676224F8B /* Products */;
+			productRefGroup = E4CEA8DE9DC00C53FB1E0E5D /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				76EE1313364C0CBA15E2DA8E /* VoiceHub */,
-				78C81647755F46D4D951BAA8 /* VoiceHubWidgetExtension */,
+				A4CB1E317D272DAE57533487 /* ClawMux */,
+				4069D4417606EAB0783EA23F /* ClawMuxWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		A17433B0721E9E9CA8CB3C0F /* Resources */ = {
+		70777560356440824A9DAAE3 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				19F890FB21F7BD55276C80D7 /* Assets.xcassets in Resources */,
+				F138DA556E94E3230F50457B /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		0C13E5B99914FD4164BE6D99 /* Sources */ = {
+		56FBAD0E73F7C0166DD19AE0 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				88AD50DD7B16A8E57363D6E2 /* VoiceHubActivityAttributes.swift in Sources */,
-				121619471040664577D1CD95 /* VoiceHubLiveActivity.swift in Sources */,
-				1FD9B0116CE2D0801820F0E3 /* VoiceHubWidgetBundle.swift in Sources */,
+				819F94636A67C9D060539C09 /* ClawMuxActivityAttributes.swift in Sources */,
+				5A53815B6D61991600040435 /* ClawMuxLiveActivity.swift in Sources */,
+				DCDC60E202EB951E0C20A61E /* ClawMuxWidgetBundle.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		1165D894B3BB47E2A9C3E2A6 /* Sources */ = {
+		8216CD92EC86B17D67C3CBCE /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				952D49B7AF72026A9FD7E940 /* ContentView.swift in Sources */,
-				057E70767F82590897BCF87E /* VoiceHubActivityAttributes.swift in Sources */,
-				41A4706C5FFF655B3D3F3F52 /* VoiceHubApp.swift in Sources */,
-				83E961DBB805916985A95CE5 /* VoiceHubViewModel.swift in Sources */,
+				CE452A75046106310CA1884D /* ClawMuxActivityAttributes.swift in Sources */,
+				D8A747936F0FDA5E95EA77BB /* ClawMuxApp.swift in Sources */,
+				8EBD594CEA424C07342CD79A /* ClawMuxViewModel.swift in Sources */,
+				34708E5BA49DCFE09A2770E8 /* ContentView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		7DE4B203D9D1FBEFD07FC50C /* PBXTargetDependency */ = {
+		54A951DF911FB058784B93C7 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 78C81647755F46D4D951BAA8 /* VoiceHubWidgetExtension */;
-			targetProxy = DF50F56C94D70026EAAE676B /* PBXContainerItemProxy */;
+			target = 4069D4417606EAB0783EA23F /* ClawMuxWidgetExtension */;
+			targetProxy = 3951751B91CF08FA4D088BBC /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		3DE0E14AE227F60F4E973AC8 /* Debug */ = {
+		07FAAACB1F3CF868441CB589 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 25QMAKVCBN;
-				INFOPLIST_FILE = VoiceHub/Info.plist;
+				INFOPLIST_FILE = ClawMux/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -248,43 +248,26 @@
 			};
 			name = Debug;
 		};
-		64D1EE0C3B1B6E74D0745FAC /* Release */ = {
+		9EA97E092C664A254A8910F4 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 25QMAKVCBN;
-				INFOPLIST_FILE = VoiceHubWidget/Info.plist;
+				INFOPLIST_FILE = ClawMux/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.zeul.clawmux.widget;
+				PRODUCT_BUNDLE_IDENTIFIER = com.zeul.clawmux;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
-		741C28C892B463FC5C5D5D27 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 25QMAKVCBN;
-				INFOPLIST_FILE = VoiceHubWidget/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.zeul.clawmux.widget;
-				SDKROOT = iphoneos;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = 1;
-			};
-			name = Debug;
-		};
-		A6AF3613AD57B5E564EEB53A /* Release */ = {
+		A456053C70B868A77151AE89 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -340,26 +323,25 @@
 			};
 			name = Release;
 		};
-		DC1E944ED3991C2A16B11CB1 /* Release */ = {
+		B98F5E160279F275BE76E627 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 25QMAKVCBN;
-				INFOPLIST_FILE = VoiceHub/Info.plist;
+				INFOPLIST_FILE = ClawMuxWidget/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.zeul.clawmux;
+				PRODUCT_BUNDLE_IDENTIFIER = com.zeul.clawmux.widget;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
-		DF5286D1F9ADF8C7BFD10B1B /* Debug */ = {
+		CEC7B1EF51A92F2682C996C0 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -422,37 +404,55 @@
 			};
 			name = Debug;
 		};
+		D1B53F6005FE4AAD3D338D3F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 25QMAKVCBN;
+				INFOPLIST_FILE = ClawMuxWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.zeul.clawmux.widget;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		16DF044E38330169D850EEF2 /* Build configuration list for PBXNativeTarget "VoiceHubWidgetExtension" */ = {
+		5BCF160C98FB4CBDE4AC451B /* Build configuration list for PBXNativeTarget "ClawMux" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				741C28C892B463FC5C5D5D27 /* Debug */,
-				64D1EE0C3B1B6E74D0745FAC /* Release */,
+				07FAAACB1F3CF868441CB589 /* Debug */,
+				9EA97E092C664A254A8910F4 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
-		687D473292DEA4611B3C487A /* Build configuration list for PBXProject "VoiceHub" */ = {
+		D3D7F2AFAD67DE202FE90F09 /* Build configuration list for PBXNativeTarget "ClawMuxWidgetExtension" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				DF5286D1F9ADF8C7BFD10B1B /* Debug */,
-				A6AF3613AD57B5E564EEB53A /* Release */,
+				D1B53F6005FE4AAD3D338D3F /* Debug */,
+				B98F5E160279F275BE76E627 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
-		8843513383EA8FFF68E64067 /* Build configuration list for PBXNativeTarget "VoiceHub" */ = {
+		F040AAA68B25E3F5F0637A53 /* Build configuration list for PBXProject "ClawMux" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				3DE0E14AE227F60F4E973AC8 /* Debug */,
-				DC1E944ED3991C2A16B11CB1 /* Release */,
+				CEC7B1EF51A92F2682C996C0 /* Debug */,
+				A456053C70B868A77151AE89 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
 	};
-	rootObject = 1233FB51CCDC765E2EFD7407 /* Project object */;
+	rootObject = E0B23EC30C301FA1C780E9AC /* Project object */;
 }
