@@ -1497,6 +1497,8 @@ struct SettingsView: View {
     @State private var draftURL: String = ""
 
     var urlChanged: Bool { draftURL.trimmingCharacters(in: .whitespaces) != vm.serverURL.trimmingCharacters(in: .whitespaces) }
+    var appVersion: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—" }
+    var appBuild: String { Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—" }
 
     var body: some View {
         NavigationStack {
@@ -1646,6 +1648,29 @@ struct SettingsView: View {
                     } label: {
                         Label("Open Debug Panel", systemImage: "ant")
                     }
+                }
+
+                Section {
+                    HStack {
+                        Text("Version")
+                        Spacer()
+                        Text(appVersion)
+                            .foregroundStyle(.secondary)
+                            .font(.system(.subheadline, design: .monospaced))
+                    }
+                    HStack {
+                        Text("Build")
+                        Spacer()
+                        Text(appBuild)
+                            .foregroundStyle(.secondary)
+                            .font(.system(.subheadline, design: .monospaced))
+                    }
+                } footer: {
+                    Text("ClawMux")
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .padding(.top, 4)
                 }
             }
             .navigationTitle("Settings")
