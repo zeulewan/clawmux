@@ -37,7 +37,7 @@
       notesObserver.observe(notesPanel, { attributes: true, attributeFilter: ['class'] });
     }
 
-    _attachDrag(sidebarHandle, sidebar, 'sidebar', false);
+    if (!isMobile) _attachDrag(sidebarHandle, sidebar, 'sidebar', false);
     _restoreWidths();
   }
 
@@ -103,7 +103,7 @@
       const settings = await resp.json();
 
       const sidebar = document.getElementById('sidebar');
-      if (settings.sidebar_width && sidebar) {
+      if (settings.sidebar_width && sidebar && !isMobile && window.innerWidth > 900) {
         const w = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, settings.sidebar_width));
         sidebar.style.width = w + 'px';
         sidebar.style.minWidth = w + 'px';
@@ -145,6 +145,17 @@
   if (notesEl) {
     observer.observe(notesEl, { attributes: true, attributeFilter: ['class'] });
   }
+
+  // Clear inline sidebar width when window narrows below tablet breakpoint
+  window.addEventListener('resize', function () {
+    if (window.innerWidth <= 900) {
+      const sidebar = document.getElementById('sidebar');
+      if (sidebar) {
+        sidebar.style.width = '';
+        sidebar.style.minWidth = '';
+      }
+    }
+  });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initResizeHandles);

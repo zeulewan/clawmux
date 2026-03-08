@@ -1147,6 +1147,8 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 .btn-icon {
   height: 40px;
   width: 40px;
+  aspect-ratio: 1;
+  flex-shrink: 0;
   border-radius: 50%;
   border: 1px solid var(--border);
   background: transparent;
@@ -1395,8 +1397,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 
 /* Tablet optimizations */
 @media (max-width: 900px) {
-  /* !important overrides JS inline styles from resize.js */
-  #sidebar { width: 180px !important; min-width: 120px !important; }
+  #sidebar { width: 180px; min-width: 120px; }
   .sidebar-card .sb-task { display: none; }
   .sidebar-card .sb-icon { width: 28px; height: 28px; font-size: 0.8rem; }
   #settings-page { max-width: 100%; }
@@ -1434,10 +1435,9 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   #header > div:has(#dot) { padding: 2px 6px !important; border-radius: var(--radius-xs); }
 
   /* Sidebar: icon-only, absolutely positioned with smooth transition */
-  /* !important overrides JS inline styles from resize.js */
   #sidebar {
-    width: 48px !important;
-    min-width: 48px !important;
+    width: 48px;
+    min-width: 48px;
     position: absolute;
     top: 0;
     bottom: 0;
@@ -1557,8 +1557,8 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 
   /* Expanded sidebar on mobile */
   #sidebar.expanded {
-    width: 200px !important;
-    min-width: 200px !important;
+    width: 200px;
+    min-width: 200px;
     box-shadow: 4px 0 24px rgba(0,0,0,0.4);
   }
   #sidebar.expanded .sb-info {
