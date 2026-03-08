@@ -152,16 +152,19 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
+  padding: 7px 12px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background var(--transition-fast), transform var(--transition-fast);
   user-select: none;
   position: relative;
   border: none;
 }
 .sidebar-card:hover {
-  background: var(--hover-bg, rgba(255,255,255,0.05));
+  background: var(--hover-bg);
+}
+.sidebar-card:active {
+  transform: scale(0.98);
 }
 .sidebar-card.dragging {
   opacity: 0.4;
@@ -1262,6 +1265,15 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 /* Firefox */
 * { scrollbar-width: thin; scrollbar-color: transparent transparent; }
 *:hover { scrollbar-color: rgba(128,128,128,0.3) transparent; }
+
+/* Tablet optimizations */
+@media (max-width: 900px) {
+  #sidebar { width: 180px; min-width: 120px; }
+  .sidebar-card .sb-task { display: none; }
+  .sidebar-card .sb-icon { width: 28px; height: 28px; font-size: 0.8rem; }
+  #settings-page { max-width: 100%; }
+  .msg { max-width: 85%; }
+}
 
 /* Mobile optimizations */
 @media (max-width: 600px) {
