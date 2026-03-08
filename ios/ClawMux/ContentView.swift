@@ -89,6 +89,7 @@ struct ContentView: View {
     @State private var showCopiedToast         = false
     @State private var thinkingExpanded        = true
     @State private var collapsedProjects:       Set<String> = []
+    @State private var isAtBottom:             Bool = true
 
     var body: some View {
         ZStack {
@@ -552,23 +553,34 @@ struct ContentView: View {
                         if vm.activeSession?.isThinking == true {
                             thinkingBubble.id("thinking")
                         }
+                        // Bottom anchor
+                        Color.clear.frame(height: 1).id("bottom")
                     }
                     .padding(.horizontal, 14)
                     .padding(.top, 10).padding(.bottom, 10)
                     .frame(minHeight: geo.size.height)
-                    .id("content")
                 }
                 .defaultScrollAnchor(.bottom)
                 .id(vm.activeSessionId ?? "none")
+                .onScrollGeometryChange(for: Bool.self) { geo in
+                    geo.contentOffset.y >= geo.contentSize.height - geo.containerSize.height - 120
+                } action: { _, atBottom in
+                    isAtBottom = atBottom
+                }
                 .onChange(of: vm.activeMessages.count)        { _, _ in scrollBottom(proxy) }
                 .onChange(of: vm.activeSession?.isThinking)   { _, _ in scrollBottom(proxy) }
                 .onChange(of: vm.activeSession?.activity)     { _, _ in scrollBottom(proxy) }
+                .onChange(of: vm.activeSessionId)             { _, _ in
+                    isAtBottom = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { scrollBottom(proxy) }
+                }
             }
         }
     }
 
     private func scrollBottom(_ proxy: ScrollViewProxy) {
-        withAnimation(.spring(response: 0.3)) { proxy.scrollTo("content", anchor: .bottom) }
+        guard isAtBottom else { return }
+        withAnimation(.spring(response: 0.3)) { proxy.scrollTo("bottom", anchor: .bottom) }
     }
 
     // MARK: - Message Grouping
@@ -580,10 +592,14 @@ struct ContentView: View {
     }
 
     private var messageGroups: [MessageGroup] {
+        let filtered = vm.activeMessages.filter { msg in
+            if msg.role == "system" || msg.role == "agent" { return vm.verboseMode }
+            return true
+        }
         var groups: [MessageGroup] = []
         var cur: String? = nil
         var batch: [ChatMessage] = []
-        for msg in vm.activeMessages {
+        for msg in filtered {
             if msg.role == cur {
                 batch.append(msg)
             } else {
@@ -628,7 +644,9 @@ struct ContentView: View {
             ? AnyShapeStyle(userBubbleColor)
             : role == "assistant"
                 ? AnyShapeStyle(isPlaying ? color.opacity(0.22) : Color.cCard)
-                : AnyShapeStyle(Color.clear)
+                : role == "agent"
+                    ? AnyShapeStyle(Color.cAccent.opacity(0.08))
+                    : AnyShapeStyle(Color.clear)
 
         return HStack(alignment: .bottom, spacing: 0) {
             if role == "user"   { Spacer(minLength: 56) }
@@ -645,6 +663,11 @@ struct ContentView: View {
                             .lineSpacing(2)
                             .foregroundStyle(Color.white)
                             .frame(maxWidth: .infinity, alignment: .trailing)
+                    } else if role == "agent" {
+                        Text(msg.text)
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color.cAccent.opacity(0.85))
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         Text(msg.text)
                             .font(.caption)
@@ -693,7 +716,7 @@ struct ContentView: View {
                 }
             }
 
-            if role == "assistant" { Spacer(minLength: 56) }
+            if role == "assistant" || role == "agent" { Spacer(minLength: 56) }
             if role == "system"   { Spacer() }
         }
     }
@@ -939,6 +962,13 @@ struct ContentView: View {
                             .padding(.horizontal, 10).padding(.vertical, 4)
                             .background(Color.glass, in: Capsule())
                     }
+                    Button { vm.verboseMode.toggle() } label: {
+                        Text(vm.verboseMode ? "Verbose" : "Minimal")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(vm.verboseMode ? Color.cAccent : Color.cTextSec)
+                            .padding(.horizontal, 10).padding(.vertical, 4)
+                            .background(vm.verboseMode ? Color.cAccent.opacity(0.12) : Color.glass, in: Capsule())
+                    }
                     if !vm.statusText.isEmpty {
                         let sc = statusColor
                         Text(vm.statusText)
@@ -988,6 +1018,13 @@ struct ContentView: View {
                         .font(.system(size: 11, weight: .semibold)).foregroundStyle(Color.cTextSec)
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(Color.glass, in: Capsule())
+                }
+                Button { vm.verboseMode.toggle() } label: {
+                    Text(vm.verboseMode ? "Verbose" : "Minimal")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(vm.verboseMode ? Color.cAccent : Color.cTextSec)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(vm.verboseMode ? Color.cAccent.opacity(0.12) : Color.glass, in: Capsule())
                 }
                 if !vm.statusText.isEmpty {
                     let sc = statusColor

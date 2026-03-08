@@ -8,9 +8,9 @@ import UserNotifications
 
 struct ChatMessage: Identifiable, Equatable {
     let id = UUID()
-    let role: String  // "user", "assistant", "system"
+    let role: String  // "user", "assistant", "system", "agent"
     let text: String
-    let timestamp: Date = Date()
+    var timestamp: Date = Date()
 }
 
 /// Canonical agent state matching the backend AgentState enum.
@@ -390,6 +390,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         didSet { UserDefaults.standard.set(backgroundMode, forKey: "backgroundMode") }
     }
     @Published var voiceResponses: Bool = true
+    @Published var verboseMode: Bool {
+        didSet { UserDefaults.standard.set(verboseMode, forKey: "verboseMode") }
+    }
 
     // Global master toggles
     @Published var globalHaptics: Bool {
@@ -616,7 +619,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             UserDefaults.standard.object(forKey: "liveActivityAuto") as? Bool ?? true
         self.liveActivityPTT =
             UserDefaults.standard.object(forKey: "liveActivityPTT") as? Bool ?? true
-        self.showDebug = UserDefaults.standard.bool(forKey: "showDebug")
+        self.showDebug    = UserDefaults.standard.bool(forKey: "showDebug")
+        self.verboseMode  = UserDefaults.standard.object(forKey: "verboseMode") as? Bool ?? false
         self.recordingURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("recording.wav")
         super.init()
@@ -829,9 +833,11 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         }
     }
 
-    private func addMessage(_ sessionId: String, role: String, text: String) {
+    private func addMessage(_ sessionId: String, role: String, text: String, ts: Double? = nil) {
         guard let idx = sessionIndex(sessionId) else { return }
-        sessions[idx].messages.append(ChatMessage(role: role, text: text))
+        var msg = ChatMessage(role: role, text: text)
+        if let ts { msg.timestamp = Date(timeIntervalSince1970: ts) }
+        sessions[idx].messages.append(msg)
         saveChats()
     }
 
@@ -1215,7 +1221,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 // In typing mode there is no audio follow-up — go straight to ready
                 if typingMode { updateStatusText("Ready", for: sid) }
                 stopThinkingSound()
-                addMessage(sid, role: "assistant", text: t)
+                addMessage(sid, role: "assistant", text: t, ts: json["ts"] as? Double)
                 if sid == activeSessionId {
                     isProcessing = false
                     updateLiveActivity()
@@ -1237,7 +1243,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
 
         case "user_text":
             if let sid = sessionId, let t = json["text"] as? String {
-                addMessage(sid, role: "user", text: t)
+                addMessage(sid, role: "user", text: t, ts: json["ts"] as? Double)
                 if sid == activeSessionId && showTranscriptPreview {
                     clearTranscriptPreview()
                 }
@@ -1259,11 +1265,11 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             }
 
         case "agent_message":
-            // Inter-agent message delivered to this session — show as system message
+            // Inter-agent message delivered to this session
             if let sid = sessionId, let content = json["content"] as? String,
                 let from = json["from"] as? String
             {
-                addMessage(sid, role: "system", text: "[\(from)]: \(content)")
+                addMessage(sid, role: "agent", text: "[\(from)]: \(content)", ts: json["ts"] as? Double)
                 if sid != activeSessionId, let idx = sessionIndex(sid) {
                     sessions[idx].unreadCount += 1
                 }
