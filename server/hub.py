@@ -997,6 +997,36 @@ async def hook_tool_status(request: Request):
         session.set_state(AgentState.COMPACTING)
         session.activity = "Compacting"
         await _save_activity(session, "Compacting")
+        # Inject CLAUDE.md + role rules into the compaction summary so instructions survive
+        if session.work_dir:
+            try:
+                def _read_instructions() -> str:
+                    parts = []
+                    claude_md_path = os.path.join(session.work_dir, "CLAUDE.md")
+                    if os.path.exists(claude_md_path):
+                        parts.append(open(claude_md_path).read())
+                    rules_dir = os.path.join(session.work_dir, ".claude", "rules")
+                    if os.path.isdir(rules_dir):
+                        for fname in sorted(os.listdir(rules_dir)):
+                            if fname.endswith(".md"):
+                                fpath = os.path.join(rules_dir, fname)
+                                parts.append(f"# Rule: {fname}\n" + open(fpath).read())
+                    return "\n\n".join(parts)
+
+                instructions = await asyncio.to_thread(_read_instructions)
+                if instructions:
+                    response_json = {
+                        "hookSpecificOutput": {
+                            "hookEventName": event,
+                            "additionalContext": (
+                                "IMPORTANT: Your instructions and role rules are being re-injected before "
+                                "compaction so they survive into the new context window. "
+                                "Re-read and internalize them:\n\n" + instructions
+                            ),
+                        }
+                    }
+            except Exception:
+                pass
     else:
         return JSONResponse({})
 
