@@ -181,17 +181,9 @@ async def compaction_monitor_loop() -> None:
             session = session_mgr.sessions.get(session_id)
             if not session or session.state == AgentState.DEAD:
                 continue
-            # Only check when context usage is >= 80% (use cached data)
+            # Check when context usage is >= 80% OR when already compacting
             usage = _context_cache.get(session_id)
-            if not usage or usage["percent"] < 80:
-                if session.state == AgentState.COMPACTING:
-                    # Context dropped below 80% (post-compaction reset)
-                    session.set_state(AgentState.PROCESSING)
-                    await send_to_browser({
-                        "type": "compaction_status",
-                        "session_id": session_id,
-                        "compacting": False,
-                    })
+            if (not usage or usage["percent"] < 80) and session.state != AgentState.COMPACTING:
                 continue
             # Capture tmux pane and check for compaction text
             try:
@@ -696,7 +688,15 @@ async def set_project_status(session_id: str, request: Request):
     session.project = data.get("project", session.project)
     session.project_area = data.get("area", session.project_area)
     if "role" in data:
-        session.role = data["role"]
+        role_val = data["role"].lower()
+        rules_dir = Path(__file__).parent / "templates" / "rules"
+        valid_roles = {f.stem for f in rules_dir.glob("*.md") if f.is_file()}
+        if valid_roles and role_val not in valid_roles:
+            return JSONResponse(
+                {"error": f"Invalid role '{role_val}'. Valid: {sorted(valid_roles)}"},
+                status_code=400,
+            )
+        session.role = role_val
     if "task" in data:
         session.task = data["task"]
     log.info("[%s] Project status: %s / %s (role=%s, task=%s)",
@@ -868,9 +868,7 @@ async def hook_tool_status(request: Request):
         session.activity = _tool_activity_text(tool_name, tool_input)
         # Log beginning of tool use
         await _save_activity(session, session.activity)
-        # Catch end of compaction — first tool call after PreCompact
-        if session.state == AgentState.COMPACTING:
-            session.set_state(AgentState.PROCESSING)
+        # Don't override compacting state — let the monitor loop detect when it finishes
         # Check inbox for urgent messages — deliver via additionalContext
         if session.work_dir:
             messages = await asyncio.to_thread(inbox.read_and_clear, session.work_dir)
@@ -1226,6 +1224,18 @@ async def regenerate_template(voice_id: str):
     if not ok:
         return JSONResponse({"error": "Agent not in agents.json"}, status_code=404)
     return JSONResponse({"regenerated": voice_id})
+
+
+# --- Roles ---
+
+@app.get("/api/roles")
+async def list_roles():
+    """Return available roles derived from template files in server/templates/rules/."""
+    rules_dir = Path(__file__).parent / "templates" / "rules"
+    roles = sorted(
+        f.stem for f in rules_dir.glob("*.md") if f.is_file()
+    )
+    return JSONResponse({"roles": roles})
 
 
 # --- Project Management ---

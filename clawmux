@@ -1676,8 +1676,18 @@ def cmd_task(args):
 def cmd_role(args):
     """Set agent role in the sidebar."""
     session_id = require_session_id()
-    http_post(f"/api/project-status/{session_id}", {"role": args.role})
-    print(f"Role: {args.role}")
+    # Validate against available role templates
+    try:
+        available = http_get("/api/roles").get("roles", [])
+    except Exception:
+        available = []
+    role_lower = args.role.lower()
+    if available and role_lower not in available:
+        print(f"Error: '{args.role}' is not a valid role.")
+        print(f"Available roles: {', '.join(available)}")
+        sys.exit(1)
+    http_post(f"/api/project-status/{session_id}", {"role": role_lower})
+    print(f"Role: {role_lower}")
 
 
 # ---------------------------------------------------------------------------
