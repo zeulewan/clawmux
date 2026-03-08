@@ -203,10 +203,10 @@ function toggleSidebarExpand() {
   if (sidebar.classList.contains('expanded')) {
     collapseSidebar();
   } else {
-    sidebar.classList.add('no-transition', 'expanded');
-    requestAnimationFrame(() => sidebar.classList.remove('no-transition'));
+    sidebar.classList.add('expanded');
     overlay.classList.add('visible');
-    renderSidebar();
+    // Delay re-render until after the width transition completes (prevents icon clipping)
+    setTimeout(() => renderSidebar(), 220);
   }
   // Restore scroll position after layout change
   requestAnimationFrame(() => { if (chat) chat.scrollTop = scrollPos; });
@@ -214,9 +214,7 @@ function toggleSidebarExpand() {
 function collapseSidebar() {
   const sidebar = document.getElementById('sidebar');
   const overlay = document.getElementById('sidebar-overlay');
-  sidebar.classList.add('no-transition');
   sidebar.classList.remove('expanded');
-  requestAnimationFrame(() => sidebar.classList.remove('no-transition'));
   overlay.classList.remove('visible');
   // Scroll chat to bottom after layout settles
   const chat = document.getElementById('chat-area');
@@ -408,6 +406,83 @@ function _toggleProjectCollapse(slug) {
 // --- Project group reordering via drag-and-drop ---
 let _draggingProjectSlug = null;
 
+// --- Touch drag-and-drop state ---
+let _touchDrag = null; // { voiceId, ghost }
+
+function _touchDragStart(voiceId, touch) {
+  const ghost = document.createElement('div');
+  ghost.className = 'sidebar-card touch-drag-ghost';
+  ghost.style.cssText = `position:fixed;left:${touch.clientX - 60}px;top:${touch.clientY - 20}px;` +
+    `width:120px;opacity:0.75;pointer-events:none;z-index:9999;` +
+    `background:var(--bg2,#222);border-radius:8px;padding:6px 10px;` +
+    `font-size:0.8rem;color:var(--text-primary,#eee);box-shadow:0 4px 20px rgba(0,0,0,0.5);`;
+  const name = voiceId.replace(/^[ab][mf]_/, '');
+  ghost.textContent = name.charAt(0).toUpperCase() + name.slice(1);
+  document.body.appendChild(ghost);
+  _touchDrag = { voiceId, ghost };
+}
+
+function _touchDragMove(touch) {
+  if (!_touchDrag) return;
+  _touchDrag.ghost.style.left = (touch.clientX - 60) + 'px';
+  _touchDrag.ghost.style.top = (touch.clientY - 20) + 'px';
+  document.querySelectorAll('.drag-above,.drag-below,.drag-over-group').forEach(el =>
+    el.classList.remove('drag-above', 'drag-below', 'drag-over-group'));
+  _touchDrag.ghost.style.display = 'none';
+  const el = document.elementFromPoint(touch.clientX, touch.clientY);
+  _touchDrag.ghost.style.display = '';
+  if (!el) return;
+  const card = el.closest('.sidebar-card');
+  const group = el.closest('.sidebar-project-group');
+  if (card && card.dataset.voiceId && card.dataset.voiceId !== _touchDrag.voiceId) {
+    const rect = card.getBoundingClientRect();
+    card.classList.toggle('drag-above', touch.clientY < rect.top + rect.height / 2);
+    card.classList.toggle('drag-below', touch.clientY >= rect.top + rect.height / 2);
+  } else if (group) {
+    group.classList.add('drag-over-group');
+  }
+}
+
+function _touchDragEnd(touch) {
+  if (!_touchDrag) return;
+  const fromVoice = _touchDrag.voiceId;
+  _touchDrag.ghost.remove();
+  _touchDrag = null;
+  document.querySelectorAll('.drag-above,.drag-below,.drag-over-group').forEach(el =>
+    el.classList.remove('drag-above', 'drag-below', 'drag-over-group'));
+  const el = document.elementFromPoint(touch.clientX, touch.clientY);
+  if (!el) return;
+  const targetCard = el.closest('.sidebar-card');
+  const targetGroup = el.closest('.sidebar-project-group');
+  const allP = (typeof allProjects !== 'undefined' ? allProjects : []);
+  const sourceProj = allP.find(p => (p.voices || []).includes(fromVoice));
+  if (targetCard && targetCard.dataset.voiceId && targetCard.dataset.voiceId !== fromVoice) {
+    const toVoice = targetCard.dataset.voiceId;
+    const targetProj = allP.find(p => (p.voices || []).includes(toVoice));
+    if (!targetProj) return;
+    if (!sourceProj || sourceProj.slug !== targetProj.slug) {
+      _moveAgentToProject(fromVoice, targetProj.slug); return;
+    }
+    const voices = targetProj.voices;
+    const fromIdx = voices.indexOf(fromVoice);
+    if (fromIdx < 0) return;
+    voices.splice(fromIdx, 1);
+    const rect = targetCard.getBoundingClientRect();
+    const newToIdx = voices.indexOf(toVoice);
+    const insertIdx = touch.clientY < rect.top + rect.height / 2 ? newToIdx : newToIdx + 1;
+    voices.splice(insertIdx, 0, fromVoice);
+    renderSidebar();
+    fetch(`/api/projects/${targetProj.slug}/voices`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ voices }),
+    }).catch(err => console.error('Failed to save agent order:', err));
+  } else if (targetGroup) {
+    const targetSlug = targetGroup.dataset.projectSlug;
+    if (targetSlug && sourceProj && sourceProj.slug !== targetSlug)
+      _moveAgentToProject(fromVoice, targetSlug);
+  }
+}
+
 async function _reorderProjects(fromSlug, toSlug) {
   if (typeof allProjects === 'undefined' || fromSlug === toSlug) return;
   const fromIdx = allProjects.findIndex(p => p.slug === fromSlug);
@@ -459,9 +534,16 @@ function _createAgentCard(voiceId, name, state) {
     const fromVoice = e.dataTransfer.getData('text/plain');
     if (!fromVoice || fromVoice === voiceId) return;
     if (e.dataTransfer.getData('application/x-project-slug')) return;
-    const proj = (typeof allProjects !== 'undefined' ? allProjects : []).find(p => (p.voices || []).includes(voiceId));
-    if (!proj || !(proj.voices || []).includes(fromVoice)) return;
-    const voices = proj.voices;
+    const allP = (typeof allProjects !== 'undefined' ? allProjects : []);
+    const targetProj = allP.find(p => (p.voices || []).includes(voiceId));
+    const sourceProj = allP.find(p => (p.voices || []).includes(fromVoice));
+    if (!targetProj) return;
+    // Cross-project drop — move agent to this card's project
+    if (!sourceProj || sourceProj.slug !== targetProj.slug) {
+      _moveAgentToProject(fromVoice, targetProj.slug); return;
+    }
+    // Same-project reorder
+    const voices = targetProj.voices;
     const fromIdx = voices.indexOf(fromVoice);
     if (fromIdx < 0) return;
     voices.splice(fromIdx, 1);
@@ -470,7 +552,7 @@ function _createAgentCard(voiceId, name, state) {
     const insertIdx = e.clientY < rect.top + rect.height / 2 ? newToIdx : newToIdx + 1;
     voices.splice(insertIdx, 0, fromVoice);
     renderSidebar();
-    fetch(`/api/projects/${proj.slug}/voices`, {
+    fetch(`/api/projects/${targetProj.slug}/voices`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ voices }),
@@ -539,24 +621,54 @@ function _createAgentCard(voiceId, name, state) {
     if (card._voiceSession) { showContextMenu(e, card._voiceSession.session_id, voiceId); }
     else { showContextMenu(e, null, voiceId); }
   };
-  let lpTimer = null, lpFired = false;
+  let lpTimer = null, lpFired = false, touchDragging = false;
+  let touchStartX = 0, touchStartY = 0;
   card.addEventListener('touchstart', (e) => {
-    lpFired = false;
+    lpFired = false; touchDragging = false;
+    const touch = e.touches[0];
+    touchStartX = touch.clientX; touchStartY = touch.clientY;
     lpTimer = setTimeout(() => {
       lpTimer = null; lpFired = true;
+      // lpFired — wait for touchmove or touchend to distinguish drag vs context menu
+    }, 400);
+  }, { passive: true });
+  card.addEventListener('touchmove', (e) => {
+    const touch = e.touches[0];
+    if (lpTimer) {
+      // Still in grace period — cancel if finger moved too far (scrolling)
+      if (Math.hypot(touch.clientX - touchStartX, touch.clientY - touchStartY) > 8) {
+        clearTimeout(lpTimer); lpTimer = null;
+      }
+      return;
+    }
+    if (!lpFired) return; // timer cancelled (scroll gesture)
+    // Long-press threshold passed and finger is moving — drag mode
+    if (!touchDragging) {
+      touchDragging = true;
+      _touchDragStart(voiceId, touch);
+    }
+    e.preventDefault();
+    _touchDragMove(touch);
+  }, { passive: false });
+  card.addEventListener('touchend', (e) => {
+    if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+    if (touchDragging) {
+      e.preventDefault();
+      _touchDragEnd(e.changedTouches[0]);
+      touchDragging = false; lpFired = false; return;
+    }
+    if (lpFired) {
+      // Long press, no drag — show context menu
+      e.preventDefault();
       card.classList.add('long-press-active');
-      const touch = e.touches[0];
+      const touch = e.changedTouches[0];
       const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: touch.clientX, clientY: touch.clientY };
       if (card._voiceSession) { showContextMenu(fakeEvent, card._voiceSession.session_id, voiceId); }
       else { showContextMenu(fakeEvent, null, voiceId); }
       setTimeout(() => card.classList.remove('long-press-active'), 200);
-    }, 500);
-  }, { passive: true });
-  card.addEventListener('touchend', (e) => {
-    if (lpTimer) clearTimeout(lpTimer); lpTimer = null;
-    if (lpFired) { e.preventDefault(); lpFired = false; }
+      lpFired = false;
+    }
   });
-  card.addEventListener('touchmove', () => { if (lpTimer) clearTimeout(lpTimer); lpTimer = null; });
   return card;
 }
 
