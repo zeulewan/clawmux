@@ -788,6 +788,7 @@ body {
   word-break: break-word;
   position: relative;
   margin-top: 10px;
+  margin-bottom: 10px;
 }
 .msg:first-child { margin-top: 0; }
 
@@ -813,30 +814,32 @@ body {
 .msg.assistant:not(:has(+ .msg.assistant)) { border-bottom-left-radius: 5px; }
 .msg .msg-actions {
   position: absolute;
-  bottom: 4px;
-  right: 6px;
+  bottom: -22px;
+  right: 4px;
   display: flex;
   gap: 4px;
   opacity: 0;
   transition: opacity 0.15s;
+  z-index: 10;
 }
 .msg:hover .msg-actions { opacity: 1; }
 .msg .msg-action-btn {
-  background: rgba(128,128,128,0.25);
-  border: none;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text-secondary);
   font-size: 0.6rem;
-  padding: 2px 6px;
+  padding: 2px 7px;
   cursor: pointer;
   line-height: 1;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
 }
-.msg .msg-action-btn:hover { background: rgba(128,128,128,0.4); }
-.msg .msg-ack-btn { font-size: 0.7rem; padding: 1px 4px; }
+.msg .msg-action-btn:hover { background: var(--neutral-strong); }
+.msg .msg-ack-btn { font-size: 0.7rem; padding: 2px 5px; }
 .msg .msg-ack-btn.acked { opacity: 0.4; pointer-events: none; }
 .msg .msg-ack-btn:active { opacity: 0.6; }
 /* Mirror action buttons: bottom-left on user messages */
-.msg.user .msg-actions { right: auto; left: 6px; }
+.msg.user .msg-actions { right: auto; left: 4px; }
 .msg .msg-action-btn.playing { color: var(--green); }
 #chat-area { overflow-x: hidden; }
 @keyframes msgAppear {
@@ -844,6 +847,57 @@ body {
   to { opacity: 1; }
 }
 .msg.rendered { animation: none !important; }
+
+/* Scroll-to-bottom button */
+#scroll-bottom-btn {
+  position: fixed;
+  bottom: 100px;
+  right: 20px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 40;
+}
+#scroll-bottom-btn.visible { opacity: 1; pointer-events: auto; }
+#scroll-bottom-btn:hover { background: var(--neutral-strong); transform: translateY(-1px); }
+
+/* Message timestamp */
+.msg-ts {
+  position: absolute;
+  bottom: -17px;
+  font-size: 0.6rem;
+  color: var(--text-tertiary);
+  opacity: 0;
+  pointer-events: none;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+.msg.user .msg-ts { right: 6px; }
+.msg.assistant .msg-ts { left: 6px; }
+.msg:hover .msg-ts { opacity: 1; }
+
+/* Code block language label */
+.code-lang-label {
+  position: absolute;
+  top: 6px;
+  left: 10px;
+  font-size: 0.6rem;
+  color: var(--text-tertiary);
+  font-family: monospace;
+  text-transform: lowercase;
+  pointer-events: none;
+  opacity: 0.7;
+}
 
 /* Typing indicator */
 .msg-typing-indicator {
@@ -1150,9 +1204,18 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 #controls-top {
   grid-column: 1 / -1;
   grid-row: 1;
-  display: none;
+  display: flex;
   justify-content: center;
   align-items: center;
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  padding-bottom: 0;
+  transition: max-height 0.25s ease-in-out, opacity 0.25s ease-in-out, padding-bottom 0.25s ease-in-out;
+}
+#controls-top.wave-visible {
+  max-height: 40px;
+  opacity: 1;
   padding-bottom: 6px;
 }
 #waveform { height: 22px; }
@@ -1686,6 +1749,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   .btn-icon { width: 38px; height: 38px; }
   .transport-btn { width: 28px; height: 28px; font-size: 0.85rem; }
   #waveform { height: 12px !important; }
+  #controls-top.wave-visible { max-height: 24px; }
   #status { font-size: 0.6rem; }
   #mode-toggle { font-size: 0.45rem !important; padding: 1px 5px !important; }
   /* Text input bar on mobile — single row, textarea + send */
@@ -1763,8 +1827,9 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   color: var(--text);
 }
 .msg.assistant .md-content pre {
-  background: var(--md-pre-bg, rgba(0,0,0,0.4)); border-radius: var(--radius-xs); padding: 10px 14px;
+  background: var(--md-pre-bg, rgba(0,0,0,0.4)); border-radius: var(--radius-xs); padding: 28px 14px 10px;
   margin: 0.4em 0; overflow-x: auto; position: relative;
+  border-top: 1px solid rgba(255,255,255,0.06);
 }
 .msg.assistant .md-content pre .code-copy-btn {
   position: absolute; top: 6px; right: 6px; background: rgba(128,128,128,0.3);
@@ -1899,6 +1964,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 </div>
 
 <div id="chat-area" style="display:none;"></div>
+<button id="scroll-bottom-btn" title="Scroll to bottom" onclick="chatScrollToBottom(true)">↓</button>
 
 <div id="controls" style="display:none;">
   <div id="controls-left">
@@ -2190,6 +2256,7 @@ function chatScrollToBottom(force = false) {
     if (force) {
       if (_scrollRaf) { cancelAnimationFrame(_scrollRaf); _scrollRaf = null; }
       chatArea.scrollTop = chatArea.scrollHeight;
+      if (typeof _updateScrollBottomBtn === 'function') _updateScrollBottomBtn();
     } else {
       _easedScrollTo(chatArea);
     }

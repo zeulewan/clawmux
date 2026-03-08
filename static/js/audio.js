@@ -26,7 +26,7 @@ let waveAudioCtxVis = null;
 function startWaveform(stream) {
   waveCanvas.style.display = 'block';
   const topRow = document.getElementById('controls-top');
-  if (topRow) topRow.style.display = 'flex';
+  if (topRow) topRow.classList.add('wave-visible');
   // Scroll chat to bottom since waveform takes space
   requestAnimationFrame(() => { chatScrollToBottom(true); });
   const dpr = window.devicePixelRatio || 1;
@@ -116,9 +116,16 @@ function drawWaveform() {
 function stopWaveform() {
   if (waveAnimFrame) { cancelAnimationFrame(waveAnimFrame); waveAnimFrame = null; }
   waveAnalyser = null;
-  waveCanvas.style.display = 'none';
+  // Start the collapse animation first — keep canvas visible so overflow:hidden
+  // hides it naturally as the container shrinks. Hide canvas after transition ends.
   const topRow = document.getElementById('controls-top');
-  if (topRow) topRow.style.display = 'none';
+  if (topRow) {
+    topRow.classList.remove('wave-visible');
+    const onEnd = () => { waveCanvas.style.display = 'none'; topRow.removeEventListener('transitionend', onEnd); };
+    topRow.addEventListener('transitionend', onEnd);
+  } else {
+    waveCanvas.style.display = 'none';
+  }
 }
 
 // --- Audio cues ---

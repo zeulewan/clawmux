@@ -68,14 +68,25 @@ function _renderMarkdown(text) {
     // Make links open in new tab
     container.querySelectorAll('a').forEach(a => { a.target = '_blank'; a.rel = 'noopener'; });
 
-    // Add copy button to code blocks
+    // Add language label + copy button to code blocks
     container.querySelectorAll('pre').forEach(pre => {
+      const code = pre.querySelector('code');
+      // Language label from hljs class e.g. "language-python" → "python"
+      if (code) {
+        const langClass = Array.from(code.classList).find(c => c.startsWith('language-'));
+        if (langClass) {
+          const lang = langClass.replace('language-', '');
+          const label = document.createElement('span');
+          label.className = 'code-lang-label';
+          label.textContent = lang;
+          pre.appendChild(label);
+        }
+      }
       const btn = document.createElement('button');
       btn.className = 'code-copy-btn';
       btn.textContent = 'Copy';
       btn.onclick = (e) => {
         e.stopPropagation();
-        const code = pre.querySelector('code');
         const text = code ? code.textContent : pre.textContent;
         navigator.clipboard.writeText(text).then(() => {
           btn.textContent = 'Copied!';
@@ -181,6 +192,14 @@ function createMsgEl(role, text, voiceColorHex, voiceId, msgObj = null) {
   if (voiceId) div.dataset.voice = voiceId;
   if (text) div.dataset.text = text;
   if (role === 'assistant' && voiceColorHex) div.style.background = hexToRgba(voiceColorHex, 0.20);
+  // Timestamp label (hover to reveal)
+  if (role === 'user' || role === 'assistant' || role === 'user interjection') {
+    const ts = msgObj && msgObj.ts ? msgObj.ts : Date.now() / 1000;
+    const tsEl = document.createElement('span');
+    tsEl.className = 'msg-ts';
+    tsEl.textContent = new Date(ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    div.appendChild(tsEl);
+  }
   if (role !== 'system' && role !== 'thinking') {
     const actions = document.createElement('div');
     actions.className = 'msg-actions';
@@ -443,8 +462,15 @@ function _loadMoreMessages() {
 
 // Scroll-to-top listener for lazy loading + scroll-to-bottom unloading
 let _scrollLoadPending = false;
+const _scrollBottomBtn = document.getElementById('scroll-bottom-btn');
+function _updateScrollBottomBtn() {
+  if (!_scrollBottomBtn) return;
+  const nearBottom = chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 200;
+  _scrollBottomBtn.classList.toggle('visible', !nearBottom);
+}
 function _initChatScroll() {
   chatArea.addEventListener('scroll', () => {
+    _updateScrollBottomBtn();
     if (_scrollLoadPending) return;
     // Load more when scrolling near top
     if (chatArea.scrollTop < 100 && activeSessionId) {
