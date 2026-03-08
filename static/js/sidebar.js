@@ -420,6 +420,42 @@ function _createAgentCard(voiceId, name, state) {
     card.classList.add('dragging');
   });
   card.addEventListener('dragend', () => { card.classList.remove('dragging'); });
+  card.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (e.dataTransfer.types.includes('application/x-project-slug')) return;
+    const rect = card.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    card.classList.toggle('drag-above', e.clientY < midY);
+    card.classList.toggle('drag-below', e.clientY >= midY);
+  });
+  card.addEventListener('dragleave', () => {
+    card.classList.remove('drag-above', 'drag-below');
+  });
+  card.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    card.classList.remove('drag-above', 'drag-below');
+    const fromVoice = e.dataTransfer.getData('text/plain');
+    if (!fromVoice || fromVoice === voiceId) return;
+    if (e.dataTransfer.getData('application/x-project-slug')) return;
+    const proj = (typeof allProjects !== 'undefined' ? allProjects : []).find(p => (p.voices || []).includes(voiceId));
+    if (!proj || !(proj.voices || []).includes(fromVoice)) return;
+    const voices = proj.voices;
+    const fromIdx = voices.indexOf(fromVoice);
+    if (fromIdx < 0) return;
+    voices.splice(fromIdx, 1);
+    const rect = card.getBoundingClientRect();
+    const newToIdx = voices.indexOf(voiceId);
+    const insertIdx = e.clientY < rect.top + rect.height / 2 ? newToIdx : newToIdx + 1;
+    voices.splice(insertIdx, 0, fromVoice);
+    renderSidebar();
+    fetch(`/api/projects/${proj.slug}/voices`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ voices }),
+    }).catch(err => console.error('Failed to save agent order:', err));
+  });
 
   const icon = document.createElement('div');
   icon.className = 'sb-icon';
