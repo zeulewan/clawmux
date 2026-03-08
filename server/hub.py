@@ -662,8 +662,8 @@ async def wait_websocket(ws: WebSocket, session_id: str):
         session.activity = ""
         session.tool_name = ""
         session.tool_input = {}
-        session.set_state(AgentState.PROCESSING)
-        await _save_activity(session, "Processing")
+        session.set_state(AgentState.THINKING)
+        await _save_activity(session, "Thinking")
         await send_to_browser({
             "type": "session_status",
             "session_id": session_id,
@@ -864,6 +864,9 @@ async def hook_tool_status(request: Request):
         # Skip activity updates while IDLE — wait WS is the sole authority
         if session.state == AgentState.IDLE:
             return JSONResponse(response_json)
+        # Transition THINKING → PROCESSING on first tool call
+        if session.state == AgentState.THINKING:
+            session.set_state(AgentState.PROCESSING)
         tool_name = data.get("tool_name", "")
         tool_input = data.get("tool_input", {})
         session.tool_name = tool_name
@@ -1407,6 +1410,25 @@ async def clear_history(voice_id: str, request: Request):
     prefix = project_mgr.get_history_prefix(project)
     await asyncio.to_thread(history.clear, voice_id, prefix)
     return JSONResponse({"status": "cleared", "voice_id": voice_id})
+
+
+@app.get("/api/search")
+async def search_history(request: Request):
+    """Search across all agent conversation histories."""
+    q = request.query_params.get("q", "")
+    if not q:
+        return JSONResponse({"error": "missing 'q' parameter"}, status_code=400)
+    agent = request.query_params.get("agent")
+    voice_ids = [a.strip() for a in agent.split(",")] if agent else None
+    role = request.query_params.get("role")
+    roles = [r.strip() for r in role.split(",")] if role else None
+    after_ts = float(request.query_params.get("after", 0)) or None
+    before_ts = float(request.query_params.get("before", 0)) or None
+    limit = min(int(request.query_params.get("limit", 50)), 200)
+    results = await asyncio.to_thread(
+        history.search, q, voice_ids, roles, after_ts, before_ts, limit,
+    )
+    return JSONResponse({"query": q, "count": len(results), "results": results})
 
 
 @app.post("/api/sessions/{session_id}/mark-read")

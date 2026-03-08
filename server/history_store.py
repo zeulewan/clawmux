@@ -3,6 +3,7 @@
 import fcntl
 import json
 import logging
+import re
 import time
 from pathlib import Path
 
@@ -161,6 +162,67 @@ class HistoryStore:
         lines.append("Resume where you left off. Do NOT re-introduce yourself or ask what you were doing.")
 
         return "\n".join(lines)
+
+    def search(
+        self,
+        query: str,
+        voice_ids: list[str] | None = None,
+        roles: list[str] | None = None,
+        after_ts: float | None = None,
+        before_ts: float | None = None,
+        limit: int = 50,
+        case_sensitive: bool = False,
+    ) -> list[dict]:
+        """Search across all agent histories for messages matching a query.
+
+        Returns a list of match dicts with voice_id, voice_name, and the message.
+        Results are sorted by timestamp (newest first).
+        """
+        # Discover all history files
+        results = []
+        flags = 0 if case_sensitive else re.IGNORECASE
+        try:
+            pattern = re.compile(query, flags)
+        except re.error:
+            # Fall back to literal search if invalid regex
+            pattern = re.compile(re.escape(query), flags)
+
+        for agent_dir in SESSIONS_DIR.iterdir():
+            if not agent_dir.is_dir():
+                continue
+            vid = agent_dir.name
+            if voice_ids and vid not in voice_ids:
+                continue
+            hist_file = agent_dir / "history.json"
+            if not hist_file.exists():
+                continue
+            try:
+                data = json.loads(hist_file.read_text())
+            except Exception:
+                continue
+            vname = data.get("voice_name", vid)
+            for msg in data.get("messages", []):
+                text = msg.get("text", "")
+                if not text:
+                    continue
+                role = msg.get("role", "")
+                if roles and role not in roles:
+                    continue
+                ts = msg.get("ts", 0)
+                if after_ts and ts < after_ts:
+                    continue
+                if before_ts and ts > before_ts:
+                    continue
+                if pattern.search(text):
+                    results.append({
+                        "voice_id": vid,
+                        "voice_name": vname,
+                        "message": msg,
+                    })
+
+        # Sort by timestamp descending (newest first)
+        results.sort(key=lambda r: r["message"].get("ts", 0), reverse=True)
+        return results[:limit]
 
     def copy_history(self, voice_id: str, from_project: str | None, to_project: str) -> bool:
         """Copy a voice's history from one project to another. Returns True on success.

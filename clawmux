@@ -270,9 +270,12 @@ def cmd_status(args):
         print("\033[2J\033[H\033[?25l", end="", flush=True)  # clear screen, hide cursor
         try:
             while True:
-                buf = _io.StringIO()
-                _print_status_table(file=buf)
-                output = buf.getvalue()
+                try:
+                    buf = _io.StringIO()
+                    _print_status_table(file=buf)
+                    output = buf.getvalue()
+                except Exception:
+                    output = "Hub unreachable — waiting for reconnect...\n"
                 # Move cursor home and overwrite (no clear = no flash)
                 print("\033[H", end="", flush=True)
                 print(output, end="", flush=True)
@@ -287,6 +290,131 @@ def cmd_status(args):
     else:
         _print_status_table()
 
+
+def _query_terminal_bg():
+    """Query the terminal for its background color via OSC 11.
+
+    Works through SSH — queries the actual client terminal (iTerm2, Ghostty, etc.).
+    Returns True for dark, False for light, None if query fails.
+    """
+    import select, termios, tty
+    if not os.isatty(sys.stdin.fileno()):
+        return None
+    try:
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            # Send OSC 11 query: "what is your background color?"
+            sys.stdout.write("\033]11;?\033\\")
+            sys.stdout.flush()
+            # Wait for response with short timeout
+            if not select.select([fd], [], [], 0.3)[0]:
+                return None
+            response = b""
+            while select.select([fd], [], [], 0.05)[0]:
+                response += os.read(fd, 64)
+            return _parse_osc11_response(response.decode("latin-1"))
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    except Exception:
+        return None
+
+def _parse_osc11_response(response):
+    """Parse OSC 11 response to determine if background is dark.
+
+    Response format: ESC ] 11 ; rgb:RRRR/GGGG/BBBB ESC \\
+    Returns True for dark, False for light.
+    """
+    import re
+    m = re.search(r"rgb:([0-9a-fA-F]+)/([0-9a-fA-F]+)/([0-9a-fA-F]+)", response)
+    if not m:
+        return None
+    # Normalize to 0-255 range (values can be 2 or 4 hex digits)
+    vals = []
+    for hex_val in m.groups():
+        v = int(hex_val, 16)
+        if len(hex_val) == 4:
+            v = v >> 8  # scale 16-bit to 8-bit
+        vals.append(v)
+    r, g, b = vals
+    # Perceived luminance (ITU-R BT.709)
+    luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    return luminance < 128  # dark if luminance is low
+
+def _is_dark_terminal():
+    """Detect if the terminal has a dark background."""
+    # 1. Explicit override: CLAWMUX_THEME=dark|light
+    theme = os.environ.get("CLAWMUX_THEME", "").lower()
+    if theme in ("dark", "d"):
+        return True
+    if theme in ("light", "l"):
+        return False
+    # 2. Check COLORFGBG (set by some terminals like xterm, rxvt)
+    colorfgbg = os.environ.get("COLORFGBG", "")
+    if colorfgbg:
+        try:
+            bg = int(colorfgbg.rsplit(";", 1)[-1])
+            return bg < 8
+        except (ValueError, IndexError):
+            pass
+    # 3. Query terminal directly via OSC 11 (works through SSH)
+    result = _query_terminal_bg()
+    if result is not None:
+        return result
+    # 4. Check system dark mode (GNOME/freedesktop) — only useful locally
+    if not os.environ.get("SSH_CLIENT"):
+        try:
+            r = subprocess.run(
+                ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
+                capture_output=True, text=True, timeout=1,
+            )
+            if r.returncode == 0:
+                val = r.stdout.strip().strip("'\"")
+                if "dark" in val:
+                    return True
+                if "light" in val or "default" in val:
+                    return False
+        except Exception:
+            pass
+    # 5. Default to dark
+    return True
+
+_dark_terminal_cache = None
+def _terminal_is_dark():
+    global _dark_terminal_cache
+    if _dark_terminal_cache is None:
+        _dark_terminal_cache = _is_dark_terminal()
+    return _dark_terminal_cache
+
+# Agent colors: two palettes for dark/light terminals
+_VOICE_COLORS_DARK = {
+    "af_sky": 33, "af_alloy": 208, "af_sarah": 196,
+    "am_adam": 78, "am_echo": 134, "am_onyx": 250,
+    "bm_fable": 220, "af_nova": 213, "am_eric": 39,
+    "af_bella": 171, "af_jessica": 209, "af_heart": 204,
+    "am_michael": 70, "am_liam": 67, "am_fenrir": 130,
+    "bf_emma": 174, "bm_george": 109, "bm_daniel": 137,
+    "af_aoede": 183, "af_jadzia": 117, "af_kore": 168,
+    "af_nicole": 216, "af_river": 73, "am_puck": 142,
+    "bf_alice": 182, "bf_lily": 223, "bm_lewis": 101,
+}
+_VOICE_COLORS_LIGHT = {
+    "af_sky": 26, "af_alloy": 166, "af_sarah": 124,
+    "am_adam": 28, "am_echo": 91, "am_onyx": 240,
+    "bm_fable": 136, "af_nova": 125, "am_eric": 31,
+    "af_bella": 133, "af_jessica": 167, "af_heart": 161,
+    "am_michael": 29, "am_liam": 60, "am_fenrir": 94,
+    "bf_emma": 131, "bm_george": 66, "bm_daniel": 95,
+    "af_aoede": 97, "af_jadzia": 30, "af_kore": 131,
+    "af_nicole": 130, "af_river": 30, "am_puck": 100,
+    "bf_alice": 61, "bf_lily": 64, "bm_lewis": 95,
+}
+
+def _voice_ansi_color(voice_id):
+    """Map voice ID to ANSI 256-color number for terminal output."""
+    palette = _VOICE_COLORS_DARK if _terminal_is_dark() else _VOICE_COLORS_LIGHT
+    return palette.get(voice_id)
 
 def _print_status_table(file=None):
     """Print the hub status table."""
@@ -340,7 +468,7 @@ def _print_status_table(file=None):
                 task = task[:28] + ".."
             # Derive state from API fields
             raw_state = s.get("state", "")
-            if raw_state in ("idle", "processing", "compacting", "starting"):
+            if raw_state in ("idle", "thinking", "processing", "compacting", "starting"):
                 state = raw_state
             elif s.get("status") in ("starting", "dead"):
                 state = s["status"]
@@ -363,7 +491,15 @@ def _print_status_table(file=None):
             ctx_info = context.get(sid, {})
             ctx_pct = ctx_info.get("percent")
             ctx_str = f"{ctx_pct:.0f}%" if ctx_pct is not None else ""
-            print(f"  {name:<10} {role:<20} {task:<32} {state:<10} {tool_name:<14} {activity:<30} {ctx_str}")
+            # Colorize entire row using ANSI 256-color matching tmux colours
+            voice = s.get("voice", "")
+            ansi_color = _voice_ansi_color(voice)
+            use_color = file is not None or sys.stdout.isatty()
+            row = f"  {name:<10} {role:<20} {task:<32} {state:<10} {tool_name:<14} {activity:<30} {ctx_str}"
+            if ansi_color and use_color:
+                print(f"\033[38;5;{ansi_color}m{row}\033[0m")
+            else:
+                print(row)
         print()
 
 
@@ -1161,16 +1297,67 @@ def cmd_messages(args):
         print(f"  {msg_id}  {sender} → {recipient}  [{state}]  {content}")
 
 
-AGENT_FG = {
-    "af_sarah": "#4a0000", "am_adam": "#1a3a1a", "af_nova": "#4a1040",
-    "am_eric": "#0a2a3a", "bm_fable": "#4a3a00", "bf_lily": "#3a2a10",
+def _parse_date_or_ts(val: str) -> str:
+    """Convert a date string (YYYY-MM-DD) or unix timestamp to a timestamp string."""
+    from datetime import datetime
+    try:
+        return str(float(val))
+    except ValueError:
+        pass
+    try:
+        dt = datetime.strptime(val, "%Y-%m-%d")
+        return str(dt.timestamp())
+    except ValueError:
+        die(f"invalid date/timestamp: {val} (use YYYY-MM-DD or unix timestamp)")
+
+
+def cmd_search(args):
+    """Search across agent conversation histories."""
+    import urllib.parse
+    params = {"q": args.query, "limit": str(args.limit)}
+    if args.agent:
+        params["agent"] = args.agent
+    if args.role:
+        params["role"] = args.role
+    if args.after:
+        params["after"] = _parse_date_or_ts(args.after)
+    if args.before:
+        params["before"] = _parse_date_or_ts(args.before)
+    qs = urllib.parse.urlencode(params)
+    data = http_get(f"/api/search?{qs}")
+    results = data.get("results", [])
+    if not results:
+        print("No results found.")
+        return
+
+    from datetime import datetime
+    print(f"Found {data.get('count', len(results))} result(s) for \"{args.query}\":\n")
+    for r in results:
+        msg = r["message"]
+        vname = r.get("voice_name", r["voice_id"])
+        role = msg.get("role", "?")
+        ts = msg.get("ts", 0)
+        dt = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M") if ts else "?"
+        text = msg.get("text", "")
+        # Truncate long messages
+        if len(text) > 200:
+            text = text[:200] + "..."
+        text = text.replace("\n", " ")
+        print(f"  [{dt}] {vname} ({role}): {text}")
+    if data.get("count", 0) > len(results):
+        print(f"\n  (showing {len(results)} of {data['count']} — use --limit to see more)")
+
+
+LIGHT_BG_VOICES = {
+    "af_alloy", "am_adam", "am_onyx", "bm_fable", "af_nova", "am_eric", "bf_lily",
+    "af_nicole", "bf_alice", "bm_lewis",
 }
 
 def _apply_agent_status_bar(tmux_session, label, color, voice=""):
     """Set a clean status bar on an agent's tmux session."""
-    fg = AGENT_FG.get(voice, "#ffffff")
+    fg = "colour16" if voice in LIGHT_BG_VOICES else "colour231"
     for opt, val in [
-        ("status-style", f"fg={fg},bg={color}"),
+        ("status-style", f"fg={fg},bg={color},bold"),
         ("status-left", f" {label} "),
         ("status-left-style", f"fg={fg},bg={color},bold"),
         ("status-left-length", "20"),
@@ -1542,9 +1729,9 @@ def tmux(*args):
         log(f"tmux error: {{r.stderr.strip()}}")
     return r
 
-AGENT_FG = {{
-    "af_sarah": "#4a0000", "am_adam": "#1a3a1a", "af_nova": "#4a1040",
-    "am_eric": "#0a2a3a", "bm_fable": "#4a3a00", "bf_lily": "#3a2a10",
+LIGHT_BG_VOICES = {{
+    "af_alloy", "am_adam", "am_onyx", "bm_fable", "af_nova", "am_eric", "bf_lily",
+    "af_nicole", "bf_alice", "bm_lewis",
 }}
 
 def set_agent_colors(agent):
@@ -1553,9 +1740,9 @@ def set_agent_colors(agent):
     if color:
         target = agent["tmux_session"]
         label = agent.get("label", target)
-        fg = AGENT_FG.get(voice, "#ffffff")
+        fg = "colour16" if voice in LIGHT_BG_VOICES else "colour231"
         for opt, val in [
-            ("status-style", f"fg={{fg}},bg={{color}}"),
+            ("status-style", f"fg={{fg}},bg={{color}},bold"),
             ("status-left", f" {{label}} "),
             ("status-left-style", f"fg={{fg}},bg={{color}},bold"),
             ("status-left-length", "20"),
@@ -1869,6 +2056,23 @@ examples:
                        description="Show message history between agents.")
     p.add_argument("--session", help="Filter by session ID")
     p.set_defaults(func=cmd_messages)
+
+    # search
+    p = sub.add_parser("search", help="Search across agent conversation histories",
+                       description="Search all agent histories for messages matching a query. Supports regex.",
+                       formatter_class=argparse.RawDescriptionHelpFormatter,
+                       epilog="""examples:
+    clawmux search "auth bug"
+    clawmux search "deploy" --agent af_sky
+    clawmux search "error" --role assistant --limit 20
+    clawmux search "API.*endpoint" --after 2025-03-01""")
+    p.add_argument("query", help="Search query (supports regex)")
+    p.add_argument("--agent", help="Filter by agent voice ID (e.g. af_sky, am_echo)")
+    p.add_argument("--role", help="Filter by message role (user, assistant, system, activity)")
+    p.add_argument("--after", help="Only messages after this date/timestamp (YYYY-MM-DD or unix ts)")
+    p.add_argument("--before", help="Only messages before this date/timestamp (YYYY-MM-DD or unix ts)")
+    p.add_argument("--limit", type=int, default=50, help="Max results (default: 50, max: 200)")
+    p.set_defaults(func=cmd_search)
 
     # regenerate
     p = sub.add_parser("regenerate", help="Regenerate CLAUDE.md templates",
