@@ -338,6 +338,21 @@ function _updateSidebarCard(card, voiceId, state) {
   // Update status label
   const label = card.querySelector('.sb-status span:not(.sb-dot)');
   if (label && label.textContent !== statusLabel) label.textContent = statusLabel;
+  // Update project area line
+  let areaEl = card.querySelector('.sb-area');
+  if (projectArea) {
+    if (!areaEl) {
+      areaEl = document.createElement('div');
+      areaEl.className = 'sb-area';
+      const info = card.querySelector('.sb-info');
+      const nameEl = card.querySelector('.sb-name');
+      if (nameEl && nameEl.nextSibling) info.insertBefore(areaEl, nameEl.nextSibling);
+      else info.appendChild(areaEl);
+    }
+    if (areaEl.textContent !== projectArea) areaEl.textContent = projectArea;
+  } else if (areaEl) {
+    areaEl.remove();
+  }
   // Update role line
   let roleEl = card.querySelector('.sb-role');
   if (roleText) {

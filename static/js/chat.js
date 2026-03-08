@@ -232,8 +232,11 @@ function createMsgEl(role, text, voiceColorHex, voiceId, msgObj = null) {
       ackBtn.onclick = (e) => {
         e.stopPropagation();
         _sendUserAck(msgObj.id);
-        ackBtn.classList.add('acked');
-        ackBtn.textContent = '\u2705';
+        div.dataset.selfAcked = '1'; // flag to absorb server echo
+        // Store immediately so renderChat shows badge if called before server echo
+        const _s = sessions.get(activeSessionId);
+        if (_s) _s.messages.push({ role: 'system', text: '', ts: Date.now() / 1000, id: 'local-ack-' + msgObj.id, parentId: msgObj.id, isBareAck: true });
+        _showPermanentAck(div, 1);
       };
       actions.appendChild(ackBtn);
     }
@@ -275,6 +278,24 @@ function createMsgEl(role, text, voiceColorHex, voiceId, msgObj = null) {
   }
 
   return div;
+}
+
+function _showPermanentAck(msgEl, count) {
+  let badge = msgEl.querySelector('.msg-ack-permanent');
+  if (badge) {
+    badge.textContent = count > 1 ? '\uD83D\uDC4D ' + count : '\uD83D\uDC4D';
+    badge.title = count + ' ack';
+  } else {
+    badge = document.createElement('span');
+    badge.className = 'msg-ack-permanent';
+    badge.textContent = '\uD83D\uDC4D';
+    badge.title = '1 ack';
+    msgEl.appendChild(badge);
+    // Make ack button invisible but keep it in flow so copy button doesn't shift position
+    const ackBtn = msgEl.querySelector('.msg-ack-btn');
+    if (ackBtn) { ackBtn.style.opacity = '0'; ackBtn.style.pointerEvents = 'none'; ackBtn.style.cursor = 'default'; }
+  }
+  badge.dataset.count = count || 1;
 }
 
 function _sendUserAck(msgId) {
@@ -402,12 +423,7 @@ function renderChat(forceScroll = false) {
       ctr.className = 'thread-container';
       const parentEl = createMsgEl(msg.role, msg.text, vc, s.voice, msg);
       const ac = bareAcks.get(msg.id) || 0;
-      if (ac > 0) {
-        const b = document.createElement('span'); b.className = 'thread-ack-badge'; b.textContent = ac > 1 ? '\uD83D\uDC4D ' + ac : '\uD83D\uDC4D'; b.title = ac + ' ack'; parentEl.appendChild(b);
-        // Hide the ack button since badge is showing
-        const ackBtn = parentEl.querySelector('.msg-ack-btn');
-        if (ackBtn) ackBtn.style.display = 'none';
-      }
+      if (ac > 0) _showPermanentAck(parentEl, ac);
       ctr.appendChild(parentEl);
       const reps = threadReplies.get(msg.id) || [];
       const collapse = reps.length >= 3;
@@ -433,9 +449,7 @@ function renderChat(forceScroll = false) {
       const el = createMsgEl(msg.role, msg.text, vc, s.voice, msg);
       if (hasAcksOnly) {
         const ac = bareAcks.get(msg.id) || 0;
-        const b = document.createElement('span'); b.className = 'thread-ack-badge'; b.textContent = ac > 1 ? '\uD83D\uDC4D ' + ac : '\uD83D\uDC4D'; b.title = ac + ' ack'; el.appendChild(b);
-        const ackBtn = el.querySelector('.msg-ack-btn');
-        if (ackBtn) ackBtn.style.display = 'none';
+        if (ac > 0) _showPermanentAck(el, ac);
       }
       chatArea.appendChild(el);
     }
@@ -521,23 +535,16 @@ function addMessage(sessionId, role, text, opts = {}) {
       const parentEl = chatArea.querySelector(`[data-msg-id="${CSS.escape(opts.parentId)}"]`);
       if (parentEl) {
         if (opts.isBareAck) {
-          // Bare ack: just add/update badge on parent — NO thread container
-          let badge = parentEl.querySelector('.thread-ack-badge');
-          if (badge) {
-            const cur = parseInt(badge.dataset.count || '1') + 1;
-            badge.dataset.count = cur;
-            badge.textContent = cur > 1 ? '\uD83D\uDC4D ' + cur : '\uD83D\uDC4D';
-            badge.title = cur + ' ack';
-          } else {
-            badge = document.createElement('span');
-            badge.className = 'thread-ack-badge';
-            badge.dataset.count = '1';
-            badge.textContent = '\uD83D\uDC4D';
-            badge.title = '1 ack';
-            parentEl.appendChild(badge);
-            const ackBtn = parentEl.querySelector('.msg-ack-btn');
-            if (ackBtn) ackBtn.style.display = 'none';
+          // Bare ack: transform the ack button in-place — no separate badge element
+          // This avoids overlap since the button is already in .msg-actions at the right position
+          if (parentEl.dataset.selfAcked) {
+            // Server echo of user's own click — absorb the count increment but ensure badge is visible
+            delete parentEl.dataset.selfAcked;
           }
+          // Always (re)apply badge — renderChat may have wiped a DOM-only badge
+          const existing = parentEl.querySelector('.msg-ack-permanent');
+          const count = existing ? parseInt(existing.dataset.count || '1') : 1;
+          _showPermanentAck(parentEl, count);
         } else {
           // Threaded reply: find or create thread container
           let threadCtr = parentEl.closest('.thread-container');

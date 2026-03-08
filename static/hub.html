@@ -262,6 +262,14 @@ body {
   text-overflow: ellipsis;
   line-height: 1.3;
 }
+.sidebar-card .sb-area {
+  font-size: 0.5rem;
+  color: var(--blue, #3a86ff);
+  opacity: 0.75;
+  margin-top: 1px;
+  line-height: 1.2;
+  letter-spacing: 0.03em;
+}
 .sidebar-card .sb-role {
   font-size: 0.55rem;
   color: var(--text-tertiary);
@@ -788,7 +796,7 @@ body {
   word-break: break-word;
   position: relative;
   margin-top: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 26px;
 }
 .msg:first-child { margin-top: 0; }
 
@@ -801,11 +809,14 @@ body {
   margin-top: 3px;
   border-top-left-radius: var(--radius-xs);
 }
-/* Extra space when speaker changes */
+/* Extra space when speaker changes — rely on previous message's margin-bottom */
 .msg.user + .msg.assistant,
 .msg.assistant + .msg.user {
-  margin-top: 16px;
+  margin-top: 6px;
 }
+/* Non-final grouped messages: small bottom margin (below-bubble elements only on last) */
+.msg.user:has(+ .msg.user) { margin-bottom: 4px; }
+.msg.assistant:has(+ .msg.assistant) { margin-bottom: 4px; }
 /* Flatten the bottom corner of non-final messages in a group */
 .msg.user:has(+ .msg.user) { border-bottom-right-radius: var(--radius-xs); }
 .msg.assistant:has(+ .msg.assistant) { border-bottom-left-radius: var(--radius-xs); }
@@ -836,8 +847,18 @@ body {
 }
 .msg .msg-action-btn:hover { background: var(--neutral-strong); }
 .msg .msg-ack-btn { font-size: 0.7rem; padding: 2px 5px; }
-.msg .msg-ack-btn.acked { opacity: 0.4; pointer-events: none; }
-.msg .msg-ack-btn:active { opacity: 0.6; }
+/* Permanent ack badge — lives on .msg directly, not inside .msg-actions */
+.msg-ack-permanent {
+  position: absolute;
+  bottom: -22px;
+  right: 4px;
+  font-size: 0.72rem;
+  opacity: 0.85;
+  pointer-events: none;
+  z-index: 10;
+}
+/* When badge is present: ensure enough margin below */
+.msg:has(.msg-ack-permanent) { margin-bottom: 30px !important; }
 /* Mirror action buttons: bottom-left on user messages */
 .msg.user .msg-actions { right: auto; left: 4px; }
 .msg .msg-action-btn.playing { color: var(--green); }
@@ -882,7 +903,7 @@ body {
   white-space: nowrap;
   transition: opacity 0.15s;
 }
-.msg.user .msg-ts { right: 6px; }
+.msg.user .msg-ts { right: 6px; left: auto; }
 .msg.assistant .msg-ts { left: 6px; }
 .msg:hover .msg-ts { opacity: 1; }
 
@@ -1033,10 +1054,8 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 .thread-container { display: flex; flex-direction: column; gap: 0; margin: 2px 0; border-left: 2px solid var(--text-tertiary, #555); padding-left: 8px; border-radius: 4px; }
 .thread-reply { margin-left: 16px; padding-left: 8px; opacity: 0.85; }
 .thread-reply .msg.system { font-size: 0.72rem; }
-/* Ack badge — below the bubble, outer edge, full opacity */
-.thread-ack-badge { position: absolute; bottom: -22px; left: 4px; font-size: 0.72rem; opacity: 0.9; pointer-events: none; z-index: 10; }
-.msg.user .thread-ack-badge { left: 4px; right: auto; }
-.msg.assistant .thread-ack-badge { left: 4px; right: auto; }
+/* Ack badge — below the bubble, right side, full opacity */
+.thread-ack-badge { position: absolute; bottom: -22px; right: 4px; left: auto; font-size: 0.72rem; opacity: 0.9; pointer-events: none; z-index: 10; }
 .msg.system .thread-ack-badge { filter: grayscale(1); opacity: 0.4; }
 .msg.agent-msg .thread-ack-badge { position: static; display: inline; margin-left: 6px; vertical-align: baseline; }
 .msg.agent-msg .agent-msg-body { line-height: 1.3; }
@@ -1789,6 +1808,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   #sidebar.expanded .sidebar-card .sb-name { font-size: 0.7rem; line-height: 1.1; }
   #sidebar.expanded .sidebar-card .sb-status { font-size: 0.5rem; margin-top: 0; gap: 3px; }
   #sidebar.expanded .sidebar-card .sb-dot { width: 5px; height: 5px; }
+  #sidebar.expanded .sidebar-card .sb-area { font-size: 0.42rem; margin-top: 0; }
   #sidebar.expanded .sidebar-card .sb-role { font-size: 0.45rem; margin-top: 0; line-height: 1.1; }
   #sidebar.expanded .sidebar-card .sb-task { font-size: 0.5rem; margin-top: 0; line-height: 1.1; }
   #sidebar.expanded .sidebar-card .sb-compacting { font-size: 0.45rem; margin-top: 0; }
@@ -1817,7 +1837,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   .msg:hover .msg-actions { display: none !important; }
 
   /* Ack badge: ensure visible on mobile */
-  .thread-ack-badge { font-size: 0.7rem; bottom: -22px; left: 4px; }
+  .thread-ack-badge { font-size: 0.7rem; bottom: -22px; right: 4px; left: auto; }
 }
 /* --- Markdown message styles --- */
 .msg.assistant .md-content { line-height: 1.6; color: var(--text); }
