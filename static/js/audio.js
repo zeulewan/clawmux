@@ -971,18 +971,24 @@ let _karaokeActiveIdx = -1;
 // Per-session pending words (waiting for audio to start)
 const _pendingKaraokeWords = new Map(); // sessionId -> words[]
 
-function karaokeSetupMessage(sessionId, words) {
+function karaokeSetupMessage(sessionId, words, msgId) {
   if (!ttsEnabled) return;
   // Filter to real (non-punctuation/symbol) words only
   const realWords = words.filter(w => /[\p{L}\p{N}]/u.test(w.word));
   if (realWords.length === 0) return;
   _pendingKaraokeWords.set(sessionId, realWords);
 
-  // Find the last assistant message element for this session and apply spans
+  // Find the specific message element by msg_id, or fall back to last assistant message
   if (sessionId !== activeSessionId) return;
-  const msgs = chatArea.querySelectorAll('.msg.assistant');
-  if (!msgs.length) return;
-  const msgEl = msgs[msgs.length - 1];
+  let msgEl = null;
+  if (msgId) {
+    msgEl = chatArea.querySelector(`[data-msg-id="${CSS.escape(msgId)}"]`);
+  }
+  if (!msgEl) {
+    const msgs = chatArea.querySelectorAll('.msg.assistant');
+    if (!msgs.length) return;
+    msgEl = msgs[msgs.length - 1];
+  }
   _applyKaraokeSpans(msgEl, realWords);
 }
 

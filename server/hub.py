@@ -685,7 +685,10 @@ async def set_project_status(session_id: str, request: Request):
     if not session:
         return JSONResponse({"error": "session not found"}, status_code=404)
     data = await request.json()
-    session.project = data.get("project", session.project)
+    if "project" in data:
+        session.project = data["project"]
+        # Also update the project_slug so grouping stays consistent
+        session.project_slug = data["project"]
     session.project_area = data.get("area", session.project_area)
     if "role" in data:
         role_val = data["role"].lower()
@@ -1593,7 +1596,7 @@ async def speak_to_user(request: Request):
                 mp3 = await tts(tts_message, sender.voice, sender.speed)
                 audio_b64 = base64.b64encode(mp3).decode()
                 word_timestamps = []
-            audio_msg = {"session_id": sender_id, "type": "audio", "data": audio_b64}
+            audio_msg = {"session_id": sender_id, "type": "audio", "data": audio_b64, "msg_id": msg_id}
             if word_timestamps:
                 audio_msg["words"] = word_timestamps
             await send_to_browser(audio_msg)

@@ -373,7 +373,7 @@ function handleMessage(data) {
   } else if (type === 'audio') {
     s.status = 'active';
     setSessionState(session_id, 'speaking');
-    if (data.words && data.words.length) karaokeSetupMessage(session_id, data.words);
+    if (data.words && data.words.length) karaokeSetupMessage(session_id, data.words, data.msg_id);
     if (session_id === activeSessionId) {
       enqueueAudio(session_id, data.data);
       setStatus('Speaking...', session_id);
