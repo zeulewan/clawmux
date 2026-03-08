@@ -223,11 +223,12 @@ function setSessionSidebarState(sessionId, newState) {
 }
 
 function updateChatStopButton() {
-  const btn = document.getElementById('text-stop');
-  if (!btn) return;
   const s = activeSessionId ? sessions.get(activeSessionId) : null;
   const isWorking = s && (s.sidebarState === 'working' || s.sidebarState === 'starting');
-  btn.style.display = isWorking ? '' : 'none';
+  const textBtn = document.getElementById('text-stop');
+  const voiceBtn = document.getElementById('voice-stop');
+  if (textBtn) textBtn.style.display = isWorking ? '' : 'none';
+  if (voiceBtn) voiceBtn.style.display = isWorking ? '' : 'none';
 }
 
 function interruptActiveAgent() {
