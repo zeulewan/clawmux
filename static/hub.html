@@ -941,9 +941,10 @@ body {
   }
 }
 .karaoke-word.active {
-  background: var(--voice-color-bg, transparent);
-  border-radius: 3px;
-  text-shadow: 0 0 0.6px currentColor, 0 0 0.6px currentColor;
+  background: var(--voice-color-bg, rgba(129,140,248,0.18));
+  border-radius: 4px;
+  color: var(--voice-color, var(--blue));
+  text-shadow: none;
 }
 .msg.tts-loading {
   border-left: 2px solid var(--blue);
@@ -1052,7 +1053,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   max-height: 120px;
   line-height: 1.4;
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, height 0.1s ease;
 }
 #text-input:focus { border-color: var(--blue); }
 #text-input::placeholder { color: var(--text-tertiary); }
@@ -1154,7 +1155,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   align-items: center;
   padding-bottom: 6px;
 }
-#waveform { height: 16px; }
+#waveform { height: 22px; }
 #controls-left, #controls-right {
   display: flex;
   align-items: center;
@@ -1197,7 +1198,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   padding: 0;
   border-radius: 50%;
   border: none;
-  background: var(--blue);
+  background: #2563eb;
   color: #fff;
   font-size: 0.8rem;
   font-weight: 600;
@@ -1209,7 +1210,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   white-space: nowrap;
   box-shadow: 0 4px 20px rgba(74,144,255,0.35);
 }
-#mic:hover { background: #3a80ef; transform: scale(1.05); box-shadow: 0 6px 28px rgba(74,144,255,0.45); }
+#mic:hover { background: #1d4ed8; transform: scale(1.05); box-shadow: 0 6px 28px rgba(37,99,235,0.5); }
 #mic.recording {
   background: var(--green);
   box-shadow: 0 4px 20px rgba(52,211,153,0.35);
@@ -1520,14 +1521,12 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 .debug-kv .v { color: var(--text); font-size: 0.72rem; }
 
 /* Scrollbar styling — hidden by default, visible on hover */
-::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: transparent; border-radius: 2px; }
-*:hover::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.3); }
-*:hover::-webkit-scrollbar-thumb:hover { background: rgba(128,128,128,0.5); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; transition: background 0.2s; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
 /* Firefox */
-* { scrollbar-width: thin; scrollbar-color: transparent transparent; }
-*:hover { scrollbar-color: rgba(128,128,128,0.3) transparent; }
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
 
 /* Tablet optimizations */
 @media (max-width: 900px) {
@@ -3312,7 +3311,10 @@ document.addEventListener('keydown', (e) => {
     // Cancel any active recording (PTT or manual)
     if (recording) {
       if (pttActive) pttActive = false;
+      const cancelSid = recordingSessionId;
       stopRecording(true); // discard audio
+      if (cancelSid) sendSilentAudio(cancelSid);
+      setStatus('');
     }
   }
 

@@ -77,7 +77,7 @@ function drawWaveform() {
     waveHistory.push(level);
 
     // Keep only enough bars to fill the width
-    const barWidth = 3;
+    const barWidth = 4;
     const barGap = 2;
     const maxBars = Math.ceil(w / (barWidth + barGap)) + 2;
     if (waveHistory.length > maxBars) {
@@ -90,7 +90,7 @@ function drawWaveform() {
   const s = sessions.get(activeSessionId);
   const color = s ? voiceColor(s.voice) : '#34d399';
 
-  const barWidth = 3;
+  const barWidth = 4;
   const barGap = 2;
   const totalBars = waveHistory.length;
   // Draw from the right edge, scrolling left
