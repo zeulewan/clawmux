@@ -783,7 +783,7 @@ body {
   line-height: 1.6;
   font-size: var(--chat-font-size, 0.92rem);
   letter-spacing: -0.01em;
-  animation: msgAppear 0.2s var(--ease-out);
+  animation: msgAppear 0.55s ease-in both;
   overflow-wrap: break-word;
   word-break: break-word;
   position: relative;
@@ -840,10 +840,10 @@ body {
 .msg .msg-action-btn.playing { color: var(--green); }
 #chat-area { overflow-x: hidden; }
 @keyframes msgAppear {
-  from { opacity: 0; transform: translateY(8px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
-#chat-area.no-animate .msg { animation: none; }
+.msg.rendered { animation: none !important; }
 
 /* Typing indicator */
 .msg-typing-indicator {
@@ -1590,6 +1590,8 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   .resize-handle { display: none !important; }
   .sidebar-project-header { display: none; }
   .sidebar-project-agents.collapsed { max-height: none !important; }
+  /* Icon-only mode: no max-height transitions (prevents icons being clipped mid-animation) */
+  #sidebar:not(.expanded) .sidebar-project-agents { max-height: none !important; transition: none !important; }
   #sidebar.expanded .sidebar-project-header { display: flex; font-size: 0.55rem; padding: 6px 10px 2px; }
   #sidebar.expanded .sidebar-project-agents.collapsed { max-height: 0 !important; }
   .sidebar-card .sb-info { display: none; }
@@ -1668,7 +1670,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   #chat-area { padding-bottom: 190px; }
 
   /* Chat messages: wider on mobile, disable text selection for long-press menu */
-  .msg { max-width: 90%; }
+  .msg { max-width: 90%; animation-duration: 0.6s; }
   .msg, .msg * { touch-action: pan-y; }
   #sidebar, #sidebar * { touch-action: manipulation; }
   #controls, #controls * { touch-action: manipulation; }
@@ -2171,9 +2173,26 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 <script>
 // --- DOM refs (loaded before audio.js which references these) ---
 const chatArea = document.getElementById('chat-area');
+let _scrollRaf = null;
+function _easedScrollTo(el, target) {
+  if (_scrollRaf) { cancelAnimationFrame(_scrollRaf); _scrollRaf = null; }
+  function step() {
+    const dest = Math.max(target, el.scrollHeight);
+    const remaining = dest - el.scrollTop;
+    if (remaining < 1) { el.scrollTop = dest; _scrollRaf = null; return; }
+    el.scrollTop += remaining * 0.25;
+    _scrollRaf = requestAnimationFrame(step);
+  }
+  _scrollRaf = requestAnimationFrame(step);
+}
 function chatScrollToBottom(force = false) {
   if (force || chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150) {
-    chatArea.scrollTop = chatArea.scrollHeight;
+    if (force) {
+      if (_scrollRaf) { cancelAnimationFrame(_scrollRaf); _scrollRaf = null; }
+      chatArea.scrollTop = chatArea.scrollHeight;
+    } else {
+      _easedScrollTo(chatArea, chatArea.scrollHeight);
+    }
   }
 }
 const controls = document.getElementById('controls');
@@ -2407,7 +2426,7 @@ async function addSession(data, autoSwitch = false) {
   if (serverState === 'idle') {
     const sess = sessions.get(data.session_id);
     if (sess) { sess.sessionState = 'idle'; sess.sidebarState = 'idle'; }
-  } else if (serverState === 'processing' || serverState === 'compacting') {
+  } else if (serverState === 'processing' || serverState === 'compacting' || serverState === 'thinking') {
     const sess = sessions.get(data.session_id);
     if (sess) { sess.sessionState = 'processing'; sess.sidebarState = 'working'; }
     showThinking(data.session_id);

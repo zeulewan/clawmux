@@ -149,6 +149,21 @@ function handleMessage(data) {
           if (serverState) {
             existing.compacting = (serverState === 'compacting');
             setSessionSidebarState(s.session_id, serverState);
+            // Keep sessionState in sync so getSessionState() / switchTab indicator check is correct
+            if (['thinking', 'processing', 'compacting'].includes(serverState)) {
+              existing.sessionState = 'processing';
+            } else if (serverState === 'idle') {
+              existing.sessionState = 'idle';
+            }
+            // Restore typing indicator immediately for the active session (reconnect — switchTab won't be called)
+            if (s.session_id === activeSessionId) {
+              const indicatorActive = ['thinking', 'processing', 'compacting', 'starting'].includes(serverState);
+              if (indicatorActive) {
+                if (typeof showTypingIndicator === 'function') showTypingIndicator(s.session_id);
+              } else {
+                if (typeof hideTypingIndicator === 'function') hideTypingIndicator(s.session_id);
+              }
+            }
           }
         }
       }
