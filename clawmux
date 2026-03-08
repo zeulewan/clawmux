@@ -1711,7 +1711,6 @@ def cmd_monitor(args):
 
 def _start_monitor_watcher(monitor_session, agent_colors, filter_agents, project_slug="default"):
     """Spawn a background process that keeps the monitor in sync with active sessions."""
-    import math as _math
 
     script = f'''
 import json, subprocess, sys, time, urllib.request
@@ -1740,7 +1739,8 @@ def get_sessions():
     result.sort(key=lambda s: s.get("label",""))
     return result
 
-def get_pane_titles():
+def get_pane_map():
+    """Return {{label: pane_id}} dict from current monitor panes."""
     r = subprocess.run(["tmux","list-panes","-t",MONITOR,"-F","#{{pane_id}} #{{pane_title}}"],
                        capture_output=True, text=True)
     if r.returncode != 0:
@@ -1752,33 +1752,13 @@ def get_pane_titles():
             panes[parts[1]] = parts[0]
     return panes
 
-def get_pane_order():
-    """Return list of (pane_id, title) in current tmux pane index order."""
-    r = subprocess.run(["tmux","list-panes","-t",MONITOR,"-F","#{{pane_id}} #{{pane_title}}"],
+def any_pane_id():
+    """Return any valid pane id from the monitor (used as split target)."""
+    r = subprocess.run(["tmux","list-panes","-t",MONITOR,"-F","#{{pane_id}}"],
                        capture_output=True, text=True)
-    if r.returncode != 0:
+    if r.returncode != 0 or not r.stdout.strip():
         return None
-    result = []
-    for line in r.stdout.strip().splitlines():
-        parts = line.split(" ", 1)
-        if len(parts) == 2:
-            result.append((parts[0], parts[1]))
-    return result
-
-def reorder_panes():
-    """Reorder panes alphabetically by title using swap-pane."""
-    pane_list = get_pane_order()
-    if not pane_list or len(pane_list) < 2:
-        return
-    # Sort by title (agent label) alphabetically
-    sorted_panes = sorted(pane_list, key=lambda p: p[1].lower())
-    # Swap panes into correct positions
-    for i, (desired_id, desired_title) in enumerate(sorted_panes):
-        if i < len(pane_list) and pane_list[i][0] != desired_id:
-            tmux("swap-pane", "-s", desired_id, "-t", pane_list[i][0])
-            # Update pane_list to reflect the swap
-            j = next(k for k, p in enumerate(pane_list) if p[0] == desired_id)
-            pane_list[i], pane_list[j] = pane_list[j], pane_list[i]
+    return r.stdout.strip().splitlines()[0]
 
 def attach_cmd(session_name):
     return "while true; do TMUX= tmux attach -t " + session_name + " 2>/dev/null || sleep 2; done"
@@ -1797,21 +1777,22 @@ LIGHT_BG_VOICES = {{
 def set_agent_colors(agent):
     voice = agent.get("voice", "")
     color = COLORS.get(voice)
-    if color:
-        target = agent["tmux_session"]
-        label = agent.get("label", target)
-        fg = "colour16" if voice in LIGHT_BG_VOICES else "colour231"
-        for opt, val in [
-            ("status-style", f"fg={{fg}},bg={{color}},bold"),
-            ("status-left", f" {{label}} "),
-            ("status-left-style", f"fg={{fg}},bg={{color}},bold"),
-            ("status-left-length", "20"),
-            ("status-right", ""),
-            ("status-right-length", "0"),
-            ("window-status-current-format", ""),
-            ("window-status-format", ""),
-        ]:
-            tmux("set-option", "-t", target, opt, val)
+    if not color:
+        return
+    target = agent["tmux_session"]
+    label = agent.get("label", target)
+    fg = "colour16" if voice in LIGHT_BG_VOICES else "colour231"
+    for opt, val in [
+        ("status-style", f"fg={{fg}},bg={{color}},bold"),
+        ("status-left", f" {{label}} "),
+        ("status-left-style", f"fg={{fg}},bg={{color}},bold"),
+        ("status-left-length", "20"),
+        ("status-right", ""),
+        ("status-right-length", "0"),
+        ("window-status-current-format", ""),
+        ("window-status-format", ""),
+    ]:
+        tmux("set-option", "-t", target, opt, val)
 
 log("Watcher started")
 while True:
@@ -1820,7 +1801,7 @@ while True:
         sessions = get_sessions()
         if sessions is None:
             continue
-        panes = get_pane_titles()
+        panes = get_pane_map()
         if panes is None:
             log("Monitor session gone, exiting")
             break
@@ -1829,21 +1810,25 @@ while True:
         desired_labels = {{s.get("label", s["tmux_session"]): s for s in sessions}}
         desired_set = set(desired_labels.keys())
 
-        changed = False
+        to_remove = current_labels - desired_set
+        to_add = desired_set - current_labels
 
-        # Remove panes for dead agents
-        for label in current_labels - desired_set:
+        # Remove panes for dead agents (kill without retiling yet)
+        for label in to_remove:
             pane_id = panes[label]
             log(f"Removing pane for {{label}}")
             tmux("kill-pane", "-t", pane_id)
-            changed = True
 
-        # Add panes for new agents
-        for label in sorted(desired_set - current_labels):
+        # Add panes for new agents (split off any existing pane)
+        for label in sorted(to_add):
             agent = desired_labels[label]
             log(f"Adding pane for {{label}}")
+            target = any_pane_id()
+            if not target:
+                log("No panes left in monitor")
+                break
             r = subprocess.run(
-                ["tmux", "split-window", "-t", MONITOR,
+                ["tmux", "split-window", "-t", target,
                  "-P", "-F", "#{{pane_id}}",
                  attach_cmd(agent["tmux_session"])],
                 capture_output=True, text=True,
@@ -1855,15 +1840,12 @@ while True:
                 log(f"Added pane {{new_pane}} for {{label}}")
             else:
                 log(f"Failed to add pane for {{label}}: {{r.stderr}}")
-            changed = True
 
-        if changed:
-            reorder_panes()
+        # Re-tile only when the pane count changed
+        if to_remove or to_add:
             tmux("select-layout", "-t", MONITOR, "tiled")
-            log("Layout re-tiled")
-
-        # Re-apply colors after layout changes (new panes added/removed)
-        if changed:
+            log(f"Layout re-tiled (+{{len(to_add)}} -{{len(to_remove)}})")
+            # Re-apply agent colors after retile
             for label, agent in desired_labels.items():
                 set_agent_colors(agent)
 
