@@ -1426,30 +1426,65 @@ async function getMicStream() {
     }
   }
   persistentStream.getAudioTracks().forEach(t => { t.enabled = !micMuted; });
-  // Re-populate device lists — labels become available after permission grant
+  // Re-populate device list — labels become available after permission grant
   populateMicSelector();
-  populateSpeakerSelector();
   return persistentStream;
 }
 
 // --- Mic device selector ---
+// Cached mic device list for popup
+let _micDevices = [];
+
 async function populateMicSelector() {
-  const sel = document.getElementById('mic-select');
-  if (!sel) return;
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
-    const mics = devices.filter(d => d.kind === 'audioinput');
-    sel.innerHTML = '<option value="">Mic: Default</option>';
-    mics.forEach((mic, i) => {
-      const opt = document.createElement('option');
-      opt.value = mic.deviceId;
-      opt.textContent = mic.label || `Microphone ${i + 1}`;
-      sel.appendChild(opt);
-    });
-    sel.value = _selectedMicDeviceId || '';
+    _micDevices = devices.filter(d => d.kind === 'audioinput');
   } catch (e) {
     console.warn('Failed to enumerate mic devices:', e);
+    _micDevices = [];
   }
+  updateMicLabel();
+}
+
+function updateMicLabel() {
+  const label = document.getElementById('mic-label');
+  if (!label) return;
+  if (_selectedMicDeviceId) {
+    const dev = _micDevices.find(d => d.deviceId === _selectedMicDeviceId);
+    const name = dev?.label || 'Selected';
+    // Truncate long names
+    label.textContent = (name.length > 20 ? name.slice(0, 18) + '...' : name) + ' \u25be';
+  } else {
+    label.textContent = 'Mic: Default \u25be';
+  }
+  label.style.display = 'inline';
+}
+
+function toggleMicPopup(e) {
+  e.stopPropagation();
+  const popup = document.getElementById('mic-popup');
+  if (popup.style.display !== 'none') { popup.style.display = 'none'; return; }
+  const items = [{ id: '', label: 'Default' }];
+  _micDevices.forEach((mic, i) => {
+    items.push({ id: mic.deviceId, label: mic.label || 'Microphone ' + (i + 1) });
+  });
+  popup.innerHTML = items.map(m => {
+    const sel = m.id === (_selectedMicDeviceId || '') ? 'font-weight:700;color:#4a9eff;' : 'color:#e0e0e0;';
+    const displayLabel = m.label.length > 35 ? m.label.slice(0, 33) + '...' : m.label;
+    return '<div style="padding:8px 16px;cursor:pointer;white-space:nowrap;' + sel + '" onmousedown="selectMicPopup(\'' + m.id + '\')" ontouchstart="selectMicPopup(\'' + m.id + '\')">' + displayLabel + (m.id === (_selectedMicDeviceId || '') ? ' \u2713' : '') + '</div>';
+  }).join('');
+  const label = document.getElementById('mic-label');
+  const rect = label.getBoundingClientRect();
+  popup.style.top = rect.bottom + 4 + 'px';
+  popup.style.left = Math.min(rect.left, window.innerWidth - 200) + 'px';
+  popup.style.display = 'block';
+  const close = () => { popup.style.display = 'none'; document.removeEventListener('click', close); };
+  setTimeout(() => document.addEventListener('click', close), 0);
+}
+
+function selectMicPopup(deviceId) {
+  document.getElementById('mic-popup').style.display = 'none';
+  changeMicDevice(deviceId);
 }
 
 function changeMicDevice(deviceId) {
@@ -1465,53 +1500,11 @@ function changeMicDevice(deviceId) {
   // Stop VAD intervals that hold references to the old stream
   stopPlaybackVAD();
   stopThinkingVAD();
-  // Blur dropdown so Space bar doesn't re-trigger selection
-  const sel = document.getElementById('mic-select');
-  if (sel) sel.blur();
-}
-
-// --- Speaker device selector ---
-let _selectedSpeakerDeviceId = (() => { try { return localStorage.getItem('hub_speaker_device') || ''; } catch(e) { return ''; } })();
-
-async function populateSpeakerSelector() {
-  const sel = document.getElementById('speaker-select');
-  if (!sel) return;
-  // Hide entirely if browser doesn't support AudioContext.setSinkId
-  if (!audioCtx.setSinkId) { sel.style.display = 'none'; return; }
-  try {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const speakers = devices.filter(d => d.kind === 'audiooutput');
-    sel.innerHTML = '<option value="">Speaker: Default</option>';
-    speakers.forEach((spk, i) => {
-      const opt = document.createElement('option');
-      opt.value = spk.deviceId;
-      opt.textContent = spk.label || `Speaker ${i + 1}`;
-      sel.appendChild(opt);
-    });
-    sel.value = _selectedSpeakerDeviceId || '';
-  } catch (e) {
-    console.warn('Failed to enumerate speaker devices:', e);
-  }
-}
-
-async function changeSpeakerDevice(deviceId) {
-  _selectedSpeakerDeviceId = deviceId;
-  try { localStorage.setItem('hub_speaker_device', deviceId); } catch(e) {}
-  // Route AudioContext output to selected device
-  if (audioCtx.setSinkId) {
-    try {
-      await audioCtx.setSinkId(deviceId || '');
-    } catch (e) {
-      console.warn('Failed to set speaker device:', e);
-    }
-  }
-  // Blur dropdown so Space bar doesn't re-trigger selection
-  const sel = document.getElementById('speaker-select');
-  if (sel) sel.blur();
+  updateMicLabel();
 }
 
 // Prevent Space/Enter from reopening header dropdowns after selection
-['mic-select', 'speaker-select', 'session-model', 'project-selector'].forEach(id => {
+['session-model', 'project-selector'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('keydown', e => {
     if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); el.blur(); }
@@ -1520,7 +1513,6 @@ async function changeSpeakerDevice(deviceId) {
 
 // Populate on load and when devices change
 populateMicSelector();
-populateSpeakerSelector();
 // On hard reload, enumerateDevices may return empty labels before mic permission.
 // If permission is already granted (from a previous session), do a silent getUserMedia
 // to unlock full device labels, then re-populate.
@@ -1532,7 +1524,6 @@ populateSpeakerSelector();
         const tmp = await navigator.mediaDevices.getUserMedia({ audio: true });
         tmp.getTracks().forEach(t => t.stop());
         populateMicSelector();
-        populateSpeakerSelector();
       }
     }
   } catch (e) { /* permission API not supported or denied — that's fine */ }
@@ -1540,13 +1531,7 @@ populateSpeakerSelector();
 if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
   navigator.mediaDevices.addEventListener('devicechange', () => {
     populateMicSelector();
-    populateSpeakerSelector();
   });
-}
-
-// Apply saved speaker device on load
-if (_selectedSpeakerDeviceId && audioCtx.setSinkId) {
-  audioCtx.setSinkId(_selectedSpeakerDeviceId).catch(() => {});
 }
 
 // --- Recording ---

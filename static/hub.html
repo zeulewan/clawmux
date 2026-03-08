@@ -1254,7 +1254,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   #settings-link { font-size: 0; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; padding: 0; }
   #settings-link::before { content: '⚙'; font-size: 14px; }
   #conn-label { display: none; }
-  #mic-select, #speaker-select { display: none !important; }
+  #mic-label { display: none !important; }
   /* Put connection dot inline with title */
   #header > div:has(#dot) { padding: 2px 6px !important; border-radius: 8px; }
 
@@ -1526,12 +1526,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
     <span id="usage-5h" style="white-space:nowrap;"></span>
     <span id="usage-7d" style="white-space:nowrap;"></span>
   </div>
-  <select id="mic-select" tabindex="-1" onchange="changeMicDevice(this.value)" title="Microphone">
-    <option value="">Mic: Default</option>
-  </select>
-  <select id="speaker-select" tabindex="-1" onchange="changeSpeakerDevice(this.value)" title="Speaker">
-    <option value="">Speaker: Default</option>
-  </select>
+  <span id="mic-label" style="display:none; font-size:0.7rem; color:var(--text-secondary); cursor:pointer;" onclick="toggleMicPopup(event)" title="Microphone">Mic: Default ▾</span>
   <div style="display:flex;align-items:center;gap:6px;padding:4px 12px;background:rgba(128,128,128,0.08);border-radius:12px;">
     <div id="dot" class="connecting"></div>
     <span id="conn-label">Connecting...</span>
@@ -1541,6 +1536,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   <!-- Debug link removed — accessible from Settings page -->
 </div>
 <div id="model-popup" style="display:none; position:fixed; background:#1a1a1a; border:1px solid #333; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.6); z-index:9999; min-width:100px; overflow:hidden;"></div>
+<div id="mic-popup" style="display:none; position:fixed; background:#1a1a1a; border:1px solid #333; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.6); z-index:9999; min-width:140px; overflow:hidden; max-height:300px; overflow-y:auto;"></div>
 
 <div id="app-body">
 
@@ -2401,8 +2397,6 @@ async function toggleSetting(key) {
 function applyTtsMode(off) {
   document.body.classList.toggle('tts-disabled', off);
   if (off && typeof stopActiveAudio === 'function') stopActiveAudio();
-  const spkSel = document.getElementById('speaker-select');
-  if (spkSel) spkSel.style.display = off ? 'none' : '';
 }
 
 function applySttMode(off) {
@@ -2413,8 +2407,8 @@ function applySttMode(off) {
   const micWrapperEl = document.getElementById('mic-wrapper');
   if (micWrapperEl) micWrapperEl.style.display = off ? 'none' : '';
   // Hide/show mic device selector in header
-  const micSel = document.getElementById('mic-select');
-  if (micSel) micSel.style.display = off ? 'none' : '';
+  const micLabel = document.getElementById('mic-label');
+  if (micLabel) micLabel.style.display = off ? 'none' : '';
   if (off) {
     // Stop any active recording
     if (typeof recording !== 'undefined' && recording && typeof stopRecording === 'function') stopRecording(true);
