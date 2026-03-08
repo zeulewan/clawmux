@@ -354,7 +354,8 @@ function handleMessage(data) {
     return;
   }
   if (type === 'assistant_text') {
-    if (typeof hideTypingIndicator === 'function') hideTypingIndicator(session_id);
+    // Don't call hideTypingIndicator here — addMessage removes it atomically with the new message
+    // to prevent a two-step DOM jump (indicator removal + message addition in separate frames)
     if (data.fire_and_forget) {
       // Fire-and-forget speak: just add message to chat, don't change state
       if (data.text && data.text.trim()) {

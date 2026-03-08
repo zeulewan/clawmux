@@ -2180,7 +2180,7 @@ function _easedScrollTo(el) {
     const dest = el.scrollHeight - el.clientHeight;
     const remaining = dest - el.scrollTop;
     if (remaining < 1) { el.scrollTop = dest; _scrollRaf = null; return; }
-    el.scrollTop += remaining * 0.05;
+    el.scrollTop += remaining * 0.14;
     _scrollRaf = requestAnimationFrame(step);
   }
   _scrollRaf = requestAnimationFrame(step);

@@ -336,8 +336,6 @@ function _appendActivityLine(container, text) {
 function renderChat(forceScroll = false) {
   // Check if user is near bottom BEFORE clearing DOM (scrollHeight resets after innerHTML='')
   const wasNearBottom = forceScroll || chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150;
-  // Suppress per-message animations during bulk re-render (tab switch, history load)
-  chatArea.classList.add('no-animate');
   chatArea.innerHTML = '';
   const s = sessions.get(activeSessionId);
   if (!s) return;
@@ -424,8 +422,8 @@ function renderChat(forceScroll = false) {
     }
   }
   if (wasNearBottom) chatArea.scrollTop = chatArea.scrollHeight;
-  // Re-enable animations after layout so new live messages can animate in
-  requestAnimationFrame(() => chatArea.classList.remove('no-animate'));
+  // Mark all bulk-rendered messages as already-rendered so they don't animate
+  chatArea.querySelectorAll('.msg').forEach(el => el.classList.add('rendered'));
 }
 
 function _loadMoreMessages() {
@@ -532,7 +530,7 @@ function addMessage(sessionId, role, text, opts = {}) {
         const el = createMsgEl(role, text, vc, s.voice, msgObj);
         chatArea.appendChild(el);
       }
-      if (wasNearBottom) chatArea.scrollTop = chatArea.scrollHeight;
+      if (wasNearBottom) chatScrollToBottom(false);
     } else {
       const wasNearBottom = chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150;
       let el;
@@ -548,11 +546,15 @@ function addMessage(sessionId, role, text, opts = {}) {
         const lastGroup = chatArea.querySelector('.activity-group.expanded');
         if (lastGroup) lastGroup.classList.remove('expanded');
         el = createMsgEl(role, text, voiceColor(s.voice), s.voice, msgObj);
+        // Append message BEFORE removing indicator — net height change stays positive so
+        // the browser never needs to clamp scrollTop (prevents the snap/bonk on indicator dismiss)
         chatArea.appendChild(el);
+        if (role === 'assistant') {
+          chatArea.querySelectorAll('.msg-typing-indicator').forEach(e => e.remove());
+          if (sessionId) _activityLogStore.delete(sessionId);
+        }
       }
-      if (wasNearBottom) {
-        chatArea.scrollTop = chatArea.scrollHeight;
-      }
+      if (wasNearBottom) chatScrollToBottom(false);
     }
   }
 }
