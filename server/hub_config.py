@@ -1,6 +1,7 @@
 """Hub configuration constants."""
 
 import os
+import secrets
 import time
 from pathlib import Path
 
@@ -14,6 +15,24 @@ DATA_DIR = CLAWMUX_HOME / "data"
 LEGACY_SESSION_DIR = Path("/tmp/clawmux-sessions")
 
 HUB_PORT = int(os.environ.get("CLAWMUX_PORT", "3460"))
+
+# External sender token — allows authorized external systems (e.g. OpenClaw) to send
+# messages to ClawMux agents without being a registered session.
+# Generated once per hub lifetime and written to ~/.clawmux/data/external_token.
+def _load_or_create_external_token() -> str:
+    token_path = DATA_DIR / "external_token"
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        if token_path.exists():
+            return token_path.read_text().strip()
+        token = secrets.token_hex(32)
+        token_path.write_text(token)
+        token_path.chmod(0o600)
+        return token
+    except OSError:
+        return secrets.token_hex(32)  # ephemeral fallback
+
+EXTERNAL_TOKEN = _load_or_create_external_token()
 HUB_START_TIME = time.time()
 SESSION_TIMEOUT_MINUTES = int(os.environ.get("VOICE_CHAT_TIMEOUT", "0"))  # 0 = never timeout
 HEALTH_CHECK_INTERVAL_SECONDS = 15

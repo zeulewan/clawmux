@@ -1644,6 +1644,68 @@ async def send_message(request: Request):
     return JSONResponse({"id": msg.id, "state": msg.state})
 
 
+@app.post("/api/messages/external")
+async def send_external_message(request: Request):
+    """Accept a message from an authorized external system (e.g. OpenClaw).
+    Requires X-ClawMux-Token header matching the hub's external_token."""
+    from hub_config import EXTERNAL_TOKEN
+    token = request.headers.get("X-ClawMux-Token", "")
+    if not token or token != EXTERNAL_TOKEN:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    data = await request.json()
+    sender_name = data.get("sender", "external").strip() or "external"
+    recipient_name = data.get("to", "")
+    content = data.get("message", "")
+    parent_id = data.get("parent_id", "")
+
+    if not recipient_name or (not content and not parent_id):
+        return JSONResponse({"error": "to and message are required"}, status_code=400)
+
+    recipient = _resolve_session(recipient_name)
+    if not recipient:
+        return JSONResponse({"error": f"recipient '{recipient_name}' not found"}, status_code=404)
+
+    if not recipient.tmux_session:
+        return JSONResponse({"error": "recipient has no tmux session"}, status_code=400)
+
+    recip_name = recipient.voice.replace("af_", "").replace("am_", "").replace("bm_", "")
+    msg = await broker.send(
+        sender=sender_name,
+        recipient=recipient.session_id,
+        content=content,
+        recipient_tmux=recipient.tmux_session,
+        sender_name=sender_name,
+        recipient_name=recip_name,
+        skip_tmux=True,
+        parent_id=parent_id,
+    )
+
+    if recipient.state == AgentState.IDLE and recipient.work_dir:
+        await _inbox_write_and_notify(recipient, {
+            "id": msg.id,
+            "from": sender_name,
+            "type": "agent",
+            "content": content,
+        })
+    elif recipient.work_dir:
+        await _inbox_write_and_notify(recipient, {
+            "id": msg.id,
+            "from": sender_name,
+            "type": "agent",
+            "content": content,
+        })
+
+    await asyncio.to_thread(history.append, recipient.voice, recipient.label, "system",
+                   f"[Agent msg from {sender_name.capitalize()}] {content}",
+                   _hist_prefix(recipient),
+                   msg_id=msg.id, parent_id=parent_id or None)
+
+    await send_to_browser({"type": "agent_message", "message": msg.to_dict()})
+    log.info("External message from '%s' to '%s': %s", sender_name, recipient.session_id, msg.id)
+    return JSONResponse({"id": msg.id})
+
+
 @app.post("/api/messages/speak")
 async def speak_to_user(request: Request):
     """Agent speaks to user via TTS — fire and forget."""

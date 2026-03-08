@@ -139,16 +139,19 @@ def http_get(path: str) -> dict:
         die(f"http error: {e}")
 
 
-def http_post(path: str, data: dict) -> dict:
+def http_post(path: str, data: dict, headers: dict = None) -> dict:
     """Simple HTTP POST to the hub REST API."""
     import urllib.request
     import urllib.error
     try:
         body = json.dumps(data).encode()
+        req_headers = {"Content-Type": "application/json"}
+        if headers:
+            req_headers.update(headers)
         req = urllib.request.Request(
             hub_url(path),
             data=body,
-            headers={"Content-Type": "application/json"},
+            headers=req_headers,
         )
         with urllib.request.urlopen(req, timeout=30) as resp:
             return json.loads(resp.read())
@@ -662,16 +665,32 @@ def cmd_spawn(args):
 def cmd_send(args):
     """Send a message to another agent or to the user."""
     sender_override = getattr(args, "sender_override", None)
-    if sender_override:
-        session_id = sender_override
-    else:
-        session_id = require_session_id()
     message = args.message or ""
 
     # Bare ack: --re with no content
     if not message and not getattr(args, "re", None):
         die("message is required (or use --re for bare acknowledgment)")
 
+    # External sender path: --from bypasses session validation, uses dedicated endpoint + token
+    if sender_override:
+        token_path = os.path.join(clawmux_home, "data", "external_token")
+        try:
+            token = open(token_path).read().strip()
+        except OSError:
+            die(f"external token not found at {token_path} — is the hub running?")
+        payload = {
+            "sender": sender_override,
+            "to": args.to,
+            "message": message,
+        }
+        if getattr(args, "re", None):
+            payload["parent_id"] = args.re
+        result = http_post("/api/messages/external", payload,
+                           headers={"X-ClawMux-Token": token})
+        print(result.get("id", ""))
+        return
+
+    session_id = require_session_id()
     payload = {
         "sender": session_id,
         "to": args.to,
