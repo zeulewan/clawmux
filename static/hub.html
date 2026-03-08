@@ -125,8 +125,8 @@ body::before, body::after {
 body::before {
   width: 700px;
   height: 900px;
-  background: rgba(120, 80, 220, 0.22);
-  filter: blur(100px);
+  background: rgba(120, 80, 220, 0.17);
+  filter: blur(110px);
   top: -300px;
   left: -150px;
   animation: drift-a 28s ease-in-out infinite;
@@ -134,8 +134,8 @@ body::before {
 body::after {
   width: 650px;
   height: 650px;
-  background: rgba(20, 180, 200, 0.16);
-  filter: blur(90px);
+  background: rgba(20, 180, 200, 0.12);
+  filter: blur(100px);
   bottom: -200px;
   right: -100px;
   animation: drift-b 22s ease-in-out infinite;
@@ -899,24 +899,29 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 #mode-toggle .mode-value { font-size: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; }
 #mode-toggle:hover { color: var(--text); background: var(--neutral-strong); border-color: var(--border-light); }
 
-/* Text input bar */
+/* Text input bar — floating pill */
 #text-input-bar {
   display: none;
-  padding: 10px 16px;
-  padding-bottom: max(10px, env(safe-area-inset-bottom));
-  background: transparent;
-  border-top: 1px solid var(--border);
+  padding: 8px 12px;
+  background: rgba(14, 20, 36, 0.72);
+  border: 1px solid var(--border-light);
+  border-radius: 20px;
   gap: 8px;
   align-items: flex-end;
   flex-shrink: 0;
+  margin: 0 16px;
+  margin-bottom: max(12px, env(safe-area-inset-bottom));
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04);
 }
 #text-input-bar.active { display: flex; }
 #text-input {
   flex: 1;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 8px 4px;
   color: var(--text);
   font-size: 0.9rem;
   font-family: inherit;
