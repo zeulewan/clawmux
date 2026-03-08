@@ -194,6 +194,17 @@ def cmd_wait(args):
     clawmux_home = os.environ.get("CLAWMUX_HOME", os.path.expanduser("~/.clawmux"))
     work_dir = os.environ.get("CLAWMUX_WORK_DIR") or os.path.join(clawmux_home, "sessions", session_id)
     sentinel_path = os.path.join(work_dir, ".waiting")
+    # Kill any previous clawmux wait instance to prevent accumulation
+    try:
+        with open(sentinel_path, "r") as _f:
+            old_pid = int(_f.read().strip())
+        if old_pid != os.getpid():
+            try:
+                os.kill(old_pid, signal.SIGTERM)
+            except (ProcessLookupError, PermissionError):
+                pass
+    except (OSError, ValueError):
+        pass
     try:
         with open(sentinel_path, "w") as _f:
             _f.write(str(os.getpid()))
