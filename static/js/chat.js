@@ -369,7 +369,10 @@ function renderChat(forceScroll = false) {
   for (const msg of displayMessages) {
     if (replySet.has(msg)) continue;
     if (msg.role === 'activity') {
-      _appendActivityLine(chatArea, msg.text);
+      if (typeof activityVerbose !== 'undefined' && activityVerbose) {
+        _appendActivityLine(chatArea, msg.text);
+      }
+      // In minimal mode: skip activity from history entirely
       continue;
     }
     if (!showAgentMessages && msg.role === 'system' && /^\[Agent msg (from|to) /.test(msg.text)) continue;
@@ -530,7 +533,12 @@ function addMessage(sessionId, role, text, opts = {}) {
       const wasNearBottom = chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150;
       let el;
       if (role === 'activity') {
-        _appendActivityLine(chatArea, text);
+        if (typeof activityVerbose !== 'undefined' && activityVerbose) {
+          _appendActivityLine(chatArea, text);
+        } else {
+          // Minimal mode: update/create typing indicator with activity text
+          _updateTypingIndicatorText(sessionId, text);
+        }
       } else {
         // Auto-collapse any open activity group when a real message arrives
         const lastGroup = chatArea.querySelector('.activity-group.expanded');
@@ -549,20 +557,24 @@ function addMessage(sessionId, role, text, opts = {}) {
 // --- Input mode (Auto / Typing) ---
 let inputMode = 'voice'; // 'voice' or 'typing'
 const modeToggle = document.getElementById('mode-toggle');
-// Rearrange controls: top row = waveform/transport, bottom row = mode | mic | status
+// Rearrange controls: row1=waveform, row2=cancel|mic|stop, row3=status (full width, no jump)
+// cancel + pause both live in controls-left (absolutely positioned, mutually exclusive)
 {
   const controlsEl = document.getElementById('controls');
   const controlsLeft = document.getElementById('controls-left');
-  const controlsRight = document.getElementById('controls-right');
-  // Move status to the right side
-  controlsRight.appendChild(document.getElementById('status'));
-  // Move cancel button to left side (mode toggle is now in header)
+  // Move cancel + pause buttons into left column (both absolute, only one shows at a time)
   controlsLeft.appendChild(document.getElementById('mic-cancel'));
-  // Create a top row for waveform
+  const pauseBtn = document.getElementById('transport-pause');
+  if (pauseBtn) controlsLeft.appendChild(pauseBtn);
+  // Create status row at bottom spanning all columns
+  const statusRow = document.createElement('div');
+  statusRow.id = 'controls-status';
+  statusRow.appendChild(document.getElementById('status'));
+  controlsEl.appendChild(statusRow);
+  // Create top row for waveform
   const topRow = document.createElement('div');
   topRow.id = 'controls-top';
-  const waveform = document.getElementById('waveform');
-  topRow.appendChild(waveform);
+  topRow.appendChild(document.getElementById('waveform'));
   controlsEl.insertBefore(topRow, controlsEl.firstChild);
 }
 // textInputBar declared in DOM refs block above
@@ -597,8 +609,13 @@ function applyInputMode() {
   }
 }
 
+// Activity log store for minimal mode typing indicator (per session)
+const _activityLogStore = new Map(); // sessionId -> { texts: string[] }
+
 // Typing indicator — show animated dots when agent is thinking/processing
 function showTypingIndicator(sessionId) {
+  // In verbose mode, activity log handles status — no dots needed
+  if (typeof activityVerbose !== 'undefined' && activityVerbose) return;
   if (sessionId !== activeSessionId) return;
   const chatArea = document.getElementById('chat-area');
   if (!chatArea || chatArea.style.display === 'none') return;
@@ -606,7 +623,8 @@ function showTypingIndicator(sessionId) {
   const el = document.createElement('div');
   el.className = 'msg assistant msg-typing-indicator';
   el.dataset.typingFor = sessionId;
-  el.innerHTML = '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>';
+  el.addEventListener('click', () => _toggleActivityExpand(el, sessionId));
+  el.innerHTML = '<div class="typing-main-row"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div>';
   chatArea.appendChild(el);
   chatScrollToBottom(false);
 }
@@ -617,6 +635,60 @@ function hideTypingIndicator(sessionId) {
   chatArea.querySelectorAll('.msg-typing-indicator').forEach(el => {
     if (!sessionId || el.dataset.typingFor === sessionId) el.remove();
   });
+  if (sessionId) _activityLogStore.delete(sessionId);
+  else _activityLogStore.clear();
+}
+
+// Update typing indicator with latest activity text + count badge (minimal mode)
+function _updateTypingIndicatorText(sessionId, text) {
+  if (sessionId !== activeSessionId) return;
+  const chatArea = document.getElementById('chat-area');
+  if (!chatArea || chatArea.style.display === 'none') return;
+
+  // Update store
+  if (!_activityLogStore.has(sessionId)) _activityLogStore.set(sessionId, { texts: [] });
+  const log = _activityLogStore.get(sessionId);
+  if (text) { log.texts.push(text); if (log.texts.length > 30) log.texts.shift(); }
+
+  let el = chatArea.querySelector('.msg-typing-indicator[data-typing-for="' + sessionId + '"]');
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'msg assistant msg-typing-indicator';
+    el.dataset.typingFor = sessionId;
+    el.addEventListener('click', () => _toggleActivityExpand(el, sessionId));
+    chatArea.appendChild(el);
+  }
+  _renderTypingBubble(el, sessionId, text);
+  chatScrollToBottom(false);
+}
+
+function _renderTypingBubble(el, sessionId, currentText) {
+  const log = _activityLogStore.get(sessionId);
+  const count = log ? log.texts.length : 0;
+  const isExpanded = el.classList.contains('expanded');
+  const esc = (t) => t.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const dots = '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>';
+  const actText = currentText ? '<span class="typing-activity-text">' + esc(currentText) + '</span>' : '';
+  const badge = count > 1 ? '<span class="typing-count-badge">+' + (count - 1) + '</span>' : '';
+  const mainRow = '<div class="typing-main-row">' + dots + actText + badge + '</div>';
+
+  if (isExpanded && log && log.texts.length > 0) {
+    const lines = log.texts.map((t, i) => {
+      const cls = i === log.texts.length - 1 ? ' current' : '';
+      return '<div class="typing-log-line' + cls + '">' + esc(t) + '</div>';
+    }).join('');
+    el.innerHTML = mainRow + '<div class="typing-log-expanded">' + lines + '</div>';
+  } else {
+    el.innerHTML = mainRow;
+  }
+}
+
+function _toggleActivityExpand(el, sessionId) {
+  el.classList.toggle('expanded');
+  const log = _activityLogStore.get(sessionId);
+  const currentText = log && log.texts.length ? log.texts[log.texts.length - 1] : '';
+  _renderTypingBubble(el, sessionId, currentText);
+  chatScrollToBottom(false);
 }
 
 // Auto-resize textarea

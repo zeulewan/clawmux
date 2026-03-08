@@ -757,7 +757,7 @@ function setSessionState(sessionId, newState) {
     startThinkingSound(sessionId);
     setSessionSidebarState(sessionId, 'working');
     if (sessionId === activeSessionId) {
-      setStatus('Thinking...', sessionId);
+      setStatus(isMobile ? 'Tap to Record' : 'Tap or Hold Space', sessionId);
       startThinkingVAD(sessionId);
     }
   } else if (newState === 'speaking') {
@@ -1377,7 +1377,7 @@ function updateMicUI() {
   // Keep mic hidden when STT is off
   if (!sttEnabled) {
     micBtn.style.display = 'none';
-    micCancelBtn.style.display = 'none';
+    micCancelBtn.classList.remove('btn-visible');
     return;
   }
 
@@ -1387,7 +1387,7 @@ function updateMicUI() {
     micBtn.disabled = false;
     micBtn.classList.add('interruptable');
     micBtn.innerHTML = MIC_INTERRUPT_SVG;
-    micCancelBtn.style.display = 'none';
+    micCancelBtn.classList.remove('btn-visible');
   } else if (recording) {
     // Recording: mic = send, cancel visible, pause hidden
     const pauseBtn = document.getElementById('transport-pause');
@@ -1396,10 +1396,10 @@ function updateMicUI() {
     micBtn.classList.add('recording');
     micBtn.innerHTML = MIC_SEND_SVG;
     micBtn.disabled = false;
-    micCancelBtn.style.display = 'flex';
+    micCancelBtn.classList.add('btn-visible');
   } else {
     // Idle or paused: mic = record
-    micCancelBtn.style.display = 'none';
+    micCancelBtn.classList.remove('btn-visible');
     micBtn.style.display = 'flex';
     micBtn.innerHTML = MIC_SVG;
     micBtn.disabled = false;

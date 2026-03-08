@@ -260,12 +260,9 @@ function handleMessage(data) {
         if (typeof hideTypingIndicator === 'function') hideTypingIndicator(data.session_id);
       }
       // Legacy status field (ready/starting)
-      if (data.status) {
-        s.status = data.status;
-        if (data.status === 'ready' && !data.silent) {
-          cueSessionReady();
-          addMessage(data.session_id, 'system', 'Claude connected.');
-        }
+      if (data.status === 'ready' && !data.silent) {
+        cueSessionReady();
+        addMessage(data.session_id, 'system', 'Claude connected.');
       }
       updateThinkingLabel(data.session_id);
     }
@@ -370,7 +367,6 @@ function handleMessage(data) {
     addMessage(session_id, 'user', data.text, { id: data.msg_id || null });
     setSessionState(session_id, 'processing');
   } else if (type === 'audio') {
-    s.status = 'active';
     setSessionState(session_id, 'speaking');
     // Setup karaoke spans on DOM and get words with el references
     const karaokeWords = (data.words && data.words.length)
@@ -403,17 +399,13 @@ function handleMessage(data) {
     if (session_id === activeSessionId) setStatus(data.text, session_id);
     else renderSidebar();
   } else if (type === 'done') {
-    if (data.processing) {
-      setSessionState(session_id, 'processing');
+    const isPlaying = (currentAudio && currentAudio.sessionId === session_id) ||
+                      (currentBufferedPlayer && currentBufferedPlayer.sessionId === session_id) ||
+                      (s.audioBuffer && s.audioBuffer.length > 0);
+    if (isPlaying) {
+      setSessionState(session_id, 'speaking');
     } else {
-      const isPlaying = (currentAudio && currentAudio.sessionId === session_id) ||
-                        (currentBufferedPlayer && currentBufferedPlayer.sessionId === session_id) ||
-                        (s.audioBuffer && s.audioBuffer.length > 0);
-      if (isPlaying) {
-        setSessionState(session_id, 'speaking');
-      } else {
-        setSessionState(session_id, 'idle');
-      }
+      setSessionState(session_id, 'idle');
     }
   } else if (type === 'session_ended') {
     // Agent said goodbye — auto-close after a short delay
