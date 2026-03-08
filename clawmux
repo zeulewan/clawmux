@@ -496,16 +496,16 @@ def _print_status_table(file=None):
         active_marker = " *" if slug == active_project else ""
         agent_count = len(by_project[slug])
         print(f"  {proj_name}{active_marker} ({agent_count} agents)")
-        print(f"  {'Name':<10} {'Role':<20} {'Task':<32} {'State':<10} {'tool_name':<14} {'activity':<30} {'ctx':<5} {'model':<8} {'effort'}")
-        print(f"  {'-' * 140}")
+        print(f"  {'Name':<10} {'Role':<14} {'Area':<16} {'Task':<32} {'State':<10} {'tool_name':<14} {'activity':<30} {'ctx':<5} {'model':<8} {'effort'}")
+        print(f"  {'-' * 150}")
         for s in sorted(by_project[slug], key=lambda s: s.get("label", "")):
             name = s.get("label", s.get("voice", "?"))
             area = s.get("project_area", "")
+            if len(area) > 14:
+                area = area[:12] + ".."
             role = s.get("role", "")
-            if area:
-                role = f"{role} · {area}" if role else area
-            if len(role) > 18:
-                role = role[:16] + ".."
+            if len(role) > 12:
+                role = role[:10] + ".."
             task = s.get("task", "")
             if len(task) > 30:
                 task = task[:28] + ".."
@@ -540,7 +540,7 @@ def _print_status_table(file=None):
             use_color = file is not None or sys.stdout.isatty()
             model = s.get("model", "") or ""
             effort = s.get("effort", "") or "default"
-            row = f"  {name:<10} {role:<20} {task:<32} {state:<10} {tool_name:<14} {activity:<30} {ctx_str:<5} {model:<8} {effort}"
+            row = f"  {name:<10} {role:<14} {area:<16} {task:<32} {state:<10} {tool_name:<14} {activity:<30} {ctx_str:<5} {model:<8} {effort}"
             if ansi_color and use_color:
                 print(f"\033[38;5;{ansi_color}m{row}\033[0m")
             else:
