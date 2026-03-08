@@ -1650,22 +1650,19 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   /* Global: disable text selection everywhere on mobile (except text input) */
   *, *::before, *::after { -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; }
   input, textarea { -webkit-user-select: text !important; user-select: text !important; }
-  #header { padding: 6px 10px; gap: 6px; flex-wrap: wrap; }
+  #header { padding: 3px 12px; gap: 6px; flex-wrap: wrap; min-height: 44px; }
   #header h1 { display: none; }
   #header-project-status { display: none; }
-  #active-voice { font-size: 0.95rem !important; font-weight: 700 !important; }
+  #active-voice { font-size: 1.2rem !important; font-weight: 700 !important; }
   /* model-label now used on all screen sizes — no mobile override needed */
-  #usage-bar { padding: 3px 6px !important; font-size: 0.55rem !important; gap: 6px !important; }
+  #usage-bar { padding: 4px 8px !important; font-size: 0.72rem !important; gap: 6px !important; }
   #settings-link { font-size: 0; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; padding: 0; }
   #settings-link::before { content: '⚙'; font-size: 14px; }
   #conn-label { display: none; }
   /* Put connection dot inline with title */
   #header > div:has(#dot) { padding: 2px 6px !important; border-radius: var(--radius-xs); }
 
-  /* Instant expand/collapse — no width transition on mobile to prevent overflow clipping */
-  #sidebar.no-transition { transition: none !important; }
-
-  /* Sidebar: icon-only, absolutely positioned */
+  /* Sidebar: icon-only, absolutely positioned, smooth slide */
   #sidebar {
     width: 48px;
     min-width: 48px;
@@ -1678,18 +1675,24 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     overflow: hidden;
+    transition: width 0.25s ease-in-out;
   }
   #main-content {
     margin-left: 48px;
   }
   .resize-handle { display: none !important; }
-  .sidebar-project-header { display: none; }
-  .sidebar-project-agents.collapsed { max-height: none !important; }
-  /* Icon-only mode: no max-height transitions (prevents icons being clipped mid-animation) */
-  #sidebar:not(.expanded) .sidebar-project-agents { max-height: none !important; transition: none !important; }
-  #sidebar.expanded .sidebar-project-header { display: flex; font-size: 0.55rem; padding: 6px 10px 2px; }
-  #sidebar.expanded .sidebar-project-agents.collapsed { max-height: 0 !important; }
-  .sidebar-card .sb-info { display: none; }
+  /* Project header: chevron always visible at left, name hidden until expanded */
+  .sidebar-project-header { justify-content: flex-start; padding: 5px 8px; gap: 6px; font-size: 0.55rem; }
+  .sidebar-project-header .project-chevron { font-size: 0.7rem; flex-shrink: 0; }
+  .sidebar-project-header .project-name,
+  .sidebar-project-header .project-agent-count { opacity: 0; pointer-events: none; }
+  #sidebar.expanded .sidebar-project-header .project-name,
+  #sidebar.expanded .sidebar-project-header .project-agent-count { opacity: 1; pointer-events: auto; transition: opacity 0.15s ease-out 0.2s; }
+  /* sb-info out of flow — starts past sidebar edge so no partial chars during slide */
+  .sidebar-card .sb-info { position: absolute; left: 56px; top: 0; bottom: 0; right: 4px; overflow: hidden; display: flex; flex-direction: column; justify-content: center; gap: 1px; }
+  /* Remove min-heights that inflate the block */
+  .sidebar-card .sb-status { min-height: 0 !important; }
+  .sidebar-card .sb-task { min-height: 0 !important; }
   .sidebar-card .sb-unread {
     position: absolute;
     top: 2px;
@@ -1699,8 +1702,8 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   }
   #sidebar-list { padding-left: 0; padding-right: 0; }
   .sidebar-card {
-    justify-content: center;
-    padding: 10px 4px;
+    justify-content: flex-start;
+    padding: 10px 8px;
     position: relative;
     -webkit-user-select: none;
     user-select: none;
@@ -1739,10 +1742,14 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 
   /* Hide focus card on mobile */
   .sidebar-focus-card { display: none !important; }
-  /* Hide settings gear from header on mobile — settings is in the sidebar drawer */
+  /* Hide notes/settings from header on mobile — they live in the sidebar drawer */
   #settings-link { display: none !important; }
-  /* Settings button in sidebar drawer */
+  #notes-link { display: none !important; }
+  /* Notes + Settings buttons in sidebar drawer */
+  #sidebar-notes-btn { display: none; }
   #sidebar-settings-btn { display: none; }
+  #sidebar.expanded #sidebar-notes-btn,
+  #sidebar.expanded #sidebar-notes-btn,
   #sidebar.expanded #sidebar-settings-btn {
     display: flex;
     align-items: center;
@@ -1757,12 +1764,15 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
     border: none;
     background: none;
     width: calc(100% - 16px);
-    animation: fadeSlideIn 0.2s ease-out 0.1s both;
   }
+  #sidebar.expanded #sidebar-notes-btn:hover,
   #sidebar.expanded #sidebar-settings-btn:hover { background: var(--hover-bg); }
 
   /* More bottom clearance for the taller mobile pill (80px mic) */
   #chat-area { padding-bottom: 190px; }
+  /* Toast at top on mobile so it doesn't overlap the voice bar */
+  #copy-toast { bottom: auto; top: 60px; transform: translateX(-50%) translateY(-12px) scale(0.94); }
+  #copy-toast.visible { transform: translateX(-50%) translateY(0) scale(1); }
 
   /* Chat messages: wider on mobile, disable text selection for long-press menu */
   .msg { max-width: 90%; animation-duration: 0.6s; }
@@ -1777,9 +1787,11 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   #controls-left, #controls-right { min-height: 80px; }
   #controls-status { padding: 4px 6px 0; }
   #mic { width: 80px; height: 80px; }
-  #mic-cancel { width: 30px; height: 30px; }
-  .btn-icon { width: 38px; height: 38px; }
-  .transport-btn { width: 28px; height: 28px; font-size: 0.85rem; }
+  #mic-cancel { width: 46px; height: 46px; font-size: 1.1rem; right: 14px; }
+  #voice-stop { width: 46px; height: 46px; left: 14px; }
+  #transport-pause { right: 14px; }
+  .btn-icon { width: 44px; height: 44px; }
+  .transport-btn { width: 46px; height: 46px; font-size: 1.1rem; }
   #waveform { height: 12px !important; }
   #controls-top.wave-visible { max-height: 24px; }
   #status { font-size: 0.6rem; }
@@ -1790,23 +1802,19 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
     min-width: 0;
   }
 
-  /* Sidebar expand toggle */
+  /* Sidebar expand toggle — larger touch target */
   #sidebar-expand-btn {
     display: flex !important;
+    padding: 16px 0 !important;
+    font-size: 1.4rem !important;
   }
 
-  /* Expanded sidebar on mobile */
+  /* Expanded sidebar on mobile — just width, everything else is always ready */
   #sidebar.expanded {
     width: 200px;
-    min-width: 200px;
     box-shadow: 4px 0 24px rgba(0,0,0,0.4);
   }
-  #sidebar.expanded .sb-info {
-    display: block !important;
-    animation: fadeSlideIn 0.2s ease-out 0.1s both;
-  }
-  #sidebar.expanded .sidebar-card { justify-content: flex-start; padding: 3px 10px; gap: 7px; }
-  #sidebar.expanded .sidebar-card .sb-icon { margin: 0; width: 24px; height: 24px; font-size: 0.8rem; }
+  #sidebar.expanded .sb-info { pointer-events: auto; }
   #sidebar.expanded .sidebar-card .sb-name { font-size: 0.7rem; line-height: 1.1; }
   #sidebar.expanded .sidebar-card .sb-status { font-size: 0.5rem; margin-top: 0; gap: 3px; }
   #sidebar.expanded .sidebar-card .sb-dot { width: 5px; height: 5px; }
@@ -1970,6 +1978,10 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
     <div class="sidebar-focus-icon"><svg viewBox="0 0 24 24" fill="currentColor" style="width:1em;height:1em"><path fill-rule="evenodd" d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm0 3a7 7 0 1 1 0 14A7 7 0 0 1 12 5zm0 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/></svg></div>
     <span>Focus</span>
   </div>
+  <button id="sidebar-notes-btn" onclick="collapseSidebar(); toggleNotesPanel();">
+    <span style="font-size:1rem;">📝</span>
+    <span>Notes</span>
+  </button>
   <button id="sidebar-settings-btn" onclick="collapseSidebar(); showSettingsPage();">
     <span style="font-size:1rem;">⚙</span>
     <span>Settings</span>
@@ -2196,6 +2208,11 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
     <span style="font-size:0.95rem; font-weight:600;"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="vertical-align:middle; margin-right:4px;"><path d="M20 8h-2.81a5.985 5.985 0 0 0-1.82-1.96L17 4.41 15.59 3l-2.17 2.17C12.96 5.06 12.49 5 12 5s-.96.06-1.41.17L8.41 3 7 4.41l1.62 1.63C7.88 6.55 7.26 7.22 6.81 8H4v2h2.09c-.05.33-.09.66-.09 1v1H4v2h2v1c0 .34.04.67.09 1H4v2h2.81c1.04 1.79 2.97 3 5.19 3s4.15-1.21 5.19-3H20v-2h-2.09c.05-.33.09-.66.09-1v-1h2v-2h-2v-1c0-.34-.04-.67-.09-1H20V8zm-6 8h-4v-2h4v2zm0-4h-4v-2h4v2z"/></svg>Debug</span>
     <span id="debug-refresh-info" style="color:var(--text-tertiary); font-size:0.65rem;"></span>
+  </div>
+
+  <div class="debug-section">
+    <div class="debug-title">Status</div>
+    <pre id="debug-status" style="background:var(--bg-card); border:1px solid var(--border); border-radius:6px; padding:0.5rem 0.75rem; margin:0; overflow-x:auto; white-space:pre; font-size:0.7rem; color:var(--text-secondary); line-height:1.5;">Loading...</pre>
   </div>
 
   <div class="debug-section">
@@ -2487,6 +2504,7 @@ async function addSession(data, autoSwitch = false) {
       serverMessages = (hist.messages || []).map(m => {
         const obj = { role: m.role, text: m.text };
         if (m.id) obj.id = m.id;
+        if (m.ts) obj.ts = m.ts;
         if (m.parent_id) obj.parentId = m.parent_id;
         if (m.bare_ack) obj.isBareAck = true;
         return obj;
@@ -2528,10 +2546,10 @@ async function addSession(data, autoSwitch = false) {
     if (isReady) {
       addMessage(data.session_id, 'system', 'Claude connected.');
     } else {
-      addMessage(data.session_id, 'system', 'Session started. Waiting for Claude...');
+      addMessage(data.session_id, 'system', 'Session started. Waiting for Claude...', { id: 'waiting-for-claude-' + data.session_id });
     }
   } else if (!isReady) {
-    addMessage(data.session_id, 'system', 'Waiting for Claude...');
+    addMessage(data.session_id, 'system', 'Waiting for Claude...', { id: 'waiting-for-claude-' + data.session_id });
   }
 
   // Restore session state from server's canonical state field
@@ -3270,6 +3288,15 @@ async function refreshDebug() {
   } catch (e) {
     console.warn('Debug refresh error:', e);
   }
+
+  // clawmux status
+  try {
+    const statusResp = await fetch('/api/debug/status');
+    if (statusResp.ok) {
+      const statusData = await statusResp.json();
+      document.getElementById('debug-status').textContent = statusData.output || '(empty)';
+    }
+  } catch {}
 
   // Log tail
   try {

@@ -756,6 +756,28 @@ async def get_debug_log():
     return JSONResponse({"lines": _browser_debug_log})
 
 
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
+
+@app.get("/api/debug/status")
+async def debug_status():
+    """Run `clawmux status` and return plain-text output (ANSI stripped)."""
+    try:
+        result = await asyncio.to_thread(
+            subprocess.run,
+            ["clawmux", "status"],
+            capture_output=True, text=True, timeout=5,
+        )
+        raw = result.stdout or result.stderr or "(no output)"
+        clean = _ANSI_RE.sub("", raw)
+        return JSONResponse({"output": clean})
+    except FileNotFoundError:
+        return JSONResponse({"output": "clawmux not found in PATH"})
+    except subprocess.TimeoutExpired:
+        return JSONResponse({"output": "clawmux status timed out"})
+    except Exception as e:
+        return JSONResponse({"output": f"Error: {e}"})
+
+
 # --- Claude Code Hook Endpoint ---
 
 def _session_from_cwd(cwd: str) -> "SessionInfo | None":
