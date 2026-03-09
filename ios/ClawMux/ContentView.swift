@@ -220,8 +220,11 @@ struct ContentView: View {
     private var groupChatMainView: some View {
         groupChatScrollArea
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .overlay(alignment: .bottom) {
+            .safeAreaInset(edge: .bottom, spacing: 0) {
                 textInputBar
+                    .frame(maxWidth: 380)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.canvas1.ignoresSafeArea(edges: .bottom))
             }
     }
 
@@ -1083,8 +1086,11 @@ struct ContentView: View {
             } else {
                 chatScrollArea
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .overlay(alignment: .bottom) {
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
                         bottomInputArea
+                            .frame(maxWidth: 380)
+                            .frame(maxWidth: .infinity)
+                            .background(Color.canvas1.ignoresSafeArea(edges: .bottom))
                     }
             }
             // Copy toast
@@ -1117,6 +1123,7 @@ struct ContentView: View {
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(Color.cText)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
 
                 // Model label — mirrors web #model-label (clickable)
                 Menu {
@@ -1211,6 +1218,7 @@ struct ContentView: View {
                     .background(Color.glass, in: Capsule())
                     .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
                 }
+                .fixedSize() // prevent SwiftUI from compressing the usage pill
             }
 
             // Connection dot only — mobile web hides #conn-label text and #focus-link
@@ -1278,7 +1286,7 @@ struct ContentView: View {
                             Color.clear.frame(height: 1).id("bottom")
                         }
                         .padding(.horizontal, 24)
-                        .padding(.top, 20).padding(.bottom, 190) // matches web: 20px 24px 190px (mobile override)
+                        .padding(.top, 20).padding(.bottom, 80) // safeAreaInset handles bar overlap; 80px breathing room
                         .frame(minHeight: geo.size.height)
                     }
                     .defaultScrollAnchor(.bottom)

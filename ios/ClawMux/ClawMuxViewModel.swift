@@ -2126,7 +2126,12 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try? JSONSerialization.data(withJSONObject: ["text": text])
-        URLSession.shared.dataTask(with: req) { _, _, _ in }.resume()
+        URLSession.shared.dataTask(with: req) { [weak self] _, resp, _ in
+            // Re-fetch history on success so message appears even if WS broadcast is delayed
+            if let http = resp as? HTTPURLResponse, http.statusCode == 200 {
+                Task { @MainActor in self?.fetchGroupHistory(groupName: groupName) }
+            }
+        }.resume()
     }
 
     // Matches web _disbandGroup → DELETE /api/groupchats/:name
