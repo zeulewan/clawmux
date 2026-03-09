@@ -167,7 +167,7 @@ All modules share global (window-scoped) variables. Dependencies are documented 
 - **`state.js`** — Global shared variables: `sessions` Map, `activeSessionId`, `ws`, recording state, audio state, UI toggles.
 - **`ws.js`** — WebSocket connection (`connect()`), message routing (`handleMessage()`), cursor-based reconnect sync. Handles all incoming WS message types (session_list, session_status, assistant_text, user_text, audio, listening, etc.).
 - **`audio.js`** — Mic recording (MediaRecorder API), TTS playback (Web Audio API with buffered streaming), karaoke word highlighting, VAD (voice activity detection), transport controls (pause/resume/scrub), waveform visualization.
-- **`chat.js`** — `addMessage()` with ID-based dedup, `renderChat()` with lazy loading and virtual scrolling, markdown rendering (marked.js + DOMPurify + highlight.js), KaTeX math, threading/ack UI, text input mode, drag-and-drop file upload, context menus.
+- **`chat.js`** — `addMessage()` with ID-based dedup, `renderChat()` with lazy loading and virtual scrolling, markdown rendering (marked.js + DOMPurify + highlight.js), KaTeX math, threading/ack UI, text input mode, drag-and-drop file upload, context menus. **Thinking bubble (`showTypingIndicator`)**: shows animated dots + current tool activity text when agent is processing. Tool call history is accumulated in `_activityLogStore` for ALL sessions (including background tabs), so switching to a busy agent immediately shows the full tool history since its last message — not just blank dots.
 - **`sidebar.js`** — Agent cards with state indicators (idle/working/speaking), unread badges, drag-to-reorder, voice grid view, settings panel rendering.
 - **`notes.js`** — Per-session scratch notes panel with auto-save.
 
