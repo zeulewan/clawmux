@@ -736,20 +736,35 @@ function _createAgentCard(voiceId, name, state) {
 
 // Move an agent to a different project via API
 async function _groupDropAgents(fromVoice, toVoice, fromSession, toSession) {
-  // If target is already in a group, join it; otherwise create a new group
   const existingGroupId = toSession.group_id || fromSession.group_id;
   if (existingGroupId) {
-    // Add the other agent to the existing group
     const joiningId = toSession.group_id ? fromSession.session_id : toSession.session_id;
-    await fetch(`/api/groups/${existingGroupId}/join/${joiningId}`, { method: 'POST' })
-      .catch(err => console.error('Failed to join group:', err));
+    const resp = await fetch(`/api/groups/${existingGroupId}/join/${joiningId}`, { method: 'POST' })
+      .catch(err => { console.error('Failed to join group:', err); return null; });
+    if (resp && resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      // Update local state immediately — don't wait for WS event
+      for (const sid of (data.session_ids || [fromSession.session_id, toSession.session_id])) {
+        const s = sessions.get(sid);
+        if (s) s.group_id = existingGroupId;
+      }
+      renderSidebar();
+    }
   } else {
-    // Create a new group with both agents
-    await fetch('/api/groups', {
+    const resp = await fetch('/api/groups', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_ids: [fromSession.session_id, toSession.session_id] }),
-    }).catch(err => console.error('Failed to create group:', err));
+    }).catch(err => { console.error('Failed to create group:', err); return null; });
+    if (resp && resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      const gid = data.group_id;
+      if (gid) {
+        fromSession.group_id = gid;
+        toSession.group_id = gid;
+        renderSidebar();
+      }
+    }
   }
 }
 
