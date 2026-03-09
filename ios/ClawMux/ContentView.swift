@@ -775,13 +775,13 @@ struct ContentView: View {
                     }
                 } label: {
                     HStack(spacing: 8) {
-                        // Bouncing dots
+                        // Bouncing dots — matches web typingBounce: up+bright, down+dim, staggered
                         HStack(spacing: 5) {
                             ForEach(0..<3, id: \.self) { i in
                                 Circle()
-                                    .fill(color.opacity(0.75))
+                                    .fill(color.opacity(isPulsing ? 1.0 : 0.45))
                                     .frame(width: 7, height: 7)
-                                    .offset(y: isPulsing ? -4 : 4)
+                                    .offset(y: isPulsing ? -5 : 0)
                                     .animation(
                                         .easeInOut(duration: 0.5).repeatForever(autoreverses: true).delay(Double(i) * 0.18),
                                         value: isPulsing)
@@ -1224,8 +1224,8 @@ struct ContentView: View {
     // MARK: - Helpers
 
     private var statusColor: Color {
-        if vm.isRecording { return .cDanger }
-        if vm.isPlaying   { return .cAccent }
+        if vm.isRecording { return .cSuccess }   // green matches web recording state
+        if vm.isPlaying   { return .cWarning }   // orange matches web interruptable state
         if vm.isProcessing || vm.activeSession?.isThinking == true { return .cWarning }
         return .cSuccess
     }
