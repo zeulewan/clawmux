@@ -201,7 +201,7 @@ struct ContentView: View {
     private var sidebarStripView: some View {
         VStack(spacing: 0) {
             // Agent list — icons when collapsed, full cards when expanded
-            ScrollView(showsIndicators: false) {
+            ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: sidebarExpanded ? 2 : 1) {
                     if sidebarExpanded {
                         // Group chat cards — separate section at top, matches web sidebar-gc-section
@@ -264,6 +264,7 @@ struct ContentView: View {
                         }
                     }
                 }
+                .frame(maxWidth: .infinity)  // prevent horizontal expansion / overscroll
                 .padding(.vertical, 4)
             }
 
@@ -318,7 +319,7 @@ struct ContentView: View {
         }
         .frame(width: sidebarExpanded ? 220 : 48)
         .frame(maxHeight: .infinity)
-        .background(Color.canvas2)
+        .background(.ultraThinMaterial)  // frosted glass — matches mobile web backdrop-filter: blur(20px)
         .overlay(alignment: .trailing) {
             Color.cBorder.opacity(0.6).frame(width: 0.5)
         }
@@ -1072,7 +1073,7 @@ struct ContentView: View {
                             }
                         }
                     }
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 9, weight: .medium))  // mobile web: font-size 0.72rem ≈ 9pt
                     .padding(.horizontal, 8).padding(.vertical, 4)
                     .background(Color.glass, in: Capsule())
                     .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
@@ -1091,7 +1092,7 @@ struct ContentView: View {
                 .background(Color.glass, in: Capsule())
                 .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
         }
-        .padding(.horizontal, 14).padding(.vertical, 7)
+        .padding(.horizontal, 12).padding(.vertical, 5)  // mobile web: padding 3px 12px
         .background {
             if #available(iOS 26, *) {
                 Color.clear.glassEffect(.regular, in: .rect)
