@@ -11,6 +11,7 @@ struct ChatMessage: Identifiable, Equatable {
     let role: String  // "user", "assistant", "system", "agent"
     let text: String
     var timestamp: Date = Date()
+    var msgId: String? = nil  // server-assigned message ID for dedup
 }
 
 /// Canonical agent state matching the backend AgentState enum.
@@ -882,10 +883,13 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         }
     }
 
-    private func addMessage(_ sessionId: String, role: String, text: String, ts: Double? = nil) {
+    private func addMessage(_ sessionId: String, role: String, text: String, ts: Double? = nil, msgId: String? = nil) {
         guard let idx = sessionIndex(sessionId) else { return }
+        // Deduplicate by server message ID
+        if let msgId, sessions[idx].messages.contains(where: { $0.msgId == msgId }) { return }
         var msg = ChatMessage(role: role, text: text)
         if let ts { msg.timestamp = Date(timeIntervalSince1970: ts) }
+        msg.msgId = msgId
         sessions[idx].messages.append(msg)
         saveChats()
     }
@@ -929,7 +933,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
 
     // MARK: - Server-Side History
 
-    private func fetchHistory(voiceId: String, sessionId: String) {
+    private func fetchHistory(voiceId: String, sessionId: String, initialState: AgentState? = nil) {
         guard let baseURL = httpBaseURL() else { return }
         let url = baseURL.appendingPathComponent("api/history/\(voiceId)")
         URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
@@ -945,12 +949,16 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     else { return nil }
                     var m = ChatMessage(role: role, text: text)
                     if let ts = msg["ts"] as? Double { m.timestamp = Date(timeIntervalSince1970: ts) }
+                    if let mid = msg["id"] as? String { m.msgId = mid }
                     return m
                 }
                 if !chatMessages.isEmpty {
-                    // Keep any system messages, prepend history
-                    let systemMessages = self.sessions[idx].messages.filter { $0.role == "system" }
-                    self.sessions[idx].messages = chatMessages + systemMessages
+                    self.sessions[idx].messages = Array(chatMessages)
+                } else if let state = initialState {
+                    // No history yet — show appropriate placeholder (mirrors web addSession)
+                    let isReady = state != .starting && state != .dead
+                    let placeholder = isReady ? "Claude connected." : "Session started. Waiting for Claude..."
+                    self.sessions[idx].messages = [ChatMessage(role: "system", text: placeholder)]
                 }
             }
         }.resume()
@@ -1289,15 +1297,22 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         // Session-scoped messages
         case "assistant_text":
             if let sid = sessionId, let t = json["text"] as? String {
-                // In typing mode there is no audio follow-up — go straight to ready
-                if typingMode { updateStatusText("Ready", for: sid) }
+                let fireAndForget = json["fire_and_forget"] as? Bool ?? false
                 stopThinkingSound()
-                addMessage(sid, role: "assistant", text: t, ts: json["ts"] as? Double)
+                addMessage(sid, role: "assistant", text: t, ts: json["ts"] as? Double, msgId: json["msg_id"] as? String)
                 if sid == activeSessionId {
                     isProcessing = false
+                    if fireAndForget {
+                        // Fire-and-forget: just show message, no state transition
+                    } else {
+                        // Converse-driven: transition to listening state (mirrors web setSessionState 'listening')
+                        if let idx = sessionIndex(sid) { sessions[idx].state = .idle }
+                        if typingMode { updateStatusText("Ready", for: sid) }
+                    }
                     updateLiveActivity()
                 } else if let idx = sessionIndex(sid) {
                     sessions[idx].unreadCount += 1
+                    if !fireAndForget { sessions[idx].state = .idle }
                 }
                 // Notify in background, gated by per-mode toggle
                 if appInBackground {
@@ -1313,8 +1328,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             }
 
         case "user_text":
-            if let sid = sessionId, let t = json["text"] as? String {
-                addMessage(sid, role: "user", text: t, ts: json["ts"] as? Double)
+            if let sid = sessionId, let t = json["text"] as? String, !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                addMessage(sid, role: "user", text: t, ts: json["ts"] as? Double, msgId: json["msg_id"] as? String)
                 if sid == activeSessionId && showTranscriptPreview {
                     clearTranscriptPreview()
                 }
@@ -1325,30 +1340,60 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             }
 
         case "activity_text":
-            // Tool call log entry — ignore for now (future: show in activity feed)
-            break
+            if verboseMode, let sid = sessionId, let t = json["text"] as? String {
+                addMessage(sid, role: "system", text: "⚙ \(t)", ts: json["ts"] as? Double)
+            }
 
         case "compaction_status":
             if let sid = sessionId, let idx = sessionIndex(sid) {
                 let compacting = json["compacting"] as? Bool ?? false
-                sessions[idx].state = compacting ? .compacting : .idle
-                if sid == activeSessionId { updateLiveActivity() }
+                // When compaction ends, agent is still processing (mirrors web: 'compacting' ? 'compacting' : 'processing')
+                sessions[idx].state = compacting ? .compacting : .processing
+                if sid == activeSessionId {
+                    if !typingMode { startThinkingSound() }
+                    updateLiveActivity()
+                }
             }
 
         case "agent_message":
-            // Inter-agent message delivered to this session
-            if let sid = sessionId, let content = json["content"] as? String,
-                let from = json["from"] as? String
-            {
-                addMessage(sid, role: "agent", text: "[\(from)]: \(content)", ts: json["ts"] as? Double)
+            // Inter-agent message — payload is nested under json["message"]
+            if let sid = sessionId, let msg = json["message"] as? [String: Any] {
+                let content = msg["content"] as? String ?? ""
+                let senderName = (msg["sender_name"] as? String ?? msg["sender"] as? String ?? "?")
+                let recipName = (msg["recipient_name"] as? String ?? msg["recipient"] as? String ?? "?")
+                let sName = senderName.prefix(1).uppercased() + senderName.dropFirst()
+                let rName = recipName.prefix(1).uppercased() + recipName.dropFirst()
+                let isBareAck = (msg["bare_ack"] as? Bool ?? false) || ((msg["parent_id"] != nil) && content.isEmpty)
+                if isBareAck { break }  // bare acks have no text to display without threading UI
+                // Determine direction: if this session is the sender, show "to"; otherwise "from"
+                let senderSession = msg["sender"] as? String
+                let direction = senderSession == sid ? "to \(rName)" : "from \(sName)"
+                let text = "[Agent msg \(direction)] \(content)"
+                addMessage(sid, role: "system", text: text, ts: json["ts"] as? Double, msgId: msg["id"] as? String)
                 if sid != activeSessionId, let idx = sessionIndex(sid) {
                     sessions[idx].unreadCount += 1
                 }
             }
 
         case "inbox_update":
-            // Badge update — unread_count already tracked per-session via session_status
-            break
+            // Payload: {"count": N, "latest": {"preview": "..."}}
+            if let sid = sessionId, let idx = sessionIndex(sid),
+               let count = json["count"] as? Int
+            {
+                sessions[idx].unreadCount = count
+            }
+
+        case "user_ack":
+            // Bare thumbs-up ack — store as threading marker (no displayed text)
+            if let sid = sessionId, let msgId = json["msg_id"] as? String {
+                var ack = ChatMessage(role: "agent", text: "")
+                ack.serverId = json["ack_id"] as? String
+                ack.parentId = msgId
+                ack.isBareAck = true
+                if let idx = sessionIndex(sid) {
+                    sessions[idx].messages.append(ack)
+                }
+            }
 
         case "audio":
             if let sid = sessionId, let b64 = json["data"] as? String,
@@ -1440,12 +1485,12 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
 
         case "done":
             if let sid = sessionId, let idx = sessionIndex(sid) {
-                let stillProcessing = json["processing"] as? Bool ?? false
-                sessions[idx].state = stillProcessing ? .thinking : .idle
-                if stillProcessing {
-                    updateStatusText("Thinking...", for: sid)
-                    if sid == activeSessionId, !typingMode { startThinkingSound() }
-                } else {
+                // Mirror web: if audio still active (playing or buffered), stay — let
+                // playback completion drive the next transition via _checkPendingListen
+                let audioStillActive = (isPlaying && playingSessionId == sid)
+                    || !sessions[idx].audioBuffer.isEmpty
+                if !audioStillActive {
+                    sessions[idx].state = .idle
                     stopThinkingSound()
                     if !sessions[idx].pendingListen {
                         updateStatusText("Ready", for: sid)
@@ -1458,15 +1503,16 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             }
 
         case "session_ended":
-            // Fire-and-forget turn done — session still alive, reset to idle
-            if let sid = sessionId, let idx = sessionIndex(sid) {
-                sessions[idx].state = .idle
-                updateStatusText("Ready", for: sid)
+            // Agent said goodbye — add message and auto-terminate after 3s (mirrors web)
+            if let sid = sessionId {
+                addMessage(sid, role: "system", text: "Session ended.")
                 if sid == activeSessionId {
                     isProcessing = false
                     stopThinkingSound()
-                    statusText = "Ready"
                     updateLiveActivity()
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+                    self?.terminateSession(sid)
                 }
             }
 
@@ -1515,23 +1561,10 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         session.toolName = dict["tool_name"] as? String ?? ""
         session.unreadCount = dict["unread_count"] as? Int ?? 0
 
-        let isConnected = agentState != .starting && agentState != .dead
-        if isConnected {
-            session.messages.append(ChatMessage(role: "system", text: "Claude connected."))
-        } else {
-            session.messages.append(
-                ChatMessage(role: "system", text: "Session started. Waiting for Claude..."))
-        }
-
-        // If idle and not in an active conversation, agent is waiting for input
-        if agentState == .idle {
-            session.pendingListen = true
-        }
-
         sessions.append(session)
 
-        // Fetch message history from server
-        fetchHistory(voiceId: voice, sessionId: sid)
+        // Fetch message history from server; add a placeholder only if history comes back empty
+        fetchHistory(voiceId: voice, sessionId: sid, initialState: agentState)
     }
 
     func switchToSession(_ id: String) {
