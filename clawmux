@@ -238,7 +238,7 @@ def cmd_status(args):
                     buf = _io.StringIO()
                     _print_status_table(file=buf)
                     output = buf.getvalue()
-                except Exception:
+                except (Exception, SystemExit):
                     output = "Hub unreachable — waiting for reconnect...\n"
                 # Move cursor home and overwrite (no clear = no flash)
                 print("\033[H", end="", flush=True)
