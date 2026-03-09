@@ -169,6 +169,8 @@ struct ContentView: View {
         return Group {
             if vm.isFocusMode {
                 focusModeView
+            } else if vm.activeGroupName != nil {
+                groupChatMainView
             } else if vm.activeSessionId != nil {
                 chatMainView
             } else {
@@ -194,6 +196,124 @@ struct ContentView: View {
                 .foregroundStyle(Color.cTextTer)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Group Chat View
+
+    private var groupChatMainView: some View {
+        VStack(spacing: 0) {
+            groupChatHeader
+            groupChatScrollArea
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay(alignment: .bottom) {
+                    textInputBar
+                        .frame(maxWidth: 380)
+                }
+        }
+    }
+
+    private var groupChatHeader: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "bubble.left.and.bubble.right.fill")
+                .font(.system(size: 13))
+                .foregroundStyle(Color.cAccent)
+            Text(vm.activeGroupName ?? "Group Chat")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Color.cText)
+                .lineLimit(1)
+            Spacer()
+            let dotColor: Color = vm.isConnected ? .cSuccess : vm.isConnecting ? .cCaution : .cDanger
+            Circle()
+                .fill(dotColor)
+                .frame(width: 8, height: 8)
+                .padding(6)
+                .background(Color.glass, in: Capsule())
+                .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
+        }
+        .padding(.horizontal, 12).padding(.vertical, 5)
+        .background {
+            if #available(iOS 26, *) {
+                Color.clear.glassEffect(.regular, in: .rect)
+            } else {
+                Color.canvas1.opacity(0.95)
+            }
+        }
+    }
+
+    private var groupChatScrollArea: some View {
+        ScrollViewReader { proxy in
+            ScrollView(showsIndicators: false) {
+                LazyVStack(spacing: 8) {
+                    ForEach(Array(vm.groupMessages.enumerated()), id: \.element.id) { idx, msg in
+                        groupMessageBubble(msg, isLast: idx == vm.groupMessages.count - 1)
+                    }
+                    Color.clear.frame(height: 90).id("gc-bottom")
+                }
+                .padding(.horizontal, 12).padding(.top, 8)
+            }
+            .onChange(of: vm.groupMessages.count) { _, _ in
+                withAnimation(.easeOut(duration: 0.18)) {
+                    proxy.scrollTo("gc-bottom", anchor: .bottom)
+                }
+            }
+            .onAppear {
+                proxy.scrollTo("gc-bottom", anchor: .bottom)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func groupMessageBubble(_ msg: GroupChatMessage, isLast: Bool) -> some View {
+        let isUser = msg.role == "user" && msg.sender.isEmpty
+        let color = isUser ? Color.clear : voiceColor(msg.sender)
+        let senderLabel = isUser ? nil : (ALL_VOICES.first { $0.id == msg.sender }?.name ?? msg.sender)
+
+        let shape = UnevenRoundedRectangle(
+            topLeadingRadius: isUser ? 18 : 4,
+            bottomLeadingRadius: 18,
+            bottomTrailingRadius: isUser ? 4 : 18,
+            topTrailingRadius: 18,
+            style: .continuous)
+
+        return HStack(alignment: .bottom, spacing: 0) {
+            if isUser { Spacer(minLength: 56) }
+            VStack(alignment: isUser ? .trailing : .leading, spacing: 2) {
+                // Sender label for agent messages
+                if let label = senderLabel {
+                    Text(label)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(color)
+                        .padding(.horizontal, 4)
+                }
+                // Message bubble
+                MarkdownContentView(text: msg.text, foreground: Color.cText,
+                                    fontSize: CGFloat(vm.chatFontSize))
+                    .padding(.horizontal, isUser ? 12 : 14)
+                    .padding(.vertical, 8)
+                    .background(shape.fill(isUser ? Color.cAccent.opacity(0.18) : Color.cCard))
+                    .overlay(shape.fill(isUser ? Color.clear : color.opacity(0.20)))
+                    .overlay(shape.strokeBorder(
+                        isUser ? Color.clear : Color(hex: 0x2A3A52), lineWidth: 1))
+                    .contextMenu {
+                        Button {
+                            UIPasteboard.general.string = msg.text
+                            withAnimation { showCopiedToast = true }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                withAnimation { showCopiedToast = false }
+                            }
+                        } label: { Label("Copy", systemImage: "doc.on.doc") }
+                    }
+                // Timestamp on last message
+                if isLast {
+                    Text(shortTime(Date(timeIntervalSince1970: msg.ts)))
+                        .font(.system(size: 9))
+                        .foregroundStyle(Color.cTextTer)
+                        .padding(.horizontal, 4)
+                }
+            }
+            if !isUser { Spacer(minLength: 56) }
+        }
+        .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
     }
 
     // MARK: - Sidebar (collapsible, 48px → 220px, overlays main when expanded)
