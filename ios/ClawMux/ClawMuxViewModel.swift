@@ -557,6 +557,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     private var pttInterrupted = false
     private var recordingStartedAt: Date?
     private var pingWatchdogTimer: Timer?
+    private var reconnectAttempt = 0
 
     // MARK: - Init
 
@@ -695,7 +696,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 else { return }
                 switch kind {
                 case .began:
-                    // Another app took audio focus — pause keepalive
+                    // Another app took audio focus — stop recording/TTS, pause keepalive
+                    if self.isRecording { self.stopRecording(discard: false) }
+                    if self.isPlaying { self.stopMessageTTS() }
                     self.silencePlayer?.pause()
                 case .ended:
                     // Re-activate audio session and restart keepalive
@@ -1026,11 +1029,14 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
 
     private func scheduleReconnect() {
         reconnectWork?.cancel()
+        // Exponential backoff: 2s, 4s, 8s, 16s, capped at 30s
+        let delay = min(30.0, 2.0 * pow(2.0, Double(reconnectAttempt)))
+        reconnectAttempt += 1
         let item = DispatchWorkItem { [weak self] in
             Task { @MainActor in self?.connect() }
         }
         reconnectWork = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: item)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
     }
 
     private func receiveMessage() {
@@ -1076,8 +1082,11 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         guard let data = try? JSONSerialization.data(withJSONObject: dict),
             let string = String(data: data, encoding: .utf8)
         else { return }
-        webSocketTask?.send(.string(string)) { error in
-            if let error { print("[ws] Send error: \(error)") }
+        webSocketTask?.send(.string(string)) { [weak self] error in
+            if let error {
+                print("[ws] Send error: \(error)")
+                Task { @MainActor in self?.handleDisconnect() }
+            }
         }
     }
 
@@ -2722,6 +2731,7 @@ extension ClawMuxViewModel: URLSessionWebSocketDelegate {
         Task { @MainActor in
             self.isConnected = true
             self.isConnecting = false
+            self.reconnectAttempt = 0   // reset backoff on successful connection
             self.statusText = "Connected"
             self.setupAudioSession()
             self.startPingWatchdog()
