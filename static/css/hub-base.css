@@ -1246,7 +1246,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   height: 38px;
   border-radius: 50%;
   border: none;
-  background: var(--blue);
+  background: #2563eb;
   color: #fff;
   font-size: 1.1rem;
   cursor: pointer;
@@ -1255,9 +1255,9 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   justify-content: center;
   transition: all 0.15s;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(74,144,255,0.3);
+  box-shadow: 0 2px 8px rgba(37,99,235,0.4);
 }
-#text-send:hover { background: #3a80ef; transform: scale(1.05); }
+#text-send:hover { background: #1d4ed8; transform: scale(1.05); }
 #text-send:disabled { opacity: 0.3; cursor: not-allowed; box-shadow: none; transform: none; }
 /* Stop/cancel buttons — absolute positioned, fade in/out via .btn-visible */
 #mic-cancel, #voice-stop {
