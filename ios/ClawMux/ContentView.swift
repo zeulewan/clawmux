@@ -876,9 +876,9 @@ struct ContentView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color.cText)
                     .padding(.horizontal, 18).padding(.vertical, 9)
-                    .background(Color.cCard, in: Capsule())
+                    .background(.ultraThinMaterial, in: Capsule())
                     .overlay(Capsule().strokeBorder(Color.cBorder, lineWidth: 0.5))
-                    .shadow(color: .black.opacity(0.4), radius: 10)
+                    .shadow(color: .black.opacity(0.4), radius: 12)
                     .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
                     .padding(.top, 68)
             }
