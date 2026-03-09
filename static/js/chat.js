@@ -923,6 +923,16 @@ function _showContextMenu(msgEl, x, y) {
 }
 
 let copyToastTimer = null;
+let _notifyToastTimer = null;
+function showToast(msg, level) {
+  const toast = document.getElementById('notify-toast');
+  if (!toast) return;
+  toast.textContent = msg || '';
+  toast.className = 'visible' + (level && level !== 'info' ? ` level-${level}` : '');
+  if (_notifyToastTimer) clearTimeout(_notifyToastTimer);
+  _notifyToastTimer = setTimeout(() => toast.classList.remove('visible'), 4000);
+}
+
 function showCopyToast(msg) {
   const toast = document.getElementById('copy-toast');
   toast.textContent = msg || 'Copied!';

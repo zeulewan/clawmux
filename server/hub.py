@@ -1926,6 +1926,36 @@ async def send_message(request: Request):
     return JSONResponse({"id": msg.id, "state": msg.state})
 
 
+@app.post("/api/notify/user")
+async def notify_user(request: Request):
+    """Send a visual notification to the browser (no TTS).
+    Requires X-ClawMux-Token header. Used by external tools (cron, pollers, etc.)
+    to display a toast/banner in the hub UI.
+
+    Body: {"message": "...", "title": "...", "level": "info|warning|error"}
+    """
+    from hub_config import EXTERNAL_TOKEN
+    token = request.headers.get("X-ClawMux-Token", "")
+    if not token or token != EXTERNAL_TOKEN:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    data = await request.json()
+    message = data.get("message", "").strip()
+    title = data.get("title", "").strip()
+    level = data.get("level", "info")
+    if not message:
+        return JSONResponse({"error": "message is required"}, status_code=400)
+
+    await send_to_browser({
+        "type": "user_notification",
+        "message": message,
+        "title": title,
+        "level": level,
+    })
+    log.info("User notification sent: [%s] %s", level, message)
+    return JSONResponse({"ok": True})
+
+
 @app.post("/api/messages/external")
 async def send_external_message(request: Request):
     """Accept a message from an authorized external system (e.g. OpenClaw).

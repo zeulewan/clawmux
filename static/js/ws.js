@@ -230,6 +230,20 @@ function handleMessage(data) {
     removeSession(data.session_id);
     return;
   }
+  if (type === 'user_notification') {
+    const level = data.level || 'info';
+    const title = data.title || '';
+    const msg = data.message || '';
+    const text = title ? `${title}: ${msg}` : msg;
+    if (typeof showToast === 'function') {
+      showToast(text, level);
+    } else {
+      // Fallback: browser notification or console
+      console.info(`[notify] ${text}`);
+    }
+    return;
+  }
+
   if (type === 'groupchat_created' || type === 'groupchat_updated') {
     const g = data.group;
     if (g) { groupChats.set(g.name.toLowerCase(), g); renderSidebar(); }
