@@ -1696,6 +1696,12 @@ function pttStart(e) {
     return;
   }
 
+  // Check for group chat voice mode
+  if (!pendingListenSessionId && !activeSessionId && typeof activeGroupId !== 'undefined' && activeGroupId) {
+    startRecording('__group__');
+    return;
+  }
+
   const sid = pendingListenSessionId || activeSessionId;
   if (!sid) return;
   if (pendingListenSessionId) pendingListenSessionId = null;

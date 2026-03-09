@@ -967,11 +967,17 @@ function _makeGroupMsgEl(msg) {
   labelEl.className = 'msg-sender-label';
   labelEl.textContent = label;
   if (color) labelEl.style.color = color;
-  const textEl = document.createElement('span');
-  textEl.className = 'msg-text';
-  textEl.textContent = msg.text;
   div.appendChild(labelEl);
-  div.appendChild(textEl);
+  // Use markdown rendering if available, fall back to plain text
+  const mdEl = (typeof _renderMarkdown === 'function') ? _renderMarkdown(msg.text || '') : null;
+  if (mdEl) {
+    div.appendChild(mdEl);
+  } else {
+    const textEl = document.createElement('span');
+    textEl.className = 'msg-text';
+    textEl.textContent = msg.text;
+    div.appendChild(textEl);
+  }
   return div;
 }
 
