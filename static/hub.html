@@ -1991,7 +1991,8 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
     padding-left: calc(48px + 8px) !important;
     padding-right: 8px !important;
   }
-  #welcome-view { padding-top: 52px; }
+  #welcome-view { padding-top: 52px; padding-left: 56px; }
+  #settings-page { padding-left: 56px; padding-top: 60px; }
 
   /* === Notes panel: overlay like sidebar, don't push chat === */
   #notes-panel {
@@ -2001,6 +2002,9 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
     width: 0 !important;
     min-width: 0 !important;
     padding-top: 44px;
+    background: var(--bg-glass) !important;
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
   }
   #notes-panel.open {
     width: min(300px, 85vw) !important;
