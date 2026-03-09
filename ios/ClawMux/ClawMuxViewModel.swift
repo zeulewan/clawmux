@@ -1684,7 +1684,10 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     let player = try AVAudioPlayer(data: data)
                     self.ttsPlayer = player
                     player.delegate = self
-                    player.play()
+                    if !player.play() {
+                        self.ttsPlayer = nil
+                        self.ttsPlayingMessageId = nil
+                    }
                 } catch {
                     self.ttsPlayingMessageId = nil
                 }
@@ -1982,16 +1985,21 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         do {
             audioPlayer = try AVAudioPlayer(data: data)
             audioPlayer?.delegate = self
-            audioPlayer?.play()
-        } catch {
-            print("[audio] Buffered playback error: \(error)")
-            if let idx2 = sessionIndex(sessionId), !sessions[idx2].audioBuffer.isEmpty {
-                playBufferedAudio(sessionId)
+            let started = audioPlayer?.play() ?? false
+            if started {
+                startPlaybackVAD()
             } else {
+                print("[audio] Buffered play() returned false for session \(sessionId)")
+                audioPlayer = nil
                 isPlaying = false
                 playingSessionId = nil
                 sendJSON(["session_id": sessionId, "type": "playback_done"])
             }
+        } catch {
+            print("[audio] Buffered playback error: \(error)")
+            isPlaying = false
+            playingSessionId = nil
+            sendJSON(["session_id": sessionId, "type": "playback_done"])
         }
     }
 
