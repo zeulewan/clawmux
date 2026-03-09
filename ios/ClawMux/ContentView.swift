@@ -1034,7 +1034,9 @@ struct ContentView: View {
                                         .foregroundStyle(Color.cTextTer)
                                         .padding(.vertical, 6).padding(.horizontal, 12)
                                         .background(Color.cCard.opacity(0.6), in: Capsule())
+                                        .overlay(Capsule().strokeBorder(Color.cBorder.opacity(0.5), lineWidth: 0.5))
                                 }
+                                .frame(maxWidth: .infinity)
                                 .padding(.top, 4)
                             }
                             Spacer(minLength: 0).frame(maxHeight: .infinity)
