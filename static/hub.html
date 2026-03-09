@@ -2622,15 +2622,16 @@ function switchTab(sessionId, manual = false) {
 
   // Render chat messages (force scroll — switching sessions)
   renderChat(true);
-  // Fill viewport if initial batch is all filtered/bare-ack messages (common on mobile)
-  if (typeof _fillViewportMessages === 'function') _fillViewportMessages();
   updateLayout();
   updateChatStopButton();
   updateHeaderProjectStatus();
   startElapsedTimer();
 
-  // Scroll to bottom after layout is applied
-  requestAnimationFrame(() => { chatScrollToBottom(true); });
+  // Scroll to bottom, then check if viewport needs filling (deferred so layout is settled)
+  requestAnimationFrame(() => {
+    chatScrollToBottom(true);
+    if (typeof _fillViewportMessages === 'function') _fillViewportMessages();
+  });
 
   if (s) {
     setStatus(s.statusText || 'Ready');

@@ -482,56 +482,45 @@ function _loadMoreMessages() {
   if (limit >= s.messages.length) return; // all loaded
   const oldHeight = chatArea.scrollHeight;
 
-  // Load batches until we've accumulated enough *visible* messages.
-  // Counting is pure data — no rendering — so no flashing.
-  const MIN_VISIBLE = Math.ceil(_CHAT_BATCH / 2); // target ≥25 visible messages per press
+  // Load batches (data-only, no rendering) until ≥25 visible messages found.
+  // Cap at 10 batches so we never exhaust the whole history from one button press.
+  const MIN_VISIBLE = Math.ceil(_CHAT_BATCH / 2);
+  const MAX_BATCHES = 10;
   let visibleFound = 0;
   let iters = 0;
-  while (iters < 20 && limit < s.messages.length && visibleFound < MIN_VISIBLE) {
+  while (iters < MAX_BATCHES && limit < s.messages.length && visibleFound < MIN_VISIBLE) {
     const prevLimit = limit;
     limit = Math.min(limit + _CHAT_BATCH, s.messages.length);
-    const batchStart = s.messages.length - limit;
-    const batchEnd = s.messages.length - prevLimit;
-    visibleFound += _countVisibleInBatch(s.messages.slice(batchStart, batchEnd));
+    visibleFound += _countVisibleInBatch(s.messages.slice(s.messages.length - limit, s.messages.length - prevLimit));
     iters++;
   }
 
   _chatRenderLimit.set(activeSessionId, limit);
-  renderChat(); // single render, no forceScroll (preserve reading position)
-  // Double rAF — first frame triggers layout, second reads settled scrollHeight
+  renderChat(); // single render, no forceScroll
+  // Guard the programmatic scroll so it doesn't re-trigger the scroll listener
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
+      _scrollLoadPending = true;
       chatArea.scrollTop = chatArea.scrollHeight - oldHeight;
+      requestAnimationFrame(() => { _scrollLoadPending = false; });
     });
   });
 }
 
-// Fill the viewport on tab switch if the initial batch is all filtered messages.
-// Pre-counts visible messages (no rendering) then calls renderChat ONCE.
-// Never called from _loadMoreMessages to avoid fighting scroll restore.
+// Fill the viewport on tab switch when the initial batch is mostly filtered messages.
+// Called deferred (via rAF in switchTab) so layout is settled before scrollHeight check.
+// Loads a fixed 3 extra batches max — never exhausts history (preserves load-more button).
 function _fillViewportMessages() {
   if (!activeSessionId) return;
   const s = sessions.get(activeSessionId);
   if (!s) return;
-  if (chatArea.scrollHeight > chatArea.clientHeight + 10) return; // already filled
-  let limit = _getChatLimit(activeSessionId);
-  if (limit >= s.messages.length) return; // no more messages
-  // Load batches until we find at least MIN_VISIBLE visible messages to show
-  const MIN_VISIBLE = _CHAT_BATCH;
-  let visibleFound = 0;
-  let iters = 0;
-  while (iters < 20 && limit < s.messages.length && visibleFound < MIN_VISIBLE) {
-    const prevLimit = limit;
-    limit = Math.min(limit + _CHAT_BATCH, s.messages.length);
-    const batchStart = s.messages.length - limit;
-    const batchEnd = s.messages.length - prevLimit;
-    visibleFound += _countVisibleInBatch(s.messages.slice(batchStart, batchEnd));
-    iters++;
-  }
-  if (limit !== _getChatLimit(activeSessionId)) {
-    _chatRenderLimit.set(activeSessionId, limit);
-    renderChat(true); // single render
-  }
+  if (chatArea.scrollHeight > chatArea.clientHeight + 10) return; // viewport already filled
+  const limit = _getChatLimit(activeSessionId);
+  if (limit >= s.messages.length) return;
+  // Load up to 3 extra batches (150 messages) — fixed cap to preserve load-more button
+  const newLimit = Math.min(limit + _CHAT_BATCH * 3, s.messages.length);
+  _chatRenderLimit.set(activeSessionId, newLimit);
+  renderChat(true); // single render
 }
 
 // Scroll-to-top listener for lazy loading + scroll-to-bottom unloading
