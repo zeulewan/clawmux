@@ -428,6 +428,15 @@ function handleMessage(data) {
       s.audioBuffer.push({ data: data.data, words: data.words || null, msgId: data.msg_id || null });
     }
   } else if (type === 'listening') {
+    // Show "ready" indicator on first idle transition (startup)
+    if (data.state === 'idle' && s.sidebarState === 'starting') {
+      // Remove "Waiting for Claude..." placeholder
+      if (s) s.messages = (s.messages || []).filter(m => m.id !== 'waiting-for-claude-' + session_id);
+      const waitEl = chatArea && chatArea.querySelector('[data-msg-id="waiting-for-claude-' + session_id + '"]');
+      if (waitEl) waitEl.remove();
+      cueSessionReady();
+      if (typeof addMessage === 'function') addMessage(session_id, 'system', '● ready');
+    }
     // Defer transition to listening if audio is still playing (speak → wait race)
     const isPlaying = (currentAudio && currentAudio.sessionId === session_id) ||
                       (currentBufferedPlayer && currentBufferedPlayer.sessionId === session_id) ||

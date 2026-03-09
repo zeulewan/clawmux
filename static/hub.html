@@ -765,7 +765,7 @@ async function addSession(data, autoSwitch = false) {
   if (autoSwitch) switchTab(data.session_id);
   if (serverMessages.length === 0) {
     if (isReady) {
-      addMessage(data.session_id, 'system', 'Claude connected.');
+      addMessage(data.session_id, 'system', '● ready');
     } else {
       addMessage(data.session_id, 'system', 'Session started. Waiting for Claude...', { id: 'waiting-for-claude-' + data.session_id });
     }
