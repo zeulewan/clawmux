@@ -406,7 +406,7 @@ function renderChat(forceScroll = false) {
   if (hasMore) {
     const loader = document.createElement('div');
     loader.id = 'chat-load-more';
-    loader.style.cssText = 'text-align:center;padding:8px;font-size:0.8em;color:var(--text-tertiary,#666);cursor:pointer;';
+    loader.style.cssText = 'text-align:center;padding:8px;font-size:0.8em;color:var(--text-tertiary,#666);cursor:pointer;touch-action:manipulation;';
     loader.textContent = '\u25B2 Load older messages';
     loader.onclick = () => _loadMoreMessages();
     chatArea.appendChild(loader);
@@ -471,13 +471,14 @@ function _loadMoreMessages() {
   if (!s) return;
   const currentLimit = _getChatLimit(activeSessionId);
   if (currentLimit >= s.messages.length) return; // all loaded
-  // Save scroll position relative to content height
+  // Save scroll position relative to content height before rebuild
   const oldHeight = chatArea.scrollHeight;
   _chatRenderLimit.set(activeSessionId, currentLimit + _CHAT_BATCH);
   renderChat();
-  // Restore scroll position — keep user at the same content
-  const newHeight = chatArea.scrollHeight;
-  chatArea.scrollTop = newHeight - oldHeight;
+  // Defer scroll restoration — mobile browsers may not update scrollHeight synchronously after DOM rebuild
+  requestAnimationFrame(() => {
+    chatArea.scrollTop = chatArea.scrollHeight - oldHeight;
+  });
 }
 
 // Scroll-to-top listener for lazy loading + scroll-to-bottom unloading
