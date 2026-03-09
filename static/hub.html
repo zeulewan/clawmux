@@ -2581,7 +2581,15 @@ function switchTab(sessionId, manual = false) {
   // Show voice name in header + tint background
   const activeVoiceEl = document.getElementById('active-voice');
   if (s) {
-    activeVoiceEl.textContent = voiceDisplayName(s.voice);
+    if (s.group_id) {
+      const memberNames = [];
+      for (const [, sess] of sessions) {
+        if (sess.group_id === s.group_id) memberNames.push(voiceDisplayName(sess.voice));
+      }
+      activeVoiceEl.textContent = memberNames.join(', ');
+    } else {
+      activeVoiceEl.textContent = voiceDisplayName(s.voice);
+    }
     const vc = voiceColor(s.voice);
     activeVoiceEl.style.color = vc;
     activeVoiceEl.style.display = 'inline';

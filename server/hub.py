@@ -347,6 +347,13 @@ async def lifespan(app: FastAPI):
     voice.reload_pronunciation_overrides()
     await agents_store.load()
     await session_mgr.cleanup_stale_sessions()
+    # Rebuild _groups from session group_id fields (survives hub reload)
+    for s in session_mgr.sessions.values():
+        if s.group_id:
+            if s.group_id not in _groups:
+                _groups[s.group_id] = {"session_ids": []}
+            if s.session_id not in _groups[s.group_id]["session_ids"]:
+                _groups[s.group_id]["session_ids"].append(s.session_id)
     broker.start()
     timeout_task = asyncio.create_task(session_mgr.run_timeout_loop())
     hb_task = asyncio.create_task(heartbeat_loop())
