@@ -1440,6 +1440,19 @@ struct ContentView: View {
                         .foregroundStyle(pttDragOffset < -80 ? Color.cDanger : Color.cTextTer)
                         .opacity(pttDragOffset < -10 ? min(1, Double(-pttDragOffset - 10) / 60) : 0.3)
                         .frame(width: 60).transition(.opacity)
+                    } else if vm.isPlaying || vm.isPlaybackPaused {
+                        // Transport pause — matches web #transport-pause (36×36, circular btn-icon)
+                        Button {
+                            if vm.isPlaybackPaused { vm.resumePlayback() } else { vm.pausePlayback() }
+                        } label: {
+                            Image(systemName: vm.isPlaybackPaused ? "play.fill" : "pause.fill")
+                                .font(.system(size: 14))
+                                .foregroundStyle(Color.cTextSec)
+                                .frame(width: 36, height: 36)
+                                .background(Color.cCard, in: Circle())
+                                .overlay(Circle().strokeBorder(Color.cBorder, lineWidth: 1))
+                        }
+                        .transition(.scale.combined(with: .opacity))
                     } else if !vm.statusText.isEmpty {
                         // Status text in controls-left — matches web #status div
                         let sc = statusColor

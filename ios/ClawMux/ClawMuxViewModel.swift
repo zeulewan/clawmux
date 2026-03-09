@@ -337,6 +337,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             }
         }
     }
+    @Published var isPlaybackPaused = false  // user-triggered transport pause
     @Published var isProcessing = false
     @Published var audioLevels: [CGFloat] = []
 
@@ -1569,7 +1570,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     sessions[idx].audioBuffer.append(audioData)
                 }
                 if sid == activeSessionId {
-                    if !isPlaying { _drainAudioBuffer(sid) }
+                    if !isPlaying && !isPlaybackPaused { _drainAudioBuffer(sid) }
                     updateLiveActivity()
                 }
             }
@@ -2293,12 +2294,34 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         }
     }
 
+    // Matches web transportPause() — pause/resume in-progress audio without discarding
+    func pausePlayback() {
+        guard isPlaying, let player = audioPlayer else { return }
+        player.pause()
+        isPlaying = false
+        isPlaybackPaused = true
+    }
+
+    func resumePlayback() {
+        guard isPlaybackPaused, let player = audioPlayer else {
+            isPlaybackPaused = false
+            return
+        }
+        if player.play() {
+            isPlaybackPaused = false
+            isPlaying = true
+        } else {
+            isPlaybackPaused = false
+        }
+    }
+
     func interruptPlayback() {
-        guard isPlaying, let sid = playingSessionId else { return }
+        guard isPlaying || isPlaybackPaused, let sid = playingSessionId else { return }
         stopPlaybackVAD()
         audioPlayer?.stop()
         audioPlayer = nil
         isPlaying = false
+        isPlaybackPaused = false
         playingSessionId = nil
         pausedAudioSessionId = nil
         // Clear any remaining buffered audio
