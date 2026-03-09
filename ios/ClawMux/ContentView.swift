@@ -32,8 +32,9 @@ private extension Color {
     static let cTextTer    = Color(hex: 0x7A8BA3)   // browser --text-tertiary
     static let cAccent     = Color(hex: 0x818CF8)   // browser --blue (indigo, not blue!)
     static let cDanger     = Color(hex: 0xFF453A)   // browser --red
-    static let cSuccess    = Color(hex: 0x30D158)
-    static let cWarning    = Color(hex: 0xFF9F0A)
+    static let cSuccess    = Color(hex: 0x30D158)   // browser --green
+    static let cWarning    = Color(hex: 0xFF9F0A)   // browser --orange
+    static let cCaution    = Color(hex: 0xFFD60A)   // browser --yellow (starting/connecting)
     static let cCard       = Color(hex: 0x141B26)   // browser --bg-card
     static let cBorder     = Color(hex: 0x1E2A3D)   // browser --border
 }
@@ -151,7 +152,7 @@ struct ContentView: View {
                         .font(.system(size: 30, weight: .bold, design: .rounded))
                         .foregroundStyle(Color.cText)
                     HStack(spacing: 5) {
-                        let dotColor: Color = vm.isConnected ? .cSuccess : vm.isConnecting ? .cWarning : .cDanger
+                        let dotColor: Color = vm.isConnected ? .cSuccess : vm.isConnecting ? .cCaution : .cDanger
                         Circle()
                             .fill(dotColor)
                             .frame(width: 5, height: 5)
@@ -395,14 +396,15 @@ struct ContentView: View {
     }
 
     private func ringColor(_ session: VoiceSession?, spawning: Bool) -> Color {
-        if spawning { return .cWarning }
+        if spawning { return .cCaution }                  // yellow: starting up
         guard let s = session else { return Color(hex: 0x48484A) }
-        if s.state == .starting { return .cWarning }
-        if s.unreadCount > 0   { return .cDanger }
-        if s.isThinking        { return .cWarning }
+        if s.state == .starting { return .cCaution }      // yellow: starting
+        if s.unreadCount > 0   { return .cDanger }        // red: unread
+        if s.state == .compacting { return .cCaution }    // yellow: compacting
+        if s.isThinking        { return .cWarning }        // orange: working
         let st = s.statusText
-        if st == "Speaking..." || st == "Playing..." { return .cAccent }
-        return .cSuccess
+        if st == "Speaking..." || st == "Playing..." { return .cAccent }  // blue: speaking
+        return .cSuccess                                   // green: idle/listening
     }
 
     private func cardStatus(_ session: VoiceSession?, spawning: Bool) -> String {
