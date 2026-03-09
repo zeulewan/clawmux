@@ -1696,8 +1696,8 @@ function pttStart(e) {
     return;
   }
 
-  // Check for group chat voice mode
-  if (!pendingListenSessionId && !activeSessionId && typeof activeGroupId !== 'undefined' && activeGroupId) {
+  // Group chat voice mode — takes priority over activeSessionId (matches mic button handler)
+  if (!pendingListenSessionId && typeof activeGroupId !== 'undefined' && activeGroupId) {
     startRecording('__group__');
     return;
   }

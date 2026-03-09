@@ -1039,10 +1039,11 @@ function renderGroupChat(messages) {
       ackCounts.set(msg.parent_id, (ackCounts.get(msg.parent_id) || 0) + 1);
     }
   }
-  // Second pass: render non-ack messages, then apply ack badges
+  // Second pass: render non-ack messages without animation (history load, not live)
   for (const msg of messages) {
     if (msg.bare_ack) continue;
     const el = _makeGroupMsgEl(msg);
+    el.style.animation = 'none';  // suppress entry animation for history
     chatArea.appendChild(el);
     if (msg.id && ackCounts.has(msg.id) && typeof _showPermanentAck === 'function') {
       _showPermanentAck(el, ackCounts.get(msg.id));

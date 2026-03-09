@@ -1887,23 +1887,19 @@ async def send_message(request: Request):
     # Deliver via exactly ONE path to avoid duplicate delivery:
     # - In wait → inbox + wait queue push (immediate, agent sees it now)
     # - Not in wait → inbox (hooks deliver via additionalContext)
+    is_bare_ack_msg = bool(parent_id and not content)
+    inbox_msg = {
+        "id": msg.id,
+        "from": sender_name,
+        "type": "ack" if is_bare_ack_msg else "agent",
+        "content": content,
+        "parent_id": parent_id,
+    }
     if recipient.state == AgentState.IDLE and recipient.work_dir:
-        # Wait mode — push via inbox + wait queue for immediate delivery
-        await _inbox_write_and_notify(recipient, {
-            "id": msg.id,
-            "from": sender_name,
-            "type": "agent",
-            "content": content,
-        })
+        await _inbox_write_and_notify(recipient, inbox_msg)
         log.info("[%s] Message %s injected via wait queue", recipient.session_id, msg.id)
     elif recipient.work_dir:
-        # Inbox — hook-based delivery (PostToolUse/PreToolUse additionalContext)
-        await _inbox_write_and_notify(recipient, {
-            "id": msg.id,
-            "from": sender_name,
-            "type": "agent",
-            "content": content,
-        })
+        await _inbox_write_and_notify(recipient, inbox_msg)
         log.info("[%s] Message %s written to inbox for hook delivery", recipient.session_id, msg.id)
     else:
         # Fallback — no inbox, not in wait, queue as interjection
@@ -2219,7 +2215,7 @@ async def _inject_inbox(session, session_id: str) -> None:
         return
 
     lines = []
-    has_user_msg = any(m.get("type") != "system" for m in messages)
+    has_user_msg = any(m.get("type") not in ("system", "ack") for m in messages)
     if session.walking_mode and has_user_msg:
         lines.append("[SYSTEM] Walking mode active — respond in plain spoken text only. No markdown, no underscores, no special formatting.")
     for msg in messages:
@@ -2234,6 +2230,9 @@ async def _inject_inbox(session, session_id: str) -> None:
         elif msg_type == "group":
             group_name = msg.get("group_name", "group")
             lines.append(f"[GROUP:{group_name} id:{msg_id} from:{sender}] {content}")
+        elif msg_type == "ack":
+            parent_id = msg.get("parent_id", "")
+            lines.append(f"[ACK from:{sender} on:{parent_id}]")
         else:
             lines.append(f"[SYSTEM] {content}")
 

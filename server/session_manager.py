@@ -229,6 +229,8 @@ class SessionManager:
             if session.project:
                 log.info("Restored project status for %s: %s / %s",
                          voice_id, session.project, session.project_area)
+            # Adopted sessions are assumed idle unless they have pending interjections
+            session.set_state(AgentState.IDLE)
             # Restore pending interjections from disk
             if self.history_store:
                 saved = self.history_store.load_interjections(voice_id)
