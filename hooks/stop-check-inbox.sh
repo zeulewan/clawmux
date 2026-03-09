@@ -49,8 +49,8 @@ COUNT=$(echo "$MESSAGES" | jq 'length')
 # to give a freshly-spawned clawmux wait process time to write its sentinel file.
 if [ "$COUNT" = "0" ]; then
     SENTINEL_WAIT="${WORK_DIR}/.waiting"
-    # Retry up to 20 times (2s total) to handle race with background task startup
-    for _i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    # Retry up to 60 times (6s total) to handle race with background task startup
+    for _i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60; do
         if [ -f "$SENTINEL_WAIT" ]; then
             WAIT_PID=$(cat "$SENTINEL_WAIT" 2>/dev/null)
             if [ -n "$WAIT_PID" ] && kill -0 "$WAIT_PID" 2>/dev/null; then
