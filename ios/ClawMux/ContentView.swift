@@ -289,30 +289,30 @@ struct ContentView: View {
                 ZStack {
                     if thinking {
                         Circle()
-                            .strokeBorder(color.opacity(isPulsing ? 0.45 : 0.05), lineWidth: 8)
-                            .frame(width: 60, height: 60)
+                            .strokeBorder(color.opacity(isPulsing ? 0.5 : 0.05), lineWidth: 6)
+                            .frame(width: 48, height: 48)
                             .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: isPulsing)
                     }
                     Circle()
-                        .fill(color.opacity(alive ? 0.16 : 0.06))
-                        .frame(width: 46, height: 46)
+                        .fill(color.opacity(alive ? 0.15 : 0.06))
+                        .frame(width: 36, height: 36)
                     if alive {
                         Circle()
                             .strokeBorder(rc, lineWidth: 2)
-                            .frame(width: 46, height: 46)
-                            .shadow(color: rc.opacity(0.45), radius: 5)
+                            .frame(width: 36, height: 36)
+                            .shadow(color: rc.opacity(0.4), radius: 4)
                     }
                     Image(systemName: voiceIcon(voice.id))
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(alive ? color : color.opacity(0.30))
                 }
-                .frame(width: 60, height: 60)
+                .frame(width: 48, height: 48)
 
                 // Name + area + role + task + status  (hub.html hierarchy)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(voice.name)
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        .foregroundStyle(alive ? Color.cText : Color.cTextTer)
+                        .foregroundStyle(alive ? color : Color.cTextTer)
                         .lineLimit(1)
                     if let s = session, alive {
                         if !s.projectArea.isEmpty {
@@ -323,9 +323,10 @@ struct ContentView: View {
                                 .lineLimit(1)
                         }
                         if !s.role.isEmpty {
-                            Text(s.role)
-                                .font(.system(size: 9))
+                            Text(s.role.uppercased())
+                                .font(.system(size: 9, weight: .medium))
                                 .foregroundStyle(Color.cTextSec)
+                                .tracking(0.5)
                                 .lineLimit(1)
                         }
                         if !s.task.isEmpty {
@@ -640,6 +641,27 @@ struct ContentView: View {
         let color     = vm.activeSession.map { voiceColor($0.voice) } ?? Color.cTextSec
         let isPlaying = vm.ttsPlayingMessageId == msg.id
 
+        // Agent (inter-agent) messages: compact inline style like web's agent-msg
+        if role == "agent" {
+            return AnyView(
+                Text(msg.text)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.cTextSec.opacity(0.65))
+                    .lineLimit(3).truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 18).padding(.vertical, 2)
+                    .contextMenu {
+                        Button {
+                            UIPasteboard.general.string = msg.text
+                            withAnimation { showCopiedToast = true }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                withAnimation { showCopiedToast = false }
+                            }
+                        } label: { Label("Copy", systemImage: "doc.on.doc") }
+                    }
+            )
+        }
+
         // Web-matched grouping: flatten tail corners in group, tail 4px on last
         let single = isFirst && isLast
         let tl: CGFloat = (role == "assistant" && !isFirst)  ? 8 : 18
@@ -652,11 +674,9 @@ struct ContentView: View {
             ? AnyShapeStyle(userBubbleColor)
             : role == "assistant"
                 ? AnyShapeStyle(isPlaying ? color.opacity(0.22) : Color.cCard)
-                : role == "agent"
-                    ? AnyShapeStyle(Color.cAccent.opacity(0.08))
-                    : AnyShapeStyle(Color.clear)
+                : AnyShapeStyle(Color.clear)
 
-        return HStack(alignment: .bottom, spacing: 0) {
+        return AnyView(HStack(alignment: .bottom, spacing: 0) {
             if role == "user"   { Spacer(minLength: 56) }
             if role == "system" { Spacer() }
 
@@ -671,11 +691,6 @@ struct ContentView: View {
                             .lineSpacing(2)
                             .foregroundStyle(Color.white)
                             .frame(maxWidth: .infinity, alignment: .trailing)
-                    } else if role == "agent" {
-                        Text(msg.text)
-                            .font(.system(size: 13))
-                            .foregroundStyle(Color.cAccent.opacity(0.85))
-                            .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         Text(msg.text)
                             .font(.caption)
@@ -724,9 +739,9 @@ struct ContentView: View {
                 }
             }
 
-            if role == "assistant" || role == "agent" { Spacer(minLength: 56) }
+            if role == "assistant" { Spacer(minLength: 56) }
             if role == "system"   { Spacer() }
-        }
+        })
     }
 
     private func shortTime(_ date: Date) -> String {
@@ -1188,7 +1203,7 @@ struct ContentView: View {
         if vm.isRecording { return .cSuccess }
         if vm.isProcessing{ return Color(hex: 0x8E8E93) }
         if vm.micMuted    { return .cDanger }
-        return .cAccent
+        return Color(hex: 0x2563EB)  // blue matching user bubble
     }
 
     // MARK: - Helpers
