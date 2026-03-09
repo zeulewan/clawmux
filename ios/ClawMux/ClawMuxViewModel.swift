@@ -304,6 +304,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     @Published var isConnected = false
     @Published var isConnecting = false
     @Published var showSettings = false
+    @Published var showNotes = false
     @Published var serverURL: String {
         didSet { UserDefaults.standard.set(serverURL, forKey: "serverURL") }
     }
