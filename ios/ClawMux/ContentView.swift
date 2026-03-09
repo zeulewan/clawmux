@@ -1508,14 +1508,6 @@ struct ContentView: View {
             .onAppear  { isPulsing = true }
             .onDisappear { isPulsing = false }
 
-            Button { vm.sendInterrupt() } label: {
-                Image(systemName: "stop.fill")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.cDanger)
-                    .frame(width: 30, height: 30)
-                    .background(Color.cDanger.opacity(0.15), in: Circle())
-                    .overlay(Circle().strokeBorder(Color.cDanger.opacity(0.25), lineWidth: 0.5))
-            }
             Spacer(minLength: 40)
         }
     }
@@ -2186,8 +2178,14 @@ struct NotesPanelView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { saveNotes() }
     }
 
+    private func notesURL(_ path: String) -> URL? {
+        var base = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !base.hasPrefix("http://") && !base.hasPrefix("https://") { base = "https://" + base }
+        return URL(string: base + path)
+    }
+
     private func loadNotes() {
-        guard let url = URL(string: "\(serverURL)/api/notes") else { return }
+        guard let url = notesURL("/api/notes") else { return }
         URLSession.shared.dataTask(with: url) { data, _, _ in
             guard let data,
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -2201,7 +2199,7 @@ struct NotesPanelView: View {
     }
 
     private func saveNotes() {
-        guard let url = URL(string: "\(serverURL)/api/notes") else { return }
+        guard let url = notesURL("/api/notes") else { return }
         var req = URLRequest(url: url)
         req.httpMethod = "PUT"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
