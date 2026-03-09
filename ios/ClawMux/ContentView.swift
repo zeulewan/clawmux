@@ -341,10 +341,21 @@ struct ContentView: View {
                                 .lineLimit(2).truncationMode(.tail)
                         }
                     }
-                    Text(cardStatus(session, spawning: spawning))
-                        .font(.system(size: 9))
-                        .foregroundStyle(alive ? Color.cTextSec : Color.cTextTer)
-                        .lineLimit(1)
+                    // Status dot + text matching web .sb-dot / .sb-status
+                    HStack(alignment: .center, spacing: 4) {
+                        let dotPulsing = thinking || spawning || session?.state == .starting || session?.state == .compacting
+                        Circle()
+                            .fill(rc)
+                            .frame(width: 6, height: 6)
+                            .shadow(color: rc.opacity(alive ? 0.5 : 0), radius: 2)
+                            .scaleEffect(dotPulsing && isPulsing ? 1.15 : dotPulsing ? 0.7 : 1.0)
+                            .opacity(dotPulsing && isPulsing ? 1.0 : dotPulsing ? 0.15 : 1.0)
+                            .animation(dotPulsing ? .easeInOut(duration: 0.7).repeatForever(autoreverses: true) : .default, value: isPulsing)
+                        Text(cardStatus(session, spawning: spawning))
+                            .font(.system(size: 9))
+                            .foregroundStyle(alive ? Color.cTextSec : Color.cTextTer)
+                            .lineLimit(1)
+                    }
                 }
 
                 Spacer()
