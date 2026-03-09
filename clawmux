@@ -2136,10 +2136,10 @@ def cmd_group(args):
             print("No group chats.")
             return
         # Get current session to mark membership
-        my_sid = os.environ.get("CLAWMUX_SESSION_ID", "")
+        my_voice = os.environ.get("CLAWMUX_VOICE_ID", "")
         for g in groups:
             members = [m["label"] for m in g.get("members", [])]
-            in_group = my_sid in g.get("session_ids", [])
+            in_group = my_voice in g.get("voices", [])
             marker = " *" if in_group else ""
             print(f"  {g['name']}{marker}  [{', '.join(members) if members else 'empty'}]")
 
