@@ -165,12 +165,25 @@ struct ContentView: View {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: sidebarExpanded ? 2 : 1) {
                     if sidebarExpanded {
-                        let groups = projectGroups
-                        ForEach(groups.namedProjects, id: \.self) { project in
-                            projectSection(project, voices: groups.byProject[project] ?? [])
+                        // Group chat cards first — each card contains its member sub-cards
+                        let chatGroups = activeGroups
+                        let groupedVoiceIds = Set(chatGroups.flatMap { $0.voices.map { $0.id } })
+                        ForEach(chatGroups, id: \.groupId) { g in
+                            groupCard(g.groupId, voices: g.voices)
                         }
-                        if !groups.ungrouped.isEmpty {
-                            if !groups.namedProjects.isEmpty {
+
+                        // Remaining agents (not in any group)
+                        let groups = projectGroups
+                        let filteredByProject = groups.namedProjects.filter { project in
+                            (groups.byProject[project] ?? []).contains { !groupedVoiceIds.contains($0.id) }
+                        }
+                        ForEach(filteredByProject, id: \.self) { project in
+                            let voices = (groups.byProject[project] ?? []).filter { !groupedVoiceIds.contains($0.id) }
+                            projectSection(project, voices: voices)
+                        }
+                        let ungroupedFiltered = groups.ungrouped.filter { !groupedVoiceIds.contains($0.id) }
+                        if !ungroupedFiltered.isEmpty {
+                            if !filteredByProject.isEmpty || !chatGroups.isEmpty {
                                 HStack {
                                     Text("AGENTS")
                                         .font(.system(size: 10, weight: .bold))
@@ -182,12 +195,20 @@ struct ContentView: View {
                                 .padding(.top, 8).padding(.bottom, 2)
                             }
                             VStack(spacing: 2) {
-                                ForEach(groups.ungrouped) { voice in agentCard(voice) }
+                                ForEach(ungroupedFiltered) { voice in agentCard(voice) }
                             }
                             .padding(.horizontal, 8)
                         }
                     } else {
-                        ForEach(ALL_VOICES) { voice in sidebarIcon(for: voice) }
+                        // Collapsed: group icons + non-grouped agent icons
+                        let chatGroups = activeGroups
+                        let groupedVoiceIds = Set(chatGroups.flatMap { $0.voices.map { $0.id } })
+                        ForEach(chatGroups, id: \.groupId) { g in
+                            groupIcon(g.groupId, voices: g.voices)
+                        }
+                        ForEach(ALL_VOICES.filter { !groupedVoiceIds.contains($0.id) }) { voice in
+                            sidebarIcon(for: voice)
+                        }
                     }
                 }
                 .padding(.vertical, 4)
@@ -518,6 +539,123 @@ struct ContentView: View {
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
+    }
+
+    // MARK: - Group Chat Card (mirrors web .sidebar-group-card)
+
+    private var activeGroups: [(groupId: String, voices: [VoiceInfo])] {
+        var byGroup: [String: [String]] = [:]
+        for s in vm.sessions where !s.groupId.isEmpty {
+            if !(byGroup[s.groupId, default: []].contains(s.voice)) {
+                byGroup[s.groupId, default: []].append(s.voice)
+            }
+        }
+        return byGroup.map { gid, voiceIds in
+            let voices = ALL_VOICES.filter { voiceIds.contains($0.id) }
+            return (gid, voices)
+        }.sorted { $0.groupId < $1.groupId }
+    }
+
+    @ViewBuilder
+    private func groupCard(_ groupId: String, voices: [VoiceInfo]) -> some View {
+        let blue = Color(hex: 0x0A84FF)
+        VStack(spacing: 0) {
+            // Header — tap to switch to first active member session
+            Button {
+                for v in voices {
+                    if let s = vm.sessions.first(where: { $0.voice == v.id && !$0.isDead }) {
+                        vm.switchToSession(s.id)
+                        break
+                    }
+                }
+                withAnimation(.spring(response: 0.3)) { sidebarExpanded = false }
+            } label: {
+                HStack(spacing: 8) {
+                    // Stacked avatar circles — up to 4, -6px overlap (mirrors .sg-avatar)
+                    ZStack(alignment: .leading) {
+                        ForEach(Array(voices.prefix(4).enumerated()), id: \.offset) { i, v in
+                            Circle()
+                                .fill(voiceColor(v.id))
+                                .frame(width: 22, height: 22)
+                                .overlay(Circle().strokeBorder(Color.canvas2, lineWidth: 1.5))
+                                .offset(x: CGFloat(i) * 16)
+                        }
+                    }
+                    .frame(width: 22 + CGFloat(max(min(voices.count, 4) - 1, 0)) * 16, height: 22)
+
+                    // Info VStack: label + names (mirrors .sg-info)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("GROUP CHAT")
+                            .font(.system(size: 8, weight: .bold))
+                            .tracking(0.5)
+                            .foregroundStyle(blue.opacity(0.85))
+                        Text(voices.map { $0.name }.joined(separator: ", "))
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color.cText)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    // × Disband button (mirrors .sg-disband)
+                    Button {
+                        vm.disbandGroup(groupId)
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Color.cTextSec)
+                            .padding(4)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 8).padding(.vertical, 6)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            // Member sub-cards (mirrors .sg-members + .sg-sub-card)
+            Divider()
+                .background(blue.opacity(0.2))
+                .padding(.horizontal, 8)
+            VStack(spacing: 2) {
+                ForEach(voices) { voice in agentCard(voice) }
+            }
+            .padding(.horizontal, 4).padding(.vertical, 4)
+        }
+        .background(blue.opacity(0.07), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(blue.opacity(0.35), lineWidth: 1))
+        .padding(.horizontal, 6).padding(.vertical, 2)
+    }
+
+    // Compact group icon for collapsed sidebar — stacked avatars in 48px strip
+    @ViewBuilder
+    private func groupIcon(_ groupId: String, voices: [VoiceInfo]) -> some View {
+        let blue = Color(hex: 0x0A84FF)
+        Button {
+            for v in voices {
+                if let s = vm.sessions.first(where: { $0.voice == v.id && !$0.isDead }) {
+                    vm.switchToSession(s.id)
+                    break
+                }
+            }
+        } label: {
+            ZStack {
+                let shown = Array(voices.prefix(3))
+                ZStack(alignment: .leading) {
+                    ForEach(Array(shown.enumerated()), id: \.offset) { i, v in
+                        Circle()
+                            .fill(voiceColor(v.id))
+                            .frame(width: 16, height: 16)
+                            .overlay(Circle().strokeBorder(Color.canvas2, lineWidth: 1))
+                            .offset(x: CGFloat(i) * 11)
+                    }
+                }
+                .frame(width: 16 + CGFloat(max(shown.count - 1, 0)) * 11, height: 16)
+            }
+            .frame(width: 48, height: 44)
+            .background(blue.opacity(0.07))
+        }
+        .buttonStyle(.plain)
     }
 
     private func agentCard(_ voice: VoiceInfo) -> some View {
@@ -914,7 +1052,7 @@ struct ContentView: View {
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(Color.cText)
                                 .frame(width: 32, height: 32)
-                                .background(Color.cCard, in: Circle())
+                                .background(.ultraThinMaterial, in: Circle())
                                 .overlay(Circle().strokeBorder(Color.glassBorder, lineWidth: 0.5))
                                 .shadow(color: .black.opacity(0.4), radius: 8, x: 0, y: 2)
                         }
