@@ -953,10 +953,21 @@ function _voiceColorByLabel(label) {
   return null;
 }
 
+function _sendGroupAck(msgId) {
+  const g = activeGroupId ? [...groupChats.values()].find(x => x.id === activeGroupId) : null;
+  if (!g) return;
+  fetch(`/api/groupchats/${encodeURIComponent(g.name)}/ack`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ msg_id: msgId }),
+  }).catch(e => console.error('[group ack]', e));
+}
+
 function _makeGroupMsgEl(msg) {
   const isUser = msg.role === 'user' && !msg.sender;
   const div = document.createElement('div');
   div.className = `msg ${isUser ? 'user' : 'assistant'}`;
+  if (msg.id) div.dataset.msgId = msg.id;
   const label = msg.sender || 'You';
   const color = isUser ? null : _voiceColorByLabel(label);
   // Match createMsgEl: assistant background = 20% voice color (same as individual chat)
@@ -978,13 +989,45 @@ function _makeGroupMsgEl(msg) {
     textEl.textContent = msg.text;
     div.appendChild(textEl);
   }
+  // Ack button for non-user messages with an ID
+  if (msg.id && !isUser) {
+    const actions = document.createElement('div');
+    actions.className = 'msg-actions';
+    const ackBtn = document.createElement('button');
+    ackBtn.className = 'msg-action-btn msg-ack-btn';
+    ackBtn.textContent = '\uD83D\uDC4D';
+    ackBtn.title = 'Acknowledge';
+    ackBtn.onclick = (e) => {
+      e.stopPropagation();
+      _sendGroupAck(msg.id);
+      div.dataset.selfAcked = '1';
+      if (typeof _showPermanentAck === 'function') _showPermanentAck(div, 1);
+    };
+    actions.appendChild(ackBtn);
+    div.appendChild(actions);
+  }
   return div;
 }
 
 function renderGroupChat(messages) {
   const chatArea = document.getElementById('chat-area');
   chatArea.innerHTML = '';
-  for (const msg of messages) chatArea.appendChild(_makeGroupMsgEl(msg));
+  // First pass: build ack counts by parent_id
+  const ackCounts = new Map();
+  for (const msg of messages) {
+    if (msg.bare_ack && msg.parent_id) {
+      ackCounts.set(msg.parent_id, (ackCounts.get(msg.parent_id) || 0) + 1);
+    }
+  }
+  // Second pass: render non-ack messages, then apply ack badges
+  for (const msg of messages) {
+    if (msg.bare_ack) continue;
+    const el = _makeGroupMsgEl(msg);
+    chatArea.appendChild(el);
+    if (msg.id && ackCounts.has(msg.id) && typeof _showPermanentAck === 'function') {
+      _showPermanentAck(el, ackCounts.get(msg.id));
+    }
+  }
   chatArea.scrollTop = chatArea.scrollHeight;
 }
 
@@ -993,6 +1036,17 @@ function appendGroupChatMessage(msg) {
   const g = [...groupChats.values()].find(x => x.id === activeGroupId);
   if (!g) return;
   const chatArea = document.getElementById('chat-area');
+  if (msg.bare_ack && msg.parent_id) {
+    // Apply ack badge to existing parent element
+    const parentEl = chatArea.querySelector(`[data-msg-id="${CSS.escape(msg.parent_id)}"]`);
+    if (parentEl) {
+      if (parentEl.dataset.selfAcked) { delete parentEl.dataset.selfAcked; return; }
+      const existing = parentEl.querySelector('.msg-ack-permanent');
+      const count = existing ? parseInt(existing.dataset.count || '1') + 1 : 1;
+      if (typeof _showPermanentAck === 'function') _showPermanentAck(parentEl, count);
+    }
+    return;
+  }
   chatArea.appendChild(_makeGroupMsgEl(msg));
   chatArea.scrollTop = chatArea.scrollHeight;
 }

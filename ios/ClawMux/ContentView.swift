@@ -150,7 +150,9 @@ struct ContentView: View {
     private var mainAreaView: some View {
         let voiceTint = vm.activeSession.map { voiceColor($0.voice) } ?? Color.clear
         return Group {
-            if vm.activeSessionId != nil {
+            if vm.isFocusMode {
+                focusModeView
+            } else if vm.activeSessionId != nil {
                 chatMainView
             } else {
                 welcomeView
@@ -160,6 +162,21 @@ struct ContentView: View {
         // Voice color background tint — matches web #main-content backgroundColor = hexToRgba(vc, 0.10)
         // Animates on session switch with 0.4s ease (matches web transition: background-color 0.4s ease)
         .background(voiceTint.opacity(0.10).animation(.easeInOut(duration: 0.4), value: vm.activeSessionId))
+    }
+
+    private var focusModeView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "scope")
+                .font(.system(size: 48, weight: .thin))
+                .foregroundStyle(Color.cTextTer)
+            Text("Focus Mode")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(Color.cTextSec)
+            Text("Tap an agent in the sidebar to switch.")
+                .font(.system(size: 13))
+                .foregroundStyle(Color.cTextTer)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Sidebar (collapsible, 48px → 220px, overlays main when expanded)
@@ -221,6 +238,40 @@ struct ContentView: View {
 
             Spacer()
 
+            // Focus card — matches web .sidebar-focus-card above #sidebar-tray
+            Button {
+                withAnimation(.easeOut(duration: 0.18)) { vm.switchToFocus() }
+                withAnimation(.spring(response: 0.3)) { sidebarExpanded = false }
+            } label: {
+                if sidebarExpanded {
+                    HStack(spacing: 8) {
+                        Image(systemName: "scope")
+                            .font(.system(size: 14))
+                            .frame(width: 34, height: 34)
+                        Text("Focus")
+                            .font(.system(size: 13, weight: .medium))
+                        Spacer()
+                    }
+                    .foregroundStyle(vm.isFocusMode ? Color.cAccent : Color.cTextSec)
+                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .background(
+                        ZStack(alignment: .leading) {
+                            if vm.isFocusMode { Color.cAccent.opacity(0.08) }
+                            if vm.isFocusMode {
+                                Capsule().fill(Color.cAccent).frame(width: 3, height: 26)
+                                    .shadow(color: Color.cAccent.opacity(0.6), radius: 3)
+                            }
+                        }
+                    )
+                } else {
+                    Image(systemName: "scope")
+                        .font(.system(size: 18))
+                        .foregroundStyle(vm.isFocusMode ? Color.cAccent : Color.cTextSec)
+                        .frame(width: 48, height: 36)
+                        .background(vm.isFocusMode ? Color.cAccent.opacity(0.10) : Color.clear)
+                }
+            }
+
             // Bottom tray: hamburger (always) + Notes + Settings (when expanded)
             // Matches web #sidebar-tray: expand-btn(48px) + notes-btn(flex) + settings-btn(flex)
             Color.cBorder.opacity(0.5).frame(height: 0.5)
@@ -280,7 +331,7 @@ struct ContentView: View {
     private func sidebarIcon(for voice: VoiceInfo) -> some View {
         let session   = vm.sessions.first { $0.voice == voice.id }
         let spawning  = vm.spawningVoiceIds.contains(voice.id)
-        let isSelected = vm.activeSession?.voice == voice.id
+        let isSelected = !vm.isFocusMode && vm.activeSession?.voice == voice.id
         let color     = voiceColor(voice.id)
         let alive     = session != nil || spawning
         let rc        = ringColor(session, spawning: spawning)
@@ -580,7 +631,7 @@ struct ContentView: View {
     @ViewBuilder
     private func groupCard(_ groupId: String, voices: [VoiceInfo]) -> some View {
         let blue = Color(hex: 0x0A84FF)
-        let isSelected = voices.contains { $0.id == vm.activeSession?.voice }
+        let isSelected = !vm.isFocusMode && voices.contains { $0.id == vm.activeSession?.voice }
         VStack(spacing: 0) {
             // Header — tap to switch to first active member session
             Button {
@@ -696,7 +747,7 @@ struct ContentView: View {
     private func agentCard(_ voice: VoiceInfo) -> some View {
         let session    = vm.sessions.first { $0.voice == voice.id }
         let spawning   = vm.spawningVoiceIds.contains(voice.id)
-        let isSelected = vm.activeSession?.voice == voice.id
+        let isSelected = !vm.isFocusMode && vm.activeSession?.voice == voice.id
         let color      = voiceColor(voice.id)
         let alive      = session != nil || spawning
         let thinking   = session?.isThinking == true
@@ -1033,6 +1084,13 @@ struct ContentView: View {
                     .background(Color.glass, in: Capsule())
                     .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
                 }
+            }
+
+            // Focus link — mirrors web #focus-link (always visible in header)
+            Button { withAnimation(.easeOut(duration: 0.18)) { vm.switchToFocus() } } label: {
+                Text("Focus")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Color.cTextSec)
             }
 
             // Connection dot pill — mirrors web #dot + #conn-label ("Live" / "Connecting..." / "Offline")

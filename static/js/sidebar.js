@@ -947,6 +947,7 @@ function _renderGroupChatSection(list, afterIndex) {
     const card = document.createElement('div');
     card.className = 'sidebar-gc-card';
     card.dataset.gcId = g.id;
+    card.draggable = true;
     if (typeof activeGroupId !== 'undefined' && activeGroupId === g.id) card.classList.add('active');
 
     const avatars = document.createElement('div');
@@ -973,10 +974,62 @@ function _renderGroupChatSection(list, afterIndex) {
     card.appendChild(avatars);
     card.appendChild(info);
     card.onclick = () => { if (typeof openGroupChat === 'function') openGroupChat(g.id); };
+
+    // Drag-and-drop reorder
+    card.addEventListener('dragstart', e => {
+      _gcDragId = g.id;
+      e.dataTransfer.effectAllowed = 'move';
+      card.classList.add('dragging');
+    });
+    card.addEventListener('dragend', () => {
+      _gcDragId = null;
+      card.classList.remove('dragging');
+      section.querySelectorAll('.sidebar-gc-card').forEach(c => c.classList.remove('drag-over'));
+    });
+    card.addEventListener('dragover', e => {
+      if (!_gcDragId || _gcDragId === g.id) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      section.querySelectorAll('.sidebar-gc-card').forEach(c => c.classList.remove('drag-over'));
+      card.classList.add('drag-over');
+    });
+    card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+    card.addEventListener('drop', e => {
+      e.preventDefault();
+      card.classList.remove('drag-over');
+      if (!_gcDragId || _gcDragId === g.id) return;
+      _reorderGroupChats(_gcDragId, g.id);
+      _gcDragId = null;
+    });
+
     section.appendChild(card);
   }
 
   list.appendChild(section);
+}
+
+let _gcDragId = null;
+
+async function _reorderGroupChats(fromId, toId) {
+  const gc = typeof groupChats !== 'undefined' ? groupChats : new Map();
+  const entries = [...gc.entries()];
+  const fromIdx = entries.findIndex(([, g]) => g.id === fromId);
+  const toIdx = entries.findIndex(([, g]) => g.id === toId);
+  if (fromIdx < 0 || toIdx < 0) return;
+  // Move fromIdx to toIdx
+  const [moved] = entries.splice(fromIdx, 1);
+  entries.splice(toIdx, 0, moved);
+  gc.clear();
+  for (const [k, v] of entries) gc.set(k, v);
+  renderSidebar();
+  // Persist order to backend
+  try {
+    await fetch('/api/groupchats/reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order: entries.map(([, g]) => g.id) }),
+    });
+  } catch (e) { console.error('[gc reorder]', e); }
 }
 
 async function _promptNewGroupChat() {

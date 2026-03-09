@@ -248,6 +248,12 @@ function handleMessage(data) {
     }
     return;
   }
+  if (type === 'groupchat_ack') {
+    if (activeGroupId === data.group_id && typeof appendGroupChatMessage === 'function') {
+      appendGroupChatMessage({ bare_ack: true, parent_id: data.msg_id, id: data.ack_id });
+    }
+    return;
+  }
   if (type === 'project_deleted' || type === 'project_renamed') {
     loadProjects();
     return;

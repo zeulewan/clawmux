@@ -1705,6 +1705,53 @@ async def groupchat_history(name: str):
     return JSONResponse({"group_id": g["id"], "name": g["name"], "messages": messages})
 
 
+@app.post("/api/groupchats/{name}/ack")
+async def groupchat_ack_message(name: str, request: Request):
+    """Acknowledge a group chat message (thumbs up)."""
+    key = name.lower()
+    if key not in _group_chats:
+        return JSONResponse({"error": "group not found"}, status_code=404)
+    data = await request.json()
+    msg_id = (data.get("msg_id") or "").strip()
+    if not msg_id:
+        return JSONResponse({"error": "msg_id required"}, status_code=400)
+    g = _group_chats[key]
+    ack_id = _gen_msg_id()
+    await asyncio.to_thread(_append_group_history, g["id"], "user", "",
+                            msg_id=ack_id, parent_id=msg_id, bare_ack=True)
+    await send_to_browser({
+        "type": "groupchat_ack",
+        "group_id": g["id"],
+        "msg_id": msg_id,
+        "ack_id": ack_id,
+    })
+    return JSONResponse({"status": "acked", "ack_id": ack_id})
+
+
+@app.post("/api/groupchats/reorder")
+async def groupchat_reorder(request: Request):
+    """Reorder group chats. Body: {order: [group_id, ...]}"""
+    data = await request.json()
+    order = data.get("order") or []
+    # Build new ordered dict
+    id_to_key = {g["id"]: k for k, g in _group_chats.items()}
+    new_chats: dict = {}
+    seen = set()
+    for gid in order:
+        k = id_to_key.get(gid)
+        if k and k not in seen:
+            new_chats[k] = _group_chats[k]
+            seen.add(k)
+    # Append any not in order list
+    for k, g in _group_chats.items():
+        if k not in seen:
+            new_chats[k] = g
+    _group_chats.clear()
+    _group_chats.update(new_chats)
+    _save_group_chats()
+    return JSONResponse({"status": "ok"})
+
+
 @app.get("/api/history/{voice_id}")
 async def get_history(voice_id: str, request: Request):
     # Use project from query param or active project
