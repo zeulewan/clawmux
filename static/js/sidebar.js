@@ -1059,9 +1059,10 @@ function renderSidebar() {
       for (const card of agentContainer.querySelectorAll('.sidebar-group-card')) { currentGroupCards.set(card.dataset.groupId, card); }
       const voiceIds = new Set(voices.map(([id]) => id));
       const activeGroupIds = new Set(items.filter(it => it.type === 'group').map(it => it.groupId));
+      const groupedVoiceIds = new Set(items.filter(it => it.type === 'group').flatMap(it => it.memberVoiceIds));
       for (const child of [...agentContainer.children]) {
         if (child.classList.contains('sidebar-group-card') && !activeGroupIds.has(child.dataset.groupId)) child.remove();
-        else if (child.classList.contains('sidebar-card') && !child.classList.contains('sg-sub-card') && child.dataset.voiceId && !voiceIds.has(child.dataset.voiceId)) child.remove();
+        else if (child.classList.contains('sidebar-card') && !child.classList.contains('sg-sub-card') && child.dataset.voiceId && (!voiceIds.has(child.dataset.voiceId) || groupedVoiceIds.has(child.dataset.voiceId))) child.remove();
       }
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
