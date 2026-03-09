@@ -475,10 +475,10 @@ async def handle_browser_message(data: dict) -> None:
             await asyncio.to_thread(history.append, session.voice, session.label, "user", text, _hist_prefix(session), msg_id=umid)
             if session.work_dir:
                 await _inbox_write_and_notify(session, {
+                    "id": umid,
                     "from": "user",
                     "type": "voice",
                     "content": text,
-                    "msg_id": umid,
                 })
             await send_to_browser({"session_id": session_id, "type": "done", "processing": False})
         else:
@@ -494,10 +494,10 @@ async def handle_browser_message(data: dict) -> None:
             await asyncio.to_thread(history.append, session.voice, session.label, "user", text, _hist_prefix(session), msg_id=umid)
             if session.work_dir:
                 await _inbox_write_and_notify(session, {
+                    "id": umid,
                     "from": "user",
                     "type": "text",
                     "content": text,
-                    "msg_id": umid,
                 })
             await send_to_browser({"session_id": session_id, "type": "done", "processing": False})
 
@@ -533,19 +533,19 @@ async def handle_browser_message(data: dict) -> None:
                 session.interjections.clear()
                 await asyncio.to_thread(history.clear_interjections, session.voice, _hist_prefix(session))
                 await _inbox_write_and_notify(session, {
+                    "id": umid,
                     "from": "user",
                     "type": "voice",
                     "content": combined,
-                    "msg_id": umid,
                 })
             elif session.work_dir:
                 # Agent not in wait — write to inbox for hook-based delivery
                 # (PostToolUse/PreToolUse will pick it up via additionalContext)
                 await _inbox_write_and_notify(session, {
+                    "id": umid,
                     "from": "user",
                     "type": "voice",
                     "content": text,
-                    "msg_id": umid,
                 })
                 log.info("[%s] Voice interjection written to inbox for hook delivery", session_id)
                 # Signal browser that message was queued (not actively processing)
@@ -843,7 +843,7 @@ def _format_inbox_messages(messages: list[dict]) -> str:
         msg_type = msg.get("type", "system")
         sender = msg.get("from", "unknown")
         content = msg.get("content", "")
-        msg_id = msg.get("msg_id") or msg.get("id", "")
+        msg_id = msg.get("id", "")
         if msg_type == "agent":
             lines.append(f"[MSG id:{msg_id} from:{sender}] {content}")
         elif msg_type in ("voice", "text"):
