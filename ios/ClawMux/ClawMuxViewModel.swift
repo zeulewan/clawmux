@@ -57,6 +57,7 @@ struct VoiceSession: Identifiable {
     var activity: String = ""
     var toolName: String = ""
     var unreadCount: Int = 0
+    var isSpeaking: Bool = false  // audio actively playing — mirrors web 'speaking' sidebar state
 
     // Derived helpers
     var isThinking: Bool { state == .thinking || state == .processing || state == .compacting }
@@ -315,7 +316,20 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     // Active session UI state
     @Published var statusText = ""
     @Published var isRecording = false
-    @Published var isPlaying = false
+    @Published var isPlaying = false {
+        didSet {
+            // Keep session.isSpeaking in sync so ringColor uses canonical state, not statusText strings
+            let sid = playingSessionId
+            if let sid, let idx = sessionIndex(sid) {
+                sessions[idx].isSpeaking = isPlaying
+            } else if !isPlaying {
+                // Playback stopped — clear isSpeaking on any session that had it set
+                for i in sessions.indices where sessions[i].isSpeaking {
+                    sessions[i].isSpeaking = false
+                }
+            }
+        }
+    }
     @Published var isProcessing = false
     @Published var audioLevels: [CGFloat] = []
 

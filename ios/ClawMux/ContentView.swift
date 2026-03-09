@@ -77,7 +77,6 @@ private func usageColor(_ pct: Int) -> Color {
 
 struct ContentView: View {
     @StateObject private var vm = ClawMuxViewModel()
-    @State private var showingChat    = false
     @State private var isPulsing      = false
     @State private var showResetConfirm      = false
     @State private var resetVoiceId: String? = nil
@@ -93,30 +92,14 @@ struct ContentView: View {
     @State private var isAtBottom:             Bool = true
 
     var body: some View {
-        ZStack {
-            // Deep atmospheric canvas matching browser palette
-            Color.canvas1.ignoresSafeArea()
-
-            if showingChat && vm.activeSessionId != nil {
-                chatView
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing),
-                        removal:   .move(edge: .trailing)
-                    ))
-            } else {
-                sessionListView
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .leading),
-                        removal:   .move(edge: .leading)
-                    ))
-            }
+        HStack(spacing: 0) {
+            sidebarStripView
+            mainAreaView
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.canvas1.ignoresSafeArea())
         .preferredColorScheme(.dark)
-        .animation(.spring(response: 0.35, dampingFraction: 0.9), value: showingChat)
         .onAppear { isPulsing = true }
-        .onChange(of: vm.activeSessionId) { _, new in
-            if new == nil { withAnimation { showingChat = false } }
-        }
         .sheet(isPresented: $vm.showSettings) { SettingsView(vm: vm) }
         .onOpenURL { vm.handleOpenURL($0) }
         .alert("Reset History", isPresented: $showResetConfirm) {
@@ -141,51 +124,168 @@ struct ContentView: View {
         } message: { Text(vm.errorMessage ?? "") }
     }
 
-    // MARK: - Session List
+    // MARK: - Split Layout
 
-    private var sessionListView: some View {
+    private var mainAreaView: some View {
+        Group {
+            if vm.activeSessionId != nil {
+                chatMainView
+            } else {
+                welcomeView
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Sidebar Strip (48px icon-only, always visible)
+
+    private var sidebarStripView: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack(alignment: .center) {
+            Button { vm.showSettings = true } label: {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.cTextTer)
+                    .frame(width: 48, height: 48)
+            }
+            Color.cBorder.opacity(0.5).frame(height: 0.5)
+
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 1) {
+                    ForEach(ALL_VOICES) { voice in
+                        sidebarIcon(for: voice)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
+            Spacer()
+
+            // Connection dot
+            let dotColor: Color = vm.isConnected ? .cSuccess : vm.isConnecting ? .cCaution : .cDanger
+            Circle()
+                .fill(dotColor)
+                .frame(width: 7, height: 7)
+                .scaleEffect(vm.isConnecting && isPulsing ? 1.15 : vm.isConnecting ? 0.7 : 1.0)
+                .opacity(vm.isConnecting && isPulsing ? 1.0 : vm.isConnecting ? 0.15 : 1.0)
+                .animation(vm.isConnecting ? .easeInOut(duration: 0.7).repeatForever(autoreverses: true) : .default, value: isPulsing)
+                .frame(width: 48, height: 28)
+                .padding(.bottom, 8)
+        }
+        .frame(width: 48)
+        .frame(maxHeight: .infinity)
+        .background(Color.canvas2)
+        .overlay(alignment: .trailing) {
+            Color.cBorder.opacity(0.6).frame(width: 0.5)
+        }
+    }
+
+    private func sidebarIcon(for voice: VoiceInfo) -> some View {
+        let session   = vm.sessions.first { $0.voice == voice.id }
+        let spawning  = vm.spawningVoiceIds.contains(voice.id)
+        let isSelected = vm.activeSession?.voice == voice.id
+        let color     = voiceColor(voice.id)
+        let alive     = session != nil || spawning
+        let rc        = ringColor(session, spawning: spawning)
+        let thinking  = session?.isThinking == true
+        let hasUnread = (session?.unreadCount ?? 0) > 0
+
+        return Button {
+            if let s = session {
+                vm.switchToSession(s.id)
+            } else if !spawning {
+                vm.spawnSession(voiceId: voice.id)
+            }
+        } label: {
+            ZStack {
+                // Selected background tint
+                if isSelected { Color.cAccent.opacity(0.08) }
+
+                // Avatar (centered)
+                ZStack {
+                    if thinking {
+                        Circle()
+                            .strokeBorder(color.opacity(isPulsing ? 0.45 : 0.05), lineWidth: 5)
+                            .frame(width: 34, height: 34)
+                            .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: isPulsing)
+                    }
+                    Circle()
+                        .fill(color.opacity(alive ? 0.15 : 0.06))
+                        .frame(width: 28, height: 28)
+                    if alive {
+                        Circle()
+                            .strokeBorder(rc, lineWidth: 1.5)
+                            .frame(width: 28, height: 28)
+                    }
+                    Image(systemName: voiceIcon(voice.id))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(alive ? color : color.opacity(0.25))
+                    if hasUnread {
+                        Circle()
+                            .fill(Color.cDanger)
+                            .frame(width: 7, height: 7)
+                            .offset(x: 9, y: -9)
+                    }
+                }
+
+                // Left accent bar for selected state
+                if isSelected {
+                    HStack(spacing: 0) {
+                        RoundedRectangle(cornerRadius: 2, style: .continuous)
+                            .fill(Color.cAccent)
+                            .frame(width: 3)
+                            .padding(.vertical, 10)
+                            .shadow(color: Color.cAccent.opacity(0.5), radius: 3)
+                        Spacer()
+                    }
+                }
+            }
+            .frame(width: 48, height: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            if let s = session {
+                Button(role: .destructive) { vm.terminateSession(s.id) } label: {
+                    Label("End Session", systemImage: "xmark.circle")
+                }
+            }
+            Button(role: .destructive) { resetVoiceId = voice.id; showResetConfirm = true } label: {
+                Label("Reset History", systemImage: "trash")
+            }
+        }
+    }
+
+    // MARK: - Welcome View (shown when no session is active)
+
+    private var welcomeView: some View {
+        VStack(spacing: 0) {
+            HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("ClawMux")
-                        .font(.system(size: 30, weight: .bold, design: .rounded))
+                        .font(.system(size: 22, weight: .bold))
                         .foregroundStyle(Color.cText)
                     HStack(spacing: 5) {
                         let dotColor: Color = vm.isConnected ? .cSuccess : vm.isConnecting ? .cCaution : .cDanger
-                        Circle()
-                            .fill(dotColor)
-                            .frame(width: 8, height: 8)
-                            .scaleEffect(vm.isConnecting && isPulsing ? 1.15 : vm.isConnecting ? 0.7 : 1.0)
-                            .opacity(vm.isConnecting && isPulsing ? 1.0 : vm.isConnecting ? 0.15 : 1.0)
-                            .animation(vm.isConnecting ? .easeInOut(duration: 0.7).repeatForever(autoreverses: true) : .default, value: isPulsing)
+                        Circle().fill(dotColor).frame(width: 7, height: 7)
                         Text(vm.isConnected ? "Connected" : vm.isConnecting ? "Connecting…" : "Offline")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(Color.cTextSec)
                     }
                 }
                 Spacer()
-                Button { vm.showSettings = true } label: {
-                    Image(systemName: "gearshape.fill")
-                        .font(.system(size: 15))
-                        .foregroundStyle(Color.cTextSec)
-                        .frame(width: 40, height: 40)
-                        .background(Color.glass, in: Circle())
-                        .overlay(Circle().strokeBorder(Color.glassBorder, lineWidth: 0.5))
-                }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
-            .padding(.bottom, 16)
+            .padding(.horizontal, 16).padding(.vertical, 12)
+            .background {
+                if #available(iOS 26, *) { Color.clear.glassEffect(.regular, in: .rect) }
+                else { Color.canvas1.opacity(0.95) }
+            }
 
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 0) {
                     let groups = projectGroups
-                    // Named project sections
                     ForEach(groups.namedProjects, id: \.self) { project in
                         projectSection(project, voices: groups.byProject[project] ?? [])
                     }
-                    // Ungrouped agents
                     if !groups.ungrouped.isEmpty {
                         if !groups.namedProjects.isEmpty {
                             HStack {
@@ -272,7 +372,7 @@ struct ContentView: View {
     private func agentCard(_ voice: VoiceInfo) -> some View {
         let session    = vm.sessions.first { $0.voice == voice.id }
         let spawning   = vm.spawningVoiceIds.contains(voice.id)
-        let isSelected = vm.activeSession?.voice == voice.id && showingChat
+        let isSelected = vm.activeSession?.voice == voice.id
         let color      = voiceColor(voice.id)
         let alive      = session != nil || spawning
         let thinking   = session?.isThinking == true
@@ -281,12 +381,8 @@ struct ContentView: View {
         return Button {
             if let s = session {
                 vm.switchToSession(s.id)
-                withAnimation { showingChat = true }
             } else if !spawning {
                 vm.spawnSession(voiceId: voice.id)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    if vm.activeSessionId != nil { withAnimation { showingChat = true } }
-                }
             }
         } label: {
             HStack(spacing: 10) {
@@ -413,8 +509,7 @@ struct ContentView: View {
         if s.unreadCount > 0   { return .cDanger }        // red: unread
         if s.state == .compacting { return .cCaution }    // yellow: compacting
         if s.isThinking        { return .cWarning }        // orange: working
-        let st = s.statusText
-        if st == "Speaking..." || st == "Playing..." { return .cAccent }  // blue: speaking
+        if s.isSpeaking        { return .cAccent }        // blue: speaking (canonical state, not string match)
         return .cSuccess                                   // green: idle/listening
     }
 
