@@ -704,8 +704,12 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     // Another app took audio focus — stop recording/TTS, pause keepalive
                     if self.isRecording { self.stopRecording(discard: false) }
                     if self.isPlaying {
+                        let sid = self.playingSessionId
+                        self.stopPlaybackVAD()
                         self.audioPlayer?.stop(); self.audioPlayer = nil
                         self.isPlaying = false; self.playingSessionId = nil
+                        // Notify server so session isn't left waiting for playback_done
+                        if let sid { self.sendJSON(["session_id": sid, "type": "playback_done"]) }
                     }
                     self.stopMessageTTS()
                     self.silencePlayer?.pause()
@@ -724,6 +728,38 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                         }
                     }
                 @unknown default:
+                    break
+                }
+            }
+        }
+        // Handle route changes (AirPods disconnect, headphones unplugged, etc.)
+        NotificationCenter.default.addObserver(
+            forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main
+        ) { [weak self] notification in
+            let reasonVal = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
+            Task { @MainActor in
+                guard let self,
+                    let reasonVal,
+                    let reason = AVAudioSession.RouteChangeReason(rawValue: reasonVal)
+                else { return }
+                switch reason {
+                case .oldDeviceUnavailable:
+                    // Output device removed — stop playback so it doesn't redirect unexpectedly
+                    if self.isPlaying {
+                        let sid = self.playingSessionId
+                        self.stopPlaybackVAD()
+                        self.audioPlayer?.stop(); self.audioPlayer = nil
+                        self.isPlaying = false; self.playingSessionId = nil
+                        if let sid { self.sendJSON(["session_id": sid, "type": "playback_done"]) }
+                    }
+                    // Restart keepalive engine if it died on route change
+                    if self.backgroundMode && self.appInBackground {
+                        if self.keepaliveEngine?.isRunning != true {
+                            self.stopSilenceLoop()
+                            self.startSilenceLoop()
+                        }
+                    }
+                default:
                     break
                 }
             }
@@ -1989,6 +2025,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         playingSessionId = sessionId
 
         do {
+            try AVAudioSession.sharedInstance().setActive(true)
             audioPlayer = try AVAudioPlayer(data: data)
             audioPlayer?.delegate = self
             let started = audioPlayer?.play() ?? false
@@ -2880,9 +2917,14 @@ extension ClawMuxViewModel: AVAudioPlayerDelegate {
                 return
             }
             let sid = self.playingSessionId ?? ""
+            self.stopPlaybackVAD()
             self.isPlaying = false
             self.playingSessionId = nil
             self.statusText = "Audio decode error"
+            // Drain stale buffer so it doesn't play on next session switch
+            if !sid.isEmpty, let idx = self.sessionIndex(sid) {
+                self.sessions[idx].audioBuffer.removeAll()
+            }
             if !sid.isEmpty {
                 self.sendJSON(["session_id": sid, "type": "playback_done"])
             }
