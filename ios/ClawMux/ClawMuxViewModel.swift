@@ -2345,6 +2345,11 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     }
 
     // Matches web transportPause() — pause/resume in-progress audio without discarding
+    func sendUserAck(msgId: String) {
+        guard let sid = activeSessionId else { return }
+        sendJSON(["session_id": sid, "type": "user_ack", "msg_id": msgId])
+    }
+
     func pausePlayback() {
         guard isPlaying, let player = audioPlayer else { return }
         player.pause()

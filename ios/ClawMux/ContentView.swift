@@ -1239,6 +1239,18 @@ struct ContentView: View {
                             Label(isPlaying ? "Stop Playing" : "Play",
                                   systemImage: isPlaying ? "stop.fill" : "play.fill")
                         }
+                        // 👍 user_ack — mirrors web context menu thumbs-up (non-user messages with ID)
+                        if let mid = msg.msgId {
+                            Button {
+                                vm.sendUserAck(msgId: mid)
+                                withAnimation { showCopiedToast = true }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                    withAnimation { showCopiedToast = false }
+                                }
+                            } label: {
+                                Label("Acknowledge", systemImage: "hand.thumbsup")
+                            }
+                        }
                     }
                     Button {
                         UIPasteboard.general.string = msg.text
