@@ -81,7 +81,7 @@ body {
   z-index: 2;
 }
 #sidebar.loading #sidebar-loading { display: flex; }
-#sidebar.loading #sidebar-list { pointer-events: none; opacity: 0.35; }
+#sidebar.loading #sidebar-list { pointer-events: none; opacity: 0; }
 .sidebar-spinner {
   width: 20px;
   height: 20px;
