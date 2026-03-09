@@ -652,6 +652,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             .appendingPathComponent("recording.wav")
         super.init()
 
+        // One-time migration: remove stale UserDefaults chat cache (server API is source of truth)
+        UserDefaults.standard.removeObject(forKey: "voice-hub-chats")
+
         setupAudioSession()
         observeAppLifecycle()
         endStaleLiveActivities()
@@ -915,48 +918,6 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         if let ts { msg.timestamp = Date(timeIntervalSince1970: ts) }
         msg.msgId = msgId
         sessions[idx].messages.append(msg)
-        // Keep underlying array bounded (match server-side 50-message history cap)
-        if sessions[idx].messages.count > 200 {
-            sessions[idx].messages.removeFirst(sessions[idx].messages.count - 200)
-        }
-        saveChats()
-    }
-
-    // MARK: - Chat Persistence
-
-    private let chatsKey = "voice-hub-chats"
-
-    private func saveChats() {
-        var data: [String: [[String: String]]] = [:]
-        for session in sessions {
-            data[session.id] = session.messages.map { ["role": $0.role, "text": $0.text] }
-        }
-        if let jsonData = try? JSONSerialization.data(withJSONObject: data) {
-            UserDefaults.standard.set(jsonData, forKey: chatsKey)
-        }
-    }
-
-    private func loadSavedMessages(for sessionId: String) -> [ChatMessage]? {
-        guard let jsonData = UserDefaults.standard.data(forKey: chatsKey),
-            let data = try? JSONSerialization.jsonObject(with: jsonData)
-                as? [String: [[String: String]]],
-            let messages = data[sessionId], !messages.isEmpty
-        else { return nil }
-        return messages.compactMap { dict in
-            guard let role = dict["role"], let text = dict["text"] else { return nil }
-            return ChatMessage(role: role, text: text)
-        }
-    }
-
-    private func clearSavedChat(for sessionId: String) {
-        guard let jsonData = UserDefaults.standard.data(forKey: chatsKey),
-            var data = try? JSONSerialization.jsonObject(with: jsonData)
-                as? [String: [[String: String]]]
-        else { return }
-        data.removeValue(forKey: sessionId)
-        if let updated = try? JSONSerialization.data(withJSONObject: data) {
-            UserDefaults.standard.set(updated, forKey: chatsKey)
-        }
     }
 
     // MARK: - Server-Side History
@@ -1918,7 +1879,6 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             playingSessionId = nil
             pausedAudioSessionId = nil
         }
-        clearSavedChat(for: id)
         clearSessionPrefs(id)
         sessions.removeAll { $0.id == id }
         if activeSessionId == id {
