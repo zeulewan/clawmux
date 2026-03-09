@@ -86,6 +86,8 @@ struct ContentView: View {
     @State private var resetVoiceId: String? = nil
     @State private var showModelRestartConfirm = false
     @State private var pendingModelSwitch      = ""
+    @State private var showEffortRestartConfirm = false
+    @State private var pendingEffortSwitch      = ""
     @State private var pttDragOffset:  CGFloat = 0
     @State private var pttDragOffsetY: CGFloat = 0
     @State private var pttGestureCommitted     = false
@@ -96,6 +98,7 @@ struct ContentView: View {
     @State private var expandedAgentMsgIds:    Set<UUID> = []
     @State private var isAtBottom:             Bool = true
     @State private var sidebarExpanded:        Bool = false
+    @State private var showFilePicker:         Bool = false
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -137,6 +140,12 @@ struct ContentView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This will restart the session with \(pendingModelSwitch.capitalized). The conversation will be preserved.")
+        }
+        .alert("Switch Effort", isPresented: $showEffortRestartConfirm) {
+            Button("Restart", role: .destructive) { vm.restartWithEffort(pendingEffortSwitch) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Switch to \(pendingEffortSwitch.capitalized) effort? This will restart the session. The conversation will be preserved.")
         }
         .alert("Error", isPresented: Binding(
             get: { vm.errorMessage != nil },
@@ -1018,20 +1027,24 @@ struct ContentView: View {
                         .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
                 }
 
-                // Effort label — mirrors web #effort-label (clickable)
-                Menu {
-                    ForEach(["low","medium","high"], id: \.self) { level in
-                        Button { vm.sendEffort(level) } label: {
-                            HStack { Text(level.capitalized); if s.effort == level { Image(systemName: "checkmark") } }
+                // Effort label — mirrors web #effort-label (clickable); hidden when haiku (matches web updateEffortLabel)
+                if s.model != "haiku" {
+                    Menu {
+                        ForEach(["high","medium","low"], id: \.self) { level in
+                            Button {
+                                if s.effort != level { pendingEffortSwitch = level; showEffortRestartConfirm = true }
+                            } label: {
+                                HStack { Text(level.capitalized); if s.effort == level { Image(systemName: "checkmark") } }
+                            }
                         }
+                    } label: {
+                        Text(s.effort.isEmpty ? "High" : s.effort.capitalized)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(Color.cTextTer)
+                            .padding(.horizontal, 7).padding(.vertical, 3)
+                            .background(Color.glass, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
                     }
-                } label: {
-                    Text(s.effort.isEmpty ? "Med" : String(s.effort.prefix(3)).capitalized)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Color.cTextTer)
-                        .padding(.horizontal, 7).padding(.vertical, 3)
-                        .background(Color.glass, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
                 }
 
                 // Mode toggle — mirrors web #mode-toggle (two-line: value + "MODE" label)
@@ -1750,6 +1763,14 @@ struct ContentView: View {
                 .transition(.scale.combined(with: .opacity))
             }
 
+            // File attach button — mirrors web drag-and-drop upload (POST /api/sessions/:id/upload)
+            Button { showFilePicker = true } label: {
+                Image(systemName: "paperclip")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(Color.cTextTer)
+                    .frame(width: 32, height: 32)
+            }
+
             // Text input — mirrors web #text-input (flex:1, transparent, padding 8px 4px)
             TextField("Type a message...", text: $vm.typingText, axis: .vertical)
                 .textFieldStyle(.plain)
@@ -1781,6 +1802,15 @@ struct ContentView: View {
             }
         }
         .padding(.horizontal, 8).padding(.bottom, 4)
+        .fileImporter(
+            isPresented: $showFilePicker,
+            allowedContentTypes: [.item],
+            allowsMultipleSelection: false
+        ) { result in
+            if case .success(let urls) = result, let url = urls.first {
+                vm.uploadFile(url: url)
+            }
+        }
     }
 
     // MARK: - PTT Text Input Bar

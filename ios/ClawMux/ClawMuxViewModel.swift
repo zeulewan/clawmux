@@ -1360,9 +1360,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         sendJSON(["session_id": sid, "type": "interrupt"])
     }
 
-    func sendEffort(_ effort: String) {
+    func restartWithEffort(_ effort: String) {
         guard let sid = activeSessionId else { return }
-        sendJSON(["session_id": sid, "type": "set_effort", "effort": effort])
+        sendJSON(["session_id": sid, "type": "restart_effort", "effort": effort])
         if let idx = sessionIndex(sid) { sessions[idx].effort = effort }
     }
 
@@ -2000,6 +2000,39 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         URLSession.shared.dataTask(with: request) { _, _, _ in }.resume()
         if activeSessionId == id { endLiveActivity() }
         removeSession(id)
+    }
+
+    // File upload — mirrors web drag-and-drop POST /api/sessions/:id/upload
+    func uploadFile(url: URL) {
+        guard let sid = activeSessionId, let baseURL = httpBaseURL() else { return }
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+        guard let data = try? Data(contentsOf: url) else {
+            addMessage(sid, role: "system", text: "Upload failed: could not read file")
+            return
+        }
+        let boundary = UUID().uuidString
+        var body = Data()
+        let filename = url.lastPathComponent
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: application/octet-stream\r\n\r\n".data(using: .utf8)!)
+        body.append(data)
+        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/sessions/\(sid)/upload"))
+        req.httpMethod = "POST"
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        req.httpBody = body
+        URLSession.shared.dataTask(with: req) { [weak self] data, resp, err in
+            Task { @MainActor in
+                guard let self else { return }
+                if let err { self.addMessage(sid, role: "system", text: "Upload error: \(err.localizedDescription)"); return }
+                if let http = resp as? HTTPURLResponse, http.statusCode != 200 {
+                    let msg = (data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] })?["error"] as? String ?? "Upload failed"
+                    self.addMessage(sid, role: "system", text: msg)
+                }
+            }
+        }.resume()
     }
 
     // Matches web _disbandGroup → DELETE /api/groupchats/:name
