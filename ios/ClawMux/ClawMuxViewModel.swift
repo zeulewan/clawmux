@@ -975,6 +975,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     var m = ChatMessage(role: role, text: text)
                     if let ts = msg["ts"] as? Double { m.timestamp = Date(timeIntervalSince1970: ts) }
                     if let mid = msg["id"] as? String { m.msgId = mid }
+                    if let pid = msg["parent_id"] as? String { m.parentId = pid }
+                    if msg["bare_ack"] as? Bool == true { m.isBareAck = true }
                     return m
                 }
                 if !chatMessages.isEmpty {
@@ -984,6 +986,65 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     let isReady = state != .starting && state != .dead
                     let placeholder = isReady ? "Claude connected." : "Session started. Waiting for Claude..."
                     self.sessions[idx].messages = [ChatMessage(role: "system", text: placeholder)]
+                }
+            }
+        }.resume()
+    }
+
+    // Cursor-based reconnect sync — appends only messages after the last known ID.
+    // Falls back to full fetchHistory if no cursor is available (empty history).
+    // Mirrors web _reconnectSyncSession.
+    private func reconnectSyncHistory(voiceId: String, sessionId: String) {
+        guard let idx = sessionIndex(sessionId) else { return }
+
+        // Find last message with a server-assigned ID (cursor)
+        let cursor = sessions[idx].messages.reversed().first(where: { $0.msgId != nil })?.msgId
+
+        if cursor == nil && sessions[idx].messages.isEmpty {
+            // No history yet — full fetch with placeholder
+            fetchHistory(voiceId: voiceId, sessionId: sessionId)
+            return
+        }
+        guard let cursor else { return } // Has messages but no IDs — nothing to sync
+
+        guard let baseURL = httpBaseURL() else { return }
+        var comps = URLComponents(
+            url: baseURL.appendingPathComponent("api/history/\(voiceId)"),
+            resolvingAgainstBaseURL: false)!
+        comps.queryItems = [
+            URLQueryItem(name: "project", value: currentProject),
+            URLQueryItem(name: "after", value: cursor),
+        ]
+        guard let url = comps.url else { return }
+
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+            guard let data,
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                let messages = json["messages"] as? [[String: Any]]
+            else { return }
+            Task { @MainActor in
+                guard let self, let _ = self.sessionIndex(sessionId) else { return }
+                for msg in messages {
+                    guard let role = msg["role"] as? String,
+                        let text = msg["text"] as? String
+                    else { continue }
+                    let ts = msg["ts"] as? Double
+                    let mid = msg["id"] as? String
+                    let parentId = msg["parent_id"] as? String
+                    let isBareAck = msg["bare_ack"] as? Bool ?? false
+                    // addMessage deduplicates by msgId — safe to call even on overlap
+                    var m = ChatMessage(role: role, text: text)
+                    if let ts { m.timestamp = Date(timeIntervalSince1970: ts) }
+                    m.msgId = mid
+                    m.parentId = parentId
+                    m.isBareAck = isBareAck
+                    if let msgId = mid,
+                        let i = self.sessionIndex(sessionId),
+                        self.sessions[i].messages.contains(where: { $0.msgId == msgId })
+                    { continue } // skip duplicates
+                    if let i = self.sessionIndex(sessionId) {
+                        self.sessions[i].messages.append(m)
+                    }
                 }
             }
         }.resume()
@@ -1247,9 +1308,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                             if let project = s["project"] as? String { sessions[idx].project = project }
                             if let area = s["project_area"] as? String { sessions[idx].projectArea = area }
                             if let unread = s["unread_count"] as? Int { sessions[idx].unreadCount = unread }
-                            // Fetch history only if not yet loaded
-                            if sessions[idx].messages.isEmpty, let voice = s["voice"] as? String {
-                                fetchHistory(voiceId: voice, sessionId: sid)
+                            // Cursor-based reconnect sync — appends missed messages (mirrors web _reconnectSyncSession)
+                            if let voice = s["voice"] as? String {
+                                reconnectSyncHistory(voiceId: voice, sessionId: sid)
                             }
                         }
                     }
