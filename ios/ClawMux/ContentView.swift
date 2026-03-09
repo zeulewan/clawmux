@@ -604,8 +604,12 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
+            if session == nil {
+                Button { vm.spawnSession(voiceId: voice.id) } label: {
+                    Label("Launch Session", systemImage: "play.circle")
+                }
+            }
             if let s = session {
-                // Mark as Unread / Read
                 if s.unreadCount == 0 {
                     Button { vm.markSessionUnread(s.id) } label: {
                         Label("Mark as Unread", systemImage: "envelope.badge")
@@ -615,46 +619,30 @@ struct ContentView: View {
                         Label("Mark as Read", systemImage: "checkmark.circle")
                     }
                 }
-                // Set Role
                 Menu {
                     ForEach(["Manager", "Frontend", "Backend", "Researcher", "Worker"], id: \.self) { role in
-                        Button {
-                            vm.setSessionRole(s.id, role: role)
-                        } label: {
-                            if s.role.lowercased() == role.lowercased() {
-                                Label(role, systemImage: "checkmark")
-                            } else {
-                                Text(role)
-                            }
+                        Button { vm.setSessionRole(s.id, role: role) } label: {
+                            if s.role.lowercased() == role.lowercased() { Label(role, systemImage: "checkmark") }
+                            else { Text(role) }
                         }
                     }
-                } label: {
-                    Label("Set Role", systemImage: "person.badge.key")
-                }
-                // Move to Project
+                } label: { Label("Set Role", systemImage: "person.badge.key") }
                 if !vm.knownProjects.isEmpty {
                     Menu {
                         ForEach(vm.knownProjects, id: \.self) { proj in
-                            Button {
-                                vm.moveSessionToProject(s.id, project: proj)
-                            } label: {
-                                if s.project == proj {
-                                    Label(proj, systemImage: "checkmark")
-                                } else {
-                                    Text(proj)
-                                }
+                            Button { vm.moveSessionToProject(s.id, project: proj) } label: {
+                                if s.project == proj { Label(proj, systemImage: "checkmark") }
+                                else { Text(proj) }
                             }
                         }
-                    } label: {
-                        Label("Move to Project", systemImage: "folder")
-                    }
+                    } label: { Label("Move to Project", systemImage: "folder") }
                 }
                 Button(role: .destructive) { vm.terminateSession(s.id) } label: {
-                    Label("End Session", systemImage: "xmark.circle")
+                    Label("Terminate Session", systemImage: "xmark.circle")
                 }
             }
             Button(role: .destructive) { resetVoiceId = voice.id; showResetConfirm = true } label: {
-                Label("Reset History", systemImage: "trash")
+                Label("Reset", systemImage: "arrow.counterclockwise")
             }
         }
     }
