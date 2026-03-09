@@ -2012,6 +2012,15 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   }
   #welcome-view { padding-top: 52px; padding-left: 56px; }
   #settings-page { padding-left: 56px; padding-top: 60px; }
+  /* Glass style for settings cards on mobile */
+  .settings-card {
+    background: var(--bg-glass) !important;
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    border-color: rgba(255,255,255,0.07) !important;
+  }
+  .settings-toggle { border-bottom-color: rgba(255,255,255,0.05) !important; }
+  .settings-toggle:active { background: rgba(128,128,128,0.12); }
 
   /* === Notes panel: overlay like sidebar, don't push chat === */
   #notes-panel {
