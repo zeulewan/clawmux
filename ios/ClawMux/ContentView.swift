@@ -630,16 +630,19 @@ struct ContentView: View {
     @ViewBuilder
     private func groupCard(_ groupId: String, name: String? = nil, voices: [VoiceInfo]) -> some View {
         let blue = Color(hex: 0x0A84FF)
-        let isSelected = !vm.isFocusMode && voices.contains { $0.id == vm.activeSession?.voice }
+        let isSelected = !vm.isFocusMode && vm.activeGroupName == (name ?? groupId)
         VStack(spacing: 0) {
-            // Header — tap to switch to first active member session
+            // Header — tap to enter group chat mode
             Button {
+                let firstName = name ?? groupId
+                var firstSid: String? = nil
                 for v in voices {
                     if let s = vm.sessions.first(where: { $0.voice == v.id && !$0.isDead }) {
-                        vm.switchToSession(s.id)
+                        firstSid = s.id
                         break
                     }
                 }
+                vm.switchToGroupChat(name: firstName, firstSessionId: firstSid)
                 withAnimation(.spring(response: 0.3)) { sidebarExpanded = false }
             } label: {
                 HStack(spacing: 8) {
@@ -707,13 +710,16 @@ struct ContentView: View {
     @ViewBuilder
     private func groupIcon(_ groupId: String, voices: [VoiceInfo]) -> some View {
         let blue = Color(hex: 0x0A84FF)
+        let groupName = vm.groupName(for: groupId) ?? groupId
         Button {
+            var firstSid: String? = nil
             for v in voices {
                 if let s = vm.sessions.first(where: { $0.voice == v.id && !$0.isDead }) {
-                    vm.switchToSession(s.id)
+                    firstSid = s.id
                     break
                 }
             }
+            vm.switchToGroupChat(name: groupName, firstSessionId: firstSid)
         } label: {
             ZStack {
                 let shown = Array(voices.prefix(3))
@@ -1661,7 +1667,7 @@ struct ContentView: View {
                         .opacity(pttDragOffset > 10 ? min(1, Double(pttDragOffset - 10) / 50) : 0.3)
                         .frame(width: 60).transition(.opacity)
                     } else if let s = vm.activeSession,
-                        s.isThinking || s.state == .starting
+                        s.isThinking || s.state == .starting || s.isSpeaking
                     {
                         // Interrupt button — mirrors web #voice-stop (red, 46×46)
                         Button { vm.sendInterrupt() } label: {
@@ -1710,8 +1716,8 @@ struct ContentView: View {
         // Mirrors web #text-input-bar: single row [text-stop?] [textarea] [send]
         // Container: padding 8px 12px, border-radius 20px, glass/blur
         HStack(alignment: .bottom, spacing: 8) {
-            // Stop button — mirrors web #text-stop (38x38, red, in-flow, shown when agent working)
-            if let s = vm.activeSession, s.isThinking || s.state == .starting {
+            // Stop button — mirrors web #text-stop (38x38, red, in-flow, shown when agent working or speaking)
+            if let s = vm.activeSession, s.isThinking || s.state == .starting || s.isSpeaking {
                 Button { vm.sendInterrupt() } label: {
                     Image(systemName: "stop.fill")
                         .font(.system(size: 13, weight: .bold))

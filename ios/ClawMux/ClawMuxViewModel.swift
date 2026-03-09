@@ -321,6 +321,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     }
     @Published var spawningVoiceIds: Set<String> = []
     @Published var knownGroupChats: [(name: String, voices: [String])] = []
+    @Published var activeGroupName: String? = nil  // non-nil when viewing a group chat
     private var groupIdToName: [String: String] = [:]  // "gc-xxx" → "group name" for disband API
 
     func groupName(for groupId: String) -> String? { groupIdToName[groupId] }
@@ -1371,6 +1372,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     }
 
     func sendInterrupt() {
+        // If audio is playing, stop it immediately (matches web stop-agent-speaking)
+        if isPlaying || isPlaybackPaused { interruptPlayback() }
         guard let sid = activeSessionId else { return }
         sendJSON(["session_id": sid, "type": "interrupt"])
     }
@@ -1878,6 +1881,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             clearTranscriptPreview()
         }
         activeSessionId = id
+        activeGroupName = nil
         showDebug = false
         isFocusMode = false
 
@@ -2048,6 +2052,27 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 }
             }
         }.resume()
+    }
+
+    // Switch to viewing a group chat (sets activeGroupName, keeps activeSessionId on first member)
+    func switchToGroupChat(name: String, firstSessionId: String?) {
+        activeGroupName = name
+        if let sid = firstSessionId {
+            switchToSession(sid)
+            // switchToSession clears activeGroupName, so re-set it
+            activeGroupName = name
+        }
+    }
+
+    // POST text message to group chat → /api/groupchats/:name/message
+    func sendGroupMessage(_ text: String, groupName: String) {
+        guard let baseURL = httpBaseURL() else { return }
+        let encoded = groupName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? groupName
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/groupchats/\(encoded)/message"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["text": text])
+        URLSession.shared.dataTask(with: req) { _, _, _ in }.resume()
     }
 
     // Matches web _disbandGroup → DELETE /api/groupchats/:name
@@ -2744,9 +2769,15 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
 
     func sendText() {
         let text = typingText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, let sid = activeSessionId else { return }
+        guard !text.isEmpty else { return }
         if hapticsSend && typingMode { haptic(.medium) }
         typingText = ""
+        // Route to group chat if one is active
+        if let groupName = activeGroupName {
+            sendGroupMessage(text, groupName: groupName)
+            return
+        }
+        guard let sid = activeSessionId else { return }
         // Check if agent is awaiting input or busy
         let isAwaiting = sessionIndex(sid).flatMap { sessions[$0].awaitingInput } ?? false
         if isAwaiting {
