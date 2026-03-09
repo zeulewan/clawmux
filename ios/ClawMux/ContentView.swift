@@ -143,7 +143,8 @@ struct ContentView: View {
     // MARK: - Split Layout
 
     private var mainAreaView: some View {
-        Group {
+        let voiceTint = vm.activeSession.map { voiceColor($0.voice) } ?? Color.clear
+        return Group {
             if vm.activeSessionId != nil {
                 chatMainView
             } else {
@@ -151,6 +152,9 @@ struct ContentView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Voice color background tint — matches web #main-content backgroundColor = hexToRgba(vc, 0.10)
+        // Animates on session switch with 0.4s ease (matches web transition: background-color 0.4s ease)
+        .background(voiceTint.opacity(0.10).animation(.easeInOut(duration: 0.4), value: vm.activeSessionId))
     }
 
     // MARK: - Sidebar (collapsible, 48px → 220px, overlays main when expanded)
@@ -791,7 +795,8 @@ struct ContentView: View {
 
     private var messageGroups: [MessageGroup] {
         let filtered = vm.activeMessages.filter { msg in
-            if msg.role == "system" || msg.role == "agent" { return vm.verboseMode }
+            if msg.role == "system" || msg.role == "agent" || msg.role == "activity" { return vm.verboseMode }
+            if msg.isBareAck { return false }
             return true
         }
         var groups: [MessageGroup] = []
