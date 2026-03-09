@@ -1119,8 +1119,8 @@ struct ContentView: View {
 
     private var messageGroups: [MessageGroup] {
         let filtered = vm.activeMessages.filter { msg in
-            if msg.role == "system" || msg.role == "agent" || msg.role == "activity" { return vm.verboseMode }
             if msg.isBareAck { return false }
+            if msg.role == "agent" || msg.role == "activity" { return vm.verboseMode }
             return true
         }
         var groups: [MessageGroup] = []
