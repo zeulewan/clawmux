@@ -1880,8 +1880,23 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   /* Karaoke words: disable hover effect on mobile but allow tap for playback */
   .karaoke-word { cursor: default; }
 
-  /* Controls: mobile size overrides */
-  #controls { padding: 8px 14px 6px; padding-bottom: max(6px, env(safe-area-inset-bottom)); max-width: calc(100% - 24px); }
+  /* Controls: mobile size overrides — pin to non-sidebar area */
+  #controls {
+    padding: 8px 14px 6px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
+    left: calc(48px + 8px) !important;
+    right: 8px !important;
+    width: auto !important;
+    max-width: none !important;
+    transform: none !important;
+  }
+  #text-input-bar {
+    left: calc(48px + 8px) !important;
+    right: 8px !important;
+    width: auto !important;
+    max-width: none !important;
+    transform: none !important;
+  }
   #controls-left, #controls-right { min-height: 80px; }
   #controls-status { padding: 4px 6px 0; }
   #mic { width: 80px; height: 80px; }
