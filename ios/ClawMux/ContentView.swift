@@ -717,36 +717,57 @@ struct ContentView: View {
     private var chatScrollArea: some View {
         GeometryReader { geo in
             ScrollViewReader { proxy in
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 20) {
-                        Spacer(minLength: 0).frame(maxHeight: .infinity)
-                        ForEach(messageGroups) { group in
-                            messageGroupView(group)
-                                .id(group.id)
-                                .transition(.opacity.animation(.easeIn(duration: 0.55)))
+                ZStack(alignment: .bottomTrailing) {
+                    ScrollView(showsIndicators: false) {
+                        VStack(spacing: 20) {
+                            Spacer(minLength: 0).frame(maxHeight: .infinity)
+                            ForEach(messageGroups) { group in
+                                messageGroupView(group)
+                                    .id(group.id)
+                                    .transition(.opacity.animation(.easeIn(duration: 0.55)))
+                            }
+                            if vm.activeSession?.isThinking == true {
+                                thinkingBubble.id("thinking")
+                            }
+                            // Bottom anchor
+                            Color.clear.frame(height: 1).id("bottom")
                         }
-                        if vm.activeSession?.isThinking == true {
-                            thinkingBubble.id("thinking")
-                        }
-                        // Bottom anchor
-                        Color.clear.frame(height: 1).id("bottom")
+                        .padding(.horizontal, 24)
+                        .padding(.top, 16).padding(.bottom, 170)
+                        .frame(minHeight: geo.size.height)
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.top, 16).padding(.bottom, 170)
-                    .frame(minHeight: geo.size.height)
-                }
-                .defaultScrollAnchor(.bottom)
-                .id(vm.activeSessionId ?? "none")
-                .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
-                .onChange(of: vm.activeMessages.count)        { _, _ in scrollBottom(proxy) }
-                .onChange(of: vm.activeSession?.isThinking)   { _, thinking in
-                    if thinking != true { thinkingExpanded = false }
-                    scrollBottom(proxy)
-                }
-                .onChange(of: vm.activeSession?.activity)     { _, _ in scrollBottom(proxy) }
-                .onChange(of: vm.activeSessionId)             { _, _ in
-                    isAtBottom = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { scrollBottom(proxy) }
+                    .defaultScrollAnchor(.bottom)
+                    .id(vm.activeSessionId ?? "none")
+                    .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
+                    .onChange(of: vm.activeMessages.count)        { _, _ in scrollBottom(proxy) }
+                    .onChange(of: vm.activeSession?.isThinking)   { _, thinking in
+                        if thinking != true { thinkingExpanded = false }
+                        scrollBottom(proxy)
+                    }
+                    .onChange(of: vm.activeSession?.activity)     { _, _ in scrollBottom(proxy) }
+                    .onChange(of: vm.activeSessionId)             { _, _ in
+                        isAtBottom = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { scrollBottom(proxy) }
+                    }
+
+                    // Scroll-to-bottom FAB (mirrors web #scroll-bottom-btn)
+                    if !isAtBottom {
+                        Button {
+                            withAnimation(.spring(response: 0.3)) { proxy.scrollTo("bottom", anchor: .bottom) }
+                        } label: {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Color.cText)
+                                .frame(width: 32, height: 32)
+                                .background(Color.cCard, in: Circle())
+                                .overlay(Circle().strokeBorder(Color.glassBorder, lineWidth: 0.5))
+                                .shadow(color: .black.opacity(0.4), radius: 8, x: 0, y: 2)
+                        }
+                        .padding(.trailing, 16)
+                        .padding(.bottom, 180)
+                        .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .bottomTrailing)))
+                        .animation(.spring(response: 0.25), value: isAtBottom)
+                    }
                 }
             }
         }
@@ -841,7 +862,8 @@ struct ContentView: View {
             if role == "user"   { Spacer(minLength: 56) }
             if role == "system" { Spacer() }
 
-            VStack(alignment: role == "user" ? .trailing : .leading, spacing: 0) {
+            VStack(alignment: role == "user" ? .trailing : .leading, spacing: 3) {
+                // Bubble
                 Group {
                     if role == "assistant" {
                         MarkdownContentView(text: msg.text, foreground: Color.cText, fontSize: CGFloat(vm.chatFontSize))
@@ -859,53 +881,54 @@ struct ContentView: View {
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }
-                .padding(.horizontal, 15).padding(.top, 10).padding(.bottom, 4)
-
-                if role != "system" {
-                    Text(shortTime(msg.timestamp))
-                        .font(.system(size: 9))
-                        .foregroundStyle(role == "user" ? Color.white.opacity(0.45) : Color.cTextTer)
-                        .padding(.horizontal, 11).padding(.bottom, 6)
-                        .frame(maxWidth: .infinity, alignment: role == "user" ? .trailing : .leading)
-                }
-            }
-            .background(bubbleBg,
-                in: UnevenRoundedRectangle(
-                    topLeadingRadius: tl, bottomLeadingRadius: bl,
-                    bottomTrailingRadius: br, topTrailingRadius: tr,
-                    style: .continuous))
-            .overlay(
-                // Voice color tint on assistant bubbles (matches web rgba(voiceColor, 0.20))
-                UnevenRoundedRectangle(
-                    topLeadingRadius: tl, bottomLeadingRadius: bl,
-                    bottomTrailingRadius: br, topTrailingRadius: tr,
-                    style: .continuous)
-                    .fill(role == "assistant" ? color.opacity(0.12) : Color.clear)
-            )
-            .overlay {
-                if role == "assistant" {
+                .padding(.horizontal, 15).padding(.vertical, 10)
+                .background(bubbleBg,
+                    in: UnevenRoundedRectangle(
+                        topLeadingRadius: tl, bottomLeadingRadius: bl,
+                        bottomTrailingRadius: br, topTrailingRadius: tr,
+                        style: .continuous))
+                .overlay(
+                    // Voice color tint on assistant bubbles
                     UnevenRoundedRectangle(
                         topLeadingRadius: tl, bottomLeadingRadius: bl,
                         bottomTrailingRadius: br, topTrailingRadius: tr,
                         style: .continuous)
-                    .strokeBorder(
-                        isPlaying ? color.opacity(isPulsing ? 0.7 : 0.2) : Color(hex: 0x2A3A52),
-                        lineWidth: 0.5)
-                    .animation(
-                        isPlaying ? .easeInOut(duration: 1.0).repeatForever(autoreverses: true) : .default,
-                        value: isPulsing)
-                }
-            }
-            .shadow(color: role == "assistant" ? Color.black.opacity(0.3) : Color.clear, radius: 1.5, x: 0, y: 1)
-            .contextMenu {
-                Button {
-                    UIPasteboard.general.string = msg.text
-                    withAnimation { showCopiedToast = true }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                        withAnimation { showCopiedToast = false }
+                        .fill(role == "assistant" ? color.opacity(0.12) : Color.clear)
+                )
+                .overlay {
+                    if role == "assistant" {
+                        UnevenRoundedRectangle(
+                            topLeadingRadius: tl, bottomLeadingRadius: bl,
+                            bottomTrailingRadius: br, topTrailingRadius: tr,
+                            style: .continuous)
+                        .strokeBorder(
+                            isPlaying ? color.opacity(isPulsing ? 0.7 : 0.2) : Color(hex: 0x2A3A52),
+                            lineWidth: 0.5)
+                        .animation(
+                            isPlaying ? .easeInOut(duration: 1.0).repeatForever(autoreverses: true) : .default,
+                            value: isPulsing)
                     }
-                } label: {
-                    Label("Copy", systemImage: "doc.on.doc")
+                }
+                .shadow(color: role == "assistant" ? Color.black.opacity(0.3) : Color.clear, radius: 1.5, x: 0, y: 1)
+                .contextMenu {
+                    Button {
+                        UIPasteboard.general.string = msg.text
+                        withAnimation { showCopiedToast = true }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                            withAnimation { showCopiedToast = false }
+                        }
+                    } label: {
+                        Label("Copy", systemImage: "doc.on.doc")
+                    }
+                }
+
+                // Timestamp below bubble — shown only on last message in group (mirrors web .msg-ts)
+                if role != "system" && isLast {
+                    Text(shortTime(msg.timestamp))
+                        .font(.system(size: 9))
+                        .foregroundStyle(Color.cTextTer)
+                        .padding(.horizontal, 4)
+                        .frame(maxWidth: .infinity, alignment: role == "user" ? .trailing : .leading)
                 }
             }
 
@@ -1099,25 +1122,16 @@ struct ContentView: View {
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
 
-                // Main row: cancel / mic / text-hint
+                // Main row: cancel / mic / interrupt
                 HStack(alignment: .center) {
-                    if vm.isPlaying {
-                        // Stop TTS playback
-                        Button { vm.interruptPlayback() } label: {
-                            Image(systemName: "stop.fill")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(Color.cDanger)
-                                .frame(width: 44, height: 44)
-                                .background(Color.cDanger.opacity(0.12), in: Circle())
-                                .overlay(Circle().strokeBorder(Color.cDanger.opacity(0.25), lineWidth: 0.5))
-                        }
-                        .transition(.scale.combined(with: .opacity))
-                    } else if vm.isRecording && !vm.pushToTalk {
+                    if vm.isRecording && !vm.pushToTalk {
+                        // Cancel recording (x) — matches web #mic-cancel (46×46, red, in mic-wrapper)
                         Button { vm.cancelRecording() } label: {
                             Image(systemName: "xmark").font(.system(size: 14, weight: .bold))
                                 .foregroundStyle(Color.cDanger)
-                                .frame(width: 40, height: 40)
-                                .background(Color.cDanger.opacity(0.15), in: Circle())
+                                .frame(width: 46, height: 46)
+                                .background(Color.cDanger.opacity(0.10), in: Circle())
+                                .overlay(Circle().strokeBorder(Color.cDanger.opacity(0.30), lineWidth: 1))
                         }
                         .transition(.scale.combined(with: .opacity))
                     } else if vm.isRecording && vm.pushToTalk {
@@ -1179,16 +1193,16 @@ struct ContentView: View {
                         .opacity(pttDragOffset > 10 ? min(1, Double(pttDragOffset - 10) / 50) : 0.3)
                         .frame(width: 60).transition(.opacity)
                     } else if let s = vm.activeSession,
-                        s.isThinking || s.state == .processing || s.state == .compacting
+                        s.isThinking || s.state == .starting
                     {
-                        // Interrupt button — mirrors web #controls-right voice-stop
+                        // Interrupt button — mirrors web #voice-stop (red, 46×46)
                         Button { vm.sendInterrupt() } label: {
                             Image(systemName: "stop.fill")
                                 .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(Color.cWarning)
-                                .frame(width: 44, height: 44)
-                                .background(Color.cWarning.opacity(0.12), in: Circle())
-                                .overlay(Circle().strokeBorder(Color.cWarning.opacity(0.25), lineWidth: 0.5))
+                                .foregroundStyle(Color.cDanger)
+                                .frame(width: 46, height: 46)
+                                .background(Color.cDanger.opacity(0.10), in: Circle())
+                                .overlay(Circle().strokeBorder(Color.cDanger.opacity(0.30), lineWidth: 1))
                         }
                         .transition(.scale.combined(with: .opacity))
                         .frame(width: 60)
@@ -1286,6 +1300,19 @@ struct ContentView: View {
             .padding(.horizontal, 16)
 
             HStack(spacing: 10) {
+                // Stop button — mirrors web #text-stop (38px red, shown when agent is working)
+                if let s = vm.activeSession, s.isThinking || s.state == .starting {
+                    Button { vm.sendInterrupt() } label: {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(Color.cDanger)
+                            .frame(width: 38, height: 38)
+                            .background(Color.cDanger.opacity(0.10), in: Circle())
+                            .overlay(Circle().strokeBorder(Color.cDanger.opacity(0.30), lineWidth: 1))
+                    }
+                    .transition(.scale.combined(with: .opacity))
+                }
+
                 TextField("Message", text: $vm.typingText, axis: .vertical)
                     .textFieldStyle(.plain).font(.subheadline).lineLimit(1...5)
                     .foregroundStyle(Color.cText)
