@@ -451,28 +451,30 @@ body {
   color: var(--text-tertiary);
 }
 
-/* App loading progress bar */
+/* App loading progress bar — fixed at top of viewport */
 #app-loading-bar {
-  position: absolute;
+  position: fixed;
   top: 0; left: 0; right: 0;
-  height: 2px;
+  height: 3px;
   overflow: hidden;
   opacity: 0;
-  transition: opacity 0.2s;
+  pointer-events: none;
+  transition: opacity 0.3s;
+  z-index: 9999;
 }
 #app-loading-bar.active { opacity: 1; }
 #app-loading-bar::after {
   content: '';
   position: absolute;
-  top: 0; left: -60%;
-  width: 60%;
+  top: 0; left: -50%;
+  width: 50%;
   height: 100%;
-  background: var(--blue);
-  border-radius: 2px;
-  animation: loading-bar-sweep 1.2s ease-in-out infinite;
+  background: linear-gradient(90deg, transparent, var(--blue), var(--blue));
+  border-radius: 0 2px 2px 0;
+  animation: loading-bar-sweep 1s ease-in-out infinite;
 }
 @keyframes loading-bar-sweep {
-  0%   { left: -60%; }
+  0%   { left: -50%; }
   100% { left: 110%; }
 }
 
