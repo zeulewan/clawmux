@@ -1022,13 +1022,27 @@ body {
   opacity: 0.9;
 }
 .typing-log-expanded {
-  margin-top: 8px;
-  padding-top: 7px;
-  border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   gap: 3px;
-  width: 100%;
+  align-self: stretch;
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 1px solid transparent;
+  transition: max-height 0.3s ease-out, opacity 0.22s ease-out,
+    margin-top 0.3s ease-out, padding-top 0.3s ease-out,
+    border-top-color 0.22s ease-out;
+}
+.msg-typing-indicator.expanded .typing-log-expanded {
+  max-height: 200px;
+  overflow-y: auto;
+  opacity: 1;
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top-color: var(--border);
 }
 .typing-log-line {
   font-size: 0.73em;
@@ -1706,7 +1720,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 @media (max-width: 600px) {
   /* Header: declutter for mobile */
   /* Global: disable text selection everywhere on mobile (except text input) */
-  *, *::before, *::after { -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; }
+  *, *::before, *::after { -webkit-tap-highlight-color: transparent; -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; }
   input, textarea { -webkit-user-select: text !important; user-select: text !important; }
   #header { padding: 3px 12px; gap: 6px; flex-wrap: wrap; min-height: 44px; }
   #header h1 { display: none; }
@@ -1927,6 +1941,42 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 
   /* Ack badge: ensure visible on mobile */
   .thread-ack-badge { font-size: 0.7rem; bottom: -22px; right: 4px; left: auto; }
+
+  /* === Floating glass header: chat scrolls behind, backdrop-filter shows === */
+  body { position: relative; }
+  #header {
+    position: absolute !important;
+    top: 0; left: 0; right: 0;
+    z-index: 60;
+    background: var(--bg-glass) !important;
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+  }
+  #app-body {
+    position: absolute !important;
+    top: 0; left: 0; right: 0; bottom: 0;
+  }
+  #sidebar-list { padding-top: 48px; }
+  #chat-area {
+    padding-top: 60px !important;
+    padding-left: calc(48px + 8px) !important;
+    padding-right: 8px !important;
+  }
+  #welcome-view { padding-top: 52px; }
+
+  /* === Notes panel: overlay like sidebar, don't push chat === */
+  #notes-panel {
+    position: absolute !important;
+    top: 0; right: 0; bottom: 0;
+    z-index: 55;
+    width: 0 !important;
+    min-width: 0 !important;
+  }
+  #notes-panel.open {
+    width: min(300px, 85vw) !important;
+    min-width: 0 !important;
+    box-shadow: -4px 0 24px rgba(0,0,0,0.4);
+  }
 }
 /* --- Markdown message styles --- */
 .msg.assistant .md-content { line-height: 1.6; color: var(--text); }
@@ -2631,7 +2681,7 @@ async function addSession(data, autoSwitch = false) {
     } else {
       addMessage(data.session_id, 'system', 'Session started. Waiting for Claude...', { id: 'waiting-for-claude-' + data.session_id });
     }
-  } else if (!isReady) {
+  } else if (!isReady && (data.state === 'starting' || !data.state)) {
     addMessage(data.session_id, 'system', 'Waiting for Claude...', { id: 'waiting-for-claude-' + data.session_id });
   }
 
