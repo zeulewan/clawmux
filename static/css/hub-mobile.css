@@ -1,0 +1,300 @@
+/* Mobile optimizations */
+@media (max-width: 600px) {
+  /* Header: declutter for mobile */
+  /* Global: disable text selection everywhere on mobile (except text input) */
+  *, *::before, *::after { -webkit-tap-highlight-color: transparent; -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; }
+  input, textarea { -webkit-user-select: text !important; user-select: text !important; }
+  #header { padding: 3px 12px; gap: 6px; flex-wrap: wrap; min-height: 44px; }
+  #header h1 { display: none; }
+  #header-project-status { display: none; }
+  #active-voice { font-size: 1.2rem !important; font-weight: 700 !important; }
+  /* model-label now used on all screen sizes — no mobile override needed */
+  #usage-bar { padding: 4px 8px !important; font-size: 0.72rem !important; gap: 6px !important; }
+  #settings-link { font-size: 0; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; padding: 0; }
+  #settings-link::before { content: '⚙'; font-size: 14px; }
+  #conn-label { display: none; }
+  /* Put connection dot inline with title */
+  #header > div:has(#dot) { padding: 2px 6px !important; border-radius: var(--radius-xs); }
+
+  /* Sidebar: icon-only, absolutely positioned, smooth slide */
+  #sidebar {
+    width: 48px;
+    min-width: 48px;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 50;
+    background: var(--bg-glass);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    overflow: hidden;
+    transition: width 0.25s ease-in-out;
+  }
+  #main-content {
+    margin-left: 0;
+  }
+  .resize-handle { display: none !important; }
+  /* Project header: chevron always visible at left, name hidden until expanded */
+  .sidebar-project-header { justify-content: flex-start; padding: 5px 8px; gap: 6px; font-size: 0.55rem; }
+  .sidebar-project-header .project-chevron { font-size: 0.7rem; flex-shrink: 0; }
+  .sidebar-project-header .project-name,
+  .sidebar-project-header .project-agent-count { opacity: 0; pointer-events: none; }
+  #sidebar.expanded .sidebar-project-header .project-name,
+  #sidebar.expanded .sidebar-project-header .project-agent-count { opacity: 1; pointer-events: auto; transition: opacity 0.15s ease-out 0.2s; }
+  /* sb-info out of flow — starts past sidebar edge so no partial chars during slide */
+  .sidebar-card .sb-info { position: absolute; left: 56px; top: 0; bottom: 0; width: 140px; overflow: hidden; display: flex; flex-direction: column; justify-content: center; gap: 1px; opacity: 1; }
+  /* Remove min-heights that inflate the block */
+  .sidebar-card .sb-status { min-height: 0 !important; }
+  .sidebar-card .sb-task { min-height: 0 !important; }
+  .sidebar-card .sb-unread {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 7px;
+    height: 7px;
+  }
+  #sidebar-list { padding-left: 0; padding-right: 0; overflow-x: hidden; }
+  .sidebar-card {
+    justify-content: flex-start;
+    padding: 10px 8px;
+    position: relative;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+  /* Override selected style on mobile: use left accent dot */
+  .sidebar-card.selected {
+    background: transparent !important;
+  }
+  .sidebar-card.selected::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 28px;
+    border-radius: 0 3px 3px 0;
+    background: var(--blue);
+  }
+  .sidebar-card .sb-icon {
+    margin: 0;
+    width: 32px;
+    height: 32px;
+    font-size: 1.1rem;
+    position: relative;
+    border: 2px solid transparent;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  /* Colored ring + glow around icon to show sidebar state */
+  .sidebar-card.idle .sb-icon { border-color: var(--green); box-shadow: 0 0 6px rgba(48,209,88,0.3); }
+  .sidebar-card.starting .sb-icon { border-color: var(--yellow); }
+  .sidebar-card.working .sb-icon { border-color: var(--orange); box-shadow: 0 0 6px rgba(255,159,10,0.3); }
+  .sidebar-card.speaking .sb-icon { border-color: var(--blue); box-shadow: 0 0 6px rgba(10,132,255,0.3); }
+  .sidebar-card.unread .sb-icon { border-color: var(--red); box-shadow: 0 0 6px rgba(255,69,58,0.3); }
+
+  /* Hide focus card on mobile */
+  .sidebar-focus-card { display: none !important; }
+  /* Hide notes/settings/focus from header on mobile — they live in the sidebar drawer */
+  #settings-link { display: none !important; }
+  #notes-link { display: none !important; }
+  #focus-link { display: none !important; }
+  /* Notes + Settings buttons in sidebar drawer */
+  /* Tray: fixed 200px wide so children don't shrink; sidebar overflow clips it */
+  #sidebar-tray {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    width: 200px;
+    flex-shrink: 0;
+    height: 52px;
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -6px 16px rgba(0,0,0,0.18);
+    background: var(--bg-glass);
+  }
+  #sidebar-notes-btn, #sidebar-settings-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    flex: 1;
+    height: 100%;
+    padding: 6px 4px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 0.6rem;
+    font-weight: 500;
+    border: none;
+    background: none;
+    white-space: nowrap;
+    border-radius: 0;
+  }
+  #sidebar-notes-btn:hover,
+  #sidebar-settings-btn:hover { background: var(--hover-bg); }
+
+  /* More bottom clearance for the taller mobile pill (80px mic) */
+  #chat-area { padding-bottom: 190px; }
+  /* Toast at top on mobile so it doesn't overlap the voice bar */
+  #copy-toast { bottom: auto; top: 60px; transform: translateX(-50%) translateY(-12px) scale(0.94); }
+  #copy-toast.visible { transform: translateX(-50%) translateY(0) scale(1); }
+
+  /* Chat messages: wider on mobile, disable text selection for long-press menu */
+  .msg { max-width: 90%; animation-duration: 0.6s; }
+  .msg, .msg * { touch-action: pan-y; }
+  #sidebar, #sidebar * { touch-action: manipulation; }
+  #controls, #controls * { touch-action: manipulation; }
+  /* Karaoke words: disable hover effect on mobile but allow tap for playback */
+  .karaoke-word { cursor: default; }
+
+  /* Controls: mobile size overrides — pin to non-sidebar area */
+  #controls {
+    padding: 8px 14px 6px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
+    left: calc(48px + 8px) !important;
+    right: 8px !important;
+    width: auto !important;
+    max-width: none !important;
+    transform: none !important;
+  }
+  #text-input-bar {
+    left: calc(48px + 8px) !important;
+    right: 8px !important;
+    width: auto !important;
+    max-width: none !important;
+    transform: none !important;
+  }
+  #controls-left, #controls-right { min-height: 80px; }
+  #controls-status { padding: 4px 6px 0; }
+  #mic { width: 80px; height: 80px; }
+  #mic-cancel { width: 46px; height: 46px; font-size: 1.1rem; right: 14px; }
+  #voice-stop { width: 46px; height: 46px; left: 14px; }
+  #transport-pause { right: 14px; }
+  .btn-icon { width: 44px; height: 44px; }
+  .transport-btn { width: 46px; height: 46px; font-size: 1.1rem; }
+  #waveform { height: 12px !important; }
+  #controls-top.wave-visible { max-height: 24px; }
+  #status { font-size: 0.6rem; }
+  #mode-toggle { font-size: 0.45rem !important; padding: 1px 5px !important; }
+  /* Text input bar on mobile — single row, textarea + send */
+  #text-input-bar #text-input {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Hamburger: 48px = collapsed sidebar width, always the first thing visible */
+  #sidebar-expand-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    min-width: 48px;
+    flex-shrink: 0;
+    height: 100%;
+    font-size: 1.4rem;
+    cursor: pointer;
+    color: var(--text-secondary);
+    border-right: 1px solid var(--border);
+  }
+
+  /* Expanded sidebar on mobile — just width, everything else is always ready */
+  #sidebar.expanded {
+    width: 200px;
+    box-shadow: 4px 0 24px rgba(0,0,0,0.4);
+  }
+  /* Normalize all text sizes on mobile — same whether expanded or not so no flash on toggle */
+  .sidebar-card .sb-name { font-size: 0.7rem; line-height: 1.1; }
+  .sidebar-card .sb-status { font-size: 0.5rem; margin-top: 0; gap: 3px; }
+  .sidebar-card .sb-dot { width: 5px; height: 5px; }
+  .sidebar-card .sb-area { font-size: 0.42rem; margin-top: 0; }
+  .sidebar-card .sb-role { font-size: 0.45rem; margin-top: 0; line-height: 1.1; }
+  .sidebar-card .sb-task { font-size: 0.5rem; margin-top: 0; line-height: 1.1; }
+  .sidebar-card .sb-compacting { font-size: 0.45rem; margin-top: 0; }
+  #sidebar.expanded .sb-info { pointer-events: auto; }
+
+  /* Overlay behind expanded sidebar */
+  #sidebar-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.3);
+    z-index: 49;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+  #sidebar-overlay.visible { opacity: 1; pointer-events: auto; }
+
+  /* Message actions: hidden on mobile — use long-press context menu instead */
+  .msg .msg-actions { display: none !important; }
+  .msg:hover .msg-actions { display: none !important; }
+
+  /* Ack badge: ensure visible on mobile */
+  .thread-ack-badge { font-size: 0.7rem; bottom: -22px; right: 4px; left: auto; }
+
+  /* === Floating glass header: chat scrolls behind, backdrop-filter shows === */
+  body { position: relative; }
+  #header {
+    position: absolute !important;
+    top: 0; left: 0; right: 0;
+    z-index: 60;
+    background: var(--bg-glass) !important;
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+  }
+  #app-body {
+    position: absolute !important;
+    top: 0; left: 0; right: 0; bottom: 0;
+  }
+  #sidebar-list { padding-top: 48px; }
+  #chat-area {
+    padding-top: 60px !important;
+    padding-left: calc(48px + 8px) !important;
+    padding-right: 8px !important;
+  }
+  #welcome-view { padding-top: 52px; padding-left: 56px; }
+  /* === Settings: glass overlay like notes panel === */
+  #settings-page {
+    position: absolute !important;
+    top: 0 !important; left: 48px !important; right: 0 !important; bottom: 0 !important;
+    z-index: 55;
+    padding: 60px 16px 80px !important;
+    max-width: none !important;
+    margin: 0 !important;
+    background: var(--bg-glass) !important;
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    overflow-y: auto;
+    box-shadow: -4px 0 24px rgba(0,0,0,0.3);
+  }
+  /* Cards inside the glass overlay — lighter treatment so we don't double-blur */
+  .settings-card {
+    background: rgba(255,255,255,0.06) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border-color: rgba(255,255,255,0.1) !important;
+  }
+  .settings-toggle { border-bottom-color: rgba(255,255,255,0.07) !important; }
+  .settings-toggle:active { background: rgba(128,128,128,0.12); }
+
+  /* === Notes panel: overlay like sidebar, don't push chat === */
+  #notes-panel {
+    position: absolute !important;
+    top: 0; right: 0; bottom: 0;
+    z-index: 55;
+    width: 0 !important;
+    min-width: 0 !important;
+    padding-top: 44px;
+    background: var(--bg-glass) !important;
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+  }
+  #notes-panel.open {
+    width: min(300px, 85vw) !important;
+    min-width: 0 !important;
+    box-shadow: -4px 0 24px rgba(0,0,0,0.4);
+  }
+}

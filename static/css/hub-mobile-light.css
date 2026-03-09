@@ -1,0 +1,25 @@
+/* Mobile + light mode: fix glass opacity and borders */
+@media (max-width: 600px) and (prefers-color-scheme: light) {
+  #header {
+    background: rgba(240, 245, 255, 0.68) !important;
+  }
+  #sidebar {
+    background: rgba(240, 245, 255, 0.68);
+  }
+  #notes-panel {
+    background: rgba(240, 245, 255, 0.68) !important;
+  }
+  #sidebar-tray {
+    background: rgba(240, 245, 255, 0.68);
+  }
+  #settings-page {
+    background: rgba(240, 245, 255, 0.78) !important;
+  }
+  .settings-card {
+    background: rgba(255, 255, 255, 0.35) !important;
+    border-color: var(--border) !important;
+  }
+  .settings-toggle {
+    border-bottom-color: var(--border) !important;
+  }
+}

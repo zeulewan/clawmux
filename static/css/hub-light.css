@@ -1,0 +1,11 @@
+/* Light mode markdown overrides */
+@media (prefers-color-scheme: light) {
+  :root {
+    --md-code-bg: rgba(0,0,0,0.06);
+    --md-pre-bg: rgba(0,0,0,0.06);
+    --md-pre-code-color: #1a1a1a;
+    --md-code-hover-bg: rgba(0,0,0,0.10);
+    --md-code-active-bg: rgba(0,0,0,0.16);
+    --md-th-bg: rgba(0,0,0,0.04);
+  }
+}
