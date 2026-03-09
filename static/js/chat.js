@@ -310,7 +310,7 @@ function _sendUserAck(msgId) {
 }
 
 const _CHAT_BATCH = 50;
-const _CHAT_MAX_DOM = 150; // max messages in DOM — triggers unload when exceeded
+const _CHAT_MAX_DOM = 800; // max messages in DOM — triggers unload when exceeded
 const _chatRenderLimit = new Map(); // session_id → max messages to display
 
 function _getChatLimit(sid) {
@@ -480,6 +480,11 @@ function _loadMoreMessages() {
   if (!s) return;
   let limit = _getChatLimit(activeSessionId);
   if (limit >= s.messages.length) return; // all loaded
+  // Cancel any in-progress eased scroll — its repeated scroll events would re-trigger load-more
+  if (typeof _scrollRaf !== 'undefined' && _scrollRaf) {
+    cancelAnimationFrame(_scrollRaf);
+    _scrollRaf = null;
+  }
   const oldHeight = chatArea.scrollHeight;
 
   // Load batches (data-only, no rendering) until ≥25 visible messages found.
