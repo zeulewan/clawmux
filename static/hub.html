@@ -1029,25 +1029,69 @@ function _makeGroupMsgEl(msg) {
   return div;
 }
 
+// Group chat viewport state — mirrors the batch/slice approach of regular chat
+const _GC_BATCH = 50;
+let _gcAllMessages = [];   // full history (non-ack messages), most-recent last
+let _gcAckCounts = new Map(); // parentId → count
+let _gcRenderedStart = 0;  // index into _gcAllMessages of first rendered message
+let _gcScrollHandlerAttached = false;
+
+function _gcRenderSlice(chatArea, fromIdx, toIdx, prepend = false) {
+  const frag = document.createDocumentFragment();
+  for (let i = fromIdx; i < toIdx; i++) {
+    const msg = _gcAllMessages[i];
+    const el = _makeGroupMsgEl(msg);
+    el.style.animation = 'none'; // no animation for history batch
+    if (msg.id && _gcAckCounts.has(msg.id) && typeof _showPermanentAck === 'function') {
+      _showPermanentAck(el, _gcAckCounts.get(msg.id));
+    }
+    frag.appendChild(el);
+  }
+  if (prepend) {
+    const firstChild = chatArea.firstChild;
+    const oldHeight = chatArea.scrollHeight;
+    chatArea.insertBefore(frag, firstChild);
+    // Preserve scroll position when prepending
+    chatArea.scrollTop += chatArea.scrollHeight - oldHeight;
+  } else {
+    chatArea.appendChild(frag);
+  }
+}
+
+function _gcAttachScrollHandler(chatArea) {
+  if (_gcScrollHandlerAttached) return;
+  _gcScrollHandlerAttached = true;
+  chatArea.addEventListener('scroll', () => {
+    if (chatArea.scrollTop < 120 && _gcRenderedStart > 0) {
+      const batchEnd = _gcRenderedStart;
+      const batchStart = Math.max(0, batchEnd - _GC_BATCH);
+      _gcRenderedStart = batchStart;
+      _gcRenderSlice(chatArea, batchStart, batchEnd, true);
+    }
+  }, { passive: true });
+}
+
 function renderGroupChat(messages) {
   const chatArea = document.getElementById('chat-area');
   chatArea.innerHTML = '';
-  // First pass: build ack counts by parent_id
-  const ackCounts = new Map();
+  _gcScrollHandlerAttached = false;
+  _gcAckCounts = new Map();
+  _gcAllMessages = [];
+
+  // Separate acks from real messages
   for (const msg of messages) {
     if (msg.bare_ack && msg.parent_id) {
-      ackCounts.set(msg.parent_id, (ackCounts.get(msg.parent_id) || 0) + 1);
+      _gcAckCounts.set(msg.parent_id, (_gcAckCounts.get(msg.parent_id) || 0) + 1);
+    } else {
+      _gcAllMessages.push(msg);
     }
   }
-  // Second pass: render non-ack messages without animation (history load, not live)
-  for (const msg of messages) {
-    if (msg.bare_ack) continue;
-    const el = _makeGroupMsgEl(msg);
-    chatArea.appendChild(el);
-    if (msg.id && ackCounts.has(msg.id) && typeof _showPermanentAck === 'function') {
-      _showPermanentAck(el, ackCounts.get(msg.id));
-    }
-  }
+
+  // Render last _GC_BATCH messages only
+  const total = _gcAllMessages.length;
+  _gcRenderedStart = Math.max(0, total - _GC_BATCH);
+  _gcRenderSlice(chatArea, _gcRenderedStart, total);
+  _gcAttachScrollHandler(chatArea);
   requestAnimationFrame(() => { chatArea.scrollTop = chatArea.scrollHeight; });
 }
 
@@ -1067,6 +1111,7 @@ function appendGroupChatMessage(msg) {
     }
     return;
   }
+  _gcAllMessages.push(msg);
   chatArea.appendChild(_makeGroupMsgEl(msg));
   requestAnimationFrame(() => { chatArea.scrollTop = chatArea.scrollHeight; });
 }
