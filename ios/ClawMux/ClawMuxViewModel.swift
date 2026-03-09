@@ -58,6 +58,7 @@ struct VoiceSession: Identifiable {
     var toolName: String = ""
     var unreadCount: Int = 0
     var isSpeaking: Bool = false  // audio actively playing — mirrors web 'speaking' sidebar state
+    var groupId: String = ""      // non-empty when this session is in a group chat
 
     // Derived helpers
     var isThinking: Bool { state == .thinking || state == .processing || state == .compacting }
@@ -1346,6 +1347,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                             if let project = s["project"] as? String { sessions[idx].project = project }
                             if let area = s["project_area"] as? String { sessions[idx].projectArea = area }
                             if let unread = s["unread_count"] as? Int { sessions[idx].unreadCount = unread }
+                            if let gid = s["group_id"] as? String { sessions[idx].groupId = gid }
                             // Cursor-based reconnect sync — appends missed messages (mirrors web _reconnectSyncSession)
                             if let voice = s["voice"] as? String {
                                 reconnectSyncHistory(voiceId: voice, sessionId: sid)
@@ -1679,6 +1681,40 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 sessions[idx].task = json["task"] as? String ?? ""
             }
 
+        case "group_created":
+            // { group_id: "grp-xxx", session_ids: [...] }
+            if let gid = json["group_id"] as? String,
+               let sids = json["session_ids"] as? [String]
+            {
+                for sid in sids {
+                    if let idx = sessionIndex(sid) { sessions[idx].groupId = gid }
+                }
+            }
+
+        case "group_updated":
+            // { group_id: "grp-xxx", session_ids: [...] } — new membership list
+            if let gid = json["group_id"] as? String,
+               let sids = json["session_ids"] as? [String]
+            {
+                let memberSet = Set(sids)
+                for idx in sessions.indices {
+                    if sessions[idx].groupId == gid {
+                        sessions[idx].groupId = memberSet.contains(sessions[idx].id) ? gid : ""
+                    }
+                }
+                for sid in sids {
+                    if let idx = sessionIndex(sid) { sessions[idx].groupId = gid }
+                }
+            }
+
+        case "group_disbanded":
+            // { group_id: "grp-xxx", session_ids: [...] }
+            if let gid = json["group_id"] as? String {
+                for idx in sessions.indices {
+                    if sessions[idx].groupId == gid { sessions[idx].groupId = "" }
+                }
+            }
+
         default:
             break
         }
@@ -1715,6 +1751,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         session.activity = dict["activity"] as? String ?? ""
         session.toolName = dict["tool_name"] as? String ?? ""
         session.unreadCount = dict["unread_count"] as? Int ?? 0
+        session.groupId = dict["group_id"] as? String ?? ""
 
         sessions.append(session)
 
