@@ -541,21 +541,41 @@ function _createAgentCard(voiceId, name, state) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     if (e.dataTransfer.types.includes('application/x-project-slug')) return;
-    const rect = card.getBoundingClientRect();
-    const midY = rect.top + rect.height / 2;
-    card.classList.toggle('drag-above', e.clientY < midY);
-    card.classList.toggle('drag-below', e.clientY >= midY);
+    // If both source and target have live sessions, show group-target highlight
+    const fromVoiceId = e.dataTransfer.getData && e.dataTransfer.types.includes('text/plain')
+      ? null : null; // can't read data during dragover in all browsers
+    const toSess = card._voiceSession;
+    if (toSess) {
+      // Check if any dragged voice has a session by seeing if a drag is in progress
+      card.classList.add('drag-group-target');
+      card.classList.remove('drag-above', 'drag-below');
+    } else {
+      card.classList.remove('drag-group-target');
+      const rect = card.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      card.classList.toggle('drag-above', e.clientY < midY);
+      card.classList.toggle('drag-below', e.clientY >= midY);
+    }
   });
   card.addEventListener('dragleave', () => {
-    card.classList.remove('drag-above', 'drag-below');
+    card.classList.remove('drag-above', 'drag-below', 'drag-group-target');
   });
   card.addEventListener('drop', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    card.classList.remove('drag-above', 'drag-below');
+    card.classList.remove('drag-above', 'drag-below', 'drag-group-target');
     const fromVoice = e.dataTransfer.getData('text/plain');
     if (!fromVoice || fromVoice === voiceId) return;
     if (e.dataTransfer.getData('application/x-project-slug')) return;
+
+    // If both agents have live sessions, offer group chat creation
+    const fromSession = [...(typeof sessions !== 'undefined' ? sessions.values() : [])].find(s => s.voice === fromVoice);
+    const toSession = card._voiceSession;
+    if (fromSession && toSession) {
+      _groupDropAgents(fromVoice, voiceId, fromSession, toSession);
+      return;
+    }
+
     const allP = (typeof allProjects !== 'undefined' ? allProjects : []);
     const targetProj = allP.find(p => (p.voices || []).includes(voiceId));
     const sourceProj = allP.find(p => (p.voices || []).includes(fromVoice));
@@ -631,6 +651,18 @@ function _createAgentCard(voiceId, name, state) {
     badge.className = 'sb-unread';
     card.appendChild(badge);
   }
+  if (state.session && state.session.group_id) {
+    const groupBadge = document.createElement('span');
+    groupBadge.className = 'sb-group-badge';
+    groupBadge.title = 'In group chat — click to leave';
+    groupBadge.textContent = '⬡';
+    groupBadge.onclick = (e) => {
+      e.stopPropagation();
+      _leaveGroup(state.session.session_id, state.session.group_id);
+    };
+    card.appendChild(groupBadge);
+    card.classList.add('in-group');
+  }
   card._voiceSession = state.session;
   card._voiceSpawning = state.isSpawning;
   card.onclick = () => {
@@ -703,6 +735,29 @@ function _createAgentCard(voiceId, name, state) {
 }
 
 // Move an agent to a different project via API
+async function _groupDropAgents(fromVoice, toVoice, fromSession, toSession) {
+  // If target is already in a group, join it; otherwise create a new group
+  const existingGroupId = toSession.group_id || fromSession.group_id;
+  if (existingGroupId) {
+    // Add the other agent to the existing group
+    const joiningId = toSession.group_id ? fromSession.session_id : toSession.session_id;
+    await fetch(`/api/groups/${existingGroupId}/join/${joiningId}`, { method: 'POST' })
+      .catch(err => console.error('Failed to join group:', err));
+  } else {
+    // Create a new group with both agents
+    await fetch('/api/groups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_ids: [fromSession.session_id, toSession.session_id] }),
+    }).catch(err => console.error('Failed to create group:', err));
+  }
+}
+
+async function _leaveGroup(sessionId, groupId) {
+  await fetch(`/api/groups/${groupId}/leave/${sessionId}`, { method: 'DELETE' })
+    .catch(err => console.error('Failed to leave group:', err));
+}
+
 async function _moveAgentToProject(voiceId, targetProjectSlug) {
   const targetProject = (typeof allProjects !== 'undefined' ? allProjects : []).find(p => p.slug === targetProjectSlug);
   const projectName = targetProject ? (targetProject.name || targetProjectSlug) : targetProjectSlug;

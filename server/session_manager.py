@@ -63,6 +63,7 @@ class Session:
     reinject_attempts: int = 0  # number of voice-mode re-injection attempts
     max_reinject_attempts: int = 3  # max re-injection attempts before giving up
     hook_delivered_message: bool = False  # True when PreToolUse/PostToolUse delivered inbox messages this cycle
+    group_id: str = ""  # non-empty when this session is in a group chat
 
     def set_state(self, new_state: AgentState) -> None:
         """Transition to a new state, syncing deprecated boolean flags."""
@@ -109,6 +110,7 @@ class Session:
             "unread_count": self.unread_count,
             "work_dir": self.work_dir,
             "project_slug": self.project_slug,
+            "group_id": self.group_id,
         }
 
     def touch(self) -> None:

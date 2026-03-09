@@ -344,6 +344,25 @@ body {
   flex-shrink: 0;
   box-shadow: 0 0 4px rgba(255,69,58,0.5);
 }
+.sidebar-card .sb-group-badge {
+  font-size: 13px;
+  color: var(--blue);
+  flex-shrink: 0;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.15s;
+  line-height: 1;
+}
+.sidebar-card .sb-group-badge:hover { opacity: 1; }
+.sidebar-card.in-group {
+  border-left: 2px solid var(--blue);
+  padding-left: calc(var(--card-px, 8px) - 2px);
+}
+.sidebar-card.drag-group-target {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--blue) 12%, var(--card-bg, transparent));
+}
 /* Sidebar project groups */
 .sidebar-project-group {
   margin-bottom: 2px;
