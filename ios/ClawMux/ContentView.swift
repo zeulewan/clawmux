@@ -1617,7 +1617,7 @@ struct ContentView: View {
             }
 
             // Text input — mirrors web #text-input (flex:1, transparent, padding 8px 4px)
-            TextField("Message", text: $vm.typingText, axis: .vertical)
+            TextField("Type a message...", text: $vm.typingText, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.system(size: 15))
                 .lineLimit(1...5)
