@@ -361,8 +361,22 @@ body {
 .sidebar-card.drag-group-target {
   outline: 2px solid var(--blue);
   outline-offset: -2px;
-  background: color-mix(in srgb, var(--blue) 12%, var(--card-bg, transparent));
+  background: color-mix(in srgb, var(--blue) 18%, var(--card-bg, transparent));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 30%, transparent);
 }
+.sidebar-card.drag-group-target::after {
+  content: 'Group +';
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--blue);
+  letter-spacing: 0.05em;
+  pointer-events: none;
+}
+.sidebar-card { position: relative; }
 .sidebar-group-card {
   border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--blue) 35%, transparent);
