@@ -698,7 +698,11 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 case .began:
                     // Another app took audio focus — stop recording/TTS, pause keepalive
                     if self.isRecording { self.stopRecording(discard: false) }
-                    if self.isPlaying { self.stopMessageTTS() }
+                    if self.isPlaying {
+                        self.audioPlayer?.stop(); self.audioPlayer = nil
+                        self.isPlaying = false; self.playingSessionId = nil
+                    }
+                    self.stopMessageTTS()
                     self.silencePlayer?.pause()
                 case .ended:
                     // Re-activate audio session and restart keepalive
@@ -984,6 +988,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     // MARK: - WebSocket
 
     func connect() {
+        reconnectAttempt = 0   // reset backoff when user explicitly connects
         disconnect()
         guard !serverURL.isEmpty else { return }
 
