@@ -234,8 +234,12 @@ final class TonePlayer {
         player.scheduleBuffer(buf, completionHandler: nil)
     }
 
-    // Ascending two-tone: your turn to speak
+    // Ascending two-tone: your turn to speak (2s cooldown matches web)
+    private var lastCueTime: Date = .distantPast
     func cueListening() {
+        let now = Date()
+        guard now.timeIntervalSince(lastCueTime) >= 2.0 else { return }
+        lastCueTime = now
         play([(660, 0.12, 0, 0.15), (880, 0.15, 0.1, 0.15)])
     }
 
@@ -1433,22 +1437,15 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 let audioData = Data(base64Encoded: b64)
             {
                 updateStatusText("Speaking...", for: sid)
+                // Always enqueue — drain immediately only if this is the active session
+                // and nothing is currently playing. This matches web enqueueAudio logic:
+                // never replace a playing player, never drop chunks.
+                if let idx = sessionIndex(sid) {
+                    sessions[idx].audioBuffer.append(audioData)
+                }
                 if sid == activeSessionId {
-                    // Play audio for active session (works in foreground and background)
-                    playAudio(sid, data: audioData)
+                    if !isPlaying { _drainAudioBuffer(sid) }
                     updateLiveActivity()
-                } else if activeSessionId == nil {
-                    // No active session (on home screen) - buffer it (cap at 50 chunks)
-                    if let idx = sessionIndex(sid) {
-                        if sessions[idx].audioBuffer.count >= 50 { sessions[idx].audioBuffer.removeFirst() }
-                        sessions[idx].audioBuffer.append(audioData)
-                    }
-                } else {
-                    // Different session active - buffer it (cap at 50 chunks)
-                    if let idx = sessionIndex(sid) {
-                        if sessions[idx].audioBuffer.count >= 50 { sessions[idx].audioBuffer.removeFirst() }
-                        sessions[idx].audioBuffer.append(audioData)
-                    }
                 }
             }
 
@@ -1658,7 +1655,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             }
             // Play buffered audio received while in background
             else if let idx = sessionIndex(id), !sessions[idx].audioBuffer.isEmpty {
-                playBufferedAudio(id)
+                _drainAudioBuffer(id)
             }
             // Handle pending listen
             else if session.pendingListen {
@@ -2096,33 +2093,13 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         sendJSON(["session_id": sid, "type": "playback_done"])
     }
 
-    private func playBufferedAudio(_ sessionId: String) {
-        guard let idx = sessionIndex(sessionId), !sessions[idx].audioBuffer.isEmpty else { return }
+    /// Pops the next chunk from the session's audioBuffer and starts playback.
+    /// Matches web _playNextQueued — never called while isPlaying is true.
+    private func _drainAudioBuffer(_ sessionId: String) {
+        guard let idx = sessionIndex(sessionId),
+              !sessions[idx].audioBuffer.isEmpty else { return }
         let data = sessions[idx].audioBuffer.removeFirst()
-        statusText = "Speaking..."
-        isPlaying = true
-        playingSessionId = sessionId
-
-        do {
-            try AVAudioSession.sharedInstance().setActive(true)
-            audioPlayer = try AVAudioPlayer(data: data)
-            audioPlayer?.delegate = self
-            let started = audioPlayer?.play() ?? false
-            if started {
-                startPlaybackVAD()
-            } else {
-                print("[audio] Buffered play() returned false for session \(sessionId)")
-                audioPlayer = nil
-                isPlaying = false
-                playingSessionId = nil
-                sendJSON(["session_id": sessionId, "type": "playback_done"])
-            }
-        } catch {
-            print("[audio] Buffered playback error: \(error)")
-            isPlaying = false
-            playingSessionId = nil
-            sendJSON(["session_id": sessionId, "type": "playback_done"])
-        }
+        playAudio(sessionId, data: data)
     }
 
     // MARK: - Recording
@@ -2939,16 +2916,18 @@ extension ClawMuxViewModel: AVAudioPlayerDelegate {
 
             let sid = self.playingSessionId ?? ""
 
-            // Check for more buffered audio to play
+            self.stopPlaybackVAD()
+            self.isPlaying = false  // clear isPlaying before playingSessionId — isSpeaking didSet depends on order
+
+            // Drain next chunk before sending playback_done (matches web _playNextQueued behavior:
+            // only send playback_done when the per-session queue is fully empty)
             if !sid.isEmpty, let idx = self.sessionIndex(sid),
                 !self.sessions[idx].audioBuffer.isEmpty
             {
-                self.playBufferedAudio(sid)
+                self._drainAudioBuffer(sid)
                 return
             }
 
-            self.stopPlaybackVAD()
-            self.isPlaying = false
             self.playingSessionId = nil
             if !sid.isEmpty {
                 self.sendJSON(["session_id": sid, "type": "playback_done"])
