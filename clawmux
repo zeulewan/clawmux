@@ -1883,9 +1883,9 @@ def get_pane_order():
     return result
 
 def reorder_panes():
-    """Reorder panes alphabetically by title using swap-pane.
-    After each swap, updates titles on both affected panes so the
-    label always matches the session running in that pane_id."""
+    """Reorder panes alphabetically by label using swap-pane.
+    swap-pane moves the entire pane (process + options incl. @agent-label)
+    to a new visual position — labels travel with the pane, no updates needed."""
     pane_list = get_pane_order()
     if not pane_list or len(pane_list) < 2:
         return
@@ -1898,16 +1898,11 @@ def reorder_panes():
         if j is None:
             continue
         old_i_id, old_i_title = pane_list[i]
-        # Swap programs between position i and position j
+        # Swap visual positions — labels travel with the pane, nothing to update
         tmux("swap-pane", "-s", desired_id, "-t", old_i_id)
-        # swap-pane moves content but NOT pane options — update labels on both panes
-        tmux("select-pane", "-t", old_i_id, "-T", desired_title)
-        tmux("set-option", "-p", "-t", old_i_id, "@agent-label", desired_title)
-        tmux("select-pane", "-t", desired_id, "-T", old_i_title)
-        tmux("set-option", "-p", "-t", desired_id, "@agent-label", old_i_title)
-        # Update our tracking list
-        pane_list[i] = (old_i_id, desired_title)
-        pane_list[j] = (desired_id, old_i_title)
+        # desired_id is now at position i; old_i_id is now at position j
+        pane_list[i] = (desired_id, desired_title)
+        pane_list[j] = (old_i_id, old_i_title)
 
 def attach_cmd(session_name):
     return "while true; do TMUX= tmux attach -t " + session_name + " 2>/dev/null || sleep 2; done"
