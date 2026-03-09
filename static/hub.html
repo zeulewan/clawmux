@@ -3625,9 +3625,14 @@ function showContextMenu(e, sessionId, voiceId) {
       }
     }
   }
-  menu.style.left = e.clientX + 'px';
-  menu.style.top = e.clientY + 'px';
   menu.classList.add('visible');
+  const mr = menu.getBoundingClientRect();
+  let mx = e.clientX;
+  let my = e.clientY;
+  if (my + mr.height > window.innerHeight) my = e.clientY - mr.height;
+  if (mx + mr.width > window.innerWidth) mx = e.clientX - mr.width;
+  menu.style.left = Math.max(0, mx) + 'px';
+  menu.style.top = Math.max(0, my) + 'px';
 }
 
 async function _setRole(sessionId, role) {
