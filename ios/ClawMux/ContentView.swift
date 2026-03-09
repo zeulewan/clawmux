@@ -1024,6 +1024,19 @@ struct ContentView: View {
                 ZStack(alignment: .bottomTrailing) {
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: 20) {
+                            // Load older messages button (mirrors web ▲ Load older messages)
+                            if vm.activeSession?.hasOlderMessages == true {
+                                Button {
+                                    if let sid = vm.activeSessionId { vm.loadOlderMessages(sessionId: sid) }
+                                } label: {
+                                    Label("Load older messages", systemImage: "chevron.up")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(Color.cTextTer)
+                                        .padding(.vertical, 6).padding(.horizontal, 12)
+                                        .background(Color.cCard.opacity(0.6), in: Capsule())
+                                }
+                                .padding(.top, 4)
+                            }
                             Spacer(minLength: 0).frame(maxHeight: .infinity)
                             ForEach(messageGroups) { group in
                                 messageGroupView(group)

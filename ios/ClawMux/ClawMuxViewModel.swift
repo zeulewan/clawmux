@@ -59,6 +59,7 @@ struct VoiceSession: Identifiable {
     var unreadCount: Int = 0
     var isSpeaking: Bool = false  // audio actively playing — mirrors web 'speaking' sidebar state
     var groupId: String = ""      // non-empty when this session is in a group chat
+    var hasOlderMessages: Bool = false  // true when server may have messages older than current history
 
     // Derived helpers
     var isThinking: Bool { state == .thinking || state == .processing || state == .compacting }
@@ -1009,6 +1010,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 }
                 if !chatMessages.isEmpty {
                     self.sessions[idx].messages = Array(chatMessages)
+                    self.sessions[idx].hasOlderMessages = chatMessages.count >= 50
                 } else if let state = initialState {
                     // No history yet — show appropriate placeholder (mirrors web addSession)
                     let isReady = state != .starting && state != .dead
@@ -1089,6 +1091,48 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         if let session = sessions.first(where: { $0.voice == voiceId }) {
             terminateSession(session.id)
         }
+    }
+
+    // Paginate backwards: fetch messages older than the oldest known ID and prepend them.
+    // Mirrors web "Load older messages" button (GET /api/history/:voice?before=<id>&limit=50).
+    func loadOlderMessages(sessionId: String) {
+        guard let idx = sessionIndex(sessionId),
+              let baseURL = httpBaseURL() else { return }
+        let session = sessions[idx]
+        // Find the oldest message with a server-assigned ID to use as the before-cursor
+        guard let oldestId = session.messages.first(where: { $0.msgId != nil })?.msgId else { return }
+        var comps = URLComponents(
+            url: baseURL.appendingPathComponent("api/history/\(session.voice)"),
+            resolvingAgainstBaseURL: false)!
+        comps.queryItems = [
+            URLQueryItem(name: "before", value: oldestId),
+            URLQueryItem(name: "limit", value: "50"),
+        ]
+        guard let url = comps.url else { return }
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+            guard let data,
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                let messages = json["messages"] as? [[String: Any]]
+            else { return }
+            Task { @MainActor in
+                guard let self, let i = self.sessionIndex(sessionId) else { return }
+                let older: [ChatMessage] = messages.compactMap { msg in
+                    guard let role = msg["role"] as? String, let text = msg["text"] as? String else { return nil }
+                    var m = ChatMessage(role: role, text: text)
+                    if let ts = msg["ts"] as? Double { m.timestamp = Date(timeIntervalSince1970: ts) }
+                    if let mid = msg["id"] as? String { m.msgId = mid }
+                    if let pid = msg["parent_id"] as? String { m.parentId = pid }
+                    if msg["bare_ack"] as? Bool == true { m.isBareAck = true }
+                    return m
+                }
+                // Prepend — deduplicate by msgId
+                let existingIds = Set(self.sessions[i].messages.compactMap(\.msgId))
+                let newOlder = older.filter { $0.msgId == nil || !existingIds.contains($0.msgId!) }
+                self.sessions[i].messages = newOlder + self.sessions[i].messages
+                // If we got a full batch there may be even older messages
+                self.sessions[i].hasOlderMessages = older.count >= 50
+            }
+        }.resume()
     }
 
     // MARK: - Ping Watchdog
