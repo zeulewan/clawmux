@@ -675,9 +675,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             Task { @MainActor in
                 guard let self else { return }
                 self.stopSilenceLoop()
-                // Reconnect if WebSocket dropped while in background
+                // Reconnect if WebSocket dropped while in background (preserve backoff state)
                 if !self.isConnected && !self.isConnecting && !self.serverURL.isEmpty {
-                    self.connect()
+                    self.connectInternal()
                 }
             }
         }
@@ -992,8 +992,14 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
 
     // MARK: - WebSocket
 
+    /// Public connect — resets backoff (use for user-initiated connects).
     func connect() {
-        reconnectAttempt = 0   // reset backoff when user explicitly connects
+        reconnectAttempt = 0
+        connectInternal()
+    }
+
+    /// Internal connect — does NOT reset backoff (used by scheduleReconnect).
+    private func connectInternal() {
         disconnect()
         guard !serverURL.isEmpty else { return }
 
@@ -1043,7 +1049,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         let delay = min(30.0, 2.0 * pow(2.0, Double(reconnectAttempt)))
         reconnectAttempt += 1
         let item = DispatchWorkItem { [weak self] in
-            Task { @MainActor in self?.connect() }
+            Task { @MainActor in self?.connectInternal() }
         }
         reconnectWork = item
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
