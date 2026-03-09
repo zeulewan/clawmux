@@ -1311,13 +1311,15 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     playAudio(sid, data: audioData)
                     updateLiveActivity()
                 } else if activeSessionId == nil {
-                    // No active session (on home screen) - buffer it
+                    // No active session (on home screen) - buffer it (cap at 50 chunks)
                     if let idx = sessionIndex(sid) {
+                        if sessions[idx].audioBuffer.count >= 50 { sessions[idx].audioBuffer.removeFirst() }
                         sessions[idx].audioBuffer.append(audioData)
                     }
                 } else {
-                    // Different session active - buffer it
+                    // Different session active - buffer it (cap at 50 chunks)
                     if let idx = sessionIndex(sid) {
+                        if sessions[idx].audioBuffer.count >= 50 { sessions[idx].audioBuffer.removeFirst() }
                         sessions[idx].audioBuffer.append(audioData)
                     }
                 }
