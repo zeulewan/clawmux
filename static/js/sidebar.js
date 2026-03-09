@@ -654,11 +654,11 @@ function _createAgentCard(voiceId, name, state) {
   if (state.session && state.session.group_id) {
     const groupBadge = document.createElement('span');
     groupBadge.className = 'sb-group-badge';
-    groupBadge.title = 'In group chat — click to leave';
+    groupBadge.title = 'In group chat — click to disband';
     groupBadge.textContent = '⬡';
     groupBadge.onclick = (e) => {
       e.stopPropagation();
-      _leaveGroup(state.session.session_id, state.session.group_id);
+      _disbandGroup(state.session.group_id);
     };
     card.appendChild(groupBadge);
     card.classList.add('in-group');
@@ -756,6 +756,11 @@ async function _groupDropAgents(fromVoice, toVoice, fromSession, toSession) {
 async function _leaveGroup(sessionId, groupId) {
   await fetch(`/api/groups/${groupId}/leave/${sessionId}`, { method: 'DELETE' })
     .catch(err => console.error('Failed to leave group:', err));
+}
+
+async function _disbandGroup(groupId) {
+  await fetch(`/api/groups/${groupId}`, { method: 'DELETE' })
+    .catch(err => console.error('Failed to disband group:', err));
 }
 
 async function _moveAgentToProject(voiceId, targetProjectSlug) {

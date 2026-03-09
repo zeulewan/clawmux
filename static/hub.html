@@ -2248,6 +2248,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
     <div class="ctx-submenu" id="ctx-project-list"></div>
   </div>
   <div class="ctx-item" id="ctx-reset" style="color:#e63946;">Reset</div>
+  <div class="ctx-item" id="ctx-disband-group">Disband Group Chat</div>
   <div class="ctx-item" id="ctx-terminate">Terminate Session</div>
 </div>
 
@@ -3398,6 +3399,10 @@ function showContextMenu(e, sessionId, voiceId) {
       roleList.appendChild(div);
     }
   }
+  // Show/hide Disband Group Chat item
+  const disbandItem = document.getElementById('ctx-disband-group');
+  disbandItem.style.display = (hasSession && sess && sess.group_id) ? 'block' : 'none';
+
   // Populate Move to Project submenu
   const moveItem = document.getElementById('ctx-move-project');
   moveItem.style.display = hasSession ? 'block' : 'none';
@@ -3473,6 +3478,15 @@ document.getElementById('ctx-launch').addEventListener('click', () => {
 
 document.getElementById('ctx-terminate').addEventListener('click', () => {
   if (contextMenuSessionId) terminateSession(contextMenuSessionId);
+  hideContextMenu();
+});
+
+document.getElementById('ctx-disband-group').addEventListener('click', () => {
+  const sess = contextMenuSessionId ? sessions.get(contextMenuSessionId) : null;
+  if (sess && sess.group_id) {
+    fetch(`/api/groups/${sess.group_id}`, { method: 'DELETE' })
+      .catch(err => console.error('Failed to disband group:', err));
+  }
   hideContextMenu();
 });
 
