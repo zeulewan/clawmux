@@ -1006,10 +1006,19 @@ struct ContentView: View {
                 // Status + mode + effort row
                 HStack(spacing: 8) {
                     Button { cycleInputMode() } label: {
-                        Text(vm.typingMode ? "Typing" : "Voice")
-                            .font(.system(size: 11, weight: .semibold)).foregroundStyle(Color.cTextSec)
-                            .padding(.horizontal, 10).padding(.vertical, 4)
-                            .background(Color.glass, in: Capsule())
+                        VStack(spacing: 0) {
+                            Text(vm.typingMode ? "TYPING" : "VOICE")
+                                .font(.system(size: 8, weight: .semibold))
+                                .tracking(0.7)
+                            Text("MODE")
+                                .font(.system(size: 7, weight: .semibold))
+                                .tracking(0.7)
+                                .opacity(0.7)
+                        }
+                        .foregroundStyle(Color.cTextSec)
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background(Color.glass, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
                     }
                     if !vm.statusText.isEmpty {
                         let sc = statusColor
@@ -1056,10 +1065,19 @@ struct ContentView: View {
         VStack(spacing: 6) {
             HStack(spacing: 8) {
                 Button { cycleInputMode() } label: {
-                    Text("Voice")
-                        .font(.system(size: 11, weight: .semibold)).foregroundStyle(Color.cTextSec)
-                        .padding(.horizontal, 10).padding(.vertical, 4)
-                        .background(Color.glass, in: Capsule())
+                    VStack(spacing: 0) {
+                        Text("VOICE")
+                            .font(.system(size: 8, weight: .semibold))
+                            .tracking(0.7)
+                        Text("MODE")
+                            .font(.system(size: 7, weight: .semibold))
+                            .tracking(0.7)
+                            .opacity(0.7)
+                    }
+                    .foregroundStyle(Color.cTextSec)
+                    .padding(.horizontal, 7).padding(.vertical, 3)
+                    .background(Color.glass, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
                 }
                 if !vm.statusText.isEmpty {
                     let sc = statusColor
