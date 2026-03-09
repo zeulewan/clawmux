@@ -410,6 +410,25 @@ body {
 .sg-disband:hover { color: var(--red); background: rgba(255,69,58,0.12); }
 .sg-members { border-top: 1px solid color-mix(in srgb, var(--blue) 20%, transparent); padding: 4px 0; }
 .sg-sub-card { border-radius: 6px !important; margin: 2px 4px !important; }
+.sidebar-group-card { position: relative; }
+.sidebar-group-card.drag-group-target {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 30%, transparent);
+  background: color-mix(in srgb, var(--blue) 14%, var(--card-bg, transparent));
+}
+.sidebar-group-card.drag-group-target::after {
+  content: 'Join Group';
+  position: absolute;
+  right: 36px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--blue);
+  letter-spacing: 0.05em;
+  pointer-events: none;
+}
 /* Sidebar project groups */
 .sidebar-project-group {
   margin-bottom: 2px;
