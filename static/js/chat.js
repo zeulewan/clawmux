@@ -569,20 +569,8 @@ function _initChatScroll() {
         });
       }
     }
-    // Unload old messages when scrolling back to bottom
-    if (activeSessionId) {
-      const limit = _getChatLimit(activeSessionId);
-      const nearBottom = chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150;
-      if (nearBottom && limit > _CHAT_MAX_DOM) {
-        _scrollLoadPending = true;
-        requestAnimationFrame(() => {
-          _chatRenderLimit.set(activeSessionId, _CHAT_BATCH);
-          renderChat();
-          chatArea.scrollTop = chatArea.scrollHeight;
-          _scrollLoadPending = false;
-        });
-      }
-    }
+    // (Unload removed — resetting DOM on scroll-to-bottom caused messages to disappear
+    //  for sparse sessions that needed large limits to show visible content.)
   });
 }
 
