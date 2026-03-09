@@ -733,14 +733,17 @@ function hideTypingIndicator(sessionId) {
 
 // Update typing indicator with latest activity text + count badge (minimal mode)
 function _updateTypingIndicatorText(sessionId, text) {
+  // Always accumulate into the log store, even for background sessions
+  if (text) {
+    if (!_activityLogStore.has(sessionId)) _activityLogStore.set(sessionId, { texts: [] });
+    const log = _activityLogStore.get(sessionId);
+    log.texts.push(text);
+    if (log.texts.length > 30) log.texts.shift();
+  }
+  // Only update DOM for the active session
   if (sessionId !== activeSessionId) return;
   const chatArea = document.getElementById('chat-area');
   if (!chatArea || chatArea.style.display === 'none') return;
-
-  // Update store
-  if (!_activityLogStore.has(sessionId)) _activityLogStore.set(sessionId, { texts: [] });
-  const log = _activityLogStore.get(sessionId);
-  if (text) { log.texts.push(text); if (log.texts.length > 30) log.texts.shift(); }
 
   let el = chatArea.querySelector('.msg-typing-indicator[data-typing-for="' + sessionId + '"]');
   if (!el) {
