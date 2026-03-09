@@ -127,6 +127,7 @@ struct ContentView: View {
                 sidebarStripView
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .ignoresSafeArea(edges: .bottom)  // let sidebar + input bars reach true screen bottom
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.canvas1.ignoresSafeArea())
@@ -222,7 +223,6 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 textInputBar
-                    .frame(maxWidth: 380)
                     .frame(maxWidth: .infinity)
                     .background(Color.canvas1.ignoresSafeArea(edges: .bottom))
             }
@@ -455,7 +455,6 @@ struct ContentView: View {
         }
         .frame(width: sidebarExpanded ? 220 : 48)
         .frame(maxHeight: .infinity)
-        .ignoresSafeArea(edges: .bottom)  // extend sidebar into bottom safe area (no gap)
         .background(.ultraThinMaterial)  // frosted glass — matches mobile web backdrop-filter: blur(20px)
         .overlay(alignment: .trailing) {
             Color.cBorder.opacity(0.6).frame(width: 0.5)
@@ -1088,7 +1087,6 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .safeAreaInset(edge: .bottom, spacing: 0) {
                         bottomInputArea
-                            .frame(maxWidth: 380)
                             .frame(maxWidth: .infinity)
                             .background(Color.canvas1.ignoresSafeArea(edges: .bottom))
                     }
