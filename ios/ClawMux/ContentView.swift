@@ -195,16 +195,6 @@ struct ContentView: View {
 
             Spacer()
 
-            // Connection dot (above tray)
-            let dotColor: Color = vm.isConnected ? .cSuccess : vm.isConnecting ? .cCaution : .cDanger
-            Circle()
-                .fill(dotColor)
-                .frame(width: 7, height: 7)
-                .scaleEffect(vm.isConnecting && isPulsing ? 1.15 : vm.isConnecting ? 0.7 : 1.0)
-                .opacity(vm.isConnecting && isPulsing ? 1.0 : vm.isConnecting ? 0.15 : 1.0)
-                .animation(vm.isConnecting ? .easeInOut(duration: 0.7).repeatForever(autoreverses: true) : .default, value: isPulsing)
-                .frame(width: 48, height: 20)
-
             // Bottom tray: hamburger (always) + Notes + Settings (when expanded)
             // Matches web #sidebar-tray: expand-btn(48px) + notes-btn(flex) + settings-btn(flex)
             Color.cBorder.opacity(0.5).frame(height: 0.5)
@@ -641,65 +631,29 @@ struct ContentView: View {
         .animation(.spring(response: 0.25, dampingFraction: 0.8), value: showCopiedToast)
     }
 
-    // MARK: - Chat Header (no back button — sidebar always visible)
+    // MARK: - Chat Header (mirrors web #header mobile layout)
+    // Left: agent name · model · effort · mode toggle
+    // Right: connection dot (web header-pill)
+    // Settings/Notes hidden from header — they live in the sidebar tray
 
     private var chatHeader: some View {
         let color = vm.activeSession.map { voiceColor($0.voice) } ?? Color.cTextSec
-        return HStack(spacing: 10) {
+        return HStack(spacing: 8) {
             if let s = vm.activeSession {
-                // Agent avatar
-                ZStack {
-                    Circle().fill(color.opacity(0.16)).frame(width: 32, height: 32)
-                    Image(systemName: voiceIcon(s.voice))
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(color)
-                }
+                // Agent name — mirrors web #active-voice
+                Text(vm.showDebug ? "Debug" : s.label)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(Color.cText)
+                    .lineLimit(1)
 
-                // Name + subtitle
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(vm.showDebug ? "Debug" : s.label)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Color.cText)
-                        .lineLimit(1)
-                    Group {
-                        if !s.role.isEmpty || !s.task.isEmpty {
-                            HStack(spacing: 3) {
-                                if !s.role.isEmpty {
-                                    Text(s.role).italic().foregroundStyle(color.opacity(0.9))
-                                }
-                                if !s.role.isEmpty && !s.task.isEmpty {
-                                    Text("·").foregroundStyle(Color.cTextTer)
-                                }
-                                if !s.task.isEmpty {
-                                    Text(s.task).foregroundStyle(Color.cTextTer).lineLimit(1)
-                                }
-                            }
-                        } else if !s.project.isEmpty {
-                            Text(s.projectArea.isEmpty ? s.project : "\(s.project) · \(s.projectArea)")
-                                .foregroundStyle(Color.cTextTer).lineLimit(1)
-                        } else {
-                            let stateColor = ringColor(s, spawning: false)
-                            HStack(spacing: 4) {
-                                Circle().fill(stateColor).frame(width: 5, height: 5)
-                                Text(s.statusText.isEmpty ? "Idle" : s.statusText)
-                                    .foregroundStyle(Color.cTextTer)
-                            }
-                        }
-                    }
-                    .font(.system(size: 11))
-                }
-            }
-
-            Spacer()
-
-            // Model picker
-            if vm.activeSessionId != nil {
-                let cur = vm.activeSession?.model ?? ""
+                // Model label — mirrors web #model-label (clickable)
                 Menu {
                     ForEach([("opus","Opus"),("sonnet","Sonnet"),("haiku","Haiku")], id: \.0) { id, name in
                         Button {
+                            let cur = vm.activeSession?.model ?? ""
                             if cur != id { pendingModelSwitch = id; showModelRestartConfirm = true }
                         } label: {
+                            let cur = vm.activeSession?.model ?? ""
                             HStack {
                                 Text(name)
                                 if cur == id || (id == "opus" && cur.isEmpty) { Image(systemName: "checkmark") }
@@ -707,24 +661,56 @@ struct ContentView: View {
                         }
                     }
                 } label: {
-                    Text(modelName(vm.activeSession?.model ?? ""))
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    Text(modelName(s.model))
+                        .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Color.cTextSec)
-                        .padding(.horizontal, 10).padding(.vertical, 6)
-                        .background(Color.cCard, in: Capsule())
-                        .overlay(Capsule().strokeBorder(Color.cBorder, lineWidth: 0.5))
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background(Color.glass, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
+                }
+
+                // Effort label — mirrors web #effort-label (clickable)
+                Menu {
+                    ForEach(["low","medium","high"], id: \.self) { level in
+                        Button { vm.sendEffort(level) } label: {
+                            HStack { Text(level.capitalized); if s.effort == level { Image(systemName: "checkmark") } }
+                        }
+                    }
+                } label: {
+                    Text(s.effort.isEmpty ? "Med" : String(s.effort.prefix(3)).capitalized)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Color.cTextTer)
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background(Color.glass, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
+                }
+
+                // Mode toggle — mirrors web #mode-toggle button
+                Button { cycleInputMode() } label: {
+                    Text(vm.typingMode ? "Text" : "Voice")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Color.cTextSec)
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background(Color.glass, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
                 }
             }
 
-            // Settings
-            Button { vm.showSettings = true } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color.cTextSec)
-                    .frame(width: 36, height: 36)
-                    .background(Color.glass, in: Circle())
-                    .overlay(Circle().strokeBorder(Color.cBorder, lineWidth: 0.5))
+            Spacer()
+
+            // Connection dot pill — mirrors web header-pill with #dot (label hidden on mobile)
+            let dotColor: Color = vm.isConnected ? .cSuccess : vm.isConnecting ? .cCaution : .cDanger
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(dotColor)
+                    .frame(width: 7, height: 7)
+                    .scaleEffect(vm.isConnecting && isPulsing ? 1.15 : vm.isConnecting ? 0.7 : 1.0)
+                    .opacity(vm.isConnecting && isPulsing ? 1.0 : vm.isConnecting ? 0.15 : 1.0)
+                    .animation(vm.isConnecting ? .easeInOut(duration: 0.7).repeatForever(autoreverses: true) : .default, value: isPulsing)
             }
+            .padding(.horizontal, 8).padding(.vertical, 5)
+            .background(Color.glass, in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
         .background {
