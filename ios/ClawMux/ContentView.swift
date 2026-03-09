@@ -100,6 +100,8 @@ struct ContentView: View {
     @State private var isAtBottom:             Bool = true
     @State private var sidebarExpanded:        Bool = false
     @State private var showFilePicker:         Bool = false
+    @State private var showCreateGroupChat     = false
+    @State private var newGroupChatName        = ""
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -153,6 +155,11 @@ struct ContentView: View {
             set: { if !$0 { vm.errorMessage = nil } }
         )) { Button("OK") { vm.errorMessage = nil }
         } message: { Text(vm.errorMessage ?? "") }
+        .alert("New Group Chat", isPresented: $showCreateGroupChat) {
+            TextField("Group name", text: $newGroupChatName)
+            Button("Create") { vm.createGroupChat(name: newGroupChatName) }
+            Button("Cancel", role: .cancel) {}
+        } message: { Text("Enter a name for the new group chat.") }
     }
 
     // MARK: - Split Layout
@@ -200,8 +207,27 @@ struct ContentView: View {
                         // Group chat cards first — each card contains its member sub-cards
                         let chatGroups = activeGroups
                         let groupedVoiceIds = Set(chatGroups.flatMap { $0.voices.map { $0.id } })
+                        if !chatGroups.isEmpty {
+                            HStack {
+                                Text("GROUP CHATS")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(Color.cTextTer)
+                                    .tracking(0.8)
+                                Spacer()
+                                Button {
+                                    newGroupChatName = ""
+                                    showCreateGroupChat = true
+                                } label: {
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(Color.cTextSec)
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.top, 8).padding(.bottom, 2)
+                        }
                         ForEach(chatGroups, id: \.groupId) { g in
-                            groupCard(g.groupId, voices: g.voices)
+                            groupCard(g.groupId, name: g.name, voices: g.voices)
                         }
 
                         // Remaining agents (not in any group)
@@ -625,7 +651,7 @@ struct ContentView: View {
 
     // MARK: - Group Chat Card (mirrors web .sidebar-group-card)
 
-    private var activeGroups: [(groupId: String, voices: [VoiceInfo])] {
+    private var activeGroups: [(groupId: String, name: String?, voices: [VoiceInfo])] {
         var byGroup: [String: [String]] = [:]
         for s in vm.sessions where !s.groupId.isEmpty {
             if !(byGroup[s.groupId, default: []].contains(s.voice)) {
@@ -634,12 +660,12 @@ struct ContentView: View {
         }
         return byGroup.map { gid, voiceIds in
             let voices = ALL_VOICES.filter { voiceIds.contains($0.id) }
-            return (gid, voices)
+            return (gid, vm.groupName(for: gid), voices)
         }.sorted { $0.groupId < $1.groupId }
     }
 
     @ViewBuilder
-    private func groupCard(_ groupId: String, voices: [VoiceInfo]) -> some View {
+    private func groupCard(_ groupId: String, name: String? = nil, voices: [VoiceInfo]) -> some View {
         let blue = Color(hex: 0x0A84FF)
         let isSelected = !vm.isFocusMode && voices.contains { $0.id == vm.activeSession?.voice }
         VStack(spacing: 0) {
@@ -666,15 +692,17 @@ struct ContentView: View {
                     }
                     .frame(width: 22 + CGFloat(max(min(voices.count, 4) - 1, 0)) * 16, height: 22)
 
-                    // Info VStack: label + names (mirrors .sg-info)
+                    // Info VStack: group name + member names (mirrors .gc-name + .gc-members-text)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("GROUP CHAT")
-                            .font(.system(size: 8, weight: .bold))
-                            .tracking(0.5)
-                            .foregroundStyle(blue.opacity(0.85))
+                        Text(name ?? "GROUP CHAT")
+                            .font(.system(size: name != nil ? 12 : 8, weight: name != nil ? .semibold : .bold))
+                            .tracking(name != nil ? 0 : 0.5)
+                            .foregroundStyle(name != nil ? Color.cText : blue.opacity(0.85))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                         Text(voices.map { $0.name }.joined(separator: ", "))
-                            .font(.system(size: 12))
-                            .foregroundStyle(Color.cText)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.cTextSec)
                             .lineLimit(1)
                             .truncationMode(.tail)
                     }

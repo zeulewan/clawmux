@@ -322,6 +322,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     @Published var spawningVoiceIds: Set<String> = []
     @Published var knownGroupChats: [(name: String, voices: [String])] = []
     private var groupIdToName: [String: String] = [:]  // "gc-xxx" → "group name" for disband API
+
+    func groupName(for groupId: String) -> String? { groupIdToName[groupId] }
     @Published var errorMessage: String?
     @Published var ttsPlayingMessageId: UUID?
 
@@ -2045,6 +2047,17 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         var req = URLRequest(url: baseURL.appendingPathComponent("api/groupchats/\(encoded)"))
         req.httpMethod = "DELETE"
         URLSession.shared.dataTask(with: req) { _, _, _ in }.resume()
+    }
+
+    func createGroupChat(name: String) {
+        guard !name.isEmpty, let baseURL = httpBaseURL() else { return }
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/groupchats"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["name": name, "voices": [] as [String]])
+        URLSession.shared.dataTask(with: req) { [weak self] _, _, _ in
+            Task { @MainActor in self?.fetchGroupChats() }
+        }.resume()
     }
 
     func markSessionUnread(_ id: String) {
