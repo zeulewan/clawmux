@@ -1511,6 +1511,38 @@ function sendAudio(sessionId) {
   interjectionMode = false;
   const blob = new Blob(audioChunks, { type: 'audio/webm' });
 
+  // Group chat voice mode: transcribe via REST API and send text to group
+  if (sessionId === '__group__') {
+    const gId = typeof activeGroupId !== 'undefined' ? activeGroupId : null;
+    const g = gId && typeof groupChats !== 'undefined'
+      ? [...groupChats.values()].find(x => x.id === gId)
+      : null;
+    if (!g) { updateMicUI(); return; }
+    setStatus('Transcribing...');
+    micBtn.classList.add('processing');
+    micBtn.disabled = true;
+    fetch('/api/transcribe', { method: 'POST', body: blob })
+      .then(r => r.ok ? r.json() : null)
+      .then(result => {
+        const text = result && result.text && result.text.trim();
+        if (text) {
+          return fetch(`/api/groupchats/${encodeURIComponent(g.name)}/message`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text }),
+          });
+        }
+      })
+      .catch(e => console.error('[group voice] failed:', e))
+      .finally(() => {
+        micBtn.classList.remove('processing');
+        micBtn.disabled = false;
+        updateMicUI();
+        setStatus('');
+      });
+    return;
+  }
+
   if (!ws || ws.readyState !== WebSocket.OPEN) {
     // Stash audio for retry after reconnect instead of dropping it
     _pendingAudioSend = { sessionId, blob, isInterjection };
@@ -1634,6 +1666,9 @@ micBtn.addEventListener('click', (e) => {
     const sid = pendingListenSessionId;
     pendingListenSessionId = null;
     startRecording(sid);
+  } else if (typeof activeGroupId !== 'undefined' && activeGroupId) {
+    // Group chat voice: transcribe via REST and send to group
+    startRecording('__group__');
   } else if (activeSessionId) {
     // Check if agent is NOT awaiting input — record as interjection
     const s = sessions.get(activeSessionId);

@@ -132,7 +132,12 @@ function updateHeaderProjectStatus() {
 }
 
 function updateLayout() {
-  renderSidebar(); // always keep sidebar up to date
+  // Preserve sidebar scroll position across re-renders
+  const sidebarList = document.getElementById('sidebar-list');
+  const savedScroll = sidebarList ? sidebarList.scrollTop : 0;
+  renderSidebar();
+  if (sidebarList) sidebarList.scrollTop = savedScroll;
+
   if (debugActive) return; // debug panel handles its own layout
   const inAgentChat = !!(activeSessionId && sessions.has(activeSessionId));
   const inGroupChat = !!(typeof activeGroupId !== 'undefined' && activeGroupId);
@@ -142,11 +147,8 @@ function updateLayout() {
   chatArea.style.display = inChat ? 'flex' : 'none';
   document.getElementById('debug-panel').style.display = 'none';
   // Settings uses class-based visibility — don't touch display here
-  if (inGroupChat) {
-    // Group chats always use text input
-    controls.style.display = 'none';
-    textInputBar.classList.add('active');
-  } else if (inAgentChat) {
+  // Both agent chats and group chats respect inputMode for input controls
+  if (inChat) {
     if (inputMode === 'typing') {
       controls.style.display = 'none';
       textInputBar.classList.add('active');

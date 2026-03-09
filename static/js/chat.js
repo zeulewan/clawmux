@@ -685,16 +685,11 @@ function cycleInputMode() {
 function applyInputMode() {
   const modeText = inputMode === 'voice' ? 'Voice' : 'Typing';
   modeToggle.innerHTML = '<span class="mode-value">' + modeText + '</span><span class="mode-label">Mode</span>';
+  // updateLayout() is the single source of truth for controls/textInputBar visibility
+  updateLayout();
   if (inputMode === 'typing') {
-    controls.style.display = 'none';
-    textInputBar.classList.add('active');
     textInput.focus();
     requestAnimationFrame(() => { chatScrollToBottom(true); });
-  } else {
-    textInputBar.classList.remove('active');
-    if (activeSessionId && sessions.has(activeSessionId)) {
-      controls.style.display = 'grid';
-    }
   }
 }
 
