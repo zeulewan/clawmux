@@ -380,6 +380,12 @@ struct ContentView: View {
             Button(role: .destructive) { resetVoiceId = voice.id; showResetConfirm = true } label: {
                 Label("Reset", systemImage: "arrow.counterclockwise")
             }
+            // Disband Group Chat — matches web ctx-disband-group
+            if let s = session, !s.groupId.isEmpty {
+                Button(role: .destructive) { vm.disbandGroup(s.groupId) } label: {
+                    Label("Disband Group Chat", systemImage: "person.2.slash")
+                }
+            }
             // Terminate Session — matches web ctx-terminate
             if let s = session {
                 Button(role: .destructive) { vm.terminateSession(s.id) } label: {
@@ -871,7 +877,7 @@ struct ContentView: View {
                             Color.clear.frame(height: 1).id("bottom")
                         }
                         .padding(.horizontal, 24)
-                        .padding(.top, 16).padding(.bottom, 170)
+                        .padding(.top, 20).padding(.bottom, 190) // matches web: 20px 24px 190px (mobile override)
                         .frame(minHeight: geo.size.height)
                     }
                     .defaultScrollAnchor(.bottom)
