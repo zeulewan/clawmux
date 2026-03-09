@@ -1120,7 +1120,8 @@ struct ContentView: View {
     private var messageGroups: [MessageGroup] {
         let filtered = vm.activeMessages.filter { msg in
             if msg.isBareAck { return false }
-            if msg.role == "agent" || msg.role == "activity" { return vm.verboseMode }
+            if msg.role == "agent" { return vm.showAgentMessages }
+            if msg.role == "activity" { return vm.verboseMode }
             return true
         }
         var groups: [MessageGroup] = []

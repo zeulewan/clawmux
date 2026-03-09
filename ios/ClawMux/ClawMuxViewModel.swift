@@ -1582,7 +1582,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 let senderSession = msg["sender"] as? String
                 let direction = senderSession == sid ? "to \(rName)" : "from \(sName)"
                 let text = "[Agent msg \(direction)] \(content)"
-                addMessage(sid, role: "system", text: text, ts: json["ts"] as? Double, msgId: msg["id"] as? String)
+                addMessage(sid, role: "agent", text: text, ts: json["ts"] as? Double, msgId: msg["id"] as? String)
                 if sid != activeSessionId, let idx = sessionIndex(sid) {
                     sessions[idx].unreadCount += 1
                 }
