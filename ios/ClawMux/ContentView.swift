@@ -1503,14 +1503,6 @@ struct ContentView: View {
                                 .overlay(Circle().strokeBorder(Color.cBorder, lineWidth: 1))
                         }
                         .transition(.scale.combined(with: .opacity))
-                    } else if !vm.statusText.isEmpty {
-                        // Status text in controls-left — matches web #status div
-                        let sc = statusColor
-                        Text(vm.statusText)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(sc)
-                            .lineLimit(1)
-                            .transition(.opacity)
                     } else {
                         Color.clear.frame(width: 60, height: 46)
                     }
@@ -1580,6 +1572,17 @@ struct ContentView: View {
                     }
                 }
                 .padding(.horizontal, 20).padding(.vertical, 14)
+
+                // Status row — mirrors web #controls-status (grid-row: 3, centered, full-width)
+                if !vm.statusText.isEmpty {
+                    Text(vm.statusText)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(statusColor)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.horizontal, 8).padding(.top, 0).padding(.bottom, 4)
+                        .transition(.opacity)
+                }
             }
             .padding(.horizontal, 12).padding(.vertical, 8).padding(.bottom, 2)
             .background {
