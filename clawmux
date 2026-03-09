@@ -2117,6 +2117,75 @@ def cmd_role(args):
     print(f"Role: {role_lower}")
 
 
+def cmd_group(args):
+    """Manage named group chats."""
+    sub = args.group_command
+
+    if sub == "list":
+        data = http_get("/api/groupchats")
+        groups = data.get("groups", [])
+        if not groups:
+            print("No group chats.")
+            return
+        # Get current session to mark membership
+        my_sid = os.environ.get("CLAWMUX_SESSION_ID", "")
+        for g in groups:
+            members = [m["label"] for m in g.get("members", [])]
+            in_group = my_sid in g.get("session_ids", [])
+            marker = " *" if in_group else ""
+            print(f"  {g['name']}{marker}  [{', '.join(members) if members else 'empty'}]")
+
+    elif sub == "create":
+        data = http_post("/api/groupchats", {"name": args.name})
+        if "error" in data:
+            print(f"Error: {data['error']}")
+            sys.exit(1)
+        print(f"Created group chat: {data['name']}")
+
+    elif sub == "delete":
+        resp = http_delete(f"/api/groupchats/{args.name}")
+        if "error" in resp:
+            print(f"Error: {resp['error']}")
+            sys.exit(1)
+        print(f"Deleted group chat: {args.name}")
+
+    elif sub == "add":
+        resp = http_post(f"/api/groupchats/{args.name}/add", {"voice": args.agent})
+        if "error" in resp:
+            print(f"Error: {resp['error']}")
+            sys.exit(1)
+        members = [m["label"] for m in resp.get("members", [])]
+        print(f"Group '{resp['name']}': {', '.join(members)}")
+
+    elif sub == "remove":
+        resp = http_post(f"/api/groupchats/{args.name}/remove", {"voice": args.agent})
+        if "error" in resp:
+            print(f"Error: {resp['error']}")
+            sys.exit(1)
+        members = [m["label"] for m in resp.get("members", [])]
+        print(f"Group '{resp['name']}': {', '.join(members)}")
+
+    elif sub == "send":
+        session_id = require_session_id()
+        # Look up this session's label for the sender field
+        try:
+            sessions = http_get("/api/sessions").get("sessions", [])
+            match = next((s for s in sessions if s.get("session_id") == session_id), None)
+            sender = match.get("label", "") if match else ""
+        except Exception:
+            sender = ""
+        resp = http_post(f"/api/groupchats/{args.name}/message", {"text": args.message, "sender": sender})
+        if "error" in resp:
+            print(f"Error: {resp['error']}")
+            sys.exit(1)
+        delivered = resp.get("delivered_to", [])
+        print(f"Sent to group '{resp['group']}': {len(delivered)} member(s) notified")
+
+    else:
+        print("Unknown group subcommand. Use: list, create, delete, add, remove, send")
+        sys.exit(1)
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -2361,6 +2430,34 @@ examples:
     clawmux role OpenClaw""")
     p.add_argument("role", help="Role name")
     p.set_defaults(func=cmd_role)
+
+    p = sub.add_parser("group", help="Manage named group chats",
+                       description="Create, manage, and message named group chats.",
+                       formatter_class=argparse.RawDescriptionHelpFormatter,
+                       epilog="""examples:
+    clawmux group list
+    clawmux group create "dev-team"
+    clawmux group add dev-team sky
+    clawmux group add dev-team echo
+    clawmux group remove dev-team echo
+    clawmux group send dev-team 'Status update — deployment complete'
+    clawmux group delete dev-team""")
+    p_group_sub = p.add_subparsers(dest="group_command", required=True)
+    p_group_sub.add_parser("list", help="List all group chats")
+    pg = p_group_sub.add_parser("create", help="Create a new group chat")
+    pg.add_argument("name", help="Group name")
+    pg = p_group_sub.add_parser("delete", help="Delete a group chat")
+    pg.add_argument("name", help="Group name")
+    pg = p_group_sub.add_parser("add", help="Add an agent to a group chat")
+    pg.add_argument("name", help="Group name")
+    pg.add_argument("agent", help="Agent voice ID or label (e.g. sky, echo)")
+    pg = p_group_sub.add_parser("remove", help="Remove an agent from a group chat")
+    pg.add_argument("name", help="Group name")
+    pg.add_argument("agent", help="Agent voice ID or label")
+    pg = p_group_sub.add_parser("send", help="Send a message to all members of a group chat")
+    pg.add_argument("name", help="Group name")
+    pg.add_argument("message", help="Message text")
+    p.set_defaults(func=cmd_group)
 
     args = parser.parse_args()
     if not args.command:

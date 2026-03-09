@@ -65,6 +65,10 @@ async def _on_session_death(session_id: str):
 session_mgr = SessionManager(history_store=history, project_mgr=project_mgr, agents_store=agents_store, backend=_backend, on_session_death=_on_session_death)
 broker = MessageBroker()
 
+# Named group chats: name -> {id, name, session_ids, created_at}
+# Independent of individual sessions — agents can still be messaged directly.
+_group_chats: dict[str, dict] = {}  # keyed by group name (lowercase)
+
 # Per-session pending tmux injection tasks (keyed by session_id)
 _pending_injections: dict[str, asyncio.Task] = {}
 
@@ -1546,6 +1550,116 @@ async def delete_project(slug: str):
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
+
+# ── Group Chat API ────────────────────────────────────────────────────────────
+
+def _group_to_dict(g: dict) -> dict:
+    """Serialize a group chat dict, resolving session_ids to voice names."""
+    members = []
+    for sid in g["session_ids"]:
+        s = session_mgr.sessions.get(sid)
+        if s:
+            members.append({"session_id": sid, "voice": s.voice, "label": s.label})
+    return {"id": g["id"], "name": g["name"], "session_ids": g["session_ids"], "members": members}
+
+
+@app.get("/api/groupchats")
+async def list_groupchats():
+    return JSONResponse({"groups": [_group_to_dict(g) for g in _group_chats.values()]})
+
+
+@app.post("/api/groupchats")
+async def create_groupchat(request: Request):
+    data = await request.json()
+    name = (data.get("name") or "").strip()
+    if not name:
+        return JSONResponse({"error": "name is required"}, status_code=400)
+    key = name.lower()
+    if key in _group_chats:
+        return JSONResponse({"error": f"group '{name}' already exists"}, status_code=409)
+    gid = "gc-" + uuid.uuid4().hex[:8]
+    session_ids = data.get("session_ids", [])
+    _group_chats[key] = {"id": gid, "name": name, "session_ids": list(session_ids)}
+    await send_to_browser({"type": "groupchat_created", "group": _group_to_dict(_group_chats[key])})
+    return JSONResponse(_group_to_dict(_group_chats[key]))
+
+
+@app.delete("/api/groupchats/{name}")
+async def delete_groupchat(name: str):
+    key = name.lower()
+    if key not in _group_chats:
+        return JSONResponse({"error": "group not found"}, status_code=404)
+    g = _group_chats.pop(key)
+    await send_to_browser({"type": "groupchat_deleted", "group_id": g["id"], "name": g["name"]})
+    return JSONResponse({"status": "deleted", "name": g["name"]})
+
+
+@app.post("/api/groupchats/{name}/add")
+async def groupchat_add_member(name: str, request: Request):
+    key = name.lower()
+    if key not in _group_chats:
+        return JSONResponse({"error": "group not found"}, status_code=404)
+    data = await request.json()
+    # Accept session_id or voice name
+    voice = data.get("voice") or data.get("session_id")
+    session = None
+    if voice:
+        for s in session_mgr.sessions.values():
+            if s.voice == voice or s.session_id == voice or s.label.lower() == voice.lower():
+                session = s; break
+    if not session:
+        return JSONResponse({"error": "session not found"}, status_code=404)
+    g = _group_chats[key]
+    if session.session_id not in g["session_ids"]:
+        g["session_ids"].append(session.session_id)
+    await send_to_browser({"type": "groupchat_updated", "group": _group_to_dict(g)})
+    return JSONResponse(_group_to_dict(g))
+
+
+@app.post("/api/groupchats/{name}/remove")
+async def groupchat_remove_member(name: str, request: Request):
+    key = name.lower()
+    if key not in _group_chats:
+        return JSONResponse({"error": "group not found"}, status_code=404)
+    data = await request.json()
+    voice = data.get("voice") or data.get("session_id")
+    session = None
+    if voice:
+        for s in session_mgr.sessions.values():
+            if s.voice == voice or s.session_id == voice or s.label.lower() == voice.lower():
+                session = s; break
+    g = _group_chats[key]
+    if session and session.session_id in g["session_ids"]:
+        g["session_ids"].remove(session.session_id)
+    await send_to_browser({"type": "groupchat_updated", "group": _group_to_dict(g)})
+    return JSONResponse(_group_to_dict(g))
+
+
+@app.post("/api/groupchats/{name}/message")
+async def groupchat_send_message(name: str, request: Request):
+    """Send a message to all members of a named group chat."""
+    key = name.lower()
+    if key not in _group_chats:
+        return JSONResponse({"error": "group not found"}, status_code=404)
+    data = await request.json()
+    text = data.get("text", "").strip()
+    sender = data.get("sender", "")  # label of sender, or empty for user
+    if not text:
+        return JSONResponse({"error": "text is required"}, status_code=400)
+    g = _group_chats[key]
+    delivered = []
+    for sid in g["session_ids"]:
+        session = session_mgr.sessions.get(sid)
+        if not session or not session.work_dir:
+            continue
+        msg = {
+            "type": "user_text",
+            "text": f"[Group: {g['name']}] {text}" if not sender else f"[Group: {g['name']} from {sender}] {text}",
+            "msg_id": _gen_msg_id(),
+        }
+        await _inbox_write_and_notify(session, msg)
+        delivered.append(sid)
+    return JSONResponse({"status": "sent", "delivered_to": delivered, "group": g["name"]})
 
 
 @app.get("/api/history/{voice_id}")
