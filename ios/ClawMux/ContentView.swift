@@ -257,6 +257,7 @@ struct ContentView: View {
         let rc        = ringColor(session, spawning: spawning)
         let thinking  = session?.isThinking == true
         let hasUnread = (session?.unreadCount ?? 0) > 0
+        let inGroup   = !(session?.groupId ?? "").isEmpty
 
         return Button {
             if let s = session {
@@ -294,6 +295,13 @@ struct ContentView: View {
                             .fill(Color.cDanger)
                             .frame(width: 7, height: 7)
                             .offset(x: 9, y: -9)
+                    }
+                    // ⬡ group badge — bottom-right, blue, matches web .sb-group-badge
+                    if inGroup {
+                        Text("⬡")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(Color(hex: 0x0A84FF))
+                            .offset(x: 9, y: 9)
                     }
                 }
 
@@ -576,13 +584,20 @@ struct ContentView: View {
 
                 Spacer(minLength: 0)
 
-                // Unread badge
-                if let u = session?.unreadCount, u > 0 {
-                    Text("\(u)")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(minWidth: 20, minHeight: 20)
-                        .background(Color.cDanger, in: Circle())
+                // Badges (right side)
+                VStack(spacing: 4) {
+                    if let u = session?.unreadCount, u > 0 {
+                        Text("\(u)")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(minWidth: 20, minHeight: 20)
+                            .background(Color.cDanger, in: Circle())
+                    }
+                    if let s = session, !s.groupId.isEmpty {
+                        Text("⬡")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Color(hex: 0x0A84FF))
+                    }
                 }
             }
             .padding(.horizontal, 8).padding(.vertical, 10)
