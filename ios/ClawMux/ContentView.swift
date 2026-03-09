@@ -1069,8 +1069,7 @@ struct ContentView: View {
     // MARK: - Thinking Bubble
 
     private var thinkingBubble: some View {
-        let color   = vm.activeSession.map { voiceColor($0.voice) } ?? Color.cTextSec
-        let session = vm.activeSession
+        let session  = vm.activeSession
         let hasDetail = session.map { !$0.activity.isEmpty || !$0.toolName.isEmpty } ?? false
 
         return HStack(alignment: .bottom, spacing: 8) {
@@ -1082,41 +1081,41 @@ struct ContentView: View {
                         thinkingExpanded.toggle()
                     }
                 } label: {
-                    HStack(spacing: 8) {
-                        // Thinking dots — matches web thinkingPulse:
-                        // 0%,80%,100%{opacity:.15;scale:.7}  40%{opacity:1;scale:1.15}
-                        // Asymmetric: quick flash up, slow fade back, each dot staggered 0.24s
+                    // typing-main-row: gap 5px (matches web)
+                    HStack(spacing: 5) {
+                        // typingBounce dots — matches web CSS:
+                        // 0%,60%,100% { translateY(0), opacity 0.45 }  30% { translateY(-5px), opacity 1 }
+                        // period 1.3s, stagger 0.18s per dot, ease-in-out
                         TimelineView(.animation) { tl in
                             HStack(spacing: 5) {
                                 ForEach(0..<3, id: \.self) { i in
                                     let t = tl.date.timeIntervalSinceReferenceDate
-                                    let period = 1.2
-                                    let phase = (t + Double(i) * 0.24).truncatingRemainder(dividingBy: period) / period
-                                    // phase 0→0.4: ramp up (cubic ease-in), 0.4→0.8: ramp down, 0.8→1.0: hold dim
-                                    let (dotOpacity, dotScale): (Double, Double) = {
-                                        if phase < 0.4 {
-                                            let p = phase / 0.4
-                                            let eased = p * p * (3 - 2 * p) // smoothstep
-                                            return (0.15 + eased * 0.85, 0.7 + eased * 0.45)
-                                        } else if phase < 0.8 {
-                                            let p = (phase - 0.4) / 0.4
-                                            let eased = p * p * (3 - 2 * p)
-                                            return (1.0 - eased * 0.85, 1.15 - eased * 0.45)
+                                    let period = 1.3
+                                    let phase = (t + Double(i) * 0.18).truncatingRemainder(dividingBy: period) / period
+                                    let (yOff, opacity): (Double, Double) = {
+                                        if phase < 0.3 {
+                                            let p = phase / 0.3
+                                            let e = p * p * (3 - 2 * p) // smoothstep ≈ ease-in-out
+                                            return (-5.0 * e, 0.45 + 0.55 * e)
+                                        } else if phase < 0.6 {
+                                            let p = (phase - 0.3) / 0.3
+                                            let e = p * p * (3 - 2 * p)
+                                            return (-5.0 * (1 - e), 1.0 - 0.55 * e)
                                         } else {
-                                            return (0.15, 0.7)
+                                            return (0, 0.45)
                                         }
                                     }()
                                     Circle()
-                                        .fill(color.opacity(dotOpacity))
+                                        .fill(Color.cTextTer.opacity(opacity)) // text-tertiary, not voice color
                                         .frame(width: 7, height: 7)
-                                        .scaleEffect(dotScale)
+                                        .offset(y: yOff)
                                 }
                             }
                         }
                         if hasDetail, let s = session {
                             let summary = s.activity.isEmpty ? s.toolName : s.activity
                             Text(summary)
-                                .font(.system(size: 10, weight: .medium))
+                                .font(.system(size: 11, weight: .medium)) // 0.78em ≈ 11pt
                                 .foregroundStyle(Color.cTextTer)
                                 .lineLimit(1).truncationMode(.middle)
                         }
@@ -1129,13 +1128,14 @@ struct ContentView: View {
                 }
                 .buttonStyle(.plain)
 
-                // Expanded detail
+                // Expanded detail (typing-log-expanded)
                 if thinkingExpanded, let s = session, hasDetail {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 3) {
                         if !s.activity.isEmpty {
                             Text(s.activity)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(color.opacity(0.9))
+                                .font(.system(size: 11, weight: .medium)) // .current line
+                                .foregroundStyle(Color.cTextSec)
+                                .lineLimit(2).truncationMode(.tail)
                         }
                         if !s.toolName.isEmpty {
                             Text(s.toolName)
@@ -1144,28 +1144,21 @@ struct ContentView: View {
                                 .lineLimit(2).truncationMode(.middle)
                         }
                     }
+                    .padding(.top, 7)
+                    .overlay(alignment: .top) {
+                        Divider().foregroundStyle(Color.cBorder)
+                    }
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
-            .padding(.horizontal, 14).padding(.vertical, 11)
-            .background(Color.cCard,
+            .padding(.horizontal, 14).padding(.vertical, 10) // matches web padding: 10px 14px
+            .background(Color.cCard,                          // matches web var(--bg-card)
                 in: UnevenRoundedRectangle(
                     topLeadingRadius: 18, bottomLeadingRadius: 4,
                     bottomTrailingRadius: 18, topTrailingRadius: 18,
                     style: .continuous))
-            .overlay(
-                UnevenRoundedRectangle(
-                    topLeadingRadius: 18, bottomLeadingRadius: 4,
-                    bottomTrailingRadius: 18, topTrailingRadius: 18,
-                    style: .continuous)
-                    .fill(color.opacity(0.1))
-            )
-            .overlay(
-                UnevenRoundedRectangle(
-                    topLeadingRadius: 18, bottomLeadingRadius: 4,
-                    bottomTrailingRadius: 18, topTrailingRadius: 18,
-                    style: .continuous)
-                .strokeBorder(Color.cBorder, lineWidth: 0.5))
+            // No voice color tint overlay — web typing indicator has no tint
+            // No border — web .msg-typing-indicator has no border
             .onAppear  { isPulsing = true }
             .onDisappear { isPulsing = false }
 
