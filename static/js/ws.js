@@ -141,7 +141,6 @@ function handleMessage(data) {
           existing.project = s.project || existing.project || '';
           existing.project_area = s.project_area || existing.project_area || '';
           existing.unreadCount = s.unread_count || 0;
-          existing.group_id = s.group_id || '';
           // Restore tool activity text from server (persists across reloads)
           if (s.activity) {
             existing.toolStatusText = s.activity;
@@ -226,17 +225,6 @@ function handleMessage(data) {
   if (type === 'session_terminated') {
     removeSession(data.session_id);
     return;
-  }
-  if (type === 'group_created' || type === 'group_updated') {
-    for (const sid of (data.session_ids || [])) {
-      const s = sessions.get(sid);
-      if (s) s.group_id = data.group_id;
-    }
-    renderSidebar(); return;
-  }
-  if (type === 'group_disbanded') {
-    for (const [, s] of sessions) { if (s.group_id === data.group_id) s.group_id = ''; }
-    renderSidebar(); return;
   }
   if (type === 'project_deleted' || type === 'project_renamed') {
     loadProjects();

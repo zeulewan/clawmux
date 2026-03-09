@@ -65,23 +65,6 @@ async def _on_session_death(session_id: str):
 session_mgr = SessionManager(history_store=history, project_mgr=project_mgr, agents_store=agents_store, backend=_backend, on_session_death=_on_session_death)
 broker = MessageBroker()
 
-_groups: dict[str, dict] = {}
-
-
-def _get_group_peers(session) -> list:
-    gid = session.group_id
-    if not gid or gid not in _groups:
-        return []
-    return [s for sid in _groups[gid]["session_ids"] if sid != session.session_id
-            for s in (session_mgr.sessions.get(sid),) if s and s.work_dir]
-
-
-async def _broadcast_to_group_peers(sender_session, msg_dict: dict) -> None:
-    for peer in _get_group_peers(sender_session):
-        peer_msg = dict(msg_dict)
-        peer_msg["msg_id"] = _gen_msg_id()
-        await _inbox_write_and_notify(peer, peer_msg)
-
 
 def _hist_prefix(session) -> str | None:
     """Get the history prefix for a session's project."""
@@ -347,13 +330,6 @@ async def lifespan(app: FastAPI):
     voice.reload_pronunciation_overrides()
     await agents_store.load()
     await session_mgr.cleanup_stale_sessions()
-    # Rebuild _groups from session group_id fields (survives hub reload)
-    for s in session_mgr.sessions.values():
-        if s.group_id:
-            if s.group_id not in _groups:
-                _groups[s.group_id] = {"session_ids": []}
-            if s.session_id not in _groups[s.group_id]["session_ids"]:
-                _groups[s.group_id]["session_ids"].append(s.session_id)
     broker.start()
     timeout_task = asyncio.create_task(session_mgr.run_timeout_loop())
     hb_task = asyncio.create_task(heartbeat_loop())
@@ -1508,78 +1484,6 @@ async def delete_project(slug: str):
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
-
-@app.get("/api/groups")
-async def list_groups():
-    return JSONResponse({"groups": [{"group_id": gid, "session_ids": info["session_ids"]} for gid, info in _groups.items()]})
-
-
-@app.post("/api/groups")
-async def create_group(request: Request):
-    data = await request.json()
-    session_ids = data.get("session_ids", [])
-    if len(session_ids) < 2:
-        return JSONResponse({"error": "at least 2 session_ids required"}, status_code=400)
-    group_id = "grp-" + uuid.uuid4().hex[:8]
-    _groups[group_id] = {"session_ids": list(session_ids)}
-    for sid in session_ids:
-        s = session_mgr.sessions.get(sid)
-        if s:
-            s.group_id = group_id
-    await send_to_browser({"type": "group_created", "group_id": group_id, "session_ids": session_ids})
-    return JSONResponse({"group_id": group_id})
-
-
-@app.delete("/api/groups/{group_id}")
-async def disband_group(group_id: str):
-    if group_id not in _groups:
-        return JSONResponse({"error": "group not found"}, status_code=404)
-    session_ids = _groups.pop(group_id, {}).get("session_ids", [])
-    for sid in session_ids:
-        s = session_mgr.sessions.get(sid)
-        if s:
-            s.group_id = ""
-    await send_to_browser({"type": "group_disbanded", "group_id": group_id, "session_ids": session_ids})
-    return JSONResponse({"status": "disbanded"})
-
-
-@app.post("/api/groups/{group_id}/join/{session_id}")
-async def join_group(group_id: str, session_id: str):
-    if group_id not in _groups:
-        return JSONResponse({"error": "group not found"}, status_code=404)
-    s = session_mgr.sessions.get(session_id)
-    if not s:
-        return JSONResponse({"error": "session not found"}, status_code=404)
-    if session_id not in _groups[group_id]["session_ids"]:
-        _groups[group_id]["session_ids"].append(session_id)
-    s.group_id = group_id
-    all_ids = _groups[group_id]["session_ids"]
-    await send_to_browser({"type": "group_updated", "group_id": group_id, "session_ids": all_ids})
-    return JSONResponse({"group_id": group_id, "session_ids": all_ids})
-
-
-@app.delete("/api/groups/{group_id}/leave/{session_id}")
-async def leave_group(group_id: str, session_id: str):
-    if group_id not in _groups:
-        return JSONResponse({"error": "group not found"}, status_code=404)
-    s = session_mgr.sessions.get(session_id)
-    if s:
-        s.group_id = ""
-    sids = _groups[group_id]["session_ids"]
-    if session_id in sids:
-        sids.remove(session_id)
-    if len(sids) < 2:
-        for remaining in sids:
-            rs = session_mgr.sessions.get(remaining)
-            if rs:
-                rs.group_id = ""
-        disbanded_ids = [session_id] + sids[:]
-        sids.clear()
-        _groups.pop(group_id, None)
-        await send_to_browser({"type": "group_disbanded", "group_id": group_id, "session_ids": disbanded_ids})
-    else:
-        await send_to_browser({"type": "group_updated", "group_id": group_id, "session_ids": sids})
-    return JSONResponse({"status": "left"})
 
 
 @app.get("/api/history/{voice_id}")

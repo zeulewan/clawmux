@@ -541,41 +541,21 @@ function _createAgentCard(voiceId, name, state) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     if (e.dataTransfer.types.includes('application/x-project-slug')) return;
-    // If both source and target have live sessions, show group-target highlight
-    const fromVoiceId = e.dataTransfer.getData && e.dataTransfer.types.includes('text/plain')
-      ? null : null; // can't read data during dragover in all browsers
-    const toSess = card._voiceSession || (typeof sessions !== 'undefined' && [...sessions.values()].find(s => s.voice === voiceId));
-    if (toSess) {
-      // Check if any dragged voice has a session by seeing if a drag is in progress
-      card.classList.add('drag-group-target');
-      card.classList.remove('drag-above', 'drag-below');
-    } else {
-      card.classList.remove('drag-group-target');
-      const rect = card.getBoundingClientRect();
-      const midY = rect.top + rect.height / 2;
-      card.classList.toggle('drag-above', e.clientY < midY);
-      card.classList.toggle('drag-below', e.clientY >= midY);
-    }
+    const rect = card.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    card.classList.toggle('drag-above', e.clientY < midY);
+    card.classList.toggle('drag-below', e.clientY >= midY);
   });
   card.addEventListener('dragleave', () => {
-    card.classList.remove('drag-above', 'drag-below', 'drag-group-target');
+    card.classList.remove('drag-above', 'drag-below');
   });
   card.addEventListener('drop', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    card.classList.remove('drag-above', 'drag-below', 'drag-group-target');
+    card.classList.remove('drag-above', 'drag-below');
     const fromVoice = e.dataTransfer.getData('text/plain');
     if (!fromVoice || fromVoice === voiceId) return;
     if (e.dataTransfer.getData('application/x-project-slug')) return;
-
-    // If both agents have live sessions, offer group chat creation
-    const _allSess = typeof sessions !== 'undefined' ? sessions : new Map();
-    const fromSession = [..._allSess.values()].find(s => s.voice === fromVoice);
-    const toSession = card._voiceSession || [..._allSess.values()].find(s => s.voice === voiceId);
-    if (fromSession && toSession) {
-      _groupDropAgents(fromVoice, voiceId, fromSession, toSession);
-      return;
-    }
 
     const allP = (typeof allProjects !== 'undefined' ? allProjects : []);
     const targetProj = allP.find(p => (p.voices || []).includes(voiceId));
@@ -652,18 +632,6 @@ function _createAgentCard(voiceId, name, state) {
     badge.className = 'sb-unread';
     card.appendChild(badge);
   }
-  if (state.session && state.session.group_id) {
-    const groupBadge = document.createElement('span');
-    groupBadge.className = 'sb-group-badge';
-    groupBadge.title = 'In group chat — click to disband';
-    groupBadge.textContent = '⬡';
-    groupBadge.onclick = (e) => {
-      e.stopPropagation();
-      _disbandGroup(state.session.group_id);
-    };
-    card.appendChild(groupBadge);
-    card.classList.add('in-group');
-  }
   card._voiceSession = state.session;
   card._voiceSpawning = state.isSpawning;
   card.onclick = () => {
@@ -734,171 +702,6 @@ function _createAgentCard(voiceId, name, state) {
 }
 
 // Move an agent to a different project via API
-async function _groupDropAgents(fromVoice, toVoice, fromSession, toSession) {
-  const existingGroupId = toSession.group_id || fromSession.group_id;
-  if (existingGroupId) {
-    const joiningId = toSession.group_id ? fromSession.session_id : toSession.session_id;
-    const resp = await fetch(`/api/groups/${existingGroupId}/join/${joiningId}`, { method: 'POST' })
-      .catch(err => { console.error('Failed to join group:', err); return null; });
-    if (resp && resp.ok) {
-      const data = await resp.json().catch(() => ({}));
-      // Update local state immediately — don't wait for WS event
-      for (const sid of (data.session_ids || [fromSession.session_id, toSession.session_id])) {
-        const s = sessions.get(sid);
-        if (s) s.group_id = existingGroupId;
-      }
-      renderSidebar();
-    }
-  } else {
-    const resp = await fetch('/api/groups', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_ids: [fromSession.session_id, toSession.session_id] }),
-    }).catch(err => { console.error('Failed to create group:', err); return null; });
-    if (resp && resp.ok) {
-      const data = await resp.json().catch(() => ({}));
-      const gid = data.group_id;
-      if (gid) {
-        fromSession.group_id = gid;
-        toSession.group_id = gid;
-        renderSidebar();
-      }
-    }
-  }
-}
-
-async function _leaveGroup(sessionId, groupId) {
-  await fetch(`/api/groups/${groupId}/leave/${sessionId}`, { method: 'DELETE' })
-    .catch(err => console.error('Failed to leave group:', err));
-}
-
-async function _disbandGroup(groupId) {
-  await fetch(`/api/groups/${groupId}`, { method: 'DELETE' })
-    .catch(err => console.error('Failed to disband group:', err));
-}
-
-function _createGroupCard(groupId, memberVoiceIds) {
-  const card = document.createElement('div');
-  card.className = 'sidebar-group-card';
-  card.dataset.groupId = groupId;
-
-  const header = document.createElement('div');
-  header.className = 'sg-header';
-
-  const avatars = document.createElement('div');
-  avatars.className = 'sg-avatars';
-  for (const vid of memberVoiceIds.slice(0, 4)) {
-    const dot = document.createElement('div');
-    dot.className = 'sg-avatar';
-    dot.style.background = voiceColor(vid);
-    const iconVal = voiceIcon(vid);
-    if (iconVal.startsWith('<')) dot.innerHTML = iconVal; else dot.textContent = iconVal;
-    avatars.appendChild(dot);
-  }
-
-  const info = document.createElement('div');
-  info.className = 'sg-info';
-  const label = document.createElement('div');
-  label.className = 'sg-label';
-  label.textContent = 'Group Chat';
-  const names = document.createElement('div');
-  names.className = 'sg-names';
-  names.textContent = memberVoiceIds
-    .map(vid => VOICE_NAMES[vid] || vid.replace(/^[a-z]{2}_/, '').replace(/^./, c => c.toUpperCase()))
-    .join(', ');
-  info.appendChild(label);
-  info.appendChild(names);
-
-  const disband = document.createElement('button');
-  disband.className = 'sg-disband';
-  disband.title = 'Disband group';
-  disband.textContent = '\u2715';
-  disband.onclick = (e) => { e.stopPropagation(); _disbandGroup(groupId); };
-
-  header.appendChild(avatars);
-  header.appendChild(info);
-  header.appendChild(disband);
-  card.appendChild(header);
-
-  // Click to switch to primary session (first member with an active session)
-  header.onclick = () => {
-    for (const vid of memberVoiceIds) {
-      for (const [sid, s] of sessions) {
-        if (s.voice === vid) { switchTab(sid, true); return; }
-      }
-    }
-  };
-
-  // Drag-and-drop: allow dropping agents onto the group card to join
-  card.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (!e.dataTransfer.types.includes('application/x-project-slug')) {
-      card.classList.add('drag-group-target');
-    }
-  });
-  card.addEventListener('dragleave', (e) => {
-    if (!card.contains(e.relatedTarget)) card.classList.remove('drag-group-target');
-  });
-  card.addEventListener('drop', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    card.classList.remove('drag-group-target');
-    const fromVoice = e.dataTransfer.getData('text/plain');
-    if (!fromVoice || memberVoiceIds.includes(fromVoice)) return;
-    const fromSession = [...sessions.values()].find(s => s.voice === fromVoice);
-    if (!fromSession) return;
-    // Find any existing member session to use as the "to" session
-    let toSession = null;
-    for (const vid of memberVoiceIds) {
-      for (const [, s] of sessions) { if (s.voice === vid) { toSession = s; break; } }
-      if (toSession) break;
-    }
-    if (toSession) _groupDropAgents(fromVoice, toSession.voice, fromSession, toSession);
-  });
-
-  card.oncontextmenu = (e) => {
-    e.preventDefault();
-    // Show disband context menu item if right-click on group card
-    const fakeEvent = { preventDefault() {}, stopPropagation() {}, clientX: e.clientX, clientY: e.clientY };
-    // Find first member session for context menu
-    for (const vid of memberVoiceIds) {
-      for (const [sid, s] of sessions) {
-        if (s.voice === vid) { showContextMenu(fakeEvent, sid, vid); return; }
-      }
-    }
-  };
-
-  return card;
-}
-
-function _updateGroupCard(card, groupId, memberVoiceIds) {
-  const avatars = card.querySelector('.sg-avatars');
-  if (avatars) {
-    avatars.innerHTML = '';
-    for (const vid of memberVoiceIds.slice(0, 4)) {
-      const dot = document.createElement('div');
-      dot.className = 'sg-avatar';
-      dot.style.background = voiceColor(vid);
-      const iconVal = voiceIcon(vid);
-      if (iconVal.startsWith('<')) dot.innerHTML = iconVal; else dot.textContent = iconVal;
-      avatars.appendChild(dot);
-    }
-  }
-  const names = card.querySelector('.sg-names');
-  if (names) {
-    names.textContent = memberVoiceIds
-      .map(vid => VOICE_NAMES[vid] || vid.replace(/^[a-z]{2}_/, '').replace(/^./, c => c.toUpperCase()))
-      .join(', ');
-  }
-  // Selected state: highlight when any member is the active session
-  const isMemberActive = memberVoiceIds.some(vid => {
-    for (const [sid, s] of sessions) { if (s.voice === vid && sid === activeSessionId) return true; }
-    return false;
-  });
-  card.classList.toggle('selected', isMemberActive);
-}
-
 async function _moveAgentToProject(voiceId, targetProjectSlug) {
   const targetProject = (typeof allProjects !== 'undefined' ? allProjects : []).find(p => p.slug === targetProjectSlug);
   const projectName = targetProject ? (targetProject.name || targetProjectSlug) : targetProjectSlug;
@@ -1083,42 +886,18 @@ function renderSidebar() {
       agentContainer.style.maxHeight = '0';
     } else {
       agentContainer.classList.remove('collapsed');
-      const seenGroupIds = new Set();
-      const items = [];
-      for (const [voiceId, name] of voices) {
-        const gid = (() => { const s = _sidebarState(voiceId); return s.session && s.session.group_id; })();
-        if (gid) {
-          if (!seenGroupIds.has(gid)) {
-            seenGroupIds.add(gid);
-            const gMembers = voices.filter(([vid]) => { const s = _sidebarState(vid); return s.session && s.session.group_id === gid; }).map(([vid]) => vid);
-            items.push({ type: 'group', groupId: gid, memberVoiceIds: gMembers });
-          }
-        } else { items.push({ type: 'voice', voiceId, name }); }
-      }
       const currentCards = new Map();
-      for (const card of agentContainer.querySelectorAll('.sidebar-card:not(.sg-sub-card)')) { currentCards.set(card.dataset.voiceId, card); }
-      const currentGroupCards = new Map();
-      for (const card of agentContainer.querySelectorAll('.sidebar-group-card')) { currentGroupCards.set(card.dataset.groupId, card); }
+      for (const card of agentContainer.querySelectorAll('.sidebar-card')) { currentCards.set(card.dataset.voiceId, card); }
       const voiceIds = new Set(voices.map(([id]) => id));
-      const activeGroupIds = new Set(items.filter(it => it.type === 'group').map(it => it.groupId));
-      const groupedVoiceIds = new Set(items.filter(it => it.type === 'group').flatMap(it => it.memberVoiceIds));
       for (const child of [...agentContainer.children]) {
-        if (child.classList.contains('sidebar-group-card') && !activeGroupIds.has(child.dataset.groupId)) child.remove();
-        else if (child.classList.contains('sidebar-card') && !child.classList.contains('sg-sub-card') && child.dataset.voiceId && (!voiceIds.has(child.dataset.voiceId) || groupedVoiceIds.has(child.dataset.voiceId))) child.remove();
+        if (child.classList.contains('sidebar-card') && child.dataset.voiceId && !voiceIds.has(child.dataset.voiceId)) child.remove();
       }
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        let el;
-        if (item.type === 'group') {
-          el = currentGroupCards.get(item.groupId);
-          if (el) _updateGroupCard(el, item.groupId, item.memberVoiceIds);
-          else el = _createGroupCard(item.groupId, item.memberVoiceIds);
-        } else {
-          el = currentCards.get(item.voiceId);
-          const st = _sidebarState(item.voiceId);
-          if (el) _updateSidebarCard(el, item.voiceId, st);
-          else el = _createAgentCard(item.voiceId, item.name, st);
-        }
+      for (let i = 0; i < voices.length; i++) {
+        const [voiceId, name] = voices[i];
+        const st = _sidebarState(voiceId);
+        let el = currentCards.get(voiceId);
+        if (el) _updateSidebarCard(el, voiceId, st);
+        else el = _createAgentCard(voiceId, name, st);
         if (agentContainer.children[i] !== el) agentContainer.insertBefore(el, agentContainer.children[i] || null);
       }
       agentContainer.style.maxHeight = agentContainer.scrollHeight + 'px';
