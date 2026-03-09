@@ -1903,7 +1903,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try? JSONSerialization.data(
-            withJSONObject: ["voice": voiceId])
+            withJSONObject: ["voice": voiceId, "project": currentProject])
         request.timeoutInterval = 90  // Spawn takes 30-60s
 
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
