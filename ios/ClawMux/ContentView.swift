@@ -2433,7 +2433,9 @@ struct SettingsView: View {
                 // Sounds
                 Section("Sounds") {
                     Toggle("Thinking Sounds", isOn: $vm.soundThinkingAuto)
+                        .onChange(of: vm.soundThinkingAuto) { _, v in vm.updateSetting("thinking_sounds", value: v) }
                     Toggle("Audio Cues", isOn: $vm.soundListeningAuto)
+                        .onChange(of: vm.soundListeningAuto) { _, v in vm.updateSetting("audio_cues", value: v) }
                 }
 
                 // Chat

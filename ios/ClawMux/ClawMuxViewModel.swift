@@ -2263,6 +2263,12 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 if let voiceResp = json["voice_responses"] as? Bool {
                     self.voiceResponses = voiceResp
                 }
+                if let thinkSounds = json["thinking_sounds"] as? Bool {
+                    self.soundThinkingAuto = thinkSounds
+                }
+                if let audioCues = json["audio_cues"] as? Bool {
+                    self.soundListeningAuto = audioCues
+                }
             }
         }.resume()
     }
