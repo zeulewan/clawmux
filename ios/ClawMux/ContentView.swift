@@ -559,6 +559,7 @@ struct ContentView: View {
     @ViewBuilder
     private func groupCard(_ groupId: String, voices: [VoiceInfo]) -> some View {
         let blue = Color(hex: 0x0A84FF)
+        let isSelected = voices.contains { $0.id == vm.activeSession?.voice }
         VStack(spacing: 0) {
             // Header — tap to switch to first active member session
             Button {
@@ -622,8 +623,18 @@ struct ContentView: View {
             }
             .padding(.horizontal, 4).padding(.vertical, 4)
         }
-        .background(blue.opacity(0.07), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(blue.opacity(isSelected ? 0.12 : 0.07), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(blue.opacity(0.35), lineWidth: 1))
+        // Left 3px inset bar when selected — mirrors web .sidebar-group-card.selected box-shadow: inset 3px 0 0 blue
+        .overlay(alignment: .leading) {
+            if isSelected {
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(blue)
+                    .frame(width: 3)
+                    .padding(.vertical, 8)
+                    .padding(.leading, 1)
+            }
+        }
         .padding(.horizontal, 6).padding(.vertical, 2)
     }
 
