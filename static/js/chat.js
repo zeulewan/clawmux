@@ -469,15 +469,28 @@ function _loadMoreMessages() {
   if (!activeSessionId) return;
   const s = sessions.get(activeSessionId);
   if (!s) return;
-  const currentLimit = _getChatLimit(activeSessionId);
+  let currentLimit = _getChatLimit(activeSessionId);
   if (currentLimit >= s.messages.length) return; // all loaded
-  // Save scroll position relative to content height before rebuild
   const oldHeight = chatArea.scrollHeight;
-  _chatRenderLimit.set(activeSessionId, currentLimit + _CHAT_BATCH);
-  renderChat();
-  // Defer scroll restoration — mobile browsers may not update scrollHeight synchronously after DOM rebuild
+  // Count visible message bubbles before loading
+  const visibleBefore = chatArea.querySelectorAll('.msg:not(.msg-typing-indicator)').length;
+  // Load a batch; keep loading if no new visible messages appeared (e.g. all bare-acks)
+  let iterations = 0;
+  do {
+    currentLimit += _CHAT_BATCH;
+    _chatRenderLimit.set(activeSessionId, currentLimit);
+    renderChat();
+    iterations++;
+  } while (
+    iterations < 10 &&
+    currentLimit < s.messages.length &&
+    chatArea.querySelectorAll('.msg:not(.msg-typing-indicator)').length === visibleBefore
+  );
+  // Double rAF — first frame triggers layout, second frame reads the settled scrollHeight
   requestAnimationFrame(() => {
-    chatArea.scrollTop = chatArea.scrollHeight - oldHeight;
+    requestAnimationFrame(() => {
+      chatArea.scrollTop = chatArea.scrollHeight - oldHeight;
+    });
   });
 }
 
