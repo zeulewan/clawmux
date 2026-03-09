@@ -16,6 +16,14 @@ struct ChatMessage: Identifiable, Equatable {
     var isBareAck: Bool = false // thumbs-up ack — no display text
 }
 
+struct GroupChatMessage: Identifiable, Equatable {
+    let id: String      // server-assigned message id
+    let role: String    // "user", "assistant", "system"
+    let text: String
+    let sender: String  // voice id of sender
+    let ts: Double      // unix timestamp
+}
+
 /// Canonical agent state matching the backend AgentState enum.
 enum AgentState: String {
     case starting, idle, thinking, processing, compacting, dead
@@ -322,6 +330,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     @Published var spawningVoiceIds: Set<String> = []
     @Published var knownGroupChats: [(name: String, voices: [String])] = []
     @Published var activeGroupName: String? = nil  // non-nil when viewing a group chat
+    @Published var groupMessages: [GroupChatMessage] = []
     private var groupIdToName: [String: String] = [:]  // "gc-xxx" → "group name" for disband API
 
     func groupName(for groupId: String) -> String? { groupIdToName[groupId] }
@@ -1797,8 +1806,23 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
 
         case "groupchat_message":
             // { group_id, group_name, message: {id, role, text, sender, ts} }
-            // Delivered to agents via inbox_update; this event is for UI refresh only
-            break
+            if let msgDict = json["message"] as? [String: Any],
+               let msgId = msgDict["id"] as? String,
+               let text = msgDict["text"] as? String {
+                let msg = GroupChatMessage(
+                    id: msgId,
+                    role: msgDict["role"] as? String ?? "assistant",
+                    text: text,
+                    sender: msgDict["sender"] as? String ?? "",
+                    ts: msgDict["ts"] as? Double ?? 0
+                )
+                // Only append if viewing this group and not already present
+                let groupName = json["group_name"] as? String ?? ""
+                if activeGroupName?.lowercased() == groupName.lowercased(),
+                   !groupMessages.contains(where: { $0.id == msgId }) {
+                    groupMessages.append(msg)
+                }
+            }
 
         default:
             break
@@ -2054,14 +2078,41 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         }.resume()
     }
 
-    // Switch to viewing a group chat (sets activeGroupName, keeps activeSessionId on first member)
+    // Switch to viewing a group chat (sets activeGroupName, loads group history)
     func switchToGroupChat(name: String, firstSessionId: String?) {
+        groupMessages = []
         activeGroupName = name
         if let sid = firstSessionId {
-            switchToSession(sid)
-            // switchToSession clears activeGroupName, so re-set it
-            activeGroupName = name
+            // Update activeSessionId without clearing activeGroupName
+            activeSessionId = sid
         }
+        fetchGroupHistory(groupName: name)
+    }
+
+    // GET /api/groupchats/:name/history → populate groupMessages
+    func fetchGroupHistory(groupName: String) {
+        guard let baseURL = httpBaseURL() else { return }
+        let encoded = groupName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? groupName
+        let url = baseURL.appendingPathComponent("api/groupchats/\(encoded)/history")
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+            guard let data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let msgs = json["messages"] as? [[String: Any]]
+            else { return }
+            let parsed = msgs.compactMap { m -> GroupChatMessage? in
+                guard let id = m["id"] as? String,
+                      let text = m["text"] as? String
+                else { return nil }
+                return GroupChatMessage(
+                    id: id,
+                    role: m["role"] as? String ?? "assistant",
+                    text: text,
+                    sender: m["sender"] as? String ?? "",
+                    ts: m["ts"] as? Double ?? 0
+                )
+            }
+            Task { @MainActor in self?.groupMessages = parsed }
+        }.resume()
     }
 
     // POST text message to group chat → /api/groupchats/:name/message
