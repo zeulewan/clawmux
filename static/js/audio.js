@@ -1630,8 +1630,8 @@ function interruptPlayback(sessionId) {
   updateMicUI();
   setStatus('Ready', sessionId);
 
-  // Send playback_done to notify hub that audio finished
-  if (ws && ws.readyState === WebSocket.OPEN) {
+  // Send playback_done to notify hub that audio finished (not for group chats)
+  if (sessionId !== '__group__' && ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ session_id: sessionId, type: 'playback_done' }));
   }
   _checkPendingListen(sessionId);
