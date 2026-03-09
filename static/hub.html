@@ -939,6 +939,7 @@ async function openGroupChat(groupId) {
   } catch (e) { /* empty */ }
 
   updateLayout();
+  if (typeof updateMicUI === 'function') updateMicUI();
 }
 
 function _voiceColorByLabel(label) {
