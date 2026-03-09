@@ -551,6 +551,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         set { updateSessionSpeed(newValue) }
     }
 
+    // Stash audio recorded while WS was disconnected — flushed as interjection on reconnect
+    private var pendingAudioSend: (sessionId: String, data: Data, isInterjection: Bool)?
+
     // Private
     private var webSocketTask: URLSessionWebSocketTask?
     private var urlSession: URLSession?
@@ -1239,6 +1242,18 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 Task { @MainActor in self?.handleDisconnect() }
             }
         }
+    }
+
+    /// Replay audio stashed during a connection drop — sent as interjection so the hub
+    /// transcribes and queues it correctly (mirrors web _flushPendingAudio called on WS open).
+    private func flushPendingAudio() {
+        guard let pending = pendingAudioSend, isConnected else { return }
+        pendingAudioSend = nil
+        let b64 = pending.data.base64EncodedString()
+        let type = pending.isInterjection ? "interjection" : "audio"
+        print("[audio] Flushing stashed audio as \(type) for session \(pending.sessionId)")
+        sendJSON(["session_id": pending.sessionId, "type": "interjection", "data": b64])
+        updateStatusText("Transcribing…", for: pending.sessionId)
     }
 
     func setSessionModel(_ model: String) {
@@ -2326,11 +2341,15 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             let b64 = audioData.base64EncodedString()
             // Check if agent is awaiting input or busy
             let isAwaiting = sessionIndex(sid).flatMap { sessions[$0].awaitingInput } ?? false
-            if isAwaiting {
-                sendJSON(["session_id": sid, "type": "audio", "data": b64])
-            } else {
-                // Agent is busy — send as audio interjection
+            let isInterjection = !isAwaiting
+            if !isConnected {
+                // WS disconnected — stash audio for replay on reconnect (matches web _pendingAudioSend)
+                pendingAudioSend = (sessionId: sid, data: audioData, isInterjection: isInterjection)
+                statusText = "Reconnecting — audio saved…"
+            } else if isInterjection {
                 sendJSON(["session_id": sid, "type": "interjection", "data": b64])
+            } else {
+                sendJSON(["session_id": sid, "type": "audio", "data": b64])
             }
             // Fire parallel transcription for user feedback (both auto and PTT swipe-up)
             if audioData.count > 1000 {
@@ -2962,6 +2981,7 @@ extension ClawMuxViewModel: URLSessionWebSocketDelegate {
             self.receiveMessage()
             self.fetchSettings()
             self.fetchUsage()
+            self.flushPendingAudio()  // replay audio recorded during disconnect
         }
     }
 
