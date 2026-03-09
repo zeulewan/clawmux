@@ -676,19 +676,26 @@ function _createAgentCard(voiceId, name, state) {
     if (card._voiceSession) { showContextMenu(e, card._voiceSession.session_id, voiceId); }
     else { showContextMenu(e, null, voiceId); }
   };
-  let lpTimer = null, lpFired = false, touchDragging = false;
+  let lpTimer = null, lpFired = false, touchDragging = false, ctxShown = false;
   let touchStartX = 0, touchStartY = 0;
   card.addEventListener('touchstart', (e) => {
-    lpFired = false; touchDragging = false;
+    lpFired = false; touchDragging = false; ctxShown = false;
     const touch = e.touches[0];
     touchStartX = touch.clientX; touchStartY = touch.clientY;
     lpTimer = setTimeout(() => {
       lpTimer = null; lpFired = true;
-      // lpFired — wait for touchmove or touchend to distinguish drag vs context menu
+      // Show context menu immediately while finger is still held
+      ctxShown = true;
+      card.classList.add('long-press-active');
+      const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: touchStartX, clientY: touchStartY };
+      if (card._voiceSession) { showContextMenu(fakeEvent, card._voiceSession.session_id, voiceId); }
+      else { showContextMenu(fakeEvent, null, voiceId); }
+      setTimeout(() => card.classList.remove('long-press-active'), 200);
     }, 400);
   }, { passive: true });
   card.addEventListener('touchmove', (e) => {
     const touch = e.touches[0];
+    if (ctxShown) { e.preventDefault(); return; } // context menu open — ignore movement
     if (lpTimer) {
       // Still in grace period — cancel if finger moved too far (scrolling)
       if (Math.hypot(touch.clientX - touchStartX, touch.clientY - touchStartY) > 8) {
@@ -697,7 +704,7 @@ function _createAgentCard(voiceId, name, state) {
       return;
     }
     if (!lpFired) return; // timer cancelled (scroll gesture)
-    // Long-press threshold passed — require intentional movement (>14px) before drag
+    // Long-press fired, no context menu — intentional movement (>14px) starts drag
     if (!touchDragging) {
       if (Math.hypot(touch.clientX - touchStartX, touch.clientY - touchStartY) < 14) return;
       touchDragging = true;
@@ -711,26 +718,16 @@ function _createAgentCard(voiceId, name, state) {
     if (touchDragging && _touchDrag) { _touchDrag.ghost.remove(); _touchDrag = null; }
     document.querySelectorAll('.drag-above,.drag-below,.drag-over-group').forEach(el =>
       el.classList.remove('drag-above', 'drag-below', 'drag-over-group'));
-    touchDragging = false; lpFired = false;
+    touchDragging = false; lpFired = false; ctxShown = false;
   };
   card.addEventListener('touchend', (e) => {
     if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
     if (touchDragging) {
       e.preventDefault();
       _touchDragEnd(e.changedTouches[0]);
-      touchDragging = false; lpFired = false; return;
+      touchDragging = false; lpFired = false; ctxShown = false; return;
     }
-    if (lpFired) {
-      // Long press, no drag — show context menu
-      e.preventDefault();
-      card.classList.add('long-press-active');
-      const touch = e.changedTouches[0];
-      const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: touch.clientX, clientY: touch.clientY };
-      if (card._voiceSession) { showContextMenu(fakeEvent, card._voiceSession.session_id, voiceId); }
-      else { showContextMenu(fakeEvent, null, voiceId); }
-      setTimeout(() => card.classList.remove('long-press-active'), 200);
-      lpFired = false;
-    }
+    lpFired = false; ctxShown = false;
   });
   card.addEventListener('touchcancel', _cancelTouchDrag);
   return card;
