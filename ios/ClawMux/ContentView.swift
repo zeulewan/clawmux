@@ -1010,6 +1010,7 @@ struct ContentView: View {
                         Text(msg.text)
                             .font(.system(size: CGFloat(vm.chatFontSize)))
                             .lineSpacing(4)
+                            .tracking(CGFloat(vm.chatFontSize) * -0.01)
                             .foregroundStyle(Color.white)
                             .frame(maxWidth: .infinity, alignment: .trailing)
                     } else {
