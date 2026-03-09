@@ -496,11 +496,13 @@ function _loadMoreMessages() {
   }
 
   _chatRenderLimit.set(activeSessionId, limit);
+  // Guard scroll listener before renderChat — clearing innerHTML resets scrollTop to 0
+  // which fires a scroll event; without the guard that would cascade into another load.
+  _scrollLoadPending = true;
   renderChat(); // single render, no forceScroll
-  // Guard the programmatic scroll so it doesn't re-trigger the scroll listener
+  // Double rAF: first frame settles layout, second restores reading position
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      _scrollLoadPending = true;
       chatArea.scrollTop = chatArea.scrollHeight - oldHeight;
       requestAnimationFrame(() => { _scrollLoadPending = false; });
     });
@@ -523,7 +525,10 @@ function _fillViewportMessages() {
   const newLimit = Math.min(limit + _CHAT_BATCH * 3, s.messages.length - _CHAT_BATCH);
   if (newLimit <= limit) return;
   _chatRenderLimit.set(activeSessionId, newLimit);
+  // Guard scroll listener — renderChat clears innerHTML which resets scrollTop → scroll event
+  _scrollLoadPending = true;
   renderChat(true); // single render
+  requestAnimationFrame(() => { _scrollLoadPending = false; });
 }
 
 // Scroll-to-top listener for lazy loading + scroll-to-bottom unloading
