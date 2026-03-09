@@ -44,16 +44,24 @@ COUNT=$(echo "$MESSAGES" | jq 'length')
 # No messages → check if a clawmux wait process is already running via PID sentinel.
 # clawmux wait writes ~/.clawmux/sessions/{ID}/.waiting containing its PID on startup,
 # before the WebSocket connects. A live PID means wait will receive incoming messages.
+#
+# Background tasks in Claude Code start AFTER the stop hook fires, so we retry briefly
+# to give a freshly-spawned clawmux wait process time to write its sentinel file.
 if [ "$COUNT" = "0" ]; then
     SENTINEL_WAIT="${WORK_DIR}/.waiting"
-    if [ -f "$SENTINEL_WAIT" ]; then
-        WAIT_PID=$(cat "$SENTINEL_WAIT" 2>/dev/null)
-        if [ -n "$WAIT_PID" ] && kill -0 "$WAIT_PID" 2>/dev/null; then
-            exit 0  # wait process is alive; it will receive any incoming messages
-        else
-            rm -f "$SENTINEL_WAIT"  # stale sentinel (process crashed/killed), clean up
+    # Retry up to 5 times (0.5s total) to handle race with background task startup
+    for _i in 1 2 3 4 5; do
+        if [ -f "$SENTINEL_WAIT" ]; then
+            WAIT_PID=$(cat "$SENTINEL_WAIT" 2>/dev/null)
+            if [ -n "$WAIT_PID" ] && kill -0 "$WAIT_PID" 2>/dev/null; then
+                exit 0  # wait process is alive; it will receive any incoming messages
+            else
+                rm -f "$SENTINEL_WAIT"  # stale sentinel (process crashed/killed), clean up
+                break
+            fi
         fi
-    fi
+        sleep 0.1
+    done
     echo "No pending messages. Run \`clawmux wait\` to enter idle mode and receive messages." >&2
     exit 2
 fi
