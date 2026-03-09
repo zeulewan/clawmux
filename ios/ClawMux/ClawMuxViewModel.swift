@@ -673,7 +673,12 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.stopSilenceLoop()
+                guard let self else { return }
+                self.stopSilenceLoop()
+                // Reconnect if WebSocket dropped while in background
+                if !self.isConnected && !self.isConnecting && !self.serverURL.isEmpty {
+                    self.connect()
+                }
             }
         }
         NotificationCenter.default.addObserver(
