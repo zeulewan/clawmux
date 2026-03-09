@@ -619,9 +619,6 @@ async def wait_websocket(ws: WebSocket, session_id: str):
     session.activity = ""
     session.tool_name = ""
     session.tool_input = {}
-    session.hook_delivered_message = False
-    if session.work_dir:
-        _clear_hook_delivered_sentinel(session.work_dir)
     session.set_state(AgentState.IDLE)
     await _save_activity(session, "Idle")
 
@@ -839,27 +836,6 @@ def _tool_activity_text(tool_name: str, tool_input: dict) -> str:
     return _TOOL_STATUS_MAP.get(tool_name, tool_name)
 
 
-_HOOK_DELIVERED_SENTINEL = ".hook_delivered"
-
-
-def _write_hook_delivered_sentinel(work_dir: str) -> None:
-    """Write a sentinel file so the Stop hook script knows a message was delivered via hooks."""
-    path = os.path.join(work_dir, _HOOK_DELIVERED_SENTINEL)
-    try:
-        open(path, "w").close()
-    except OSError:
-        pass
-
-
-def _clear_hook_delivered_sentinel(work_dir: str) -> None:
-    """Remove the sentinel file (called when agent enters idle via wait WS)."""
-    path = os.path.join(work_dir, _HOOK_DELIVERED_SENTINEL)
-    try:
-        os.unlink(path)
-    except FileNotFoundError:
-        pass
-
-
 def _format_inbox_messages(messages: list[dict]) -> str:
     """Format inbox messages as text for Claude's additionalContext."""
     lines = [f"You have {len(messages)} new message(s):"]
@@ -917,30 +893,8 @@ async def hook_tool_status(request: Request):
                 "tool_input": session.tool_input,
             })
             await _save_activity(session, "Thinking")
-        # Check inbox for pending messages — deliver via additionalContext
-        if session.work_dir:
-            messages = await asyncio.to_thread(inbox.read_and_clear, session.work_dir)
-            if messages:
-                formatted = _format_inbox_messages(messages)
-                response_json = {
-                    "hookSpecificOutput": {
-                        "hookEventName": event,
-                        "additionalContext": formatted,
-                    }
-                }
-                session.hook_delivered_message = True
-                _write_hook_delivered_sentinel(session.work_dir)
-                # Notify browser that inbox was cleared
-                await send_to_browser({
-                    "type": "inbox_update",
-                    "session_id": session.session_id,
-                    "count": 0,
-                })
     elif event == "Stop":
-        # State does NOT change here — PROCESSING → IDLE only when wait WS connects.
-        # The command-type Stop hook (stop-check-inbox.sh) handles message delivery
-        # and the hook_delivered sentinel file; HTTP Stop hooks cannot block Claude.
-        pass
+        pass  # HTTP Stop hooks cannot block Claude; stop-check-inbox.sh handles idle signaling
     elif event == "PreToolUse":
         # PreToolUse means the agent is actively making a tool call — cannot be truly idle.
         # Cancel any pending tmux injection (agent already has work).
@@ -956,25 +910,6 @@ async def hook_tool_status(request: Request):
         session.activity = _tool_activity_text(tool_name, tool_input)
         # Log beginning of tool use
         await _save_activity(session, session.activity)
-        # Don't override compacting state — let the monitor loop detect when it finishes
-        # Check inbox for urgent messages — deliver via additionalContext
-        if session.work_dir:
-            messages = await asyncio.to_thread(inbox.read_and_clear, session.work_dir)
-            if messages:
-                formatted = _format_inbox_messages(messages)
-                response_json = {
-                    "hookSpecificOutput": {
-                        "hookEventName": event,
-                        "additionalContext": formatted,
-                    }
-                }
-                session.hook_delivered_message = True
-                _write_hook_delivered_sentinel(session.work_dir)
-                await send_to_browser({
-                    "type": "inbox_update",
-                    "session_id": session.session_id,
-                    "count": 0,
-                })
     elif event == "Notification":
         # Notification hook — relay to browser and check inbox
         notification = data.get("notification", {})
@@ -983,41 +918,9 @@ async def hook_tool_status(request: Request):
             "session_id": session.session_id,
             "notification": notification,
         })
-        # Also deliver any pending inbox messages
-        if session.work_dir:
-            messages = await asyncio.to_thread(inbox.read_and_clear, session.work_dir)
-            if messages:
-                formatted = _format_inbox_messages(messages)
-                response_json = {
-                    "hookSpecificOutput": {
-                        "hookEventName": event,
-                        "additionalContext": formatted,
-                    }
-                }
-                await send_to_browser({
-                    "type": "inbox_update",
-                    "session_id": session.session_id,
-                    "count": 0,
-                })
     elif event == "SessionStart":
-        # SessionStart hook — agent stays STARTING until first wait WS connects
         session.activity = "Starting"
         await _save_activity(session, "Starting")
-        if session.work_dir:
-            messages = await asyncio.to_thread(inbox.read_and_clear, session.work_dir)
-            if messages:
-                formatted = _format_inbox_messages(messages)
-                response_json = {
-                    "hookSpecificOutput": {
-                        "hookEventName": event,
-                        "additionalContext": formatted,
-                    }
-                }
-                await send_to_browser({
-                    "type": "inbox_update",
-                    "session_id": session.session_id,
-                    "count": 0,
-                })
     elif event == "PreCompact":
         session.set_state(AgentState.COMPACTING)
         session.activity = "Compacting"

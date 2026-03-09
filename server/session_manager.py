@@ -63,7 +63,7 @@ class Session:
     project_slug: str = "default"  # which project this session belongs to
     reinject_attempts: int = 0  # number of voice-mode re-injection attempts
     max_reinject_attempts: int = 3  # max re-injection attempts before giving up
-    hook_delivered_message: bool = False  # True when PreToolUse/PostToolUse delivered inbox messages this cycle
+
 
     def set_state(self, new_state: AgentState) -> None:
         """Transition to a new state, syncing deprecated boolean flags."""
