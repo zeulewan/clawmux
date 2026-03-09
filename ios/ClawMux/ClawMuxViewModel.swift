@@ -1023,9 +1023,12 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     private func setupAudioSession() {
         do {
             let session = AVAudioSession.sharedInstance()
+            // No .mixWithOthers — voice assistant needs exclusive mic focus during recording.
+            // .mixWithOthers allows other app audio to bleed into the mic, corrupting VAD
+            // energy levels and triggering false speech detection.
             try session.setCategory(
                 .playAndRecord, mode: .spokenAudio,
-                options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .allowBluetoothHFP, .mixWithOthers])
+                options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .allowBluetoothHFP])
             try session.setPreferredSampleRate(48000)
             try session.setPreferredIOBufferDuration(0.02)
             try session.setActive(true)
