@@ -1584,9 +1584,10 @@ async def groupchat_send_message(name: str, request: Request):
         if sender and session.label.lower() == sender.lower():
             continue
         inbox_msg = {
-            "type": "user_text",
-            "text": f"[Group:{g['name']}] {text}" if not sender else f"[Group:{g['name']} from {sender}] {text}",
-            "msg_id": _gen_msg_id(),
+            "id": msg_id,
+            "type": "group",
+            "from": sender or "user",
+            "content": text,
             "group_name": g["name"],
             "group_id": g["id"],
         }
@@ -2088,6 +2089,9 @@ async def _inject_inbox(session, session_id: str) -> None:
             lines.append(f"[MSG id:{msg_id} from:{sender}] {content}")
         elif msg_type in ("voice", "text"):
             lines.append(f"[VOICE id:{msg_id} from:{sender}] {content}")
+        elif msg_type == "group":
+            group_name = msg.get("group_name", "group")
+            lines.append(f"[GROUP:{group_name} id:{msg_id} from:{sender}] {content}")
         else:
             lines.append(f"[SYSTEM] {content}")
 
