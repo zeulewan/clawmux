@@ -2187,6 +2187,11 @@ struct NotesPanelView: View {
     @State private var saveStatus: String = ""
     private var saveTimer: DispatchWorkItem? = nil
 
+    init(serverURL: String, onDismiss: @escaping () -> Void) {
+        self.serverURL = serverURL
+        self.onDismiss = onDismiss
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
