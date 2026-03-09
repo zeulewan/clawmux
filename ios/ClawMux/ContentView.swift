@@ -684,8 +684,9 @@ struct ContentView: View {
 
             Spacer()
 
-            // Connection dot pill — mirrors web header-pill with #dot (label hidden on mobile)
+            // Connection dot pill — mirrors web #dot + #conn-label ("Live" / "Connecting..." / "Offline")
             let dotColor: Color = vm.isConnected ? .cSuccess : vm.isConnecting ? .cCaution : .cDanger
+            let connLabel: String = vm.isConnected ? "Live" : vm.isConnecting ? "Connecting..." : "Offline"
             HStack(spacing: 5) {
                 Circle()
                     .fill(dotColor)
@@ -693,6 +694,9 @@ struct ContentView: View {
                     .scaleEffect(vm.isConnecting && isPulsing ? 1.15 : vm.isConnecting ? 0.7 : 1.0)
                     .opacity(vm.isConnecting && isPulsing ? 1.0 : vm.isConnecting ? 0.15 : 1.0)
                     .animation(vm.isConnecting ? .easeInOut(duration: 0.7).repeatForever(autoreverses: true) : .default, value: isPulsing)
+                Text(connLabel)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color.cTextTer)
             }
             .padding(.horizontal, 8).padding(.vertical, 5)
             .background(Color.glass, in: Capsule())
