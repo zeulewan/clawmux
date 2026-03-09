@@ -684,6 +684,37 @@ struct ContentView: View {
 
             Spacer()
 
+            // Usage bar pill — mirrors web #usage-bar (ctx / 5h / 7d). Tap opens Settings.
+            let hasUsage = vm.contextPct != nil || vm.usage5hPct != nil || vm.usage7dPct != nil
+            if hasUsage {
+                Button { vm.showSettings = true } label: {
+                    HStack(spacing: 6) {
+                        if let pct = vm.contextPct {
+                            HStack(spacing: 2) {
+                                Text("ctx:").foregroundStyle(Color.cTextTer)
+                                Text("\(pct)%").foregroundStyle(usageColor(pct)).fontWeight(.semibold)
+                            }
+                        }
+                        if let pct = vm.usage5hPct {
+                            HStack(spacing: 2) {
+                                Text("5h:").foregroundStyle(Color.cTextTer)
+                                Text("\(pct)%").foregroundStyle(usageColor(pct)).fontWeight(.semibold)
+                            }
+                        }
+                        if let pct = vm.usage7dPct {
+                            HStack(spacing: 2) {
+                                Text("7d:").foregroundStyle(Color.cTextTer)
+                                Text("\(pct)%").foregroundStyle(usageColor(pct)).fontWeight(.semibold)
+                            }
+                        }
+                    }
+                    .font(.system(size: 10, weight: .medium))
+                    .padding(.horizontal, 8).padding(.vertical, 5)
+                    .background(Color.glass, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
+                }
+            }
+
             // Connection dot pill — mirrors web #dot + #conn-label ("Live" / "Connecting..." / "Offline")
             let dotColor: Color = vm.isConnected ? .cSuccess : vm.isConnecting ? .cCaution : .cDanger
             let connLabel: String = vm.isConnected ? "Live" : vm.isConnecting ? "Connecting..." : "Offline"

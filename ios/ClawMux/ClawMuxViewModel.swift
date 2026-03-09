@@ -1878,6 +1878,17 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         removeSession(id)
     }
 
+    func markSessionUnread(_ id: String) {
+        guard let idx = sessionIndex(id) else { return }
+        sessions[idx].unreadCount = max(sessions[idx].unreadCount, 0) + 1
+        if activeSessionId == id { activeSessionId = nil }
+    }
+
+    func clearSessionUnread(_ id: String) {
+        guard let idx = sessionIndex(id) else { return }
+        sessions[idx].unreadCount = 0
+    }
+
     private func markSessionViewing(_ id: String) {
         guard let baseURL = httpBaseURL() else { return }
         let url = baseURL.appendingPathComponent("api/sessions/\(id)/viewing")
