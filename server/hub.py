@@ -836,22 +836,6 @@ def _tool_activity_text(tool_name: str, tool_input: dict) -> str:
     return _TOOL_STATUS_MAP.get(tool_name, tool_name)
 
 
-def _format_inbox_messages(messages: list[dict]) -> str:
-    """Format inbox messages as text for Claude's additionalContext."""
-    lines = [f"You have {len(messages)} new message(s):"]
-    for msg in messages:
-        msg_type = msg.get("type", "system")
-        sender = msg.get("from", "unknown")
-        content = msg.get("content", "")
-        msg_id = msg.get("id", "")
-        if msg_type == "agent":
-            lines.append(f"[MSG id:{msg_id} from:{sender}] {content}")
-        elif msg_type in ("voice", "text"):
-            lines.append(f"[VOICE id:{msg_id} from:{sender}] {content}")
-        else:
-            lines.append(f"[SYSTEM] {content}")
-    return "\n".join(lines)
-
 
 @app.post("/api/hooks/tool-status")
 async def hook_tool_status(request: Request):
@@ -2100,8 +2084,7 @@ async def _inject_inbox(session, session_id: str) -> None:
     if not messages:
         return
 
-    # Format identically to stop hook stderr delivery
-    lines = [f"You have {len(messages)} new message(s):", ""]
+    lines = []
     for msg in messages:
         msg_type = msg.get("type", "system")
         sender = msg.get("from", "unknown")
@@ -2113,8 +2096,6 @@ async def _inject_inbox(session, session_id: str) -> None:
             lines.append(f"[VOICE id:{msg_id} from:{sender}] {content}")
         else:
             lines.append(f"[SYSTEM] {content}")
-    lines.append("")
-    lines.append("Process these messages now.")
 
     text = "\n".join(lines)
     try:
