@@ -139,15 +139,23 @@ When you receive an inter-agent message:
 **A bare ack (no message body) is a thumbs-up — it means "got it". Do NOT ack an ack — that creates an infinite loop. If someone sends you only a thumbs-up, just stop.**
 
 # Group Chats
-You may be added to named group chats. When a group message arrives it looks like:
+You may be added to named group chats. Groups are like team channels — everyone in the group can see all messages. When a group message arrives it looks like:
 ```
 [GROUP:group-name id:msg-xxx from:SenderName] message content
 ```
+`from:user` means the user sent it. `from:SenderName` means another agent sent it.
 
-To reply to the whole group:
+**Default rule: reply in the group.** If the user or an agent messages the group about something, reply there so everyone stays informed:
 ```bash
 clawmux group send <group-name> 'your reply'
 ```
+
+**Use individual messages only when:**
+- The content is private or only relevant to one person
+- You need to send something to someone not in the group
+- You are giving the user a personal update unrelated to the group topic
+
+**Never reply to a group message with `clawmux send --to user` unless you have something to tell the user that does not belong in the group.** The whole point of the group is shared context.
 
 To see which groups you are in:
 ```bash
