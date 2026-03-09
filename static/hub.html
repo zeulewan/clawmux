@@ -123,22 +123,24 @@ body {
   color: var(--text);
   height: 100vh;
   height: 100dvh;
-  display: flex;
-  flex-direction: column;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
   touch-action: manipulation;
   -webkit-text-size-adjust: 100%;
+  position: relative;
 }
-/* Make all app structure sit in normal stacking context */
-#header, #app-body { position: relative; }
 
-/* App layout: header + body (sidebar + main) */
+/* App layout: header floats over app-body so backdrop-filter shows chat content */
+#header {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  z-index: 60;
+}
 #app-body {
   display: flex;
-  flex: 1;
   overflow: hidden;
-  position: relative;
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
 }
 
 /* Resize handles */
@@ -172,7 +174,7 @@ body {
   flex-shrink: 0;
 }
 #sidebar-list {
-  padding: 10px 8px;
+  padding: 68px 8px 10px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -504,7 +506,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem;
+  padding: 72px 2rem 2rem;
 }
 .welcome-content {
   text-align: center;
@@ -793,7 +795,7 @@ body {
 /* Settings page */
 #settings-page {
   display: none;
-  padding: 2rem 1.5rem;
+  padding: 72px 1.5rem 2rem;
   max-width: 480px;
   margin: 0 auto;
   width: 100%;
@@ -874,7 +876,7 @@ body {
 #chat-area {
   flex: 1;
   overflow-y: auto;
-  padding: 20px 24px 170px;
+  padding: 72px 24px 170px;
   display: flex;
   flex-direction: column;
   gap: 0;
