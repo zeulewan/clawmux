@@ -123,6 +123,8 @@ body {
   color: var(--text);
   height: 100vh;
   height: 100dvh;
+  display: flex;
+  flex-direction: column;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
   touch-action: manipulation;
@@ -130,17 +132,17 @@ body {
   position: relative;
 }
 
-/* App layout: header floats over app-body so backdrop-filter shows chat content */
+/* Header floats over app-body (out of flex flow) — enables backdrop-filter glass */
 #header {
   position: absolute;
   top: 0; left: 0; right: 0;
   z-index: 60;
 }
+/* App layout: fills full body since header is out of flex flow */
 #app-body {
   display: flex;
+  flex: 1;
   overflow: hidden;
-  position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
 }
 
 /* Resize handles */
