@@ -132,12 +132,7 @@ function updateHeaderProjectStatus() {
 }
 
 function updateLayout() {
-  // Preserve sidebar scroll position across re-renders
-  const sidebarList = document.getElementById('sidebar-list');
-  const savedScroll = sidebarList ? sidebarList.scrollTop : 0;
-  renderSidebar();
-  if (sidebarList) sidebarList.scrollTop = savedScroll;
-
+  renderSidebar(); // scroll preservation is handled inside renderSidebar
   if (debugActive) return; // debug panel handles its own layout
   const inAgentChat = !!(activeSessionId && sessions.has(activeSessionId));
   const inGroupChat = !!(typeof activeGroupId !== 'undefined' && activeGroupId);
@@ -766,6 +761,9 @@ async function _moveAgentToProject(voiceId, targetProjectSlug) {
 
 function renderSidebar() {
   const list = document.getElementById('sidebar-list');
+  // Preserve scroll position across re-renders and CSS transitions
+  const _savedScroll = list ? list.scrollTop : 0;
+  requestAnimationFrame(() => { if (list) list.scrollTop = _savedScroll; });
   const projects = (typeof allProjects !== 'undefined' && allProjects.length > 0) ? allProjects : [];
 
   // No projects — show only active sessions or welcome
