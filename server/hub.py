@@ -338,6 +338,24 @@ async def lifespan(app: FastAPI):
     await agents_store.load()
     _load_groups()
     await session_mgr.cleanup_stale_sessions()
+    # Flush any pending interjections (saved across hub restarts) into inbox for delivery.
+    # The agent is assumed idle after a hub restart, so we convert interjections to inbox
+    # messages and trigger immediate injection rather than waiting for a new voice message.
+    for session in list(session_mgr.sessions.values()):
+        if session.interjections and session.work_dir:
+            combined = " ... ".join(session.interjections)
+            session.interjections.clear()
+            await asyncio.to_thread(history.clear_interjections,
+                                    session.voice, _hist_prefix(session))
+            import uuid as _uuid
+            await asyncio.to_thread(inbox.write, session.work_dir, {
+                "id": f"msg-{_uuid.uuid4().hex[:8]}",
+                "from": "user",
+                "type": "voice",
+                "content": combined,
+            })
+            session.set_state(AgentState.IDLE)
+            log.info("[%s] Flushed %d interjection(s) to inbox on startup", session.session_id, 1)
     broker.start()
     timeout_task = asyncio.create_task(session_mgr.run_timeout_loop())
     hb_task = asyncio.create_task(heartbeat_loop())

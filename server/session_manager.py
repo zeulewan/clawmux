@@ -229,15 +229,15 @@ class SessionManager:
             if session.project:
                 log.info("Restored project status for %s: %s / %s",
                          voice_id, session.project, session.project_area)
-            # Adopted sessions are assumed idle unless they have pending interjections
+            # Adopted sessions are assumed idle — hub.py will flush any saved interjections
+            # to inbox after cleanup_stale_sessions returns, triggering immediate injection.
             session.set_state(AgentState.IDLE)
-            # Restore pending interjections from disk
+            # Restore pending interjections from disk so hub.py can flush them
             if self.history_store:
                 saved = self.history_store.load_interjections(voice_id)
                 if saved:
                     session.interjections = saved
-                    session.set_state(AgentState.PROCESSING)
-                    log.info("Restored %d interjection(s) for %s", len(saved), voice_id)
+                    log.info("Loaded %d saved interjection(s) for %s — will flush to inbox", len(saved), voice_id)
             # Restore model from agents.json, fall back to hub default
             session.model = entry.model or ""
             if not session.model:
