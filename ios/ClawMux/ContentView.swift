@@ -204,9 +204,9 @@ struct ContentView: View {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: sidebarExpanded ? 2 : 1) {
                     if sidebarExpanded {
-                        // Group chat cards first — each card contains its member sub-cards
+                        // Group chat cards — separate section at top, matches web sidebar-gc-section
+                        // Agents remain in their normal positions below (web does NOT remove them)
                         let chatGroups = activeGroups
-                        let groupedVoiceIds = Set(chatGroups.flatMap { $0.voices.map { $0.id } })
                         if !chatGroups.isEmpty {
                             HStack {
                                 Text("GROUP CHATS")
@@ -2482,10 +2482,15 @@ struct SettingsView: View {
 
                 // Live Activity (iOS-only)
                 Section {
-                    Toggle("Auto Mode", isOn: $vm.liveActivityAuto)
-                    Toggle("Push to Talk", isOn: $vm.liveActivityPTT)
+                    Toggle("Live Activity", isOn: $vm.liveActivityEnabled)
+                    if vm.liveActivityEnabled {
+                        Toggle("Auto Mode", isOn: $vm.liveActivityAuto)
+                        Toggle("Push to Talk", isOn: $vm.liveActivityPTT)
+                    }
                 } header: { Text("Live Activity") } footer: {
-                    Text("Show session status on Dynamic Island and Lock Screen.")
+                    Text(vm.liveActivityEnabled
+                         ? "Show session status on Dynamic Island and Lock Screen."
+                         : "Live Activity is disabled.")
                 }
 
                 // Usage

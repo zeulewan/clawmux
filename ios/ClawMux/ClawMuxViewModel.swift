@@ -419,7 +419,10 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         }
     }
     @Published var backgroundMode: Bool {
-        didSet { UserDefaults.standard.set(backgroundMode, forKey: "backgroundMode") }
+        didSet {
+            UserDefaults.standard.set(backgroundMode, forKey: "backgroundMode")
+            if backgroundMode { liveActivityEnabled = true }
+        }
     }
     @Published var voiceResponses: Bool = true {
         didSet { updateSetting("voice_responses", value: voiceResponses) }
@@ -554,6 +557,12 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     }
 
     // Live Activity toggles — per mode
+    @Published var liveActivityEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(liveActivityEnabled, forKey: "liveActivityEnabled")
+            if !liveActivityEnabled { endLiveActivity() }
+        }
+    }
     @Published var liveActivityAuto: Bool {
         didSet {
             UserDefaults.standard.set(liveActivityAuto, forKey: "liveActivityAuto")
@@ -712,6 +721,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             UserDefaults.standard.object(forKey: "notifyPTT") as? Bool ?? true
         self.notifyTyping =
             UserDefaults.standard.object(forKey: "notifyTyping") as? Bool ?? true
+        self.liveActivityEnabled =
+            UserDefaults.standard.object(forKey: "liveActivityEnabled") as? Bool ?? true
         self.liveActivityAuto =
             UserDefaults.standard.object(forKey: "liveActivityAuto") as? Bool ?? true
         self.liveActivityPTT =
@@ -3235,6 +3246,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     // MARK: - Live Activity
 
     private func startLiveActivity(sessionId: String) {
+        guard liveActivityEnabled else { return }
         guard (isAutoMode && liveActivityAuto) || (pushToTalk && liveActivityPTT) else { return }
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         guard let session = sessions.first(where: { $0.id == sessionId }) else { return }
