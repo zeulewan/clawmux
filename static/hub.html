@@ -348,6 +348,10 @@
         <div class="toggle-info"><span class="toggle-name">Verbose Activity Log</span><span class="toggle-desc">Show full tool use history in chat (off = transient minimal indicator)</span></div>
         <div class="toggle-indicator" id="toggle-activity_verbose"></div>
       </div>
+      <div class="settings-toggle" onclick="toggleWalkingMode()">
+        <div class="toggle-info"><span class="toggle-name">Walking Mode</span><span class="toggle-desc">Active agent responds in plain spoken text — no markdown or special formatting</span></div>
+        <div class="toggle-indicator" id="toggle-walking_mode"></div>
+      </div>
     </div>
   </div>
 
@@ -1164,6 +1168,9 @@ async function loadSettings() {
     // Sync default effort dropdown
     const deSel = document.getElementById('default-effort-select');
     if (deSel) deSel.value = s.effort || 'high';
+    // Walking mode — per active session
+    const activeSession = activeSessionId ? sessions.get(activeSessionId) : null;
+    setToggle('walking_mode', activeSession?.walking_mode || false);
   } catch (e) {
     console.error('Failed to load settings:', e);
   }
@@ -1438,6 +1445,20 @@ function selectEffortPopup(effort) {
 }
 
 // --- Auto mode ---
+function toggleWalkingMode() {
+  if (!activeSessionId) return;
+  const s = sessions.get(activeSessionId);
+  if (!s) return;
+  const newVal = !s.walking_mode;
+  s.walking_mode = newVal;
+  setToggle('walking_mode', newVal);
+  fetch(`/api/agents/${activeSessionId}/walking`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: newVal }),
+  }).catch(() => {});
+}
+
 function toggleAutoMode() {
   autoMode = !autoMode;
   setToggle('auto_record', autoMode);

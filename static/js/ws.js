@@ -279,6 +279,12 @@ function handleMessage(data) {
       if ('tool_name' in data) {
         s.toolName = data.tool_name || '';
       }
+      if ('walking_mode' in data) {
+        s.walking_mode = data.walking_mode;
+        if (data.session_id === activeSessionId && typeof setToggle === 'function') {
+          setToggle('walking_mode', data.walking_mode);
+        }
+      }
       // Use canonical state field
       const serverState = data.state;
       if (serverState) {
