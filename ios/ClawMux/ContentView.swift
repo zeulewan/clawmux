@@ -691,8 +691,8 @@ struct ContentView: View {
             }
             withAnimation(.spring(response: 0.3)) { sidebarExpanded = false }
         } label: {
-            HStack(spacing: 10) {
-                // sb-icon: 32px circle with 2px state-color border + glow (hub.html mobile sb-icon)
+            HStack(spacing: 8) {
+                // sb-icon: 34px circle with 2px state-color border + glow (hub.html .sb-icon 34×34)
                 ZStack {
                     Circle()
                         .fill(color.opacity(alive ? 0.15 : 0.06))
@@ -704,7 +704,7 @@ struct ContentView: View {
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(alive ? color : color.opacity(0.30))
                 }
-                .frame(width: 32, height: 32)
+                .frame(width: 34, height: 34)
 
                 // sb-info: name + area + role + task + status (hub.html hierarchy)
                 // This VStack starts at x=50 (8pad+32icon+10gap) — clipped at 48px when collapsed
@@ -769,19 +769,20 @@ struct ContentView: View {
                     }
                 }
             }
-            .padding(.horizontal, 8).padding(.vertical, 10)
+            .padding(.horizontal, 12).padding(.vertical, 7)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 ZStack(alignment: .leading) {
-                    // Transparent bg on mobile (hub.html selected overrides to transparent)
+                    // Selected bg: matches web .sidebar-card.selected { background: var(--selected-bg) }
                     if isSelected {
-                        Color(hex: 0x0A84FF).opacity(0.05)
+                        Color(.systemPurple).opacity(0.08)
                     }
-                    // Left accent bar: 3px × 28px blue (hub.html mobile .selected::before)
+                    // Left accent bar: 3px × 55% height purple (hub.html .selected::before)
                     if isSelected {
                         Capsule()
-                            .fill(Color(hex: 0x0A84FF))
-                            .frame(width: 3, height: 28)
+                            .fill(Color(.systemPurple))
+                            .frame(width: 3, height: 26)
+                            .shadow(color: Color(.systemPurple).opacity(0.6), radius: 3)
                     }
                 }
             )
