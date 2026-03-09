@@ -1867,6 +1867,8 @@ private struct MarkdownContentView: View {
         case bullet(String)
         case numbered(String, String)
         case code(String, String)   // (language, content)
+        case blockquote(String)
+        case rule
         case spacing
     }
 
@@ -1891,6 +1893,9 @@ private struct MarkdownContentView: View {
             if line.hasPrefix("### ") { result.append(.header(3, String(line.dropFirst(4)))); i += 1; continue }
             if line.hasPrefix("## ")  { result.append(.header(2, String(line.dropFirst(3)))); i += 1; continue }
             if line.hasPrefix("# ")   { result.append(.header(1, String(line.dropFirst(2)))); i += 1; continue }
+            if line.hasPrefix("> ") { result.append(.blockquote(String(line.dropFirst(2)))); i += 1; continue }
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed == "---" || trimmed == "***" || trimmed == "___" { result.append(.rule); i += 1; continue }
             if line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("+ ") {
                 result.append(.bullet(String(line.dropFirst(2)))); i += 1; continue
             }
@@ -1961,20 +1966,44 @@ private struct MarkdownContentView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+        case .blockquote(let str):
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 2).fill(Color.cTextTer.opacity(0.5)).frame(width: 3)
+                Text(Self.inlineMarkdown(str))
+                    .font(.system(size: fontSize))
+                    .foregroundStyle(foreground.opacity(0.75))
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.leading, 2)
+
+        case .rule:
+            Divider().background(Color.cBorder)
+
         case .code(let lang, let content):
             VStack(alignment: .leading, spacing: 0) {
-                if !lang.isEmpty {
-                    Text(lang)
+                // Header: language label + copy button (mirrors web .code-copy-btn)
+                HStack {
+                    Text(lang.isEmpty ? "code" : lang)
                         .font(.system(size: 9, weight: .medium, design: .monospaced))
                         .foregroundStyle(Color.cTextTer)
-                        .padding(.horizontal, 10).padding(.top, 7).padding(.bottom, 2)
+                    Spacer()
+                    Button {
+                        UIPasteboard.general.string = content
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color.cTextTer)
+                            .padding(4)
+                    }
                 }
+                .padding(.horizontal, 10).padding(.top, 6).padding(.bottom, 2)
+
                 ScrollView(.horizontal, showsIndicators: false) {
                     Text(content)
                         .font(.system(size: 12, design: .monospaced))
                         .foregroundStyle(Color.cText)
                         .padding(.horizontal, 10)
-                        .padding(.vertical, lang.isEmpty ? 10 : 0)
                         .padding(.bottom, 8)
                         .fixedSize(horizontal: true, vertical: false)
                 }
