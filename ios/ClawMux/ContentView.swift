@@ -1359,72 +1359,50 @@ struct ContentView: View {
     // MARK: - Text Input Bar
 
     private var textInputBar: some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 8) {
-                Button { cycleInputMode() } label: {
-                    VStack(spacing: 0) {
-                        Text("VOICE")
-                            .font(.system(size: 8, weight: .semibold))
-                            .tracking(0.7)
-                        Text("MODE")
-                            .font(.system(size: 7, weight: .semibold))
-                            .tracking(0.7)
-                            .opacity(0.7)
-                    }
-                    .foregroundStyle(Color.cTextSec)
-                    .padding(.horizontal, 7).padding(.vertical, 3)
-                    .background(Color.glass, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
+        // Mirrors web #text-input-bar: single row [text-stop?] [textarea] [send]
+        // Container: padding 8px 12px, border-radius 20px, glass/blur
+        HStack(alignment: .bottom, spacing: 8) {
+            // Stop button — mirrors web #text-stop (38x38, red, in-flow, shown when agent working)
+            if let s = vm.activeSession, s.isThinking || s.state == .starting {
+                Button { vm.sendInterrupt() } label: {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Color.cDanger)
+                        .frame(width: 38, height: 38)
+                        .background(Color.cDanger.opacity(0.10), in: Circle())
+                        .overlay(Circle().strokeBorder(Color.cDanger.opacity(0.30), lineWidth: 1))
                 }
-                if !vm.statusText.isEmpty {
-                    let sc = statusColor
-                    Text(vm.statusText)
-                        .font(.system(size: 11, weight: .semibold)).foregroundStyle(sc)
-                        .padding(.horizontal, 10).padding(.vertical, 4)
-                        .background(sc.opacity(0.12), in: Capsule())
-                }
+                .transition(.scale.combined(with: .opacity))
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
 
-            HStack(spacing: 10) {
-                // Stop button — mirrors web #text-stop (38px red, shown when agent is working)
-                if let s = vm.activeSession, s.isThinking || s.state == .starting {
-                    Button { vm.sendInterrupt() } label: {
-                        Image(systemName: "stop.fill")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(Color.cDanger)
-                            .frame(width: 38, height: 38)
-                            .background(Color.cDanger.opacity(0.10), in: Circle())
-                            .overlay(Circle().strokeBorder(Color.cDanger.opacity(0.30), lineWidth: 1))
-                    }
-                    .transition(.scale.combined(with: .opacity))
-                }
+            // Text input — mirrors web #text-input (flex:1, transparent, padding 8px 4px)
+            TextField("Message", text: $vm.typingText, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.system(size: 15))
+                .lineLimit(1...5)
+                .foregroundStyle(Color.cText)
+                .padding(.horizontal, 4).padding(.vertical, 8)
+                .onSubmit { vm.sendText() }.submitLabel(.send)
 
-                TextField("Message", text: $vm.typingText, axis: .vertical)
-                    .textFieldStyle(.plain).font(.subheadline).lineLimit(1...5)
-                    .foregroundStyle(Color.cText)
-                    .padding(.horizontal, 14).padding(.vertical, 10)
-                    .background(Color.glass, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
-                    .onSubmit { vm.sendText() }.submitLabel(.send)
-
-                Button { vm.sendText() } label: {
-                    Image(systemName: "arrow.up.circle.fill").font(.system(size: 30))
-                        .foregroundStyle(
-                            vm.typingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            ? Color.cTextTer : Color.cAccent)
-                }
-                .disabled(vm.typingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            // Send button — mirrors web #text-send (38x38, blue circle)
+            Button { vm.sendText() } label: {
+                Image(systemName: "arrow.up.circle.fill")
+                    .font(.system(size: 30))
+                    .foregroundStyle(
+                        vm.typingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? Color.cTextTer : Color.cAccent)
             }
-            .padding(.horizontal, 12).padding(.bottom, 8)
+            .disabled(vm.typingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
+        .padding(.horizontal, 12).padding(.vertical, 8)
         .background {
             if #available(iOS 26, *) {
                 Color.clear
-                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             } else {
-                RoundedRectangle(cornerRadius: 28, style: .continuous).fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
             }
         }
         .padding(.horizontal, 8).padding(.bottom, 4)
