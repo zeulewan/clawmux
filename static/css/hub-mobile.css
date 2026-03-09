@@ -217,7 +217,7 @@
   #sidebar-overlay {
     position: absolute;
     top: 0;
-    left: 0;
+    left: 48px; /* starts after collapsed sidebar so sidebar itself isn't darkened */
     right: 0;
     bottom: 0;
     background: rgba(0,0,0,0.3);
