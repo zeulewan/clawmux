@@ -2071,15 +2071,9 @@ async def _inject_inbox(session, session_id: str) -> None:
     settle, verifies the input prompt is visible, then injects all queued
     messages as a single tmux send-keys call.
 
-    If the pane is not in input-ready state the messages stay in the inbox and
-    will be retried on the next idle signal.
+    Tmux buffers input, so injection works whether the agent is idle or mid-task.
+    Messages are cleared from inbox immediately; on failure they are returned.
     """
-    await asyncio.sleep(0.5)
-
-    # Abort if the agent started working again before we got here
-    if session.state != AgentState.IDLE:
-        return
-
     messages = await asyncio.to_thread(inbox.read_and_clear, session.work_dir)
     if not messages:
         return
@@ -2101,7 +2095,6 @@ async def _inject_inbox(session, session_id: str) -> None:
     try:
         await session_mgr.backend.deliver_message(session.tmux_session, text)
         log.info("[%s] Injected %d message(s) via tmux", session_id, len(messages))
-        session.set_state(AgentState.THINKING)
         await send_to_browser({
             "type": "inbox_update",
             "session_id": session_id,
@@ -2129,9 +2122,8 @@ async def _inbox_write_and_notify(session, msg_dict: dict) -> dict:
             "preview": msg_dict.get("content", "")[:100],
         },
     })
-    # If agent is IDLE, schedule tmux injection so the message is delivered
-    # immediately without waiting for the next stop hook cycle.
-    if session.state == AgentState.IDLE and session.work_dir:
+    # Inject immediately — tmux buffers input regardless of agent state.
+    if session.work_dir:
         prev = _pending_injections.pop(session.session_id, None)
         if prev and not prev.done():
             prev.cancel()
