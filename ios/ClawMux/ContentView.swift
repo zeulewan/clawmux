@@ -640,11 +640,12 @@ struct ContentView: View {
         let color     = vm.activeSession.map { voiceColor($0.voice) } ?? Color.cTextSec
         let isPlaying = vm.ttsPlayingMessageId == msg.id
 
-        // Web-matched grouping: flatten tail-side top corner on non-first, tail 4px on last
-        let tl: CGFloat = (role == "assistant" && !isFirst) ? 8 : 18
-        let bl: CGFloat = (role == "assistant" && isLast)   ? 4 : 18
-        let tr: CGFloat = (role == "user"      && !isFirst) ? 8 : 18
-        let br: CGFloat = (role == "user"      && isLast)   ? 4 : 18
+        // Web-matched grouping: flatten tail corners in group, tail 4px on last
+        let single = isFirst && isLast
+        let tl: CGFloat = (role == "assistant" && !isFirst)  ? 8 : 18
+        let bl: CGFloat = role == "assistant" ? (isLast ? 4 : single ? 18 : 8) : 18
+        let tr: CGFloat = (role == "user"      && !isFirst)  ? 8 : 18
+        let br: CGFloat = role == "user"      ? (isLast ? 4 : single ? 18 : 8) : 18
 
         let userBubbleColor = Color(hex: 0x2563EB)
         let bubbleBg: AnyShapeStyle = role == "user"
