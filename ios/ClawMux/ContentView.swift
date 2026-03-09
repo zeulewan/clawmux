@@ -190,13 +190,13 @@ struct ContentView: View {
                                     .tracking(0.8)
                                 Spacer()
                             }
-                            .padding(.horizontal, 20)
-                            .padding(.top, 16).padding(.bottom, 6)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 12).padding(.bottom, 4)
                         }
-                        VStack(spacing: 6) {
+                        VStack(spacing: 2) {
                             ForEach(groups.ungrouped) { voice in agentCard(voice) }
                         }
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, 8)
                     }
                 }
                 .padding(.bottom, 32)
@@ -249,16 +249,16 @@ struct ContentView: View {
                         .foregroundStyle(Color.cTextTer.opacity(0.55))
                     Spacer()
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 16).padding(.bottom, 6)
+                .padding(.horizontal, 16)
+                .padding(.top, 8).padding(.bottom, 4)
             }
             .buttonStyle(.plain)
 
             if !collapsed {
-                VStack(spacing: 6) {
+                VStack(spacing: 2) {
                     ForEach(voices) { voice in agentCard(voice) }
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 8)
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
@@ -284,7 +284,7 @@ struct ContentView: View {
                 }
             }
         } label: {
-            HStack(spacing: 14) {
+            HStack(spacing: 10) {
                 // Avatar + state ring
                 ZStack {
                     if thinking {
@@ -357,13 +357,13 @@ struct ContentView: View {
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(alive ? Color.cTextTer : Color(hex: 0x2A3A52))
             }
-            .padding(.horizontal, 14).padding(.vertical, 10)
+            .padding(.horizontal, 12).padding(.vertical, 7)
             .background(
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(isSelected ? color.opacity(0.08) : Color.cCard)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
                                 .strokeBorder(isSelected ? color.opacity(0.3) : Color.cBorder, lineWidth: 0.5)
                         )
                     // Left accent bar (hub.html selected indicator)
@@ -371,7 +371,7 @@ struct ContentView: View {
                         RoundedRectangle(cornerRadius: 2, style: .continuous)
                             .fill(color)
                             .frame(width: 3)
-                            .padding(.vertical, 10)
+                            .padding(.vertical, 8)
                             .shadow(color: color.opacity(0.6), radius: 4)
                     }
                 }
