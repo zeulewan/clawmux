@@ -308,6 +308,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     @Published var isConnecting = false
     @Published var showSettings = false
     @Published var showNotes = false
+    @Published var isFocusMode = false
     @Published var serverURL: String {
         didSet { UserDefaults.standard.set(serverURL, forKey: "serverURL") }
     }
@@ -320,6 +321,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     }
     @Published var spawningVoiceIds: Set<String> = []
     @Published var knownGroupChats: [(name: String, voices: [String])] = []
+    private var groupIdToName: [String: String] = [:]  // "gc-xxx" → "group name" for disband API
     @Published var errorMessage: String?
     @Published var ttsPlayingMessageId: UUID?
 
@@ -1432,7 +1434,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 }
                 addSessionFromDict(s)
                 // Only auto-switch if on the home page
-                if activeSessionId == nil && !showDebug {
+                if activeSessionId == nil && !showDebug && !isFocusMode {
                     switchToSession(sid)
                 }
             }
@@ -1746,6 +1748,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             {
                 let voices = g["voices"] as? [String] ?? []
                 // Update knownGroupChats
+                groupIdToName[gid] = name
                 if let i = knownGroupChats.firstIndex(where: { $0.name.lowercased() == name.lowercased() }) {
                     knownGroupChats[i] = (name: name, voices: voices)
                 } else {
@@ -1768,6 +1771,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 for idx in sessions.indices {
                     if sessions[idx].groupId == gid { sessions[idx].groupId = "" }
                 }
+                groupIdToName.removeValue(forKey: gid)
             }
             if let name = json["name"] as? String {
                 knownGroupChats.removeAll { $0.name.lowercased() == name.lowercased() }
@@ -1823,6 +1827,23 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         fetchHistory(voiceId: voice, sessionId: sid, initialState: agentState)
     }
 
+    func switchToFocus() {
+        if isPlaying, let player = audioPlayer, player.isPlaying {
+            stopPlaybackVAD()
+            player.pause()
+            isPlaying = false
+        }
+        if isRecording { stopRecording(discard: true) }
+        stopThinkingSound()
+        isFocusMode = true
+        activeSessionId = nil
+        showDebug = false
+    }
+
+    func exitFocusMode() {
+        isFocusMode = false
+    }
+
     func switchToSession(_ id: String) {
         if activeSessionId != id {
             // Pause audio from previous session (don't stop/interrupt)
@@ -1843,6 +1864,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         }
         activeSessionId = id
         showDebug = false
+        isFocusMode = false
 
         // Clear unread and tell server we're viewing this session
         if let idx = sessionIndex(id), sessions[idx].unreadCount > 0 {
@@ -1962,8 +1984,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 if self.sessionIndex(sid) == nil {
                     self.addSessionFromDict(json)
                 }
-                // Only auto-switch if still on the home page
-                if self.activeSessionId == nil && !self.showDebug {
+                // Only auto-switch if still on the home page and not in focus mode
+                if self.activeSessionId == nil && !self.showDebug && !self.isFocusMode {
                     self.switchToSession(sid)
                 }
             }
@@ -1980,10 +2002,12 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         removeSession(id)
     }
 
-    // Matches web _disbandGroup → DELETE /api/groups/:id
+    // Matches web _disbandGroup → DELETE /api/groupchats/:name
     func disbandGroup(_ groupId: String) {
-        guard let baseURL = httpBaseURL() else { return }
-        var req = URLRequest(url: baseURL.appendingPathComponent("api/groups/\(groupId)"))
+        guard let baseURL = httpBaseURL(),
+              let name = groupIdToName[groupId] else { return }
+        let encoded = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? name
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/groupchats/\(encoded)"))
         req.httpMethod = "DELETE"
         URLSession.shared.dataTask(with: req) { _, _, _ in }.resume()
     }
@@ -2258,11 +2282,13 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     let voices = g["voices"] as? [String] ?? []
                     return (name: name, voices: voices)
                 }
-                // Sync groupId on sessions from fetched group membership
+                // Sync groupId on sessions + build id→name map
                 for gc in list {
                     guard let gid = gc["id"] as? String,
+                          let name = gc["name"] as? String,
                           let members = gc["members"] as? [[String: Any]]
                     else { continue }
+                    self.groupIdToName[gid] = name
                     let memberSessionIds = Set(members.compactMap { $0["session_id"] as? String })
                     for idx in self.sessions.indices {
                         if memberSessionIds.contains(self.sessions[idx].id) {
