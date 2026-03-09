@@ -19,6 +19,7 @@ body {
   position: absolute;
   top: 0; left: 0; right: 0;
   z-index: 60;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.04);
 }
 /* App layout: fills full body since header is out of flex flow */
 #app-body {
@@ -745,7 +746,7 @@ body {
   background: var(--bg-glass);
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
-  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.25);
+  box-shadow: -8px 0 32px rgba(0,0,0,0.4), 8px 0 32px rgba(0,0,0,0.15), 0 -4px 20px rgba(0,0,0,0.2), 0 4px 20px rgba(0,0,0,0.2);
   opacity: 1;
   transform: translateX(100%);
   pointer-events: none;
@@ -1024,7 +1025,6 @@ body {
   cursor: pointer;
   user-select: none;
   gap: 0;
-  box-shadow: var(--shadow-md);
 }
 .typing-main-row {
   display: flex;
@@ -1104,7 +1104,6 @@ body {
   background: #2563eb;
   color: #fff;
   border-bottom-right-radius: 6px;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
 }
 /* interjection styling removed — all user messages look the same */
 .msg.assistant {
@@ -1114,7 +1113,7 @@ body {
   color: var(--text);
   border: 1px solid var(--border-light);
   border-bottom-left-radius: 4px;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
   /* Voice color background applied via JS */
 }
 .karaoke-word { cursor: pointer; transition: transform 0.1s ease, text-shadow 0.1s ease, background 0.1s ease; display: inline-block; border-radius: 3px; }
