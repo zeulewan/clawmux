@@ -289,13 +289,16 @@
     width: 0 !important;
     min-width: 0 !important;
     padding-top: 44px;
-    background: var(--bg-glass) !important;
-    backdrop-filter: blur(20px) saturate(160%);
-    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
   #notes-panel.open {
     width: min(300px, 85vw) !important;
     min-width: 0 !important;
+    background: var(--bg-glass) !important;
+    backdrop-filter: blur(20px) saturate(160%) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(160%) !important;
     box-shadow: -4px 0 24px rgba(0,0,0,0.4);
   }
 }

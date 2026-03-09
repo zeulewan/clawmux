@@ -550,11 +550,9 @@ body {
   z-index: 55;
   width: 0;
   min-width: 0;
-  background: var(--bg-glass);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  will-change: backdrop-filter;
-  transform: translateZ(0);
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   border-left: none;
   display: flex;
   flex-direction: column;
@@ -566,6 +564,11 @@ body {
 #notes-panel.open {
   width: var(--notes-width, 320px);
   min-width: 200px;
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  will-change: backdrop-filter;
+  transform: translateZ(0);
   border-left: 1px solid var(--border);
   box-shadow: -4px 0 24px rgba(0,0,0,0.4);
 }
