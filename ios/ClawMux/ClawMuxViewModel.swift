@@ -630,6 +630,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     private var backgroundRecordingTimer: Timer?
     private let maxLevelSamples = 50
     private var debugRefreshTimer: Timer?
+    private var usageRefreshTimer: Timer?
     private var pausedAudioSessionId: String?
     private var suppressNextAutoRecord = false
     private var currentActivity: Activity<ClawMuxActivityAttributes>?
@@ -1245,6 +1246,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         reconnectWork = nil
         pingWatchdogTimer?.invalidate()
         pingWatchdogTimer = nil
+        usageRefreshTimer?.invalidate()
+        usageRefreshTimer = nil
         lastPingTime = nil
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
@@ -1836,6 +1839,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             sessions[idx].unreadCount = 0
         }
         markSessionViewing(id)
+        fetchUsage()  // refresh context % for new active session (matches web switchTab → fetchUsage)
 
         endLiveActivity()
         if !typingMode {
@@ -3176,6 +3180,10 @@ extension ClawMuxViewModel: URLSessionWebSocketDelegate {
             self.receiveMessage()
             self.fetchSettings()
             self.fetchUsage()
+            self.usageRefreshTimer?.invalidate()
+            self.usageRefreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+                self?.fetchUsage()
+            }
             self.flushPendingAudio()  // replay audio recorded during disconnect
         }
     }
