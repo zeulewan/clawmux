@@ -943,14 +943,22 @@ struct ContentView: View {
                         .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
                 }
 
-                // Mode toggle — mirrors web #mode-toggle button
+                // Mode toggle — mirrors web #mode-toggle (two-line: value + "MODE" label)
                 Button { cycleInputMode() } label: {
-                    Text(vm.typingMode ? "Text" : "Voice")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(Color.cTextSec)
-                        .padding(.horizontal, 7).padding(.vertical, 3)
-                        .background(Color.glass, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
+                    VStack(spacing: 0) {
+                        Text(vm.typingMode ? "TEXT" : "VOICE")
+                            .font(.system(size: 8, weight: .semibold))
+                            .tracking(0.5)
+                        Text("MODE")
+                            .font(.system(size: 7, weight: .medium))
+                            .tracking(0.5)
+                            .opacity(0.7)
+                    }
+                    .foregroundStyle(Color.cTextSec)
+                    .lineLimit(1)
+                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .background(Color.glass, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
                 }
             }
 
@@ -980,8 +988,8 @@ struct ContentView: View {
                             }
                         }
                     }
-                    .font(.system(size: 10, weight: .medium))
-                    .padding(.horizontal, 8).padding(.vertical, 5)
+                    .font(.system(size: 11, weight: .medium))
+                    .padding(.horizontal, 8).padding(.vertical, 4)
                     .background(Color.glass, in: Capsule())
                     .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
                 }
