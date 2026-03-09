@@ -540,6 +540,7 @@ struct ContentView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .overlay(alignment: .bottom) {
                             bottomInputArea
+                                .frame(maxWidth: 380)
                         }
                 }
             }
