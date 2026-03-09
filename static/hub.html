@@ -1935,15 +1935,28 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
     padding-right: 8px !important;
   }
   #welcome-view { padding-top: 52px; padding-left: 56px; }
-  #settings-page { padding-left: 56px; padding-top: 60px; }
-/* Glass style for settings cards on mobile */
-  .settings-card {
+  /* === Settings: glass overlay like notes panel === */
+  #settings-page {
+    position: absolute !important;
+    top: 0 !important; left: 48px !important; right: 0 !important; bottom: 0 !important;
+    z-index: 55;
+    padding: 60px 16px 80px !important;
+    max-width: none !important;
+    margin: 0 !important;
     background: var(--bg-glass) !important;
-    backdrop-filter: blur(16px) saturate(140%);
-    -webkit-backdrop-filter: blur(16px) saturate(140%);
-    border-color: rgba(255,255,255,0.07) !important;
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    overflow-y: auto;
+    box-shadow: -4px 0 24px rgba(0,0,0,0.3);
   }
-  .settings-toggle { border-bottom-color: rgba(255,255,255,0.05) !important; }
+  /* Cards inside the glass overlay — lighter treatment so we don't double-blur */
+  .settings-card {
+    background: rgba(255,255,255,0.06) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border-color: rgba(255,255,255,0.1) !important;
+  }
+  .settings-toggle { border-bottom-color: rgba(255,255,255,0.07) !important; }
   .settings-toggle:active { background: rgba(128,128,128,0.12); }
 
   /* === Notes panel: overlay like sidebar, don't push chat === */
@@ -2038,8 +2051,11 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   #sidebar-tray {
     background: rgba(240, 245, 255, 0.68);
   }
+  #settings-page {
+    background: rgba(240, 245, 255, 0.78) !important;
+  }
   .settings-card {
-    background: rgba(255, 255, 255, 0.68) !important;
+    background: rgba(255, 255, 255, 0.35) !important;
     border-color: var(--border) !important;
   }
   .settings-toggle {
@@ -2779,31 +2795,40 @@ async function changeSpeed(speed) {
 let activityVerbose = false; // true = show full tool log; false = transient minimal mode
 let _preSettingsSessionId = null;
 function showSettingsPage() {
-  // Toggle: if settings is already visible, go back to previous chat or welcome
-  if (document.getElementById('settings-page').style.display === 'block') {
-    document.getElementById('settings-page').style.display = 'none';
-    if (_preSettingsSessionId && sessions.has(_preSettingsSessionId)) {
-      switchTab(_preSettingsSessionId, true);
-    } else {
-      showWelcome();
+  const settingsPage = document.getElementById('settings-page');
+  // Toggle: if settings is already visible, close it
+  if (settingsPage.style.display === 'block') {
+    settingsPage.style.display = 'none';
+    if (!isMobile) {
+      if (_preSettingsSessionId && sessions.has(_preSettingsSessionId)) {
+        switchTab(_preSettingsSessionId, true);
+      } else {
+        showWelcome();
+      }
+      _preSettingsSessionId = null;
     }
-    _preSettingsSessionId = null;
     return;
   }
-  _preSettingsSessionId = activeSessionId;
-  document.getElementById('welcome-view').style.display = 'none';
-  document.getElementById('chat-area').style.display = 'none';
-  document.getElementById('controls').style.display = 'none';
-  document.getElementById('waveform').style.display = 'none';
-  const dbg = document.getElementById('debug-panel');
-  if (dbg) dbg.style.display = 'none';
-  document.getElementById('settings-page').style.display = 'block';
-  document.getElementById('active-voice').style.display = 'none';
-  document.getElementById('session-model').style.display = 'none';
-  document.getElementById('model-label').style.display = 'none';
-  textInputBar.classList.remove('active');
-  activeSessionId = null;
-  debugActive = false;
+  if (isMobile) {
+    // Mobile: settings overlays the chat — don't hide anything behind it
+    settingsPage.style.display = 'block';
+  } else {
+    // Desktop: settings replaces the chat view
+    _preSettingsSessionId = activeSessionId;
+    document.getElementById('welcome-view').style.display = 'none';
+    document.getElementById('chat-area').style.display = 'none';
+    document.getElementById('controls').style.display = 'none';
+    document.getElementById('waveform').style.display = 'none';
+    const dbg = document.getElementById('debug-panel');
+    if (dbg) dbg.style.display = 'none';
+    document.getElementById('active-voice').style.display = 'none';
+    document.getElementById('session-model').style.display = 'none';
+    document.getElementById('model-label').style.display = 'none';
+    textInputBar.classList.remove('active');
+    activeSessionId = null;
+    debugActive = false;
+    settingsPage.style.display = 'block';
+  }
   renderSidebar();
   loadSettings();
   loadUsageForSettings();
