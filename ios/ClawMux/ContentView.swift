@@ -314,13 +314,33 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
-            if let s = session {
-                Button(role: .destructive) { vm.terminateSession(s.id) } label: {
-                    Label("End Session", systemImage: "xmark.circle")
+            // Launch Session — only when no session (matches web ctx-launch)
+            if session == nil {
+                Button { vm.spawnSession(voiceId: voice.id) } label: {
+                    Label("Launch Session", systemImage: "play.circle")
                 }
             }
+            // Mark as Unread / Read — matches web ctx-mark-unread / ctx-mark-read
+            if let s = session {
+                if s.unreadCount == 0 {
+                    Button { vm.markSessionUnread(s.id) } label: {
+                        Label("Mark as Unread", systemImage: "envelope.badge")
+                    }
+                } else {
+                    Button { vm.clearSessionUnread(s.id) } label: {
+                        Label("Mark as Read", systemImage: "checkmark.circle")
+                    }
+                }
+            }
+            // Reset — matches web ctx-reset
             Button(role: .destructive) { resetVoiceId = voice.id; showResetConfirm = true } label: {
-                Label("Reset History", systemImage: "trash")
+                Label("Reset", systemImage: "arrow.counterclockwise")
+            }
+            // Terminate Session — matches web ctx-terminate
+            if let s = session {
+                Button(role: .destructive) { vm.terminateSession(s.id) } label: {
+                    Label("Terminate Session", systemImage: "xmark.circle")
+                }
             }
         }
     }
