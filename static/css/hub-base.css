@@ -19,7 +19,10 @@ body {
   position: absolute;
   top: 0; left: 0; right: 0;
   z-index: 60;
-  box-shadow: 0 2px 16px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.04);
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4), 0 1px 0 rgba(255,255,255,0.05);
 }
 /* App layout: fills full body since header is out of flex flow */
 #app-body {
@@ -414,7 +417,7 @@ body {
   opacity: 0.8;
 }
 
-/* Main content area — offset by sidebar width since sidebar is now absolute */
+/* Main content area — full width, sidebar overlaps left portion for glass blur */
 #main-content {
   flex: 1;
   display: flex;
@@ -423,7 +426,6 @@ body {
   min-width: 0;
   transition: background-color 0.4s ease;
   position: relative;
-  margin-left: var(--sidebar-w, 220px);
 }
 
 /* Welcome state (no chat selected) */
@@ -858,11 +860,11 @@ body {
 }
 .settings-toggle .toggle-indicator.on::after { left: 20px; }
 
-/* Chat area */
+/* Chat area — padding-left accounts for absolute sidebar overlay */
 #chat-area {
   flex: 1;
   overflow-y: auto;
-  padding: 72px 24px 170px;
+  padding: 72px 24px 170px calc(var(--sidebar-w, 220px) + 24px);
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -1208,9 +1210,9 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   display: none;
   position: absolute;
   bottom: max(12px, env(safe-area-inset-bottom));
-  left: 50%;
+  left: calc(50% + var(--sidebar-w, 220px) / 2);
   transform: translateX(-50%);
-  width: calc(100% - 32px);
+  width: calc(100% - var(--sidebar-w, 220px) - 32px);
   max-width: 760px;
   z-index: var(--z-sticky);
   padding: 8px 12px;
@@ -1319,9 +1321,9 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   gap: 0;
   position: absolute;
   bottom: max(12px, env(safe-area-inset-bottom));
-  left: 50%;
+  left: calc(50% + var(--sidebar-w, 220px) / 2);
   transform: translateX(-50%);
-  width: calc(100% - 32px);
+  width: calc(100% - var(--sidebar-w, 220px) - 32px);
   max-width: 380px;
   z-index: var(--z-sticky);
   background: var(--pill-bg);
