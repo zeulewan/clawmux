@@ -269,16 +269,7 @@
     -webkit-backdrop-filter: blur(20px) saturate(160%);
     overflow-y: auto;
     box-shadow: -4px 0 24px rgba(0,0,0,0.3);
-    /* Mobile slide: start fully off-screen to the right */
-    transform: translateX(100%) !important;
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease !important;
-    opacity: 0;
     visibility: visible !important;
-  }
-  #settings-page.open {
-    transform: translateX(0) !important;
-    opacity: 1;
-    pointer-events: auto !important;
   }
   /* Cards inside the glass overlay — lighter treatment so we don't double-blur */
   .settings-card {

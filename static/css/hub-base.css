@@ -25,6 +25,7 @@ body {
   display: flex;
   flex: 1;
   overflow: hidden;
+  position: relative;
 }
 
 /* Resize handles */
@@ -37,6 +38,14 @@ body {
   z-index: 10;
   transition: background 0.15s;
 }
+/* Sidebar handle: anchored to sidebar right edge since sidebar is now absolute */
+.resize-handle-sidebar {
+  position: absolute;
+  top: 0; bottom: 0;
+  left: var(--sidebar-w, 220px);
+  transform: translateX(-2px);
+  z-index: 51;
+}
 .resize-handle:hover,
 .resize-handle:active {
   background: var(--accent, #0a84ff);
@@ -46,7 +55,7 @@ body {
 #sidebar-settings-btn { display: none; }
 #sidebar-tray { display: none; }
 #sidebar {
-  width: 220px;
+  width: var(--sidebar-w, 220px);
   min-width: 140px;
   background: var(--bg-glass);
   border-right: 1px solid var(--border);
@@ -55,7 +64,10 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  flex-shrink: 0;
+  /* Absolute positioning overlaps chat content — required for glass backdrop-filter */
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  z-index: 50;
 }
 #sidebar-list {
   padding: 68px 8px 10px;
@@ -401,7 +413,7 @@ body {
   opacity: 0.8;
 }
 
-/* Main content area */
+/* Main content area — offset by sidebar width since sidebar is now absolute */
 #main-content {
   flex: 1;
   display: flex;
@@ -410,6 +422,7 @@ body {
   min-width: 0;
   transition: background-color 0.4s ease;
   position: relative;
+  margin-left: var(--sidebar-w, 220px);
 }
 
 /* Welcome state (no chat selected) */
@@ -733,11 +746,11 @@ body {
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
   box-shadow: -4px 0 24px rgba(0, 0, 0, 0.25);
-  opacity: 0;
-  transform: translateX(16px);
+  opacity: 1;
+  transform: translateX(100%);
   pointer-events: none;
-  transition: opacity 0.2s ease, transform 0.2s ease;
-  visibility: hidden;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  visibility: visible;
 }
 /* Glass cards inside settings — same treatment as mobile */
 #settings-page .settings-card {
@@ -747,10 +760,8 @@ body {
   border-color: rgba(255, 255, 255, 0.08);
 }
 #settings-page.open {
-  opacity: 1;
   transform: translateX(0);
   pointer-events: auto;
-  visibility: visible;
 }
 .settings-header {
   display: flex;
