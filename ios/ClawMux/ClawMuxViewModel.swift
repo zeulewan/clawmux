@@ -310,6 +310,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
 
     // Sessions
     @Published var sessions: [VoiceSession] = []
+    @Published var currentProject: String = "default"
     @Published var activeSessionId: String? {
         didSet { UserDefaults.standard.set(activeSessionId, forKey: "activeSessionId") }
     }
@@ -1281,6 +1282,26 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         case "session_terminated":
             if let sid = sessionId {
                 removeSession(sid)
+            }
+
+        case "project_deleted":
+            // Sessions in the deleted project arrive via session_terminated; no extra cleanup needed.
+            // currentProject will be updated by a following project_switched event if needed.
+            break
+
+        case "project_renamed":
+            // Sessions store the project slug, which is unchanged on rename; no action needed.
+            break
+
+        case "project_switched":
+            let newProject = json["project"] as? String ?? "default"
+            currentProject = newProject
+            // Auto-switch to first non-dead session in the new project (mirrors web auto-switch)
+            if let match = sessions.first(where: { $0.project == newProject && $0.state != .dead }) {
+                switchToSession(match.id)
+            } else if activeSessionId != nil {
+                // No sessions in new project — deselect (mirrors web switchTab(null))
+                activeSessionId = nil
             }
 
         case "session_status":
