@@ -54,6 +54,10 @@ private func voiceColor(_ id: String) -> Color {
     }
 }
 
+private func voiceIdByName(_ name: String) -> String {
+    ALL_VOICES.first { $0.name.lowercased() == name.lowercased() }?.id ?? name.lowercased()
+}
+
 private func voiceIcon(_ id: String) -> String {
     switch id {
     case "af_sky":   return "cloud.fill"
@@ -89,6 +93,7 @@ struct ContentView: View {
     @State private var showCopiedToast         = false
     @State private var thinkingExpanded        = false
     @State private var collapsedProjects:       Set<String> = []
+    @State private var expandedAgentMsgIds:    Set<UUID> = []
     @State private var isAtBottom:             Bool = true
     @State private var sidebarExpanded:        Bool = false
 
@@ -1155,15 +1160,44 @@ struct ContentView: View {
         let color     = vm.activeSession.map { voiceColor($0.voice) } ?? Color.cTextSec
         let isPlaying = vm.ttsPlayingMessageId == msg.id
 
-        // Agent (inter-agent) messages: compact inline style like web's agent-msg
+        // Agent (inter-agent) messages: match web .msg.agent-msg — arrow+name header, collapsible body
         if role == "agent" {
-            return AnyView(
-                Text(msg.text)
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.cTextSec.opacity(0.65))
-                    .lineLimit(3).truncationMode(.tail)
+            // Parse "[Agent msg from/to Name] content" format
+            let agentMsgPattern = /^\[Agent msg (from|to) ([^\]]+)\] (.*)/
+            let isExpanded = expandedAgentMsgIds.contains(msg.id)
+            if let m = try? agentMsgPattern.firstMatch(in: msg.text) {
+                let direction = String(m.1)
+                let agentName = String(m.2)
+                let content   = String(m.3)
+                let arrow     = direction == "from" ? "←" : "→"
+                let agentColor = voiceColor(voiceIdByName(agentName))
+                return AnyView(
+                    VStack(alignment: .leading, spacing: 0) {
+                        // Header: arrow + agent name (colored) — always visible
+                        HStack(spacing: 4) {
+                            Text("\(arrow) \(agentName)")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(agentColor)
+                        }
+                        // Body: collapsed by default, expands on tap
+                        if isExpanded {
+                            Text(content)
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color.cTextSec.opacity(0.9))
+                                .lineLimit(nil)
+                                .padding(.top, 4)
+                        }
+                    }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 18).padding(.vertical, 2)
+                    .padding(.horizontal, 10).padding(.vertical, 3)
+                    .opacity(isExpanded ? 1 : 0.7)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            if isExpanded { expandedAgentMsgIds.remove(msg.id) }
+                            else          { expandedAgentMsgIds.insert(msg.id) }
+                        }
+                    }
                     .contextMenu {
                         Button {
                             UIPasteboard.general.string = msg.text
@@ -1173,6 +1207,15 @@ struct ContentView: View {
                             }
                         } label: { Label("Copy", systemImage: "doc.on.doc") }
                     }
+                )
+            }
+            // Fallback for non-matching agent text
+            return AnyView(
+                Text(msg.text)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.cTextSec.opacity(0.65))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10).padding(.vertical, 3)
             )
         }
 
