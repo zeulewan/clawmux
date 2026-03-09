@@ -67,6 +67,32 @@ body {
   scrollbar-width: none; /* Firefox */
 }
 #sidebar-list::-webkit-scrollbar { display: none; } /* Chrome/Safari */
+
+/* Sidebar loading state — shown until session_list resolves */
+#sidebar-loading {
+  display: none;
+  position: absolute;
+  top: 56px;
+  left: 0; right: 0;
+  padding: 20px 0;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+  z-index: 2;
+}
+#sidebar.loading #sidebar-loading { display: flex; }
+#sidebar.loading #sidebar-list { pointer-events: none; opacity: 0.35; }
+.sidebar-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: sidebar-spin 0.7s linear infinite;
+}
+@keyframes sidebar-spin {
+  to { transform: rotate(360deg); }
+}
 #sidebar-expand-btn {
   flex-shrink: 0;
 }

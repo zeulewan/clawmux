@@ -171,6 +171,7 @@ function handleMessage(data) {
     }
     Promise.all(promises).then(() => {
       _sessionsLoading = false;
+      document.getElementById('sidebar')?.classList.remove('loading');
       _flushMessageBuffer();
       renderVoiceGridIfActive();
       renderSidebar();
@@ -211,6 +212,7 @@ function handleMessage(data) {
     }).catch((e) => {
       console.error('[session_list] Promise.all failed:', e);
       _sessionsLoading = false;
+      document.getElementById('sidebar')?.classList.remove('loading');
       _flushMessageBuffer();
       renderSidebar();
     });
