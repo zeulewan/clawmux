@@ -1716,8 +1716,8 @@ struct ContentView: View {
                     .animation(.easeOut(duration: 0.08), value: level)
             }
         }
-        .frame(height: 36).frame(maxWidth: .infinity)
-        .padding(.horizontal, 20).padding(.vertical, 6)
+        .frame(height: 12).frame(maxWidth: .infinity)
+        .padding(.horizontal, 20).padding(.vertical, 4)
     }
 
     // MARK: - Mic Button
