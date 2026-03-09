@@ -202,12 +202,13 @@
 
 
 <div id="welcome-view">
+  <div id="app-loading-bar"></div>
   <div class="welcome-content">
     <div class="welcome-icon">
       <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
     </div>
     <div class="welcome-title">ClawMux</div>
-    <div class="welcome-sub">Select an agent from the sidebar to begin</div>
+    <div id="welcome-sub" class="welcome-sub">Select an agent from the sidebar to begin</div>
   </div>
 </div>
 
@@ -2020,6 +2021,24 @@ _initChatScroll();
   _updateScrollBtnPos();
   new ResizeObserver(_updateScrollBtnPos).observe(controlsEl);
 })();
+// Show loading state on welcome screen until sessions are ready
+(function() {
+  const sub = document.getElementById('welcome-sub');
+  const bar = document.getElementById('app-loading-bar');
+  const sidebar = document.getElementById('sidebar');
+  if (!sub || !sidebar) return;
+  sub.textContent = 'Loading…';
+  if (bar) bar.classList.add('active');
+  const obs = new MutationObserver(function() {
+    if (!sidebar.classList.contains('loading')) {
+      sub.textContent = 'Select an agent from the sidebar to begin';
+      if (bar) bar.classList.remove('active');
+      obs.disconnect();
+    }
+  });
+  obs.observe(sidebar, { attributes: true, attributeFilter: ['class'] });
+})();
+
 renderSidebar();
 connect();
 loadSettings().then(() => loadProjects());

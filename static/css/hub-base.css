@@ -360,6 +360,31 @@ body {
   color: var(--text-tertiary);
 }
 
+/* App loading progress bar */
+#app-loading-bar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+#app-loading-bar.active { opacity: 1; }
+#app-loading-bar::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -60%;
+  width: 60%;
+  height: 100%;
+  background: var(--blue);
+  border-radius: 2px;
+  animation: loading-bar-sweep 1.2s ease-in-out infinite;
+}
+@keyframes loading-bar-sweep {
+  0%   { left: -60%; }
+  100% { left: 110%; }
+}
+
 /* Focus mode */
 #focus-view {
   flex: 1;
