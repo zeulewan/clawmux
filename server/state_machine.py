@@ -16,12 +16,12 @@ class AgentState(str, enum.Enum):
     SPEAKING is browser-only (TTS playback is independent of agent state).
 
     Transitions:
-      STARTING → IDLE        (first wait WS connects)
-      IDLE → THINKING        (wait WS disconnects)
+      STARTING → IDLE        (stop hook signals idle via POST /api/agents/{id}/idle)
+      IDLE → THINKING        (hub injects message via tmux)
       THINKING → PROCESSING  (PreToolUse hook — first tool call)
-      PROCESSING → IDLE      (wait WS connects)
+      PROCESSING → IDLE      (stop hook signals idle)
       PROCESSING → COMPACTING (PreCompact hook)
-      COMPACTING → IDLE      (wait WS connects)
+      COMPACTING → IDLE      (stop hook signals idle)
       COMPACTING → PROCESSING (PreToolUse hook)
       ANY → DEAD             (terminate)
     """

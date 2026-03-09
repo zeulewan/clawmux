@@ -900,16 +900,12 @@ async def hook_tool_status(request: Request):
     response_json = {}
 
     if event in ("PostToolUse", "PostToolUseFailure"):
-        # Skip entirely for clawmux wait — wait WS handles all state transitions
         tool_name = data.get("tool_name", "")
         tool_input = data.get("tool_input", {})
-        if tool_name == "Bash" and "clawmux wait" in tool_input.get("command", ""):
-            return JSONResponse(response_json)
         session.activity = ""
         session.tool_name = ""
         session.tool_input = {}
         # Transition back to THINKING after each tool call — Claude is deciding next action
-        # Include IDLE: background clawmux wait WS can flip state to IDLE mid-tool-call
         if session.state in (AgentState.PROCESSING, AgentState.IDLE):
             session.set_state(AgentState.THINKING)
             await send_to_browser({
@@ -951,7 +947,6 @@ async def hook_tool_status(request: Request):
         prev = _pending_injections.pop(session.session_id, None)
         if prev and not prev.done():
             prev.cancel()
-        # If session is IDLE (e.g. background clawmux wait WS is connected), override to PROCESSING.
         if session.state in (AgentState.IDLE, AgentState.THINKING):
             session.set_state(AgentState.PROCESSING)
         tool_name = data.get("tool_name", "")
@@ -1153,20 +1148,8 @@ async def interrupt_session(session_id: str):
         return JSONResponse({"error": str(e)}, status_code=500)
     log.info("Interrupted session %s (tmux: %s)", session_id, tmux_name)
 
-    # After interrupt, auto-send 'clawmux wait' so agent re-enters message loop
-    async def _auto_recover():
-        await asyncio.sleep(3)
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                "tmux", "send-keys", "-t", tmux_name, "Run this exact command now: clawmux wait", "Enter",
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            await proc.communicate()
-            log.info("Auto-recovery: sent 'clawmux wait' to %s", tmux_name)
-        except Exception:
-            pass
-    asyncio.create_task(_auto_recover())
+    # Signal idle so hub re-delivers any pending inbox messages after interrupt
+    asyncio.create_task(asyncio.sleep(3))  # Let Claude Code settle before hub can inject
 
     return JSONResponse({"status": "interrupted"})
 

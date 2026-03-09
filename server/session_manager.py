@@ -23,6 +23,7 @@ from hub_config import (
 from agents_store import AgentEntry, AgentsStore
 from project_manager import ProjectManager
 from state_machine import AgentState
+from template_renderer import TemplateRenderer
 
 log = logging.getLogger("hub.sessions")
 
@@ -129,6 +130,7 @@ class SessionManager:
         self.agents_store = agents_store
         self.backend = backend  # AgentBackend instance
         self._on_session_death = on_session_death  # async callback(session_id)
+        self._template_renderer = TemplateRenderer(agents_store) if agents_store else None
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
         if LEGACY_SESSION_DIR.exists():
             log.info("Legacy session dir found at %s — will scan for orphans", LEGACY_SESSION_DIR)
@@ -442,145 +444,13 @@ class SessionManager:
 
             session.claude_session_id = claude_session_id
 
-            # Write CLAUDE.md with agent identity
+            # Write CLAUDE.md using the template renderer, then append context summary
             claude_md = work_dir / "CLAUDE.md"
 
-            # Check if silent startup is enabled
-            silent_startup = False
-            try:
-                settings_path = DATA_DIR / "settings.json"
-                if settings_path.exists():
-                        silent_startup = json.loads(settings_path.read_text()).get("silent_startup", False)
-            except Exception:
-                pass
-
-            # Check if there's prior history to determine greeting style
-            has_history = False
-            if self.history_store:
-                hist_prefix = self.project_mgr.get_history_prefix(project_slug)
-                prior_messages = self.history_store.load(voice_id, hist_prefix)
-                has_history = any(
-                    m.get("role") in ("user", "assistant") for m in prior_messages
-                )
-
-            if silent_startup:
-                identity = (
-                    f"Your name is {voice_name}. "
-                    f"Do NOT greet the user or say anything on startup. "
-                    f"Immediately run: clawmux wait\n"
-                    f"This will block until a message arrives. Say nothing until you receive a message.\n"
-                )
-            elif has_history:
-                identity = (
-                    f"Your name is {voice_name}. "
-                    f"You were restarted but your previous conversation history is preserved below. "
-                    f"Read the context summary at the end of this file to understand what you were working on.\n"
-                    f"Greet the user by running: clawmux send --to user 'Hey, I am back. I have read my previous context and I am ready to continue.'\n"
-                    f"Then run: clawmux wait\n"
-                )
+            if self._template_renderer:
+                identity = await self._template_renderer.render(voice_id) or f"Your name is {voice_name}.\n"
             else:
-                identity = (
-                    f"Your name is {voice_name}. "
-                    f"Greet the user by running: clawmux send --to user 'Hi, I am {voice_name}. How can I help?'\n"
-                    f"Then run: clawmux wait\n"
-                )
-
-            # Add behavioral instructions
-            identity += (
-                "\n# Important Rules\n"
-                "- NEVER enter plan mode. Always execute tasks directly.\n"
-                "- Always operate in bypass permissions mode.\n"
-                "- After being interrupted (Ctrl+C, Escape), always run `clawmux wait` to re-enter the message loop.\n"
-                "- NEVER print text directly to the terminal chat. ALL communication must go through `clawmux send`. "
-                "The user cannot see your terminal — they only see messages sent via ClawMux.\n"
-                "- When you receive a message via hooks (while working), acknowledge it with `clawmux send` before continuing.\n"
-                "\n# Formatting\n"
-                "Use rich markdown formatting in your output whenever it adds clarity:\n"
-                "- Use **headings** (##, ###) to organize longer responses\n"
-                "- Use **code blocks** with language tags (```python, ```bash, etc.) for any code\n"
-                "- Use **tables** for comparisons or structured data\n"
-                "- Use **bullet lists** or **numbered lists** for steps or multiple items\n"
-                "- Use **bold** for key terms, file names, and important values\n"
-                "- Use *italic* for technical terms, subtle emphasis, or asides\n"
-                "- Always format URLs as clickable markdown links: `[Link Text](https://url)` — never paste raw URLs\n"
-                "The browser renders full markdown, so take advantage of it.\n"
-            )
-
-            identity += (
-                    "\n# Communication (v0.6.0)\n"
-                    "You are running in CLI mode. All communication uses the unified `clawmux send` and `clawmux wait` commands.\n\n"
-                    "## Speaking to the user (TTS)\n"
-                    "```bash\n"
-                    "clawmux send --to user 'Your message here'\n"
-                    "```\n"
-                    "This triggers TTS and returns immediately. Do NOT block waiting for a response.\n\n"
-                    "**IMPORTANT: Always use single quotes** for `clawmux send` messages. "
-                    "Double quotes cause shell escaping issues — backslashes (in LaTeX, file paths) "
-                    "and `!` get mangled by the shell before Python receives them.\n\n"
-                    "## Sending a message to another agent\n"
-                    "```bash\n"
-                    "clawmux send --to echo 'Check the auth module'\n"
-                    "```\n\n"
-                    "## Replying to a specific message (threading)\n"
-                    "```bash\n"
-                    "clawmux send --to sky --re msg-xxx 'Here is the answer'\n"
-                    "```\n\n"
-                    "## Acknowledging a message (thumbs up)\n"
-                    "```bash\n"
-                    "clawmux send --to sky --re msg-xxx\n"
-                    "```\n\n"
-                    "## Waiting for messages (idle mode)\n"
-                    "```bash\n"
-                    "clawmux wait\n"
-                    "```\n"
-                    "Blocks until a message arrives (voice from user or inter-agent). The hub pushes messages in real-time. "
-                    "Always call this when you have no active work.\n\n"
-                    "## Setting your project status\n"
-                    "```bash\n"
-                    "clawmux project 'project-name' --area 'frontend'\n"
-                    "```\n\n"
-                    "IMPORTANT: Always use `clawmux send --to user` for ALL output to the user. "
-                    "Never just print text to the terminal. Text printed directly to Claude Code "
-                    "chat is NOT visible to the user in the browser.\n\n"
-                    "# Message Delivery\n"
-                    "Messages arrive through two mechanisms:\n"
-                    "1. **Hooks** — While you're actively working (making tool calls), messages are delivered via "
-                    "PostToolUse/PreToolUse hooks as additional context. You'll see them as `[MSG from:name]` or "
-                    "`[VOICE from:name]` in system reminders.\n"
-                    "2. **Wait** — While idle, `clawmux wait` receives pushed messages from the hub.\n\n"
-                    "Process ALL messages you receive, whether from hooks or wait. For voice messages from the user, "
-                    "respond with `clawmux send --to user`. For agent messages, respond with `clawmux send --to <agent>`.\n\n"
-                    "# CLI Environment\n"
-                    "`clawmux` is already in your PATH at `/usr/local/bin/clawmux`. "
-                    "Environment variables (`CLAWMUX_SESSION_ID`, `CLAWMUX_PORT`) are automatically set. "
-                    "Never `cd` into the repo directory or manually export these variables — just run `clawmux` directly.\n\n"
-                    "Run `clawmux --help` to see all available commands (spawn, monitor, projects, version, update, etc.).\n\n"
-                    "# Hub Management\n"
-                    "NEVER use `pkill`, `kill`, or any signal-based commands to restart the hub. "
-                    "Use the built-in CLI commands instead:\n"
-                    "- `clawmux reload` — Gracefully restart the hub (agents auto-reconnect)\n"
-                    "- `clawmux start` — Start the hub if it's not running\n"
-                    "- `clawmux stop` — Stop the hub gracefully\n"
-                    "- `clawmux status` — Check hub state and sessions\n"
-                    "- `clawmux spawn` — Launch a new agent session\n"
-                )
-            # Inter-agent messaging instructions
-            identity += (
-                "\n# Inter-Agent Messaging\n"
-                "You may receive messages from other agents. "
-                "These appear as `[MSG from:agent_name]` in system reminders or via `clawmux wait`.\n\n"
-                "When you receive an inter-agent message:\n"
-                "1. Process the message content\n"
-                "2. Do NOT speak the response out loud to the user\n"
-                "3. Reply using: `clawmux send --to <sender_name> 'your reply'`\n"
-                "4. Or acknowledge with: `clawmux send --to <sender_name> --re <msg_id>`\n"
-            )
-
-            # Team Manager section — no agent-specific managers assigned
-            identity += (
-                "\n# Team Manager\n"
-                "No manager currently assigned. Speak to the user directly via `clawmux send --to user`.\n"
-            )
+                identity = f"Your name is {voice_name}.\n"
 
             # Inject context summary from previous session history
             if self.history_store:
@@ -731,49 +601,8 @@ class SessionManager:
                         await self.terminate_session(session_id)
 
     async def _voice_watchdog(self, session_id: str, session: Session, now: float) -> None:
-        """Detect agents that dropped out of voice mode and re-inject the wait command."""
-        # Skip sessions that aren't in a watchdog-relevant state
-        if session.state not in (AgentState.IDLE, AgentState.THINKING, AgentState.PROCESSING):
-            return
-        if session.in_wait or session.processing or session.restarting or session.compacting:
-            return
-        # Skip if max re-injection attempts exceeded
-        if session.reinject_attempts >= session.max_reinject_attempts:
-            return
-
-        # Grace period for new sessions
-        if (now - session.created_at) < 120:
-            return
-
-        # Check if clawmux is visible in the pane (actively waiting)
-        try:
-            result = await self.backend.capture_pane(session.tmux_session)
-            if result and ("clawmux" in result.lower() or "listening" in result.lower()):
-                return
-        except Exception:
-            pass
-
-        # Agent appears to have dropped out of voice mode — attempt re-injection
-        session.reinject_attempts += 1
-
-        log.warning(
-            "[%s] Voice watchdog: agent dropped out of voice mode, re-injecting (attempt %d/%d)",
-            session_id,
-            session.reinject_attempts, session.max_reinject_attempts,
-        )
-
-        try:
-            # Check if Claude Code is at a prompt (has > or ❯ visible)
-            result = await self.backend.capture_pane(session.tmux_session)
-            if not result or (">" not in result and "❯" not in result):
-                log.info("[%s] Voice watchdog: Claude not at prompt, skipping re-inject", session_id)
-                return
-
-            log.info("[%s] Voice watchdog: re-injecting clawmux wait", session_id)
-            startup_msg = 'Run this exact command now: clawmux wait'
-            await self.backend.deliver_message(session.tmux_session, startup_msg)
-        except Exception as e:
-            log.error("[%s] Voice watchdog re-inject failed: %s", session_id, e)
+        """Legacy watchdog — no-op in hub-push delivery model (v0.8.0+)."""
+        pass
 
     def _cleanup_workdir(self, session: Session) -> None:
         # Don't delete voice work dirs — they persist for --resume

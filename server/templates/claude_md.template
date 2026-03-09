@@ -1,5 +1,3 @@
-Your name is {name}. Greet the user by running: clawmux send --to user 'Hi, I am {name}. How can I help?'
-
 # Important Rules
 - NEVER enter plan mode. Always execute tasks directly.
 - Always operate in bypass permissions mode.
