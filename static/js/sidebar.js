@@ -697,8 +697,9 @@ function _createAgentCard(voiceId, name, state) {
       return;
     }
     if (!lpFired) return; // timer cancelled (scroll gesture)
-    // Long-press threshold passed and finger is moving — drag mode
+    // Long-press threshold passed — require intentional movement (>14px) before drag
     if (!touchDragging) {
+      if (Math.hypot(touch.clientX - touchStartX, touch.clientY - touchStartY) < 14) return;
       touchDragging = true;
       _touchDragStart(voiceId, touch);
     }
