@@ -1933,8 +1933,17 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             try AVAudioSession.sharedInstance().setActive(true)
             audioPlayer = try AVAudioPlayer(data: data)
             audioPlayer?.delegate = self
-            audioPlayer?.play()
-            startPlaybackVAD()
+            let started = audioPlayer?.play() ?? false
+            if started {
+                startPlaybackVAD()
+            } else {
+                // play() returned false — audio session issue; notify server and reset
+                print("[audio] play() returned false for session \(sessionId)")
+                audioPlayer = nil
+                isPlaying = false
+                playingSessionId = nil
+                sendJSON(["session_id": sessionId, "type": "playback_done"])
+            }
         } catch {
             print("[audio] Playback error: \(error)")
             statusText = "Audio error"
