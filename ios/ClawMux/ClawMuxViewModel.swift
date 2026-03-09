@@ -2269,6 +2269,15 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 if let audioCues = json["audio_cues"] as? Bool {
                     self.soundListeningAuto = audioCues
                 }
+                if let silent = json["silent_startup"] as? Bool {
+                    self.silentStartup = silent
+                }
+                if let showAgent = json["show_agent_messages"] as? Bool {
+                    self.showAgentMessages = showAgent
+                }
+                if let verbose = json["activity_verbose"] as? Bool {
+                    self.verboseMode = verbose
+                }
             }
         }.resume()
     }
