@@ -1024,6 +1024,7 @@ body {
   cursor: pointer;
   user-select: none;
   gap: 0;
+  box-shadow: var(--shadow-md);
 }
 .typing-main-row {
   display: flex;
@@ -1103,6 +1104,7 @@ body {
   background: #2563eb;
   color: #fff;
   border-bottom-right-radius: 6px;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
 }
 /* interjection styling removed — all user messages look the same */
 .msg.assistant {
@@ -1112,7 +1114,7 @@ body {
   color: var(--text);
   border: 1px solid var(--border-light);
   border-bottom-left-radius: 4px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
   /* Voice color background applied via JS */
 }
 .karaoke-word { cursor: pointer; transition: transform 0.1s ease, text-shadow 0.1s ease, background 0.1s ease; display: inline-block; border-radius: 3px; }
