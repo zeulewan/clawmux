@@ -712,7 +712,7 @@ struct ContentView: View {
             .background(Color.glass, in: Capsule())
             .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
         }
-        .padding(.horizontal, 14).padding(.vertical, 10)
+        .padding(.horizontal, 14).padding(.vertical, 7)
         .background {
             if #available(iOS 26, *) {
                 Color.clear.glassEffect(.regular, in: .rect)
@@ -1210,7 +1210,7 @@ struct ContentView: View {
                         Color.clear.frame(width: 60, height: 44)
                     }
                 }
-                .padding(.horizontal, 16).padding(.top, 8)
+                .padding(.horizontal, 16).padding(.top, 4)
 
                 // Status + mode + effort row
                 HStack(spacing: 8) {
@@ -1253,9 +1253,9 @@ struct ContentView: View {
                         }
                     }
                 }
-                .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 4)
+                .padding(.horizontal, 16).padding(.top, 6).padding(.bottom, 2)
             }
-            .padding(.horizontal, 12).padding(.vertical, 10).padding(.bottom, 4)
+            .padding(.horizontal, 12).padding(.vertical, 8).padding(.bottom, 2)
             .background {
                 if #available(iOS 26, *) {
                     Color.clear
@@ -1407,30 +1407,30 @@ struct ContentView: View {
             // Pulsing glow ring during tap-to-record
             if vm.isRecording && !vm.pushToTalk {
                 Circle()
-                    .fill(micColor.opacity(0.18)).frame(width: 88, height: 88)
-                    .scaleEffect(isPulsing ? 1.15 : 1.0)
+                    .fill(micColor.opacity(0.18)).frame(width: 104, height: 104)
+                    .scaleEffect(isPulsing ? 1.12 : 1.0)
                     .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: isPulsing)
                 Circle()
                     .strokeBorder(micColor.opacity(isPulsing ? 0.5 : 0.1), lineWidth: 1.5)
-                    .frame(width: 88, height: 88)
+                    .frame(width: 104, height: 104)
                     .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: isPulsing)
             }
-            // Main button circle
+            // Main button circle — matches web mobile #mic (80px)
             Circle()
                 .fill(micColor)
-                .frame(width: 68, height: 68)
+                .frame(width: 80, height: 80)
                 .shadow(color: micColor.opacity(0.5), radius: 16, y: 4)
             // Inner highlight
             Circle()
                 .fill(LinearGradient(
                     colors: [.white.opacity(0.18), .clear],
                     startPoint: .topLeading, endPoint: .bottomTrailing))
-                .frame(width: 68, height: 68)
+                .frame(width: 80, height: 80)
             Image(systemName: micIcon)
-                .font(.system(size: 22, weight: .semibold))
+                .font(.system(size: 26, weight: .semibold))
                 .foregroundStyle(.white)
         }
-        .frame(width: 92, height: 92)
+        .frame(width: 80, height: 80)
     }
 
     private var micIcon: String {
