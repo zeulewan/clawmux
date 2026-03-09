@@ -2873,6 +2873,12 @@ extension ClawMuxViewModel: AVAudioPlayerDelegate {
         _ player: AVAudioPlayer, error: (any Error)?
     ) {
         Task { @MainActor in
+            // TTS message decode error — just clear state
+            if self.ttsPlayer != nil && self.playingSessionId == nil {
+                self.ttsPlayer = nil
+                self.ttsPlayingMessageId = nil
+                return
+            }
             let sid = self.playingSessionId ?? ""
             self.isPlaying = false
             self.playingSessionId = nil
