@@ -870,7 +870,7 @@ def _format_inbox_messages(messages: list[dict]) -> str:
         msg_id = msg.get("msg_id") or msg.get("id", "")
         if msg_type == "agent":
             lines.append(f"[MSG id:{msg_id} from:{sender}] {content}")
-        elif msg_type == "voice":
+        elif msg_type in ("voice", "text"):
             lines.append(f"[VOICE id:{msg_id} from:{sender}] {content}")
         else:
             lines.append(f"[SYSTEM] {content}")
@@ -2206,7 +2206,7 @@ async def _inject_inbox(session, session_id: str) -> None:
         msg_id = msg.get("id", "")
         if msg_type == "agent":
             lines.append(f"[MSG id:{msg_id} from:{sender}] {content}")
-        elif msg_type == "voice":
+        elif msg_type in ("voice", "text"):
             lines.append(f"[VOICE id:{msg_id} from:{sender}] {content}")
         else:
             lines.append(f"[SYSTEM] {content}")
