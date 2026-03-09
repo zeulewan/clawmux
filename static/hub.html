@@ -928,24 +928,45 @@ async function openGroupChat(groupId) {
   updateLayout();
 }
 
+function _voiceColorByLabel(label) {
+  // Find voice color by display name — check live sessions first, then VOICE_NAMES table
+  if (!label) return null;
+  const lc = label.toLowerCase();
+  for (const [, s] of sessions) {
+    if (s.label && s.label.toLowerCase() === lc) return voiceColor(s.voice);
+  }
+  for (const [vid, vname] of Object.entries(VOICE_NAMES)) {
+    if (vname.toLowerCase() === lc) return voiceColor(vid);
+  }
+  return null;
+}
+
+function _makeGroupMsgEl(msg) {
+  const isUser = msg.role === 'user' && !msg.sender;
+  const div = document.createElement('div');
+  div.className = `msg ${isUser ? 'user' : 'assistant'}`;
+  const label = msg.sender || 'You';
+  const color = isUser ? null : _voiceColorByLabel(label);
+  if (color) {
+    div.style.background = color + '18';
+    div.style.borderColor = color + '60';
+  }
+  const labelEl = document.createElement('span');
+  labelEl.className = 'msg-sender-label';
+  labelEl.textContent = label;
+  if (color) labelEl.style.color = color;
+  const textEl = document.createElement('span');
+  textEl.className = 'msg-text';
+  textEl.textContent = msg.text;
+  div.appendChild(labelEl);
+  div.appendChild(textEl);
+  return div;
+}
+
 function renderGroupChat(messages) {
   const chatArea = document.getElementById('chat-area');
   chatArea.innerHTML = '';
-  for (const msg of messages) {
-    const div = document.createElement('div');
-    const isUser = msg.role === 'user' && !msg.sender;
-    div.className = `msg ${isUser ? 'user' : 'assistant'}`;
-    const label = msg.sender ? msg.sender : 'You';
-    const labelEl = document.createElement('span');
-    labelEl.className = 'msg-sender-label';
-    labelEl.textContent = label;
-    const textEl = document.createElement('span');
-    textEl.className = 'msg-text';
-    textEl.textContent = msg.text;
-    div.appendChild(labelEl);
-    div.appendChild(textEl);
-    chatArea.appendChild(div);
-  }
+  for (const msg of messages) chatArea.appendChild(_makeGroupMsgEl(msg));
   chatArea.scrollTop = chatArea.scrollHeight;
 }
 
@@ -954,18 +975,7 @@ function appendGroupChatMessage(msg) {
   const g = [...groupChats.values()].find(x => x.id === activeGroupId);
   if (!g) return;
   const chatArea = document.getElementById('chat-area');
-  const div = document.createElement('div');
-  const isUser = msg.role === 'user' && !msg.sender;
-  div.className = `msg ${isUser ? 'user' : 'assistant'}`;
-  const labelEl = document.createElement('span');
-  labelEl.className = 'msg-sender-label';
-  labelEl.textContent = msg.sender || 'You';
-  const textEl = document.createElement('span');
-  textEl.className = 'msg-text';
-  textEl.textContent = msg.text;
-  div.appendChild(labelEl);
-  div.appendChild(textEl);
-  chatArea.appendChild(div);
+  chatArea.appendChild(_makeGroupMsgEl(msg));
   chatArea.scrollTop = chatArea.scrollHeight;
 }
 

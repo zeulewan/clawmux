@@ -2181,7 +2181,8 @@ def cmd_group(args):
         session_id = require_session_id()
         # Look up this session's label for the sender field
         try:
-            sessions = http_get("/api/sessions").get("sessions", [])
+            resp_data = http_get("/api/sessions")
+            sessions = resp_data if isinstance(resp_data, list) else resp_data.get("sessions", [])
             match = next((s for s in sessions if s.get("session_id") == session_id), None)
             sender = match.get("label", "") if match else ""
         except Exception:
