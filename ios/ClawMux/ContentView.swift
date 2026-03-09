@@ -1067,6 +1067,17 @@ struct ContentView: View {
                 }
                 .shadow(color: role == "assistant" ? Color.black.opacity(0.3) : Color.clear, radius: 1.5, x: 0, y: 1)
                 .contextMenu {
+                    if role == "assistant" {
+                        Button {
+                            vm.playMessageTTS(
+                                messageId: msg.id,
+                                text: msg.text,
+                                voice: vm.activeSession?.voice)
+                        } label: {
+                            Label(isPlaying ? "Stop Playing" : "Play",
+                                  systemImage: isPlaying ? "stop.fill" : "play.fill")
+                        }
+                    }
                     Button {
                         UIPasteboard.general.string = msg.text
                         withAnimation { showCopiedToast = true }
