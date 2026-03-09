@@ -619,7 +619,10 @@ struct ContentView: View {
                 .background(blue.opacity(0.2))
                 .padding(.horizontal, 8)
             VStack(spacing: 2) {
-                ForEach(voices) { voice in agentCard(voice) }
+                ForEach(voices) { voice in
+                    agentCard(voice)
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
             }
             .padding(.horizontal, 4).padding(.vertical, 4)
         }
