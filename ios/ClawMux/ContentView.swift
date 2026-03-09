@@ -104,23 +104,29 @@ struct ContentView: View {
     @State private var newGroupChatName        = ""
 
     var body: some View {
-        ZStack(alignment: .leading) {
-            // Main content — always has 48px left offset for the collapsed sidebar
-            mainAreaView
-                .padding(.leading, 48)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        VStack(spacing: 0) {
+            // Header — always full width, never covered by sidebar (matches mobile web #header z-index)
+            topBarView
 
-            // Dim overlay behind expanded sidebar (z-index 49 matching web)
-            if sidebarExpanded {
-                Color.black.opacity(0.3)
-                    .ignoresSafeArea()
+            // Body + Sidebar ZStack — sidebar only overlays the content area, not the header
+            ZStack(alignment: .leading) {
+                mainAreaView
                     .padding(.leading, 48)
-                    .onTapGesture { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { sidebarExpanded = false } }
-                    .transition(.opacity)
-            }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Sidebar (draws over main content when expanded, z-index 50)
-            sidebarStripView
+                // Dim overlay behind expanded sidebar
+                if sidebarExpanded {
+                    Color.black.opacity(0.3)
+                        .ignoresSafeArea()
+                        .padding(.leading, 48)
+                        .onTapGesture { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { sidebarExpanded = false } }
+                        .transition(.opacity)
+                }
+
+                // Sidebar (draws over content but NOT header)
+                sidebarStripView
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.canvas1.ignoresSafeArea())
@@ -164,6 +170,17 @@ struct ContentView: View {
 
     // MARK: - Split Layout
 
+    // Top bar — full-width header always above the sidebar ZStack
+    private var topBarView: some View {
+        Group {
+            if vm.activeGroupName != nil {
+                groupChatHeader
+            } else {
+                chatHeader  // handles nil activeSession gracefully (shows just conn dot)
+            }
+        }
+    }
+
     private var mainAreaView: some View {
         let voiceTint = vm.activeSession.map { voiceColor($0.voice) } ?? Color.clear
         return Group {
@@ -201,15 +218,11 @@ struct ContentView: View {
     // MARK: - Group Chat View
 
     private var groupChatMainView: some View {
-        VStack(spacing: 0) {
-            groupChatHeader
-            groupChatScrollArea
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .overlay(alignment: .bottom) {
-                    textInputBar
-                        .frame(maxWidth: 380)
-                }
-        }
+        groupChatScrollArea
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .bottom) {
+                textInputBar
+            }
     }
 
     private var groupChatHeader: some View {
@@ -324,8 +337,31 @@ struct ContentView: View {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: sidebarExpanded ? 2 : 1) {
                     if sidebarExpanded {
-                        // Group chat cards — separate section at top, matches web sidebar-gc-section
-                        // Agents remain in their normal positions below (web does NOT remove them)
+                        // Agents first (matches mobile web — group chats section is below agents)
+                        let groups = projectGroups
+                        ForEach(groups.namedProjects, id: \.self) { project in
+                            let voices = groups.byProject[project] ?? []
+                            projectSection(project, voices: voices)
+                        }
+                        if !groups.ungrouped.isEmpty {
+                            if !groups.namedProjects.isEmpty {
+                                HStack {
+                                    Text("AGENTS")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundStyle(Color.cTextTer)
+                                        .tracking(0.8)
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.top, 8).padding(.bottom, 2)
+                            }
+                            VStack(spacing: 2) {
+                                ForEach(groups.ungrouped) { voice in agentCard(voice) }
+                            }
+                            .padding(.horizontal, 8)
+                        }
+
+                        // Group chats section below agents — matches web sidebar-gc-section placement
                         let chatGroups = activeGroups
                         if !chatGroups.isEmpty {
                             HStack {
@@ -345,48 +381,25 @@ struct ContentView: View {
                             }
                             .padding(.horizontal, 16)
                             .padding(.top, 8).padding(.bottom, 2)
-                        }
-                        ForEach(chatGroups, id: \.groupId) { g in
-                            groupCard(g.groupId, name: g.name, voices: g.voices)
-                        }
-
-                        // All agents in their normal project sections (not filtered by group membership)
-                        let groups = projectGroups
-                        ForEach(groups.namedProjects, id: \.self) { project in
-                            let voices = groups.byProject[project] ?? []
-                            projectSection(project, voices: voices)
-                        }
-                        if !groups.ungrouped.isEmpty {
-                            if !groups.namedProjects.isEmpty || !chatGroups.isEmpty {
-                                HStack {
-                                    Text("AGENTS")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundStyle(Color.cTextTer)
-                                        .tracking(0.8)
-                                    Spacer()
-                                }
-                                .padding(.horizontal, 16)
-                                .padding(.top, 8).padding(.bottom, 2)
+                            ForEach(chatGroups, id: \.groupId) { g in
+                                groupCard(g.groupId, name: g.name, voices: g.voices)
                             }
-                            VStack(spacing: 2) {
-                                ForEach(groups.ungrouped) { voice in agentCard(voice) }
-                            }
-                            .padding(.horizontal, 8)
                         }
                     } else {
-                        // Collapsed: group icons at top, then all agent icons normally
+                        // Collapsed: all agent icons, then group icons at bottom
+                        ForEach(ALL_VOICES) { voice in
+                            sidebarIcon(for: voice)
+                        }
                         let chatGroups = activeGroups
                         ForEach(chatGroups, id: \.groupId) { g in
                             groupIcon(g.groupId, voices: g.voices)
                         }
-                        ForEach(ALL_VOICES) { voice in
-                            sidebarIcon(for: voice)
-                        }
                     }
                 }
-                .frame(maxWidth: .infinity)  // prevent horizontal expansion / overscroll
+                .frame(maxWidth: .infinity)
                 .padding(.vertical, 4)
             }
+            .clipped()  // clip horizontal overflow at ScrollView level
 
             Spacer()
 
@@ -439,6 +452,7 @@ struct ContentView: View {
         }
         .frame(width: sidebarExpanded ? 220 : 48)
         .frame(maxHeight: .infinity)
+        .ignoresSafeArea(edges: .bottom)  // extend sidebar into bottom safe area (no gap)
         .background(.ultraThinMaterial)  // frosted glass — matches mobile web backdrop-filter: blur(20px)
         .overlay(alignment: .trailing) {
             Color.cBorder.opacity(0.6).frame(width: 0.5)
@@ -1065,20 +1079,13 @@ struct ContentView: View {
     private var chatMainView: some View {
         ZStack(alignment: .top) {
             if vm.showDebug {
-                VStack(spacing: 0) {
-                    chatHeader
-                    DebugView(vm: vm)
-                }
+                DebugView(vm: vm)
             } else {
-                VStack(spacing: 0) {
-                    chatHeader
-                    chatScrollArea
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .overlay(alignment: .bottom) {
-                            bottomInputArea
-                                .frame(maxWidth: 380)
-                        }
-                }
+                chatScrollArea
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .overlay(alignment: .bottom) {
+                        bottomInputArea
+                    }
             }
             // Copy toast
             if showCopiedToast {
@@ -1090,7 +1097,7 @@ struct ContentView: View {
                     .overlay(Capsule().strokeBorder(Color.cBorder, lineWidth: 0.5))
                     .shadow(color: .black.opacity(0.4), radius: 12)
                     .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
-                    .padding(.top, 68)
+                    .padding(.top, 12)
             }
         }
         .animation(.spring(response: 0.25, dampingFraction: 0.8), value: showCopiedToast)

@@ -85,9 +85,11 @@ struct VoiceInfo: Identifiable {
 let ALL_VOICES: [VoiceInfo] = [
     VoiceInfo(id: "af_sky", name: "Sky"),
     VoiceInfo(id: "af_alloy", name: "Alloy"),
+    VoiceInfo(id: "af_nova", name: "Nova"),
     VoiceInfo(id: "af_sarah", name: "Sarah"),
     VoiceInfo(id: "am_adam", name: "Adam"),
     VoiceInfo(id: "am_echo", name: "Echo"),
+    VoiceInfo(id: "am_eric", name: "Eric"),
     VoiceInfo(id: "am_onyx", name: "Onyx"),
     VoiceInfo(id: "bm_fable", name: "Fable"),
 ]
