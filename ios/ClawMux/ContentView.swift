@@ -337,7 +337,7 @@ struct ContentView: View {
                     HStack(spacing: 5) {
                         let dotColor: Color = vm.isConnected ? .cSuccess : vm.isConnecting ? .cCaution : .cDanger
                         Circle().fill(dotColor).frame(width: 7, height: 7)
-                        Text(vm.isConnected ? "Connected" : vm.isConnecting ? "Connecting…" : "Offline")
+                        Text(vm.isConnected ? "Live" : vm.isConnecting ? "Connecting..." : "Offline")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(Color.cTextSec)
                     }
