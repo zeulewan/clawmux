@@ -1177,9 +1177,9 @@ struct ContentView: View {
         // Web-matched grouping: flatten tail corners in group, tail 4px on last
         let single = isFirst && isLast
         let tl: CGFloat = (role == "assistant" && !isFirst)  ? 8 : 16
-        let bl: CGFloat = role == "assistant" ? (isLast ? 4 : single ? 16 : 8) : 16
+        let bl: CGFloat = role == "assistant" ? (isLast ? 5 : single ? 16 : 8) : 16
         let tr: CGFloat = (role == "user"      && !isFirst)  ? 8 : 16
-        let br: CGFloat = role == "user"      ? (isLast ? 4 : single ? 16 : 8) : 16
+        let br: CGFloat = role == "user"      ? (isLast ? 5 : single ? 16 : 8) : 16
 
         let userBubbleColor = Color(hex: 0x2563EB)
         let bubbleBg: AnyShapeStyle = role == "user"
@@ -1212,7 +1212,8 @@ struct ContentView: View {
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }
-                .padding(.horizontal, 15).padding(.vertical, 10)
+                .padding(.horizontal, role == "system" ? 0 : 15)
+                .padding(.vertical, role == "system" ? 4 : 10)
                 .background(bubbleBg,
                     in: UnevenRoundedRectangle(
                         topLeadingRadius: tl, bottomLeadingRadius: bl,
