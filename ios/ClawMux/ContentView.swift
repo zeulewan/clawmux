@@ -1142,8 +1142,16 @@ struct ContentView: View {
                         .foregroundStyle(pttDragOffset < -80 ? Color.cDanger : Color.cTextTer)
                         .opacity(pttDragOffset < -10 ? min(1, Double(-pttDragOffset - 10) / 60) : 0.3)
                         .frame(width: 60).transition(.opacity)
+                    } else if !vm.statusText.isEmpty {
+                        // Status text in controls-left — matches web #status div
+                        let sc = statusColor
+                        Text(vm.statusText)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(sc)
+                            .lineLimit(1)
+                            .transition(.opacity)
                     } else {
-                        Color.clear.frame(width: 60, height: 40)
+                        Color.clear.frame(width: 60, height: 46)
                     }
 
                     Spacer()
@@ -1210,50 +1218,7 @@ struct ContentView: View {
                         Color.clear.frame(width: 60, height: 44)
                     }
                 }
-                .padding(.horizontal, 16).padding(.top, 4)
-
-                // Status + mode + effort row
-                HStack(spacing: 8) {
-                    Button { cycleInputMode() } label: {
-                        VStack(spacing: 0) {
-                            Text(vm.typingMode ? "TYPING" : "VOICE")
-                                .font(.system(size: 8, weight: .semibold))
-                                .tracking(0.7)
-                            Text("MODE")
-                                .font(.system(size: 7, weight: .semibold))
-                                .tracking(0.7)
-                                .opacity(0.7)
-                        }
-                        .foregroundStyle(Color.cTextSec)
-                        .padding(.horizontal, 7).padding(.vertical, 3)
-                        .background(Color.glass, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
-                    }
-                    if !vm.statusText.isEmpty {
-                        let sc = statusColor
-                        Text(vm.statusText)
-                            .font(.system(size: 11, weight: .semibold)).foregroundStyle(sc)
-                            .padding(.horizontal, 10).padding(.vertical, 4)
-                            .background(sc.opacity(0.12), in: Capsule())
-                    }
-                    Spacer()
-                    if let s = vm.activeSession {
-                        Menu {
-                            ForEach(["low","medium","high"], id: \.self) { level in
-                                Button { vm.sendEffort(level) } label: {
-                                    HStack { Text(level.capitalized); if s.effort == level { Image(systemName: "checkmark") } }
-                                }
-                            }
-                        } label: {
-                            Image(systemName: effortIcon(s.effort))
-                                .font(.system(size: 11)).foregroundStyle(Color.cTextSec)
-                                .frame(width: 28, height: 28)
-                                .background(Color.glass, in: Circle())
-                                .overlay(Circle().strokeBorder(Color.glassBorder, lineWidth: 0.5))
-                        }
-                    }
-                }
-                .padding(.horizontal, 16).padding(.top, 6).padding(.bottom, 2)
+                .padding(.horizontal, 20).padding(.vertical, 14)
             }
             .padding(.horizontal, 12).padding(.vertical, 8).padding(.bottom, 2)
             .background {
