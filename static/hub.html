@@ -858,13 +858,11 @@ let activityVerbose = false; // true = show full tool log; false = transient min
 let _preSettingsSessionId = null;
 function showSettingsPage() {
   const settingsPage = document.getElementById('settings-page');
-  // Toggle: if settings is already visible, close it
-  if (settingsPage.style.display === 'block') {
-    settingsPage.style.display = 'none';
+  if (settingsPage.classList.contains('open')) {
+    settingsPage.classList.remove('open');
     return;
   }
-  // Settings overlays the chat on all screen sizes — nothing to hide behind it
-  settingsPage.style.display = 'block';
+  settingsPage.classList.add('open');
   renderSidebar();
   loadSettings();
   loadUsageForSettings();
@@ -1240,7 +1238,7 @@ function applySttMode(off) {
       if (typeof saveInputMode === 'function') saveInputMode();
       // Always sync mode toggle text (even on settings page where applyInputMode is skipped)
       if (modeToggleEl) modeToggleEl.innerHTML = '<span class="mode-value">Typing</span><span class="mode-label">Mode</span>';
-      if (activeSessionId && document.getElementById('settings-page').style.display !== 'block') {
+      if (activeSessionId && !document.getElementById('settings-page').classList.contains('open')) {
         if (typeof applyInputMode === 'function') applyInputMode();
       }
     }
@@ -1481,7 +1479,7 @@ function showDebugPanel() {
   document.getElementById('welcome-view').style.display = 'none';
   chatArea.style.display = 'none';
   controls.style.display = 'none';
-  document.getElementById('settings-page').style.display = 'none';
+  document.getElementById('settings-page').classList.remove('open');
   document.getElementById('debug-panel').style.display = 'flex';
   document.getElementById('debug-panel').style.flexDirection = 'column';
   textInputBar.classList.remove('active');
