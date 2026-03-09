@@ -763,6 +763,100 @@ async function _disbandGroup(groupId) {
     .catch(err => console.error('Failed to disband group:', err));
 }
 
+function _createGroupCard(groupId, memberVoiceIds) {
+  const card = document.createElement('div');
+  card.className = 'sidebar-group-card';
+  card.dataset.groupId = groupId;
+  const header = document.createElement('div');
+  header.className = 'sg-header';
+  const avatars = document.createElement('div');
+  avatars.className = 'sg-avatars';
+  for (const vid of memberVoiceIds.slice(0, 3)) {
+    const dot = document.createElement('div');
+    dot.className = 'sg-avatar';
+    dot.style.background = voiceColor(vid);
+    const iconVal = voiceIcon(vid);
+    if (iconVal.startsWith('<')) dot.innerHTML = iconVal; else dot.textContent = iconVal;
+    avatars.appendChild(dot);
+  }
+  const info = document.createElement('div');
+  info.className = 'sg-info';
+  const label = document.createElement('div');
+  label.className = 'sg-label';
+  label.textContent = 'Group Chat';
+  const names = document.createElement('div');
+  names.className = 'sg-names';
+  names.textContent = memberVoiceIds
+    .map(vid => VOICE_NAMES[vid] || vid.replace(/^[a-z]{2}_/, '').replace(/^./, c => c.toUpperCase()))
+    .join(', ');
+  info.appendChild(label);
+  info.appendChild(names);
+  const chevron = document.createElement('span');
+  chevron.className = 'sg-chevron';
+  chevron.textContent = '\u203a';
+  const disband = document.createElement('button');
+  disband.className = 'sg-disband';
+  disband.title = 'Disband group';
+  disband.textContent = '\u2715';
+  disband.onclick = (e) => { e.stopPropagation(); _disbandGroup(groupId); };
+  header.appendChild(avatars);
+  header.appendChild(info);
+  header.appendChild(chevron);
+  header.appendChild(disband);
+  card.appendChild(header);
+  const members = document.createElement('div');
+  members.className = 'sg-members';
+  members.style.display = 'none';
+  card.appendChild(members);
+  header._expanded = false;
+  header.onclick = () => {
+    header._expanded = !header._expanded;
+    members.style.display = header._expanded ? 'block' : 'none';
+    chevron.style.transform = header._expanded ? 'rotate(90deg)' : '';
+    if (header._expanded) {
+      members.innerHTML = '';
+      for (const vid of memberVoiceIds) {
+        const vname = VOICE_NAMES[vid] || vid.replace(/^[a-z]{2}_/, '').replace(/^./, c => c.toUpperCase());
+        const sub = _createAgentCard(vid, vname, _sidebarState(vid));
+        sub.classList.add('sg-sub-card');
+        members.appendChild(sub);
+      }
+    }
+  };
+  return card;
+}
+
+function _updateGroupCard(card, groupId, memberVoiceIds) {
+  const avatars = card.querySelector('.sg-avatars');
+  if (avatars) {
+    avatars.innerHTML = '';
+    for (const vid of memberVoiceIds.slice(0, 3)) {
+      const dot = document.createElement('div');
+      dot.className = 'sg-avatar';
+      dot.style.background = voiceColor(vid);
+      const iconVal = voiceIcon(vid);
+      if (iconVal.startsWith('<')) dot.innerHTML = iconVal; else dot.textContent = iconVal;
+      avatars.appendChild(dot);
+    }
+  }
+  const names = card.querySelector('.sg-names');
+  if (names) {
+    names.textContent = memberVoiceIds
+      .map(vid => VOICE_NAMES[vid] || vid.replace(/^[a-z]{2}_/, '').replace(/^./, c => c.toUpperCase()))
+      .join(', ');
+  }
+  const members = card.querySelector('.sg-members');
+  if (members && members.style.display !== 'none') {
+    members.innerHTML = '';
+    for (const vid of memberVoiceIds) {
+      const vname = VOICE_NAMES[vid] || vid.replace(/^[a-z]{2}_/, '').replace(/^./, c => c.toUpperCase());
+      const sub = _createAgentCard(vid, vname, _sidebarState(vid));
+      sub.classList.add('sg-sub-card');
+      members.appendChild(sub);
+    }
+  }
+}
+
 async function _moveAgentToProject(voiceId, targetProjectSlug) {
   const targetProject = (typeof allProjects !== 'undefined' ? allProjects : []).find(p => p.slug === targetProjectSlug);
   const projectName = targetProject ? (targetProject.name || targetProjectSlug) : targetProjectSlug;
@@ -947,29 +1041,42 @@ function renderSidebar() {
       agentContainer.style.maxHeight = '0';
     } else {
       agentContainer.classList.remove('collapsed');
-      // Render agent cards
+      const seenGroupIds = new Set();
+      const items = [];
+      for (const [voiceId, name] of voices) {
+        const gid = (() => { const s = _sidebarState(voiceId); return s.session && s.session.group_id; })();
+        if (gid) {
+          if (!seenGroupIds.has(gid)) {
+            seenGroupIds.add(gid);
+            const gMembers = voices.filter(([vid]) => { const s = _sidebarState(vid); return s.session && s.session.group_id === gid; }).map(([vid]) => vid);
+            items.push({ type: 'group', groupId: gid, memberVoiceIds: gMembers });
+          }
+        } else { items.push({ type: 'voice', voiceId, name }); }
+      }
       const currentCards = new Map();
-      for (const card of agentContainer.querySelectorAll('.sidebar-card')) {
-        currentCards.set(card.dataset.voiceId, card);
-      }
-      // Remove stale cards
+      for (const card of agentContainer.querySelectorAll('.sidebar-card:not(.sg-sub-card)')) { currentCards.set(card.dataset.voiceId, card); }
+      const currentGroupCards = new Map();
+      for (const card of agentContainer.querySelectorAll('.sidebar-group-card')) { currentGroupCards.set(card.dataset.groupId, card); }
       const voiceIds = new Set(voices.map(([id]) => id));
-      for (const card of [...agentContainer.children]) {
-        if (card.dataset.voiceId && !voiceIds.has(card.dataset.voiceId)) card.remove();
+      const activeGroupIds = new Set(items.filter(it => it.type === 'group').map(it => it.groupId));
+      for (const child of [...agentContainer.children]) {
+        if (child.classList.contains('sidebar-group-card') && !activeGroupIds.has(child.dataset.groupId)) child.remove();
+        else if (child.classList.contains('sidebar-card') && !child.classList.contains('sg-sub-card') && child.dataset.voiceId && !voiceIds.has(child.dataset.voiceId)) child.remove();
       }
-
-      for (let i = 0; i < voices.length; i++) {
-        const [voiceId, name] = voices[i];
-        const state = _sidebarState(voiceId);
-        let card = currentCards.get(voiceId);
-        if (card) {
-          _updateSidebarCard(card, voiceId, state);
-          if (agentContainer.children[i] !== card) agentContainer.insertBefore(card, agentContainer.children[i]);
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        let el;
+        if (item.type === 'group') {
+          el = currentGroupCards.get(item.groupId);
+          if (el) _updateGroupCard(el, item.groupId, item.memberVoiceIds);
+          else el = _createGroupCard(item.groupId, item.memberVoiceIds);
         } else {
-          card = _createAgentCard(voiceId, name, state);
-          if (i < agentContainer.children.length) agentContainer.insertBefore(card, agentContainer.children[i]);
-          else agentContainer.appendChild(card);
+          el = currentCards.get(item.voiceId);
+          const st = _sidebarState(item.voiceId);
+          if (el) _updateSidebarCard(el, item.voiceId, st);
+          else el = _createAgentCard(item.voiceId, item.name, st);
         }
+        if (agentContainer.children[i] !== el) agentContainer.insertBefore(el, agentContainer.children[i] || null);
       }
       agentContainer.style.maxHeight = agentContainer.scrollHeight + 'px';
     }
