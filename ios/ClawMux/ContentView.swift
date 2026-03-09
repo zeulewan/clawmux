@@ -1066,6 +1066,7 @@ struct ContentView: View {
                             }
                             if vm.activeSession?.isThinking == true {
                                 thinkingBubble.id("thinking")
+                                    .transition(.opacity.animation(.easeOut(duration: 0.18)))
                             }
                             // Bottom anchor
                             Color.clear.frame(height: 1).id("bottom")
