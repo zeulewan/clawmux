@@ -274,41 +274,8 @@ struct ContentView: View {
 
             Spacer()
 
-            // Focus card — matches web .sidebar-focus-card above #sidebar-tray
-            Button {
-                withAnimation(.easeOut(duration: 0.18)) { vm.switchToFocus() }
-                withAnimation(.spring(response: 0.3)) { sidebarExpanded = false }
-            } label: {
-                if sidebarExpanded {
-                    HStack(spacing: 8) {
-                        Image(systemName: "scope")
-                            .font(.system(size: 14))
-                            .frame(width: 34, height: 34)
-                        Text("Focus")
-                            .font(.system(size: 13, weight: .medium))
-                        Spacer()
-                    }
-                    .foregroundStyle(vm.isFocusMode ? Color.cAccent : Color.cTextSec)
-                    .padding(.horizontal, 12).padding(.vertical, 7)
-                    .background(
-                        ZStack(alignment: .leading) {
-                            if vm.isFocusMode { Color.cAccent.opacity(0.08) }
-                            if vm.isFocusMode {
-                                Capsule().fill(Color.cAccent).frame(width: 3, height: 26)
-                                    .shadow(color: Color.cAccent.opacity(0.6), radius: 3)
-                            }
-                        }
-                    )
-                } else {
-                    Image(systemName: "scope")
-                        .font(.system(size: 18))
-                        .foregroundStyle(vm.isFocusMode ? Color.cAccent : Color.cTextSec)
-                        .frame(width: 48, height: 36)
-                        .background(vm.isFocusMode ? Color.cAccent.opacity(0.10) : Color.clear)
-                }
-            }
-
             // Bottom tray: hamburger (always) + Notes + Settings (when expanded)
+            // Note: sidebar-focus-card is hidden on mobile web — no Focus card here
             // Matches web #sidebar-tray: expand-btn(48px) + notes-btn(flex) + settings-btn(flex)
             Color.cBorder.opacity(0.5).frame(height: 0.5)
             HStack(spacing: 0) {
@@ -1128,30 +1095,17 @@ struct ContentView: View {
                 }
             }
 
-            // Focus link — mirrors web #focus-link (always visible in header)
-            Button { withAnimation(.easeOut(duration: 0.18)) { vm.switchToFocus() } } label: {
-                Text("Focus")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.cTextSec)
-            }
-
-            // Connection dot pill — mirrors web #dot + #conn-label ("Live" / "Connecting..." / "Offline")
+            // Connection dot only — mobile web hides #conn-label text and #focus-link
             let dotColor: Color = vm.isConnected ? .cSuccess : vm.isConnecting ? .cCaution : .cDanger
-            let connLabel: String = vm.isConnected ? "Live" : vm.isConnecting ? "Connecting..." : "Offline"
-            HStack(spacing: 5) {
-                Circle()
-                    .fill(dotColor)
-                    .frame(width: 7, height: 7)
-                    .scaleEffect(vm.isConnecting && isPulsing ? 1.15 : vm.isConnecting ? 0.7 : 1.0)
-                    .opacity(vm.isConnecting && isPulsing ? 1.0 : vm.isConnecting ? 0.15 : 1.0)
-                    .animation(vm.isConnecting ? .easeInOut(duration: 0.7).repeatForever(autoreverses: true) : .default, value: isPulsing)
-                Text(connLabel)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Color.cTextTer)
-            }
-            .padding(.horizontal, 8).padding(.vertical, 5)
-            .background(Color.glass, in: Capsule())
-            .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
+            Circle()
+                .fill(dotColor)
+                .frame(width: 8, height: 8)
+                .scaleEffect(vm.isConnecting && isPulsing ? 1.15 : vm.isConnecting ? 0.7 : 1.0)
+                .opacity(vm.isConnecting && isPulsing ? 1.0 : vm.isConnecting ? 0.15 : 1.0)
+                .animation(vm.isConnecting ? .easeInOut(duration: 0.7).repeatForever(autoreverses: true) : .default, value: isPulsing)
+                .padding(6)
+                .background(Color.glass, in: Capsule())
+                .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
         }
         .padding(.horizontal, 14).padding(.vertical, 7)
         .background {
