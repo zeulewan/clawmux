@@ -559,7 +559,7 @@ struct ContentView: View {
         GeometryReader { geo in
             ScrollViewReader { proxy in
                 ScrollView(showsIndicators: false) {
-                    VStack(spacing: 10) {
+                    VStack(spacing: 20) {
                         Spacer(minLength: 0).frame(maxHeight: .infinity)
                         ForEach(messageGroups) { group in
                             messageGroupView(group).id(group.id)
@@ -570,8 +570,8 @@ struct ContentView: View {
                         // Bottom anchor
                         Color.clear.frame(height: 1).id("bottom")
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.top, 10).padding(.bottom, 10)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16).padding(.bottom, 16)
                     .frame(minHeight: geo.size.height)
                 }
                 .defaultScrollAnchor(.bottom)
@@ -627,12 +627,6 @@ struct ContentView: View {
     private func messageGroupView(_ group: MessageGroup) -> some View {
         let color = vm.activeSession.map { voiceColor($0.voice) } ?? Color.cTextSec
         return VStack(alignment: group.role == "user" ? .trailing : .leading, spacing: 3) {
-            if group.role == "assistant", let s = vm.activeSession {
-                Text(s.label)
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(color.opacity(0.85))
-                    .padding(.leading, 6)
-            }
             ForEach(Array(group.messages.enumerated()), id: \.element.id) { idx, msg in
                 chatBubble(msg,
                     isFirst: idx == 0,
