@@ -1169,10 +1169,10 @@ struct ContentView: View {
             // Parse "[Agent msg from/to Name] content" format
             let agentMsgPattern = /^\[Agent msg (from|to) ([^\]]+)\] (.*)/
             let isExpanded = expandedAgentMsgIds.contains(msg.id)
-            if let m = try? agentMsgPattern.firstMatch(in: msg.text) {
-                let direction = String(m.1)
-                let agentName = String(m.2)
-                let content   = String(m.3)
+            if let m = agentMsgPattern.firstMatch(in: msg.text) {
+                let direction = String(m.output.1)
+                let agentName = String(m.output.2)
+                let content   = String(m.output.3)
                 let arrow     = direction == "from" ? "←" : "→"
                 let agentColor = voiceColor(voiceIdByName(agentName))
                 return AnyView(
