@@ -141,7 +141,7 @@ function updateLayout() {
   document.getElementById('focus-view').style.display = focusMode ? 'flex' : 'none';
   chatArea.style.display = inChat ? 'flex' : 'none';
   document.getElementById('debug-panel').style.display = 'none';
-  document.getElementById('settings-page').style.display = 'none';
+  // Settings uses class-based visibility — don't touch display here
   if (inGroupChat) {
     // Group chats always use text input
     controls.style.display = 'none';
