@@ -2127,6 +2127,7 @@ def cmd_walking(args):
 
 def cmd_group(args):
     """Manage named group chats."""
+    import urllib.parse
     sub = args.group_command
 
     if sub == "list":
@@ -2151,14 +2152,16 @@ def cmd_group(args):
         print(f"Created group chat: {data['name']}")
 
     elif sub == "delete":
-        resp = http_delete(f"/api/groupchats/{args.name}")
+        enc = urllib.parse.quote(args.name, safe="")
+        resp = http_delete(f"/api/groupchats/{enc}")
         if "error" in resp:
             print(f"Error: {resp['error']}")
             sys.exit(1)
         print(f"Deleted group chat: {args.name}")
 
     elif sub == "add":
-        resp = http_post(f"/api/groupchats/{args.name}/add", {"voice": args.agent})
+        enc = urllib.parse.quote(args.name, safe="")
+        resp = http_post(f"/api/groupchats/{enc}/add", {"voice": args.agent})
         if "error" in resp:
             print(f"Error: {resp['error']}")
             sys.exit(1)
@@ -2166,7 +2169,8 @@ def cmd_group(args):
         print(f"Group '{resp['name']}': {', '.join(members)}")
 
     elif sub == "remove":
-        resp = http_post(f"/api/groupchats/{args.name}/remove", {"voice": args.agent})
+        enc = urllib.parse.quote(args.name, safe="")
+        resp = http_post(f"/api/groupchats/{enc}/remove", {"voice": args.agent})
         if "error" in resp:
             print(f"Error: {resp['error']}")
             sys.exit(1)
@@ -2182,7 +2186,8 @@ def cmd_group(args):
             sender = match.get("label", "") if match else ""
         except Exception:
             sender = ""
-        resp = http_post(f"/api/groupchats/{args.name}/message", {"text": args.message, "sender": sender})
+        enc = urllib.parse.quote(args.name, safe="")
+        resp = http_post(f"/api/groupchats/{enc}/message", {"text": args.message, "sender": sender})
         if "error" in resp:
             print(f"Error: {resp['error']}")
             sys.exit(1)
