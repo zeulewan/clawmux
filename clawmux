@@ -185,85 +185,6 @@ def http_delete(path: str) -> dict:
 # Commands
 # ---------------------------------------------------------------------------
 
-def cmd_wait(args):
-    """Block until an inbox message arrives, then print it."""
-    import atexit
-    import signal
-
-    session_id = require_session_id()
-
-    # Write .waiting sentinel immediately so stop hook can detect intent without polling.
-    # Use CLAWMUX_WORK_DIR (voice_id-based) if set; fall back to session_id-based path.
-    clawmux_home = os.environ.get("CLAWMUX_HOME", os.path.expanduser("~/.clawmux"))
-    work_dir = os.environ.get("CLAWMUX_WORK_DIR") or os.path.join(clawmux_home, "sessions", session_id)
-    sentinel_path = os.path.join(work_dir, ".waiting")
-    # Kill any previous clawmux wait instance to prevent accumulation
-    try:
-        with open(sentinel_path, "r") as _f:
-            old_pid = int(_f.read().strip())
-        if old_pid != os.getpid():
-            try:
-                os.kill(old_pid, signal.SIGTERM)
-            except (ProcessLookupError, PermissionError):
-                pass
-    except (OSError, ValueError):
-        pass
-    try:
-        with open(sentinel_path, "w") as _f:
-            _f.write(str(os.getpid()))
-    except OSError:
-        pass  # non-fatal; stop hook falls back to exit 2
-
-    def _remove_sentinel():
-        try:
-            os.unlink(sentinel_path)
-        except OSError:
-            pass
-
-    atexit.register(_remove_sentinel)
-    signal.signal(signal.SIGTERM, lambda _s, _f: sys.exit(0))
-
-    async def _wait():
-        from websockets.asyncio.client import connect as ws_connect
-        url = f"ws://127.0.0.1:{HUB_PORT}/ws/wait/{session_id}"
-        max_retries = 30  # ~30 seconds of retrying
-        for attempt in range(max_retries):
-            try:
-                async with ws_connect(url) as ws:
-                    while True:
-                        raw = await ws.recv()
-                        data = json.loads(raw)
-                        if data.get("type") == "ping":
-                            continue
-                        if data.get("type") == "messages":
-                            messages = data.get("messages", [])
-                            for msg in messages:
-                                msg_type = msg.get("type", "system")
-                                sender = msg.get("from", "unknown")
-                                content = msg.get("content", "")
-                                msg_id = msg.get("msg_id") or msg.get("id", "")
-                                if msg_type == "ack":
-                                    parent = msg.get("parent_id", "?")
-                                    print(f"[ACK id:{msg_id} from:{sender} on:{parent}]")
-                                elif msg_type == "agent":
-                                    print(f"[MSG id:{msg_id} from:{sender}] {content}")
-                                elif msg_type == "voice":
-                                    print(f"[VOICE id:{msg_id} from:{sender}] {content}")
-                                else:
-                                    print(f"[SYSTEM] {content}")
-                            return
-            except ConnectionRefusedError:
-                if attempt == max_retries - 1:
-                    die(f"cannot connect to hub at port {HUB_PORT} — is the hub running?")
-                await asyncio.sleep(1)
-            except Exception:
-                if attempt == max_retries - 1:
-                    die(f"cannot connect to hub after {max_retries} retries")
-                await asyncio.sleep(1)
-
-    asyncio.run(_wait())
-
-
 def cmd_status(args):
     """Show hub state and session info."""
     if args.agent:
@@ -1658,8 +1579,24 @@ def cmd_monitor(args):
     suffix = f"-{project_slug}" if project_slug != "default" else ""
     MONITOR_SESSION = f"clawmux-monitor{suffix}"
 
+    # Paths for watcher process tracking (session-specific, no collisions)
+    _watcher_pid_path = f"/tmp/clawmux-monitor-{MONITOR_SESSION}-watcher.pid"
+    _watcher_script_path = f"/tmp/clawmux-monitor-{MONITOR_SESSION}-watcher.py"
+    _watcher_log_path = f"/tmp/clawmux-monitor-{MONITOR_SESSION}-watcher.log"
+
+    def _kill_existing_watcher():
+        """Kill the previous watcher process if it is still running."""
+        try:
+            with open(_watcher_pid_path) as _f:
+                _old_pid = int(_f.read().strip())
+            import signal as _signal
+            os.kill(_old_pid, _signal.SIGTERM)
+        except (OSError, ValueError, ProcessLookupError):
+            pass
+
     # Kill existing monitor session if --restart
     if args.restart:
+        _kill_existing_watcher()
         subprocess.run(["tmux", "kill-session", "-t", f"={MONITOR_SESSION}"],
                        capture_output=True)
 
@@ -1733,9 +1670,15 @@ def cmd_monitor(args):
         return result.stdout.strip()
 
     # Create monitor session — returns first pane id
+    # Use actual terminal dimensions if available, fall back to large safe defaults
+    try:
+        _ts = os.get_terminal_size()
+        _term_x, _term_y = str(_ts.columns), str(_ts.lines)
+    except OSError:
+        _term_x, _term_y = "240", "60"
     result = subprocess.run([
         "tmux", "new-session", "-d", "-s", MONITOR_SESSION,
-        "-x", "240", "-y", "60",
+        "-x", _term_x, "-y", _term_y,
         "-P", "-F", "#{pane_id}",
     ], capture_output=True, text=True, check=True)
     first_pane = result.stdout.strip()
@@ -1858,17 +1801,27 @@ def cmd_monitor(args):
 
     # Start live watcher (auto-updates panes as agents join/leave)
     if not args.no_live:
-        _start_monitor_watcher(MONITOR_SESSION, AGENT_COLORS, args.agents, project_slug)
+        _start_monitor_watcher(MONITOR_SESSION, AGENT_COLORS, args.agents, project_slug,
+                               watcher_script_path=_watcher_script_path,
+                               watcher_log_path=_watcher_log_path,
+                               watcher_pid_path=_watcher_pid_path)
 
     if not args.detach:
         os.execlp("tmux", "tmux", "attach", "-t", MONITOR_SESSION)
 
 
-def _start_monitor_watcher(monitor_session, agent_colors, filter_agents, project_slug="default"):
+def _start_monitor_watcher(monitor_session, agent_colors, filter_agents, project_slug="default",
+                            watcher_script_path=None, watcher_log_path=None, watcher_pid_path=None):
     """Spawn a background process that keeps the monitor in sync with active sessions."""
+    if watcher_script_path is None:
+        watcher_script_path = f"/tmp/clawmux-monitor-{monitor_session}-watcher.py"
+    if watcher_log_path is None:
+        watcher_log_path = f"/tmp/clawmux-monitor-{monitor_session}-watcher.log"
+    if watcher_pid_path is None:
+        watcher_pid_path = f"/tmp/clawmux-monitor-{monitor_session}-watcher.pid"
 
     script = f'''
-import json, subprocess, sys, time, urllib.request
+import json, os, subprocess, sys, time, urllib.request
 
 MONITOR = {monitor_session!r}
 COLORS = {agent_colors!r}
@@ -1990,7 +1943,13 @@ def set_agent_colors(agent):
     ]:
         tmux("set-option", "-t", target, opt, val)
 
-log("Watcher started")
+PID_PATH = {watcher_pid_path!r}
+
+# Write our PID so the parent can kill us on monitor restart
+with open(PID_PATH, "w") as _f:
+    _f.write(str(os.getpid()))
+
+log(f"Watcher started (pid={{os.getpid()}})")
 while True:
     time.sleep(3)
     try:
@@ -2021,8 +1980,22 @@ while True:
             log(f"Adding pane for {{label}}")
             target = any_pane_id()
             if not target:
-                log("No panes left in monitor")
-                break
+                # All panes were killed — recover by creating a new window in the monitor
+                log("No panes left — recovering with new window")
+                r = subprocess.run(
+                    ["tmux", "new-window", "-t", MONITOR, "-P", "-F", "#{{pane_id}}",
+                     attach_cmd(agent["tmux_session"])],
+                    capture_output=True, text=True,
+                )
+                if r.returncode != 0:
+                    log(f"Recovery failed: {{r.stderr}}")
+                    break
+                new_pane = r.stdout.strip()
+                tmux("select-pane", "-t", new_pane, "-T", label)
+                tmux("set-option", "-p", "-t", new_pane, "@agent-label", label)
+                set_agent_colors(agent)
+                log(f"Recovered pane {{new_pane}} for {{label}}")
+                continue
             r = subprocess.run(
                 ["tmux", "split-window", "-t", target,
                  "-P", "-F", "#{{pane_id}}",
@@ -2038,33 +2011,32 @@ while True:
             else:
                 log(f"Failed to add pane for {{label}}: {{r.stderr}}")
 
-        # Re-tile and reorder only when the pane count changed
+        # Re-tile and reorder when pane count changed
         if to_remove or to_add:
             tmux("select-layout", "-t", MONITOR, "tiled")
             reorder_panes()  # restore alphabetical order after retile
             log(f"Layout re-tiled (+{{len(to_add)}} -{{len(to_remove)}})")
-            # Re-apply agent colors after retile
-            for label, agent in desired_labels.items():
-                set_agent_colors(agent)
+
+        # Refresh agent colors every cycle (catches state/label changes between join/leave events)
+        for label, agent in desired_labels.items():
+            set_agent_colors(agent)
 
     except Exception as e:
         log(f"Error: {{e}}")
 '''
 
     # Write watcher script and run it in the background
-    watcher_path = "/tmp/clawmux-monitor-watcher.py"
-    with open(watcher_path, "w") as f:
+    with open(watcher_script_path, "w") as f:
         f.write(script)
 
-    log_path = "/tmp/clawmux-monitor-watcher.log"
-    with open(log_path, "w") as log:
+    with open(watcher_log_path, "w") as log:
         subprocess.Popen(
-            [sys.executable, watcher_path],
+            [sys.executable, watcher_script_path],
             stdout=log,
             stderr=log,
             start_new_session=True,
         )
-    print(f"Live watcher started (polls every 3s, log: {log_path})")
+    print(f"Live watcher started (polls every 3s, log: {watcher_log_path})")
 
 
 def cmd_regenerate(args):
@@ -2242,7 +2214,6 @@ examples:
     clawmux projects
     clawmux send --to user "Hello, what should I work on?"
     clawmux send --to alloy "Check the auth module"
-    clawmux wait
     clawmux start
     clawmux reload
     clawmux monitor
@@ -2253,15 +2224,6 @@ examples:
     # version
     p = sub.add_parser("version", help="Show ClawMux version and commit")
     p.set_defaults(func=cmd_version)
-
-    # wait (NEW — push-based idle mode)
-    p = sub.add_parser("wait", help="Block until a message arrives",
-                       description="Enter idle mode. Blocks until an inbox message arrives, then prints it to stdout.",
-                       formatter_class=argparse.RawDescriptionHelpFormatter,
-                       epilog="""examples:
-    clawmux wait                     # Block until message arrives
-    text=$(clawmux wait)             # Capture message text""")
-    p.set_defaults(func=cmd_wait)
 
     # send
     p = sub.add_parser("send", help="Send a message to an agent or user",
