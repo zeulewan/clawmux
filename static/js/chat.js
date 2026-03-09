@@ -712,30 +712,44 @@ function _updateTypingIndicatorText(sessionId, text) {
 function _renderTypingBubble(el, sessionId, currentText) {
   const log = _activityLogStore.get(sessionId);
   const count = log ? log.texts.length : 0;
-  const isExpanded = el.classList.contains('expanded');
   const esc = (t) => t.replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const dots = '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>';
   const actText = currentText ? '<span class="typing-activity-text">' + esc(currentText) + '</span>' : '';
   const badge = count > 1 ? '<span class="typing-count-badge">+' + (count - 1) + '</span>' : '';
-  const mainRow = '<div class="typing-main-row">' + dots + actText + badge + '</div>';
 
-  if (isExpanded && log && log.texts.length > 0) {
-    const lines = log.texts.map((t, i) => {
+  // Incremental update — preserve .typing-log-expanded in DOM for CSS transitions
+  let mainRow = el.querySelector('.typing-main-row');
+  if (!mainRow) {
+    mainRow = document.createElement('div');
+    mainRow.className = 'typing-main-row';
+    el.insertBefore(mainRow, el.firstChild);
+  }
+  mainRow.innerHTML = dots + actText + badge;
+
+  if (log && log.texts.length > 0) {
+    let logEl = el.querySelector('.typing-log-expanded');
+    if (!logEl) {
+      logEl = document.createElement('div');
+      logEl.className = 'typing-log-expanded';
+      el.appendChild(logEl);
+    }
+    logEl.innerHTML = log.texts.map((t, i) => {
       const cls = i === log.texts.length - 1 ? ' current' : '';
       return '<div class="typing-log-line' + cls + '">' + esc(t) + '</div>';
     }).join('');
-    el.innerHTML = mainRow + '<div class="typing-log-expanded">' + lines + '</div>';
-  } else {
-    el.innerHTML = mainRow;
   }
 }
 
 function _toggleActivityExpand(el, sessionId) {
+  // Snapshot BEFORE class toggle — scrollHeight grows after expanding
+  const wasNearBottom = chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 200;
   el.classList.toggle('expanded');
-  const log = _activityLogStore.get(sessionId);
-  const currentText = log && log.texts.length ? log.texts[log.texts.length - 1] : '';
-  _renderTypingBubble(el, sessionId, currentText);
-  chatScrollToBottom(false);
+  // Don't call _renderTypingBubble here — resets dot animations causing flash.
+  // .typing-log-expanded is already in DOM; CSS transition handles the reveal.
+  if (wasNearBottom) {
+    if (_scrollRaf) { cancelAnimationFrame(_scrollRaf); _scrollRaf = null; }
+    _easedScrollTo(chatArea);
+  }
 }
 
 // Auto-resize textarea
