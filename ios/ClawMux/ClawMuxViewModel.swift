@@ -1207,15 +1207,28 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 for s in sessions where !liveIds.contains(s.id) {
                     removeSession(s.id)
                 }
-                // Add new sessions; re-sync history for already-tracked ones (handles reconnect)
+                // Add new sessions; re-sync state and history for existing ones (reconnect)
                 for s in list {
                     if let sid = s["session_id"] as? String {
                         if sessionIndex(sid) == nil {
                             addSessionFromDict(s)
-                        } else if let voice = s["voice"] as? String,
-                            let idx = sessionIndex(sid), sessions[idx].messages.isEmpty {
-                            // Already tracked but no messages loaded — sync history
-                            fetchHistory(voiceId: voice, sessionId: sid)
+                        } else if let idx = sessionIndex(sid) {
+                            // Re-sync server-authoritative state (mirrors web session_list reconnect sync)
+                            let stateStr = s["state"] as? String ?? ""
+                            if let newState = AgentState(rawValue: stateStr) {
+                                sessions[idx].state = newState
+                            }
+                            if let activity = s["activity"] as? String { sessions[idx].activity = activity }
+                            if let speed = s["speed"] as? Double { sessions[idx].speed = speed }
+                            if let model = s["model"] as? String, !model.isEmpty { sessions[idx].model = model }
+                            if let effort = s["effort"] as? String, !effort.isEmpty { sessions[idx].effort = effort }
+                            if let project = s["project"] as? String { sessions[idx].project = project }
+                            if let area = s["project_area"] as? String { sessions[idx].projectArea = area }
+                            if let unread = s["unread_count"] as? Int { sessions[idx].unreadCount = unread }
+                            // Fetch history only if not yet loaded
+                            if sessions[idx].messages.isEmpty, let voice = s["voice"] as? String {
+                                fetchHistory(voiceId: voice, sessionId: sid)
+                            }
                         }
                     }
                 }
