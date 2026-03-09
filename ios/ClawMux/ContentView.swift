@@ -1892,17 +1892,24 @@ private struct MarkdownContentView: View {
             if line.hasPrefix("> ") { result.append(.blockquote(String(line.dropFirst(2)))); i += 1; continue }
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed == "---" || trimmed == "***" || trimmed == "___" { result.append(.rule); i += 1; continue }
-            if line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("+ ") {
-                result.append(.bullet(String(line.dropFirst(2)))); i += 1; continue
+            let stripped = line.drop(while: { $0 == " " || $0 == "\t" })
+            if stripped.hasPrefix("- ") || stripped.hasPrefix("* ") || stripped.hasPrefix("+ ") {
+                result.append(.bullet(String(stripped.dropFirst(2)))); i += 1; continue
             }
-            if let m = line.firstMatch(of: /^(\d+)\. (.+)/) {
+            if let m = stripped.firstMatch(of: /^(\d+)\. (.+)/) {
                 result.append(.numbered(String(m.output.1), String(m.output.2))); i += 1; continue
             }
             if line.trimmingCharacters(in: .whitespaces).isEmpty {
                 if case .spacing? = result.last {} else { result.append(.spacing) }
                 i += 1; continue
             }
-            result.append(.text(line)); i += 1
+            // Merge consecutive plain text lines into one paragraph (matches web paragraph flow)
+            if case .text(let prev) = result.last {
+                result[result.count - 1] = .text(prev + "\n" + line)
+            } else {
+                result.append(.text(line))
+            }
+            i += 1
         }
         return result
     }
