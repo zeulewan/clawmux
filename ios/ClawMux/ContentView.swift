@@ -332,16 +332,13 @@ struct ContentView: View {
                             Text(s.task)
                                 .font(.system(size: 9))
                                 .foregroundStyle(Color.cTextTer)
-                                .lineLimit(1).truncationMode(.tail)
+                                .lineLimit(2).truncationMode(.tail)
                         }
                     }
-                    HStack(spacing: 4) {
-                        if alive { Circle().fill(rc).frame(width: 6, height: 6) }
-                        Text(cardStatus(session, spawning: spawning))
-                            .font(.system(size: 9))
-                            .foregroundStyle(alive ? Color.cTextSec : Color.cTextTer)
-                            .lineLimit(1)
-                    }
+                    Text(cardStatus(session, spawning: spawning))
+                        .font(.system(size: 9))
+                        .foregroundStyle(alive ? Color.cTextSec : Color.cTextTer)
+                        .lineLimit(1)
                 }
 
                 Spacer()
@@ -581,7 +578,10 @@ struct ContentView: View {
                 .id(vm.activeSessionId ?? "none")
                 .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
                 .onChange(of: vm.activeMessages.count)        { _, _ in scrollBottom(proxy) }
-                .onChange(of: vm.activeSession?.isThinking)   { _, _ in scrollBottom(proxy) }
+                .onChange(of: vm.activeSession?.isThinking)   { _, thinking in
+                    if thinking != true { thinkingExpanded = false }
+                    scrollBottom(proxy)
+                }
                 .onChange(of: vm.activeSession?.activity)     { _, _ in scrollBottom(proxy) }
                 .onChange(of: vm.activeSessionId)             { _, _ in
                     isAtBottom = true
