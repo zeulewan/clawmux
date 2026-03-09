@@ -1753,11 +1753,13 @@ struct ContentView: View {
     // MARK: - Waveform
 
     private var waveformView: some View {
-        HStack(alignment: .center, spacing: 3) {
+        // Mirrors web drawWaveform: voice color, opacity 0.35+level*0.65, bars 4px w / 2px gap
+        let waveColor = vm.activeSession.map { voiceColor($0.voice) } ?? Color.cAccent
+        return HStack(alignment: .center, spacing: 2) {
             ForEach(Array(vm.audioLevels.enumerated()), id: \.offset) { _, level in
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(Color.white.opacity(0.65 + Double(level) * 0.35))
-                    .frame(width: 3, height: max(4, level * 32))
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(waveColor.opacity(0.35 + Double(level) * 0.65))
+                    .frame(width: 4, height: max(2, level * 8))
                     .animation(.easeOut(duration: 0.08), value: level)
             }
         }
