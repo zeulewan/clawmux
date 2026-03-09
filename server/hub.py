@@ -1553,6 +1553,57 @@ async def delete_project(slug: str):
 
 # ── Group Chat API ────────────────────────────────────────────────────────────
 
+_GROUPS_DIR = hub_config.CLAWMUX_HOME / "groups"
+
+
+def _group_history_path(group_id: str):
+    d = _GROUPS_DIR / group_id
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "history.json"
+
+
+def _load_group_history(group_id: str) -> list:
+    p = _group_history_path(group_id)
+    if not p.exists():
+        return []
+    try:
+        return json.loads(p.read_text()).get("messages", [])
+    except Exception:
+        return []
+
+
+def _append_group_history(group_id: str, role: str, text: str, sender: str = "",
+                           msg_id: str | None = None, parent_id: str | None = None,
+                           bare_ack: bool = False) -> None:
+    import fcntl
+    p = _group_history_path(group_id)
+    try:
+        data = json.loads(p.read_text()) if p.exists() else {}
+    except Exception:
+        data = {}
+    msgs = data.get("messages", [])
+    entry: dict = {"role": role, "text": text, "ts": time.time()}
+    if sender:
+        entry["sender"] = sender
+    if msg_id:
+        entry["id"] = msg_id
+    if parent_id:
+        entry["parent_id"] = parent_id
+    if bare_ack:
+        entry["bare_ack"] = True
+    msgs.append(entry)
+    data["messages"] = msgs
+    try:
+        with open(p, "w") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            try:
+                f.write(json.dumps(data, indent=2))
+            finally:
+                fcntl.flock(f, fcntl.LOCK_UN)
+    except Exception as e:
+        log.error("Failed to save group history %s: %s", group_id, e)
+
+
 def _group_to_dict(g: dict) -> dict:
     """Serialize a group chat dict, resolving session_ids to voice names."""
     members = []
@@ -1647,19 +1698,48 @@ async def groupchat_send_message(name: str, request: Request):
     if not text:
         return JSONResponse({"error": "text is required"}, status_code=400)
     g = _group_chats[key]
+    msg_id = _gen_msg_id()
+    role = "user" if not sender else "assistant"
+    # Write to group history
+    await asyncio.to_thread(
+        _append_group_history, g["id"], role, text, sender, msg_id
+    )
+    # Deliver to all members' inboxes
     delivered = []
     for sid in g["session_ids"]:
         session = session_mgr.sessions.get(sid)
         if not session or not session.work_dir:
             continue
-        msg = {
+        # Don't deliver back to the sender
+        if sender and session.label.lower() == sender.lower():
+            continue
+        inbox_msg = {
             "type": "user_text",
-            "text": f"[Group: {g['name']}] {text}" if not sender else f"[Group: {g['name']} from {sender}] {text}",
+            "text": f"[Group:{g['name']}] {text}" if not sender else f"[Group:{g['name']} from {sender}] {text}",
             "msg_id": _gen_msg_id(),
+            "group_name": g["name"],
+            "group_id": g["id"],
         }
-        await _inbox_write_and_notify(session, msg)
+        await _inbox_write_and_notify(session, inbox_msg)
         delivered.append(sid)
-    return JSONResponse({"status": "sent", "delivered_to": delivered, "group": g["name"]})
+    # Notify browser of new group history message
+    await send_to_browser({
+        "type": "groupchat_message",
+        "group_id": g["id"],
+        "group_name": g["name"],
+        "message": {"id": msg_id, "role": role, "text": text, "sender": sender, "ts": time.time()},
+    })
+    return JSONResponse({"status": "sent", "msg_id": msg_id, "delivered_to": delivered, "group": g["name"]})
+
+
+@app.get("/api/groupchats/{name}/history")
+async def groupchat_history(name: str):
+    key = name.lower()
+    if key not in _group_chats:
+        return JSONResponse({"error": "group not found"}, status_code=404)
+    g = _group_chats[key]
+    messages = await asyncio.to_thread(_load_group_history, g["id"])
+    return JSONResponse({"group_id": g["id"], "name": g["name"], "messages": messages})
 
 
 @app.get("/api/history/{voice_id}")
