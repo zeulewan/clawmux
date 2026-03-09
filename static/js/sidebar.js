@@ -930,15 +930,15 @@ function _renderGroupChatSection(list, afterIndex) {
   // Section header
   const section = document.createElement('div');
   section.dataset.gcSection = '1';
-  section.style.cssText = 'margin-top:8px;';
+  section.className = 'sidebar-gc-section';
 
   const hdr = document.createElement('div');
-  hdr.style.cssText = 'padding:4px 10px;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-secondary,#888);display:flex;align-items:center;justify-content:space-between;';
+  hdr.className = 'sidebar-gc-header';
   hdr.innerHTML = '<span>Group Chats</span>';
   const createBtn = document.createElement('button');
+  createBtn.className = 'sidebar-gc-new-btn';
   createBtn.title = 'New group chat';
   createBtn.textContent = '+';
-  createBtn.style.cssText = 'background:none;border:none;color:var(--blue);cursor:pointer;font-size:1rem;line-height:1;padding:0 2px;';
   createBtn.onclick = () => _promptNewGroupChat();
   hdr.appendChild(createBtn);
   section.appendChild(hdr);
