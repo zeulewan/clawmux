@@ -774,7 +774,7 @@ body {
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
   will-change: transform, backdrop-filter;
-  box-shadow: -8px 0 32px rgba(0,0,0,0.4), 8px 0 32px rgba(0,0,0,0.15), 0 -4px 20px rgba(0,0,0,0.2), 0 4px 20px rgba(0,0,0,0.2);
+  box-shadow: none;
   opacity: 1;
   transform: translateX(100%);
   pointer-events: none;
@@ -791,6 +791,7 @@ body {
 #settings-page.open {
   transform: translateX(0);
   pointer-events: auto;
+  box-shadow: -8px 0 32px rgba(0,0,0,0.4);
 }
 .settings-header {
   display: flex;
