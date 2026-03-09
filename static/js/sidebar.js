@@ -767,11 +767,13 @@ function _createGroupCard(groupId, memberVoiceIds) {
   const card = document.createElement('div');
   card.className = 'sidebar-group-card';
   card.dataset.groupId = groupId;
+
   const header = document.createElement('div');
   header.className = 'sg-header';
+
   const avatars = document.createElement('div');
   avatars.className = 'sg-avatars';
-  for (const vid of memberVoiceIds.slice(0, 3)) {
+  for (const vid of memberVoiceIds.slice(0, 4)) {
     const dot = document.createElement('div');
     dot.className = 'sg-avatar';
     dot.style.background = voiceColor(vid);
@@ -779,6 +781,7 @@ function _createGroupCard(groupId, memberVoiceIds) {
     if (iconVal.startsWith('<')) dot.innerHTML = iconVal; else dot.textContent = iconVal;
     avatars.appendChild(dot);
   }
+
   const info = document.createElement('div');
   info.className = 'sg-info';
   const label = document.createElement('div');
@@ -791,38 +794,67 @@ function _createGroupCard(groupId, memberVoiceIds) {
     .join(', ');
   info.appendChild(label);
   info.appendChild(names);
-  const chevron = document.createElement('span');
-  chevron.className = 'sg-chevron';
-  chevron.textContent = '\u203a';
+
   const disband = document.createElement('button');
   disband.className = 'sg-disband';
   disband.title = 'Disband group';
   disband.textContent = '\u2715';
   disband.onclick = (e) => { e.stopPropagation(); _disbandGroup(groupId); };
+
   header.appendChild(avatars);
   header.appendChild(info);
-  header.appendChild(chevron);
   header.appendChild(disband);
   card.appendChild(header);
-  const members = document.createElement('div');
-  members.className = 'sg-members';
-  members.style.display = 'none';
-  card.appendChild(members);
-  header._expanded = false;
+
+  // Click to switch to primary session (first member with an active session)
   header.onclick = () => {
-    header._expanded = !header._expanded;
-    members.style.display = header._expanded ? 'block' : 'none';
-    chevron.style.transform = header._expanded ? 'rotate(90deg)' : '';
-    if (header._expanded) {
-      members.innerHTML = '';
-      for (const vid of memberVoiceIds) {
-        const vname = VOICE_NAMES[vid] || vid.replace(/^[a-z]{2}_/, '').replace(/^./, c => c.toUpperCase());
-        const sub = _createAgentCard(vid, vname, _sidebarState(vid));
-        sub.classList.add('sg-sub-card');
-        members.appendChild(sub);
+    for (const vid of memberVoiceIds) {
+      for (const [sid, s] of sessions) {
+        if (s.voice === vid) { switchTab(sid, true); return; }
       }
     }
   };
+
+  // Drag-and-drop: allow dropping agents onto the group card to join
+  card.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (!e.dataTransfer.types.includes('application/x-project-slug')) {
+      card.classList.add('drag-group-target');
+    }
+  });
+  card.addEventListener('dragleave', (e) => {
+    if (!card.contains(e.relatedTarget)) card.classList.remove('drag-group-target');
+  });
+  card.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    card.classList.remove('drag-group-target');
+    const fromVoice = e.dataTransfer.getData('text/plain');
+    if (!fromVoice || memberVoiceIds.includes(fromVoice)) return;
+    const fromSession = [...sessions.values()].find(s => s.voice === fromVoice);
+    if (!fromSession) return;
+    // Find any existing member session to use as the "to" session
+    let toSession = null;
+    for (const vid of memberVoiceIds) {
+      for (const [, s] of sessions) { if (s.voice === vid) { toSession = s; break; } }
+      if (toSession) break;
+    }
+    if (toSession) _groupDropAgents(fromVoice, toSession.voice, fromSession, toSession);
+  });
+
+  card.oncontextmenu = (e) => {
+    e.preventDefault();
+    // Show disband context menu item if right-click on group card
+    const fakeEvent = { preventDefault() {}, stopPropagation() {}, clientX: e.clientX, clientY: e.clientY };
+    // Find first member session for context menu
+    for (const vid of memberVoiceIds) {
+      for (const [sid, s] of sessions) {
+        if (s.voice === vid) { showContextMenu(fakeEvent, sid, vid); return; }
+      }
+    }
+  };
+
   return card;
 }
 
@@ -830,7 +862,7 @@ function _updateGroupCard(card, groupId, memberVoiceIds) {
   const avatars = card.querySelector('.sg-avatars');
   if (avatars) {
     avatars.innerHTML = '';
-    for (const vid of memberVoiceIds.slice(0, 3)) {
+    for (const vid of memberVoiceIds.slice(0, 4)) {
       const dot = document.createElement('div');
       dot.className = 'sg-avatar';
       dot.style.background = voiceColor(vid);
@@ -844,16 +876,6 @@ function _updateGroupCard(card, groupId, memberVoiceIds) {
     names.textContent = memberVoiceIds
       .map(vid => VOICE_NAMES[vid] || vid.replace(/^[a-z]{2}_/, '').replace(/^./, c => c.toUpperCase()))
       .join(', ');
-  }
-  const members = card.querySelector('.sg-members');
-  if (members && members.style.display !== 'none') {
-    members.innerHTML = '';
-    for (const vid of memberVoiceIds) {
-      const vname = VOICE_NAMES[vid] || vid.replace(/^[a-z]{2}_/, '').replace(/^./, c => c.toUpperCase());
-      const sub = _createAgentCard(vid, vname, _sidebarState(vid));
-      sub.classList.add('sg-sub-card');
-      members.appendChild(sub);
-    }
   }
 }
 
