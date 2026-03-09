@@ -582,7 +582,7 @@ struct ContentView: View {
                         ForEach(messageGroups) { group in
                             messageGroupView(group)
                                 .id(group.id)
-                                .transition(.opacity.animation(.easeIn(duration: 0.4)))
+                                .transition(.opacity.animation(.easeIn(duration: 0.55)))
                         }
                         if vm.activeSession?.isThinking == true {
                             thinkingBubble.id("thinking")
