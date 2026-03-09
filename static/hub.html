@@ -564,6 +564,7 @@ function switchTab(sessionId, manual = false) {
   // Block auto-switches in focus mode; allow manual clicks to exit focus
   if (focusMode && !manual) return;
   activeGroupId = null;
+  try { localStorage.removeItem('hub_active_group'); } catch(e) {}
   hideDebugPanel();
   exitFocusMode();
   // Stop audio and recording from the tab we're leaving
@@ -892,12 +893,23 @@ async function loadGroupChats() {
       groupChats.set(g.name.toLowerCase(), g);
     }
     renderSidebar();
+    // Restore last active group chat (if no agent tab is already active)
+    if (!activeSessionId && !activeGroupId) {
+      try {
+        const savedGroup = localStorage.getItem('hub_active_group');
+        if (savedGroup) {
+          const g = [...groupChats.values()].find(x => x.id === savedGroup);
+          if (g) openGroupChat(savedGroup);
+        }
+      } catch(e) {}
+    }
   } catch (e) { /* hub may not be ready */ }
 }
 
 async function openGroupChat(groupId) {
   activeGroupId = groupId;
   activeSessionId = null;
+  try { localStorage.setItem('hub_active_group', groupId); } catch(e) {}
   const g = [...groupChats.values()].find(x => x.id === groupId);
   if (!g) return;
 

@@ -192,8 +192,8 @@ function handleMessage(data) {
           }
         }
       }
-      // Auto-restore previously active session on reconnect
-      if (!activeSessionId) {
+      // Auto-restore previously active session on reconnect (skip if a group chat is active)
+      if (!activeSessionId && !activeGroupId) {
         try {
           const savedVoice = (() => { try { return localStorage.getItem('hub_active_voice'); } catch(e) { return null; } })();
           if (savedVoice) {
