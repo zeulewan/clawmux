@@ -228,6 +228,24 @@ function handleMessage(data) {
     removeSession(data.session_id);
     return;
   }
+  if (type === 'groupchat_created' || type === 'groupchat_updated') {
+    const g = data.group;
+    if (g) { groupChats.set(g.name.toLowerCase(), g); renderSidebar(); }
+    return;
+  }
+  if (type === 'groupchat_deleted') {
+    groupChats.delete((data.name || '').toLowerCase());
+    if (activeGroupId === data.group_id) { activeGroupId = null; showWelcome(); }
+    renderSidebar();
+    return;
+  }
+  if (type === 'groupchat_message') {
+    // Update group chat view if it's currently open
+    if (activeGroupId === data.group_id && typeof appendGroupChatMessage === 'function') {
+      appendGroupChatMessage(data.message);
+    }
+    return;
+  }
   if (type === 'project_deleted' || type === 'project_renamed') {
     loadProjects();
     return;

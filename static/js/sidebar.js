@@ -134,13 +134,19 @@ function updateHeaderProjectStatus() {
 function updateLayout() {
   renderSidebar(); // always keep sidebar up to date
   if (debugActive) return; // debug panel handles its own layout
-  const inChat = activeSessionId && sessions.has(activeSessionId);
+  const inAgentChat = !!(activeSessionId && sessions.has(activeSessionId));
+  const inGroupChat = !!(typeof activeGroupId !== 'undefined' && activeGroupId);
+  const inChat = inAgentChat || inGroupChat;
   document.getElementById('welcome-view').style.display = (!inChat && !focusMode) ? 'flex' : 'none';
   document.getElementById('focus-view').style.display = focusMode ? 'flex' : 'none';
   chatArea.style.display = inChat ? 'flex' : 'none';
   document.getElementById('debug-panel').style.display = 'none';
   document.getElementById('settings-page').style.display = 'none';
-  if (inChat) {
+  if (inGroupChat) {
+    // Group chats always use text input
+    controls.style.display = 'none';
+    textInputBar.classList.add('active');
+  } else if (inAgentChat) {
     if (inputMode === 'typing') {
       controls.style.display = 'none';
       textInputBar.classList.add('active');
@@ -162,6 +168,7 @@ function showWelcome() {
   stopElapsedTimer();
   pendingListenSessionId = null;
   activeSessionId = null;
+  if (typeof activeGroupId !== 'undefined') activeGroupId = null;
   hideDebugPanel();
   exitFocusMode();
   document.getElementById('active-voice').style.display = 'none';
@@ -909,6 +916,83 @@ function renderSidebar() {
       else list.appendChild(group);
     }
   }
+
+  // Group chats section (rendered below all projects)
+  _renderGroupChatSection(list, projects.length);
+}
+
+function _renderGroupChatSection(list, afterIndex) {
+  const gc = typeof groupChats !== 'undefined' ? groupChats : new Map();
+  // Remove stale group chat section or cards
+  for (const child of [...list.children]) {
+    if (child.dataset && child.dataset.gcSection) child.remove();
+  }
+  // Section header
+  const section = document.createElement('div');
+  section.dataset.gcSection = '1';
+  section.style.cssText = 'margin-top:8px;';
+
+  const hdr = document.createElement('div');
+  hdr.style.cssText = 'padding:4px 10px;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-secondary,#888);display:flex;align-items:center;justify-content:space-between;';
+  hdr.innerHTML = '<span>Group Chats</span>';
+  const createBtn = document.createElement('button');
+  createBtn.title = 'New group chat';
+  createBtn.textContent = '+';
+  createBtn.style.cssText = 'background:none;border:none;color:var(--blue);cursor:pointer;font-size:1rem;line-height:1;padding:0 2px;';
+  createBtn.onclick = () => _promptNewGroupChat();
+  hdr.appendChild(createBtn);
+  section.appendChild(hdr);
+
+  for (const g of gc.values()) {
+    const card = document.createElement('div');
+    card.className = 'sidebar-gc-card';
+    card.dataset.gcId = g.id;
+    if (typeof activeGroupId !== 'undefined' && activeGroupId === g.id) card.classList.add('active');
+
+    const avatars = document.createElement('div');
+    avatars.className = 'gc-avatars';
+    for (const m of (g.members || []).slice(0, 4)) {
+      const dot = document.createElement('div');
+      dot.className = 'gc-avatar';
+      dot.style.background = (typeof voiceColor === 'function') ? voiceColor(m.voice) : '#4a9eff';
+      dot.textContent = m.label ? m.label[0].toUpperCase() : '?';
+      avatars.appendChild(dot);
+    }
+
+    const info = document.createElement('div');
+    info.className = 'gc-info';
+    const nameEl = document.createElement('div');
+    nameEl.className = 'gc-name';
+    nameEl.textContent = g.name;
+    const membersEl = document.createElement('div');
+    membersEl.className = 'gc-members-text';
+    membersEl.textContent = (g.members || []).map(m => m.label).join(', ') || 'No members';
+    info.appendChild(nameEl);
+    info.appendChild(membersEl);
+
+    card.appendChild(avatars);
+    card.appendChild(info);
+    card.onclick = () => { if (typeof openGroupChat === 'function') openGroupChat(g.id); };
+    section.appendChild(card);
+  }
+
+  list.appendChild(section);
+}
+
+async function _promptNewGroupChat() {
+  const name = prompt('Group chat name:');
+  if (!name || !name.trim()) return;
+  try {
+    const resp = await fetch('/api/groupchats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name.trim() }),
+    });
+    const data = await resp.json();
+    if (data.error) { alert(data.error); return; }
+    if (typeof groupChats !== 'undefined') groupChats.set(data.name.toLowerCase(), data);
+    renderSidebar();
+  } catch (e) { console.error('Failed to create group chat:', e); }
 }
 
 // Fallback: flat list of agents when no projects exist

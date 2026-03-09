@@ -556,6 +556,7 @@ const textInputBar = document.getElementById('text-input-bar');
 function switchTab(sessionId, manual = false) {
   // Block auto-switches in focus mode; allow manual clicks to exit focus
   if (focusMode && !manual) return;
+  activeGroupId = null;
   hideDebugPanel();
   exitFocusMode();
   // Stop audio and recording from the tab we're leaving
@@ -871,6 +872,97 @@ let currentProject = 'default';
 let currentProjectVoices = null; // null = use all VOICE_NAMES (fallback)
 let allProjects = []; // [{slug, name, voices: [...]}] — all projects for grouped sidebar
 let _savedProjectOrder = null; // persisted project ordering from settings
+
+// Group chat state
+let groupChats = new Map(); // group_name_lower -> {id, name, session_ids, members}
+let activeGroupId = null; // currently open group chat (id), or null
+
+async function loadGroupChats() {
+  try {
+    const resp = await fetch('/api/groupchats');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    groupChats.clear();
+    for (const g of (data.groups || [])) {
+      groupChats.set(g.name.toLowerCase(), g);
+    }
+    renderSidebar();
+  } catch (e) { /* hub may not be ready */ }
+}
+
+async function openGroupChat(groupId) {
+  activeGroupId = groupId;
+  activeSessionId = null;
+  const g = [...groupChats.values()].find(x => x.id === groupId);
+  if (!g) return;
+
+  // Update header
+  const activeVoiceEl = document.getElementById('active-voice');
+  if (activeVoiceEl) {
+    activeVoiceEl.textContent = g.name;
+    activeVoiceEl.style.color = 'var(--blue)';
+    activeVoiceEl.style.display = 'inline';
+  }
+  document.getElementById('main-content').style.backgroundColor = '';
+  document.documentElement.style.setProperty('--voice-color', 'var(--blue)');
+  document.documentElement.style.setProperty('--voice-color-bg', 'rgba(74,158,255,0.18)');
+
+  // Clear chat area content and let updateLayout() show it
+  const chatArea = document.getElementById('chat-area');
+  chatArea.innerHTML = '';
+
+  // Load group history
+  try {
+    const resp = await fetch(`/api/groupchats/${encodeURIComponent(g.name)}/history`);
+    if (resp.ok) {
+      const data = await resp.json();
+      renderGroupChat(data.messages || []);
+    }
+  } catch (e) { /* empty */ }
+
+  updateLayout();
+}
+
+function renderGroupChat(messages) {
+  const chatArea = document.getElementById('chat-area');
+  chatArea.innerHTML = '';
+  for (const msg of messages) {
+    const div = document.createElement('div');
+    const isUser = msg.role === 'user' && !msg.sender;
+    div.className = `msg ${isUser ? 'user' : 'assistant'}`;
+    const label = msg.sender ? msg.sender : 'You';
+    const labelEl = document.createElement('span');
+    labelEl.className = 'msg-sender-label';
+    labelEl.textContent = label;
+    const textEl = document.createElement('span');
+    textEl.className = 'msg-text';
+    textEl.textContent = msg.text;
+    div.appendChild(labelEl);
+    div.appendChild(textEl);
+    chatArea.appendChild(div);
+  }
+  chatArea.scrollTop = chatArea.scrollHeight;
+}
+
+function appendGroupChatMessage(msg) {
+  if (!activeGroupId) return;
+  const g = [...groupChats.values()].find(x => x.id === activeGroupId);
+  if (!g) return;
+  const chatArea = document.getElementById('chat-area');
+  const div = document.createElement('div');
+  const isUser = msg.role === 'user' && !msg.sender;
+  div.className = `msg ${isUser ? 'user' : 'assistant'}`;
+  const labelEl = document.createElement('span');
+  labelEl.className = 'msg-sender-label';
+  labelEl.textContent = msg.sender || 'You';
+  const textEl = document.createElement('span');
+  textEl.className = 'msg-text';
+  textEl.textContent = msg.text;
+  div.appendChild(labelEl);
+  div.appendChild(textEl);
+  chatArea.appendChild(div);
+  chatArea.scrollTop = chatArea.scrollHeight;
+}
 
 async function loadProjects() {
   const sel = document.getElementById('project-selector');
@@ -2041,7 +2133,7 @@ _initChatScroll();
 
 renderSidebar();
 connect();
-loadSettings().then(() => loadProjects());
+loadSettings().then(() => { loadProjects(); loadGroupChats(); });
 loadDeploymentConfig();
 startUsagePolling();
 startStateSync();

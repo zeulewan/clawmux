@@ -818,8 +818,25 @@ textInput.addEventListener('keydown', (e) => {
 
 function sendTextMessage() {
   const text = textInput.value.trim();
-  if (!text || !ws || ws.readyState !== WebSocket.OPEN || !activeSessionId) return;
-  // Check if agent is NOT awaiting input — send as interjection
+  if (!text) return;
+  // Group chat send
+  if (typeof activeGroupId !== 'undefined' && activeGroupId) {
+    const g = typeof groupChats !== 'undefined'
+      ? [...groupChats.values()].find(x => x.id === activeGroupId)
+      : null;
+    if (!g) return;
+    fetch(`/api/groupchats/${encodeURIComponent(g.name)}/message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    }).catch(e => console.error('Group send failed:', e));
+    textInput.value = '';
+    textInput.style.height = 'auto';
+    textSendBtn.disabled = true;
+    return;
+  }
+  // Individual agent send
+  if (!ws || ws.readyState !== WebSocket.OPEN || !activeSessionId) return;
   const s = sessions.get(activeSessionId);
   const isInterjection = s && s.sessionState !== 'listening';
   const msgType = isInterjection ? 'interjection' : 'text';
