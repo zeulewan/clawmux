@@ -402,26 +402,34 @@ struct ContentView: View {
 
     private var welcomeView: some View {
         VStack(spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("ClawMux")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundStyle(Color.cText)
-                    HStack(spacing: 5) {
-                        let dotColor: Color = vm.isConnected ? .cSuccess : vm.isConnecting ? .cCaution : .cDanger
-                        Circle().fill(dotColor).frame(width: 7, height: 7)
-                        Text(vm.isConnected ? "Live" : vm.isConnecting ? "Connecting..." : "Offline")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(Color.cTextSec)
-                    }
+            // Welcome content — matches web #welcome-view: icon + title + subtitle
+            VStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(Color.cCard)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .strokeBorder(Color.cBorder, lineWidth: 1)
+                        )
+                        .shadow(color: .black.opacity(0.3), radius: 6, x: 0, y: 3)
+                        .frame(width: 60, height: 60)
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 28))
+                        .foregroundStyle(Color.cAccent)
                 }
-                Spacer()
+                .padding(.bottom, 4)
+
+                Text("ClawMux")
+                    .font(.system(size: 18, weight: .bold))
+                    .kerning(-0.36)
+                    .foregroundStyle(Color.cTextSec)
+
+                Text("Select an agent to begin")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.cTextTer)
             }
-            .padding(.horizontal, 16).padding(.vertical, 12)
-            .background {
-                if #available(iOS 26, *) { Color.clear.glassEffect(.regular, in: .rect) }
-                else { Color.canvas1.opacity(0.95) }
-            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 32).padding(.bottom, 24)
 
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 0) {

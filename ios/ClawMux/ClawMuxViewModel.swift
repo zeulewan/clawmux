@@ -1915,6 +1915,14 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         removeSession(id)
     }
 
+    // Matches web _disbandGroup → DELETE /api/groups/:id
+    func disbandGroup(_ groupId: String) {
+        guard let baseURL = httpBaseURL() else { return }
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/groups/\(groupId)"))
+        req.httpMethod = "DELETE"
+        URLSession.shared.dataTask(with: req) { _, _, _ in }.resume()
+    }
+
     func markSessionUnread(_ id: String) {
         guard let idx = sessionIndex(id) else { return }
         sessions[idx].unreadCount = max(sessions[idx].unreadCount, 0) + 1
