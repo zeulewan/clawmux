@@ -199,16 +199,19 @@ struct ContentView: View {
             // Matches web #sidebar-tray: expand-btn(48px) + notes-btn(flex) + settings-btn(flex)
             Color.cBorder.opacity(0.5).frame(height: 0.5)
             HStack(spacing: 0) {
-                // Hamburger — always 48px, always visible
+                // Hamburger — always 48px, border-right matches web #sidebar-expand-btn
                 Button {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                         sidebarExpanded.toggle()
                     }
                 } label: {
                     Image(systemName: "line.3.horizontal")
-                        .font(.system(size: 16))
+                        .font(.system(size: 22))  // web: font-size 1.4rem ≈ 22pt
                         .foregroundStyle(Color.cTextSec)
                         .frame(width: 48, height: 52)
+                }
+                .overlay(alignment: .trailing) {
+                    Color.cBorder.frame(width: 0.5)  // web: border-right: 1px solid var(--border)
                 }
                 // Notes + Settings — visible only when expanded (clipped otherwise)
                 if sidebarExpanded {
@@ -218,7 +221,7 @@ struct ContentView: View {
                     } label: {
                         VStack(spacing: 3) {
                             Image(systemName: "note.text").font(.system(size: 13))
-                            Text("Notes").font(.system(size: 8, weight: .medium))
+                            Text("Notes").font(.system(size: 10, weight: .medium))  // web: 0.6rem ≈ 10pt
                         }
                         .foregroundStyle(Color.cTextSec)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -229,7 +232,7 @@ struct ContentView: View {
                     } label: {
                         VStack(spacing: 3) {
                             Image(systemName: "gearshape.fill").font(.system(size: 13))
-                            Text("Settings").font(.system(size: 8, weight: .medium))
+                            Text("Settings").font(.system(size: 10, weight: .medium))  // web: 0.6rem ≈ 10pt
                         }
                         .foregroundStyle(Color.cTextSec)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
