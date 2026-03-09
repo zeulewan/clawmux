@@ -11,7 +11,9 @@ struct ChatMessage: Identifiable, Equatable {
     let role: String  // "user", "assistant", "system", "agent"
     let text: String
     var timestamp: Date = Date()
-    var msgId: String? = nil  // server-assigned message ID for dedup
+    var msgId: String? = nil    // server-assigned msg_id (for dedup + TTS replay)
+    var parentId: String? = nil // parent msg_id for threading
+    var isBareAck: Bool = false // thumbs-up ack — no display text
 }
 
 /// Canonical agent state matching the backend AgentState enum.
@@ -1387,7 +1389,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             // Bare thumbs-up ack — store as threading marker (no displayed text)
             if let sid = sessionId, let msgId = json["msg_id"] as? String {
                 var ack = ChatMessage(role: "agent", text: "")
-                ack.serverId = json["ack_id"] as? String
+                ack.msgId = json["ack_id"] as? String
                 ack.parentId = msgId
                 ack.isBareAck = true
                 if let idx = sessionIndex(sid) {
@@ -1454,8 +1456,10 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                         }
                         updateStatusText("Type a message", for: sid)
                     } else if effectiveAutoRecord || bgAutoRecord {
-                        if isPlaying {
-                            // Still playing audio - defer until playback finishes
+                        // Defer if audio is playing OR buffered — mirrors web pendingListenAfterPlayback
+                        let audioActive = isPlaying
+                            || (sessionIndex(sid).map { !sessions[$0].audioBuffer.isEmpty } ?? false)
+                        if audioActive {
                             if let idx = sessionIndex(sid) {
                                 sessions[idx].pendingListen = true
                             }
