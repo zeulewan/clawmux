@@ -1280,6 +1280,39 @@ async def agent_active(session_id: str):
     return JSONResponse({"ok": True})
 
 
+# --- Walking Mode ---
+
+@app.post("/api/agents/{session_id}/walking")
+async def set_walking_mode(session_id: str, request: Request):
+    """Toggle walking mode for a session.
+
+    When walking_mode is on, every tmux injection prepends a reminder for the
+    agent to respond in plain spoken text — no markdown, no special formatting.
+    """
+    session = session_mgr.sessions.get(session_id)
+    if not session:
+        return JSONResponse({"ok": False, "reason": "session not found"})
+    data = await request.json()
+    enabled = bool(data.get("enabled", True))
+    session.walking_mode = enabled
+    log.info("[%s] Walking mode: %s", session_id, "on" if enabled else "off")
+    await send_to_browser({
+        "type": "session_status",
+        "session_id": session_id,
+        "state": session.state.value,
+        "activity": session.activity,
+        "tool_name": session.tool_name,
+        "tool_input": session.tool_input,
+        "walking_mode": enabled,
+    })
+    note = "on" if enabled else "off"
+    await _inbox_write_and_notify(session, {
+        "type": "system",
+        "content": f"Walking mode is now {note}." + (" Respond in plain spoken text only — no markdown, no underscores, no special formatting." if enabled else " You may use normal formatting again."),
+    })
+    return JSONResponse({"ok": True, "walking_mode": enabled})
+
+
 # --- Roles ---
 
 @app.get("/api/roles")
@@ -1428,6 +1461,43 @@ async def delete_project(slug: str):
 # ── Group Chat API ────────────────────────────────────────────────────────────
 
 _GROUPS_DIR = hub_config.CLAWMUX_HOME / "groups"
+_GROUPS_META = hub_config.CLAWMUX_HOME / "groups.json"
+
+
+def _label_for_voice(voice_id: str) -> str:
+    """Derive display label from voice ID (e.g. 'af_sky' → 'Sky')."""
+    part = voice_id.split("_", 1)[-1] if "_" in voice_id else voice_id
+    return part.capitalize()
+
+
+def _save_groups() -> None:
+    import fcntl
+    data = {
+        name: {"id": g["id"], "name": g["name"], "voices": list(g["voices"])}
+        for name, g in _group_chats.items()
+    }
+    try:
+        with open(_GROUPS_META, "w") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            json.dump(data, f)
+            fcntl.flock(f, fcntl.LOCK_UN)
+    except Exception:
+        pass
+
+
+def _load_groups() -> None:
+    if not _GROUPS_META.exists():
+        return
+    try:
+        data = json.loads(_GROUPS_META.read_text())
+        for name, g in data.items():
+            _group_chats[name] = {
+                "id": g["id"],
+                "name": g["name"],
+                "voices": list(g.get("voices", g.get("session_ids", []))),
+            }
+    except Exception:
+        pass
 
 
 def _group_history_path(group_id: str):
@@ -2084,6 +2154,8 @@ async def _inject_inbox(session, session_id: str) -> None:
         return
 
     lines = []
+    if session.walking_mode:
+        lines.append("[SYSTEM] Walking mode active — respond in plain spoken text only. No markdown, no underscores, no special formatting.")
     for msg in messages:
         msg_type = msg.get("type", "system")
         sender = msg.get("from", "unknown")

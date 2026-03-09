@@ -63,6 +63,7 @@ class Session:
     project_slug: str = "default"  # which project this session belongs to
     reinject_attempts: int = 0  # number of voice-mode re-injection attempts
     max_reinject_attempts: int = 3  # max re-injection attempts before giving up
+    walking_mode: bool = False  # user is walking — agent should use plain spoken text only
 
 
     def set_state(self, new_state: AgentState) -> None:

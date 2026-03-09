@@ -2117,6 +2117,14 @@ def cmd_role(args):
     print(f"Role: {role_lower}")
 
 
+def cmd_walking(args):
+    """Toggle walking mode for an agent session."""
+    session_id = args.agent or require_session_id()
+    enabled = args.state != "off"
+    http_post(f"/api/agents/{session_id}/walking", {"enabled": enabled})
+    print(f"Walking mode: {'on' if enabled else 'off'}")
+
+
 def cmd_group(args):
     """Manage named group chats."""
     sub = args.group_command
@@ -2430,6 +2438,12 @@ examples:
     clawmux role OpenClaw""")
     p.add_argument("role", help="Role name")
     p.set_defaults(func=cmd_role)
+
+    p = sub.add_parser("walking", help="Toggle walking mode (plain spoken text, no markdown)",
+                       description="Enable or disable walking mode for an agent. When on, the agent is reminded to respond in plain spoken text with no markdown or special formatting.")
+    p.add_argument("state", choices=["on", "off"], help="on or off")
+    p.add_argument("--agent", default="", help="Agent session ID (default: current session)")
+    p.set_defaults(func=cmd_walking)
 
     p = sub.add_parser("group", help="Manage named group chats",
                        description="Create, manage, and message named group chats.",
