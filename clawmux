@@ -1579,10 +1579,10 @@ def cmd_monitor(args):
     suffix = f"-{project_slug}" if project_slug != "default" else ""
     MONITOR_SESSION = f"clawmux-monitor{suffix}"
 
-    # Paths for watcher process tracking (session-specific, no collisions)
-    _watcher_pid_path = f"/tmp/clawmux-monitor-{MONITOR_SESSION}-watcher.pid"
-    _watcher_script_path = f"/tmp/clawmux-monitor-{MONITOR_SESSION}-watcher.py"
-    _watcher_log_path = f"/tmp/clawmux-monitor-{MONITOR_SESSION}-watcher.log"
+    # Paths for watcher process tracking (keyed by project slug, not full session name)
+    _watcher_pid_path = f"/tmp/clawmux-monitor-{project_slug}-watcher.pid"
+    _watcher_script_path = f"/tmp/clawmux-monitor-{project_slug}-watcher.py"
+    _watcher_log_path = f"/tmp/clawmux-monitor-{project_slug}-watcher.log"
 
     def _kill_existing_watcher():
         """Kill the previous watcher process if it is still running."""
@@ -1596,9 +1596,11 @@ def cmd_monitor(args):
 
     # Kill existing monitor session if --restart
     if args.restart:
-        _kill_existing_watcher()
         subprocess.run(["tmux", "kill-session", "-t", f"={MONITOR_SESSION}"],
                        capture_output=True)
+
+    # Always kill any orphaned watcher before potentially starting a new one
+    _kill_existing_watcher()
 
     # Check if monitor session already exists (= prefix forces exact match)
     check = subprocess.run(
