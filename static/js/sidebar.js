@@ -544,7 +544,7 @@ function _createAgentCard(voiceId, name, state) {
     // If both source and target have live sessions, show group-target highlight
     const fromVoiceId = e.dataTransfer.getData && e.dataTransfer.types.includes('text/plain')
       ? null : null; // can't read data during dragover in all browsers
-    const toSess = card._voiceSession;
+    const toSess = card._voiceSession || (typeof sessions !== 'undefined' && [...sessions.values()].find(s => s.voice === voiceId));
     if (toSess) {
       // Check if any dragged voice has a session by seeing if a drag is in progress
       card.classList.add('drag-group-target');
@@ -569,8 +569,9 @@ function _createAgentCard(voiceId, name, state) {
     if (e.dataTransfer.getData('application/x-project-slug')) return;
 
     // If both agents have live sessions, offer group chat creation
-    const fromSession = [...(typeof sessions !== 'undefined' ? sessions.values() : [])].find(s => s.voice === fromVoice);
-    const toSession = card._voiceSession;
+    const _allSess = typeof sessions !== 'undefined' ? sessions : new Map();
+    const fromSession = [..._allSess.values()].find(s => s.voice === fromVoice);
+    const toSession = card._voiceSession || [..._allSess.values()].find(s => s.voice === voiceId);
     if (fromSession && toSession) {
       _groupDropAgents(fromVoice, voiceId, fromSession, toSession);
       return;
