@@ -705,7 +705,7 @@ struct ContentView: View {
                         MarkdownContentView(text: msg.text, foreground: Color.cText)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } else if role == "user" {
-                        Text(LocalizedStringKey(msg.text))
+                        Text(msg.text)
                             .font(.system(size: 15))
                             .lineSpacing(4)
                             .foregroundStyle(Color.white)
@@ -772,10 +772,10 @@ struct ContentView: View {
         })
     }
 
+    private static let _fmtToday: DateFormatter = { let f = DateFormatter(); f.dateFormat = "h:mm a"; return f }()
+    private static let _fmtOther: DateFormatter = { let f = DateFormatter(); f.dateFormat = "MMM d, h:mm a"; return f }()
     private func shortTime(_ date: Date) -> String {
-        let fmt = DateFormatter()
-        fmt.dateFormat = Calendar.current.isDateInToday(date) ? "h:mm a" : "MMM d, h:mm a"
-        return fmt.string(from: date)
+        (Calendar.current.isDateInToday(date) ? Self._fmtToday : Self._fmtOther).string(from: date)
     }
 
     // MARK: - Thinking Bubble
@@ -795,16 +795,34 @@ struct ContentView: View {
                     }
                 } label: {
                     HStack(spacing: 8) {
-                        // Bouncing dots — matches web typingBounce: up+bright, down+dim, staggered
-                        HStack(spacing: 5) {
-                            ForEach(0..<3, id: \.self) { i in
-                                Circle()
-                                    .fill(color.opacity(isPulsing ? 1.0 : 0.45))
-                                    .frame(width: 7, height: 7)
-                                    .offset(y: isPulsing ? -5 : 0)
-                                    .animation(
-                                        .easeInOut(duration: 0.5).repeatForever(autoreverses: true).delay(Double(i) * 0.18),
-                                        value: isPulsing)
+                        // Thinking dots — matches web thinkingPulse:
+                        // 0%,80%,100%{opacity:.15;scale:.7}  40%{opacity:1;scale:1.15}
+                        // Asymmetric: quick flash up, slow fade back, each dot staggered 0.24s
+                        TimelineView(.animation) { tl in
+                            HStack(spacing: 5) {
+                                ForEach(0..<3, id: \.self) { i in
+                                    let t = tl.date.timeIntervalSinceReferenceDate
+                                    let period = 1.2
+                                    let phase = (t + Double(i) * 0.24).truncatingRemainder(dividingBy: period) / period
+                                    // phase 0→0.4: ramp up (cubic ease-in), 0.4→0.8: ramp down, 0.8→1.0: hold dim
+                                    let (dotOpacity, dotScale): (Double, Double) = {
+                                        if phase < 0.4 {
+                                            let p = phase / 0.4
+                                            let eased = p * p * (3 - 2 * p) // smoothstep
+                                            return (0.15 + eased * 0.85, 0.7 + eased * 0.45)
+                                        } else if phase < 0.8 {
+                                            let p = (phase - 0.4) / 0.4
+                                            let eased = p * p * (3 - 2 * p)
+                                            return (1.0 - eased * 0.85, 1.15 - eased * 0.45)
+                                        } else {
+                                            return (0.15, 0.7)
+                                        }
+                                    }()
+                                    Circle()
+                                        .fill(color.opacity(dotOpacity))
+                                        .frame(width: 7, height: 7)
+                                        .scaleEffect(dotScale)
+                                }
                             }
                         }
                         if hasDetail, let s = session {
@@ -1297,6 +1315,13 @@ private struct MarkdownContentView: View {
     let text: String
     let foreground: Color
 
+    /// Parses inline markdown (bold, italic, `code`) using AttributedString so
+    /// backtick code spans render as monospaced — LocalizedStringKey does not handle `code`.
+    private static func inlineMarkdown(_ str: String) -> AttributedString {
+        (try? AttributedString(markdown: str,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(str)
+    }
+
     private enum Block {
         case text(String)
         case header(Int, String)
@@ -1357,7 +1382,7 @@ private struct MarkdownContentView: View {
             Color.clear.frame(height: 3)
 
         case .text(let str):
-            Text(LocalizedStringKey(str))
+            Text(Self.inlineMarkdown(str))
                 .font(.system(size: 15))
                 .foregroundStyle(foreground)
                 .lineSpacing(4)
@@ -1366,7 +1391,7 @@ private struct MarkdownContentView: View {
         case .header(let level, let str):
             let sz: CGFloat = level == 1 ? 19 : level == 2 ? 16 : 14
             let wt: Font.Weight = level <= 2 ? .bold : .semibold
-            Text(LocalizedStringKey(str))
+            Text(Self.inlineMarkdown(str))
                 .font(.system(size: sz, weight: wt))
                 .foregroundStyle(foreground)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1377,7 +1402,7 @@ private struct MarkdownContentView: View {
                     .font(.system(size: 15))
                     .foregroundStyle(Color.cTextSec)
                     .frame(width: 10)
-                Text(LocalizedStringKey(str))
+                Text(Self.inlineMarkdown(str))
                     .font(.system(size: 15))
                     .foregroundStyle(foreground)
                     .lineSpacing(1)
@@ -1390,7 +1415,7 @@ private struct MarkdownContentView: View {
                     .font(.system(size: 15))
                     .foregroundStyle(Color.cTextSec)
                     .frame(width: 22, alignment: .trailing)
-                Text(LocalizedStringKey(str))
+                Text(Self.inlineMarkdown(str))
                     .font(.system(size: 15))
                     .foregroundStyle(foreground)
                     .lineSpacing(1)
