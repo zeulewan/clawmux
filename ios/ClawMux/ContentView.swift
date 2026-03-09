@@ -1036,7 +1036,9 @@ struct ContentView: View {
     // MARK: - Chat Scroll Area
 
     private var chatScrollArea: some View {
-        GeometryReader { geo in
+        // Voice-color ambient tint on the whole chat area — mirrors web #main-content backgroundColor
+        let areaTint = vm.activeSession.map { voiceColor($0.voice) } ?? Color.clear
+        return GeometryReader { geo in
             ScrollViewReader { proxy in
                 ZStack(alignment: .bottomTrailing) {
                     ScrollView(showsIndicators: false) {
@@ -1107,6 +1109,7 @@ struct ContentView: View {
                 }
             }
         }
+        .background(areaTint.opacity(0.10))
     }
 
     private func scrollBottom(_ proxy: ScrollViewProxy) {
@@ -1264,14 +1267,7 @@ struct ContentView: View {
                         topLeadingRadius: tl, bottomLeadingRadius: bl,
                         bottomTrailingRadius: br, topTrailingRadius: tr,
                         style: .continuous))
-                .overlay(
-                    // Voice color tint on assistant bubbles
-                    UnevenRoundedRectangle(
-                        topLeadingRadius: tl, bottomLeadingRadius: bl,
-                        bottomTrailingRadius: br, topTrailingRadius: tr,
-                        style: .continuous)
-                        .fill(role == "assistant" ? color.opacity(0.12) : Color.clear)
-                )
+                // Voice tint moved to chatScrollArea background (matches web #main-content tint)
                 .overlay {
                     if role == "assistant" {
                         UnevenRoundedRectangle(
