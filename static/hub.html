@@ -63,6 +63,7 @@
   --z-modal: 200;
   --z-toast: 300;
   --z-max: 9999;
+  --sidebar-w: 220px; /* updated by resize.js when user drags sidebar */
 }
 @media (prefers-color-scheme: light) {
   :root {
@@ -708,12 +709,15 @@ body {
 /* Settings page */
 #settings-page {
   display: none;
+  position: absolute;
+  top: 0; left: var(--sidebar-w, 220px); right: 0; bottom: 0;
+  z-index: 55;
   padding: 72px 1.5rem 2rem;
-  max-width: 480px;
-  margin: 0 auto;
-  width: 100%;
+  max-width: none;
   overflow-y: auto;
-  flex: 1;
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
 }
 #settings-page h2 {
   margin: 0 0 1.5rem 0;
@@ -2799,36 +2803,10 @@ function showSettingsPage() {
   // Toggle: if settings is already visible, close it
   if (settingsPage.style.display === 'block') {
     settingsPage.style.display = 'none';
-    if (!isMobile) {
-      if (_preSettingsSessionId && sessions.has(_preSettingsSessionId)) {
-        switchTab(_preSettingsSessionId, true);
-      } else {
-        showWelcome();
-      }
-      _preSettingsSessionId = null;
-    }
     return;
   }
-  if (isMobile) {
-    // Mobile: settings overlays the chat — don't hide anything behind it
-    settingsPage.style.display = 'block';
-  } else {
-    // Desktop: settings replaces the chat view
-    _preSettingsSessionId = activeSessionId;
-    document.getElementById('welcome-view').style.display = 'none';
-    document.getElementById('chat-area').style.display = 'none';
-    document.getElementById('controls').style.display = 'none';
-    document.getElementById('waveform').style.display = 'none';
-    const dbg = document.getElementById('debug-panel');
-    if (dbg) dbg.style.display = 'none';
-    document.getElementById('active-voice').style.display = 'none';
-    document.getElementById('session-model').style.display = 'none';
-    document.getElementById('model-label').style.display = 'none';
-    textInputBar.classList.remove('active');
-    activeSessionId = null;
-    debugActive = false;
-    settingsPage.style.display = 'block';
-  }
+  // Settings overlays the chat on all screen sizes — nothing to hide behind it
+  settingsPage.style.display = 'block';
   renderSidebar();
   loadSettings();
   loadUsageForSettings();

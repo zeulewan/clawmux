@@ -64,6 +64,7 @@
         } else {
           panel.style.width = newW + 'px';
           panel.style.minWidth = newW + 'px';
+          document.documentElement.style.setProperty('--sidebar-w', newW + 'px');
         }
       }
 
@@ -107,6 +108,7 @@
         const w = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, settings.sidebar_width));
         sidebar.style.width = w + 'px';
         sidebar.style.minWidth = w + 'px';
+        document.documentElement.style.setProperty('--sidebar-w', w + 'px');
       }
 
       const notes = document.getElementById('notes-panel');
