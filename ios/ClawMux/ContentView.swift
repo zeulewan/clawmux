@@ -155,7 +155,7 @@ struct ContentView: View {
                         let dotColor: Color = vm.isConnected ? .cSuccess : vm.isConnecting ? .cCaution : .cDanger
                         Circle()
                             .fill(dotColor)
-                            .frame(width: 5, height: 5)
+                            .frame(width: 8, height: 8)
                             .scaleEffect(vm.isConnecting && isPulsing ? 1.15 : vm.isConnecting ? 0.7 : 1.0)
                             .opacity(vm.isConnecting && isPulsing ? 1.0 : vm.isConnecting ? 0.15 : 1.0)
                             .animation(vm.isConnecting ? .easeInOut(duration: 0.7).repeatForever(autoreverses: true) : .default, value: isPulsing)
@@ -316,7 +316,7 @@ struct ContentView: View {
                 // Name + area + role + task + status  (hub.html hierarchy)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(voice.name)
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(alive ? color : Color.cTextTer)
                         .lineLimit(1)
                     if let s = session, alive {
@@ -330,7 +330,7 @@ struct ContentView: View {
                         if !s.role.isEmpty {
                             Text(s.role.uppercased())
                                 .font(.system(size: 9, weight: .medium))
-                                .foregroundStyle(Color.cTextSec)
+                                .foregroundStyle(Color.cTextTer)
                                 .tracking(0.5)
                                 .lineLimit(1)
                         }
@@ -377,18 +377,18 @@ struct ContentView: View {
             .background(
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(isSelected ? color.opacity(0.08) : Color.cCard)
+                        .fill(isSelected ? Color.cAccent.opacity(0.08) : Color.cCard)
                         .overlay(
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .strokeBorder(isSelected ? color.opacity(0.3) : Color.cBorder, lineWidth: 0.5)
+                                .strokeBorder(isSelected ? Color.cAccent.opacity(0.3) : Color.cBorder, lineWidth: 0.5)
                         )
-                    // Left accent bar (hub.html selected indicator)
+                    // Left accent bar — always purple per web .sidebar-card.selected::before
                     if isSelected {
                         RoundedRectangle(cornerRadius: 2, style: .continuous)
-                            .fill(color)
+                            .fill(Color.cAccent)
                             .frame(width: 3)
                             .padding(.vertical, 8)
-                            .shadow(color: color.opacity(0.6), radius: 4)
+                            .shadow(color: Color.cAccent.opacity(0.6), radius: 4)
                     }
                 }
             )
@@ -590,8 +590,8 @@ struct ContentView: View {
                         // Bottom anchor
                         Color.clear.frame(height: 1).id("bottom")
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 16).padding(.bottom, 16)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 16).padding(.bottom, 170)
                     .frame(minHeight: geo.size.height)
                 }
                 .defaultScrollAnchor(.bottom)
@@ -683,10 +683,10 @@ struct ContentView: View {
 
         // Web-matched grouping: flatten tail corners in group, tail 4px on last
         let single = isFirst && isLast
-        let tl: CGFloat = (role == "assistant" && !isFirst)  ? 8 : 18
-        let bl: CGFloat = role == "assistant" ? (isLast ? 4 : single ? 18 : 8) : 18
-        let tr: CGFloat = (role == "user"      && !isFirst)  ? 8 : 18
-        let br: CGFloat = role == "user"      ? (isLast ? 4 : single ? 18 : 8) : 18
+        let tl: CGFloat = (role == "assistant" && !isFirst)  ? 8 : 16
+        let bl: CGFloat = role == "assistant" ? (isLast ? 4 : single ? 16 : 8) : 16
+        let tr: CGFloat = (role == "user"      && !isFirst)  ? 8 : 16
+        let br: CGFloat = role == "user"      ? (isLast ? 4 : single ? 16 : 8) : 16
 
         let userBubbleColor = Color(hex: 0x2563EB)
         let bubbleBg: AnyShapeStyle = role == "user"
@@ -717,7 +717,7 @@ struct ContentView: View {
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }
-                .padding(.horizontal, 13).padding(.top, 9).padding(.bottom, 4)
+                .padding(.horizontal, 15).padding(.top, 10).padding(.bottom, 4)
 
                 if role != "system" {
                     Text(shortTime(msg.timestamp))
@@ -811,7 +811,7 @@ struct ContentView: View {
                             let summary = s.activity.isEmpty ? s.toolName : s.activity
                             Text(summary)
                                 .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(color.opacity(0.8))
+                                .foregroundStyle(Color.cTextTer)
                                 .lineLimit(1).truncationMode(.middle)
                         }
                         if hasDetail {
