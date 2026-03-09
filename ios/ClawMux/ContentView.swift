@@ -524,19 +524,23 @@ struct ContentView: View {
         return st.isEmpty ? "Idle" : st
     }
 
-    // MARK: - Chat View
+    // MARK: - Chat Main View
 
-    private var chatView: some View {
+    private var chatMainView: some View {
         ZStack(alignment: .top) {
-            VStack(spacing: 0) {
-                if vm.showDebug {
+            if vm.showDebug {
+                VStack(spacing: 0) {
                     chatHeader
                     DebugView(vm: vm)
-                } else {
+                }
+            } else {
+                VStack(spacing: 0) {
                     chatHeader
                     chatScrollArea
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    bottomInputArea
+                        .overlay(alignment: .bottom) {
+                            bottomInputArea
+                        }
                 }
             }
             // Copy toast
@@ -555,36 +559,24 @@ struct ContentView: View {
         .animation(.spring(response: 0.25, dampingFraction: 0.8), value: showCopiedToast)
     }
 
-    // MARK: - Chat Header
+    // MARK: - Chat Header (no back button — sidebar always visible)
 
     private var chatHeader: some View {
         let color = vm.activeSession.map { voiceColor($0.voice) } ?? Color.cTextSec
-        return HStack(spacing: 12) {
-            // Back
-            Button {
-                withAnimation { showingChat = false }
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color.cTextSec)
-                    .frame(width: 36, height: 36)
-                    .background(Color.glass, in: Circle())
-                    .overlay(Circle().strokeBorder(Color.cBorder, lineWidth: 0.5))
-            }
-
+        return HStack(spacing: 10) {
             if let s = vm.activeSession {
                 // Agent avatar
                 ZStack {
-                    Circle().fill(color.opacity(0.16)).frame(width: 36, height: 36)
+                    Circle().fill(color.opacity(0.16)).frame(width: 32, height: 32)
                     Image(systemName: voiceIcon(s.voice))
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(color)
                 }
 
                 // Name + subtitle
                 VStack(alignment: .leading, spacing: 2) {
                     Text(vm.showDebug ? "Debug" : s.label)
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(Color.cText)
                         .lineLimit(1)
                     Group {
