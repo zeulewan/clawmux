@@ -1262,10 +1262,9 @@ struct ContentView: View {
     // MARK: - Helpers
 
     private var statusColor: Color {
-        if vm.isRecording { return .cSuccess }   // green matches web recording state
-        if vm.isPlaying   { return .cWarning }   // orange matches web interruptable state
-        if vm.isProcessing || vm.activeSession?.isThinking == true { return .cWarning }
-        return .cSuccess
+        if vm.isRecording { return .cSuccess }   // green: recording (web: var(--green))
+        if vm.isPlaying   { return .cWarning }   // orange: interruptable (web: var(--orange))
+        return .cTextSec                          // default: processing/thinking (web: text-tertiary default)
     }
 
     private func cycleInputMode() { vm.inputMode = vm.typingMode ? "auto" : "typing" }
