@@ -65,6 +65,9 @@ async def _on_session_death(session_id: str):
 session_mgr = SessionManager(history_store=history, project_mgr=project_mgr, agents_store=agents_store, backend=_backend, on_session_death=_on_session_death)
 broker = MessageBroker()
 
+# Per-session pending tmux injection tasks (keyed by session_id)
+_pending_injections: dict[str, asyncio.Task] = {}
+
 
 def _hist_prefix(session) -> str | None:
     """Get the history prefix for a session's project."""
@@ -940,6 +943,10 @@ async def hook_tool_status(request: Request):
         pass
     elif event == "PreToolUse":
         # PreToolUse means the agent is actively making a tool call — cannot be truly idle.
+        # Cancel any pending tmux injection (agent already has work).
+        prev = _pending_injections.pop(session.session_id, None)
+        if prev and not prev.done():
+            prev.cancel()
         # If session is IDLE (e.g. background clawmux wait WS is connected), override to PROCESSING.
         if session.state in (AgentState.IDLE, AgentState.THINKING):
             session.set_state(AgentState.PROCESSING)
@@ -1338,6 +1345,61 @@ async def regenerate_template(voice_id: str):
     if not ok:
         return JSONResponse({"error": "Agent not in agents.json"}, status_code=404)
     return JSONResponse({"regenerated": voice_id})
+
+
+# --- Agent idle/active signals (used by stop hook for tmux-push delivery) ---
+
+@app.post("/api/agents/{session_id}/idle")
+async def agent_idle(session_id: str):
+    """Signal that an agent has finished responding and is now idle.
+
+    Called by the stop hook (stop-check-inbox.sh). Transitions the agent to
+    IDLE state and schedules a tmux injection if inbox has pending messages.
+    """
+    session = session_mgr.sessions.get(session_id)
+    if not session or not session.work_dir:
+        return JSONResponse({"ok": False, "reason": "session not found"})
+
+    session.set_state(AgentState.IDLE)
+    session.activity = ""
+    session.tool_name = ""
+    session.tool_input = {}
+    await _save_activity(session, "Idle")
+    await send_to_browser({"session_id": session_id, "type": "listening", "state": "idle"})
+    await send_to_browser({
+        "type": "session_status",
+        "session_id": session_id,
+        "state": session.state.value,
+        "activity": "",
+        "tool_name": "",
+        "tool_input": {},
+    })
+
+    # Cancel any stale pending injection
+    prev = _pending_injections.pop(session_id, None)
+    if prev and not prev.done():
+        prev.cancel()
+
+    # Schedule injection if inbox has messages
+    count = await asyncio.to_thread(inbox.peek, session.work_dir)
+    if count > 0:
+        task = asyncio.create_task(_inject_inbox(session, session_id))
+        _pending_injections[session_id] = task
+
+    return JSONResponse({"ok": True, "pending": count})
+
+
+@app.post("/api/agents/{session_id}/active")
+async def agent_active(session_id: str):
+    """Cancel any pending tmux injection for a session.
+
+    Called by PreToolUse hook when the agent starts a tool call — injection is
+    no longer needed since the agent is already working.
+    """
+    prev = _pending_injections.pop(session_id, None)
+    if prev and not prev.done():
+        prev.cancel()
+    return JSONResponse({"ok": True})
 
 
 # --- Roles ---
@@ -1936,6 +1998,70 @@ async def peek_inbox(session_id: str):
             "preview": latest.get("content", "")[:100],
         }
     return JSONResponse(result)
+
+
+async def _inject_inbox(session, session_id: str) -> None:
+    """Deliver pending inbox messages to an idle agent via tmux injection.
+
+    Called after the stop hook signals IDLE. Waits briefly for Claude Code to
+    settle, verifies the input prompt is visible, then injects all queued
+    messages as a single tmux send-keys call.
+
+    If the pane is not in input-ready state the messages stay in the inbox and
+    will be retried on the next idle signal.
+    """
+    await asyncio.sleep(0.3)
+
+    # Abort if the agent started working again before we got here
+    if session.state != AgentState.IDLE:
+        return
+
+    # Verify Claude Code is at its input prompt before injecting
+    try:
+        pane = await session_mgr.backend.capture_pane(session.tmux_session)
+        if not pane or ("❯" not in pane and ">" not in pane):
+            log.warning("[%s] tmux injection skipped: Claude Code not at input prompt", session_id)
+            return
+    except Exception as exc:
+        log.warning("[%s] tmux injection skipped: pane capture failed (%s)", session_id, exc)
+        return
+
+    messages = await asyncio.to_thread(inbox.read_and_clear, session.work_dir)
+    if not messages:
+        return
+
+    # Format identically to stop hook stderr delivery
+    lines = [f"You have {len(messages)} new message(s):", ""]
+    for msg in messages:
+        msg_type = msg.get("type", "system")
+        sender = msg.get("from", "unknown")
+        content = msg.get("content", "")
+        msg_id = msg.get("id", "")
+        if msg_type == "agent":
+            lines.append(f"[MSG id:{msg_id} from:{sender}] {content}")
+        elif msg_type == "voice":
+            lines.append(f"[VOICE id:{msg_id} from:{sender}] {content}")
+        else:
+            lines.append(f"[SYSTEM] {content}")
+    lines.append("")
+    lines.append("Process these messages now.")
+
+    text = "\n".join(lines)
+    try:
+        await session_mgr.backend.deliver_message(session.tmux_session, text)
+        log.info("[%s] Injected %d message(s) via tmux", session_id, len(messages))
+        session.set_state(AgentState.THINKING)
+        await send_to_browser({
+            "type": "inbox_update",
+            "session_id": session_id,
+            "count": 0,
+        })
+    except Exception as exc:
+        log.error("[%s] tmux injection FAILED: %s — %d message(s) returned to inbox",
+                  session_id, exc, len(messages))
+        # Return messages to inbox so the next idle signal retries
+        for msg in messages:
+            await asyncio.to_thread(inbox.write, session.work_dir, msg)
 
 
 async def _inbox_write_and_notify(session, msg_dict: dict) -> dict:

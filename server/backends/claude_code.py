@@ -59,7 +59,7 @@ class ClaudeCodeBackend(AgentBackend):
         # Build Claude command
         model_flag = f" --model {model}" if model != "opus" else ""
         effort_flag = f" --effort {effort}" if effort and model != "haiku" else ""
-        startup_prompt = "Run this exact command now: clawmux wait"
+        startup_prompt = "Greet the user as instructed in your CLAUDE.md. Then stop — the hub will deliver messages when they arrive."
         if resuming:
             claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag}{effort_flag} --resume {claude_session_id} '{startup_prompt}'"
         else:
@@ -126,7 +126,7 @@ class ClaudeCodeBackend(AgentBackend):
 
         model_flag = f" --model {model}" if model != "opus" else ""
         effort_flag = f" --effort {effort}" if effort and model != "haiku" else ""
-        startup_prompt = "Run this exact command now: clawmux wait"
+        startup_prompt = "Greet the user as instructed in your CLAUDE.md. Then stop — the hub will deliver messages when they arrive."
         claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag}{effort_flag} --resume {claude_session_id} '{startup_prompt}'"
         await self._run(f'tmux send-keys -t {session_name} "{claude_cmd}" Enter')
 
