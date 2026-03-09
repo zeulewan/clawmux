@@ -1280,13 +1280,13 @@ struct ContentView: View {
                             style: .continuous)
                         .strokeBorder(
                             isPlaying ? color.opacity(isPulsing ? 0.7 : 0.2) : Color(hex: 0x2A3A52),
-                            lineWidth: 0.5)
+                            lineWidth: 1)
                         .animation(
                             isPlaying ? .easeInOut(duration: 1.0).repeatForever(autoreverses: true) : .default,
                             value: isPulsing)
                     }
                 }
-                .shadow(color: role == "assistant" ? Color.black.opacity(0.3) : Color.clear, radius: 1.5, x: 0, y: 1)
+                .shadow(color: role == "assistant" ? Color.black.opacity(0.3) : Color.clear, radius: 3, x: 0, y: 1)
                 .contextMenu {
                     if role == "assistant" {
                         Button {
