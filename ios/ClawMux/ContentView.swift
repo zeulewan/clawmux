@@ -230,18 +230,14 @@ struct ContentView: View {
                             groupCard(g.groupId, name: g.name, voices: g.voices)
                         }
 
-                        // Remaining agents (not in any group)
+                        // All agents in their normal project sections (not filtered by group membership)
                         let groups = projectGroups
-                        let filteredByProject = groups.namedProjects.filter { project in
-                            (groups.byProject[project] ?? []).contains { !groupedVoiceIds.contains($0.id) }
-                        }
-                        ForEach(filteredByProject, id: \.self) { project in
-                            let voices = (groups.byProject[project] ?? []).filter { !groupedVoiceIds.contains($0.id) }
+                        ForEach(groups.namedProjects, id: \.self) { project in
+                            let voices = groups.byProject[project] ?? []
                             projectSection(project, voices: voices)
                         }
-                        let ungroupedFiltered = groups.ungrouped.filter { !groupedVoiceIds.contains($0.id) }
-                        if !ungroupedFiltered.isEmpty {
-                            if !filteredByProject.isEmpty || !chatGroups.isEmpty {
+                        if !groups.ungrouped.isEmpty {
+                            if !groups.namedProjects.isEmpty || !chatGroups.isEmpty {
                                 HStack {
                                     Text("AGENTS")
                                         .font(.system(size: 10, weight: .bold))
@@ -253,18 +249,17 @@ struct ContentView: View {
                                 .padding(.top, 8).padding(.bottom, 2)
                             }
                             VStack(spacing: 2) {
-                                ForEach(ungroupedFiltered) { voice in agentCard(voice) }
+                                ForEach(groups.ungrouped) { voice in agentCard(voice) }
                             }
                             .padding(.horizontal, 8)
                         }
                     } else {
-                        // Collapsed: group icons + non-grouped agent icons
+                        // Collapsed: group icons at top, then all agent icons normally
                         let chatGroups = activeGroups
-                        let groupedVoiceIds = Set(chatGroups.flatMap { $0.voices.map { $0.id } })
                         ForEach(chatGroups, id: \.groupId) { g in
                             groupIcon(g.groupId, voices: g.voices)
                         }
-                        ForEach(ALL_VOICES.filter { !groupedVoiceIds.contains($0.id) }) { voice in
+                        ForEach(ALL_VOICES) { voice in
                             sidebarIcon(for: voice)
                         }
                     }
@@ -691,17 +686,6 @@ struct ContentView: View {
             }
             .buttonStyle(.plain)
 
-            // Member sub-cards (mirrors .sg-members + .sg-sub-card)
-            Divider()
-                .background(blue.opacity(0.2))
-                .padding(.horizontal, 8)
-            VStack(spacing: 2) {
-                ForEach(voices) { voice in
-                    agentCard(voice)
-                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                }
-            }
-            .padding(.horizontal, 4).padding(.vertical, 4)
         }
         .background(blue.opacity(isSelected ? 0.12 : 0.07), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(blue.opacity(0.35), lineWidth: 1))
