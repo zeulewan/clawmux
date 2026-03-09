@@ -151,9 +151,13 @@ struct ContentView: View {
                         .font(.system(size: 30, weight: .bold, design: .rounded))
                         .foregroundStyle(Color.cText)
                     HStack(spacing: 5) {
+                        let dotColor: Color = vm.isConnected ? .cSuccess : vm.isConnecting ? .cWarning : .cDanger
                         Circle()
-                            .fill(vm.isConnected ? Color.cSuccess : vm.isConnecting ? Color.cWarning : Color.cDanger)
+                            .fill(dotColor)
                             .frame(width: 5, height: 5)
+                            .scaleEffect(vm.isConnecting && isPulsing ? 1.15 : vm.isConnecting ? 0.7 : 1.0)
+                            .opacity(vm.isConnecting && isPulsing ? 1.0 : vm.isConnecting ? 0.15 : 1.0)
+                            .animation(vm.isConnecting ? .easeInOut(duration: 0.7).repeatForever(autoreverses: true) : .default, value: isPulsing)
                         Text(vm.isConnected ? "Connected" : vm.isConnecting ? "Connecting…" : "Offline")
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(Color.cTextSec)
