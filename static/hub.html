@@ -408,6 +408,10 @@ body {
 .sg-chevron { font-size: 1rem; color: var(--text-secondary, #888); flex-shrink: 0; transition: transform 0.2s; line-height: 1; }
 .sg-disband { background: none; border: none; color: var(--text-secondary, #888); cursor: pointer; font-size: 0.75rem; flex-shrink: 0; padding: 2px 4px; border-radius: 4px; line-height: 1; }
 .sg-disband:hover { color: var(--red); background: rgba(255,69,58,0.12); }
+.sidebar-group-card.selected {
+  background: color-mix(in srgb, var(--blue) 12%, var(--card-bg, transparent)) !important;
+  box-shadow: inset 3px 0 0 var(--blue);
+}
 .sg-members { border-top: 1px solid color-mix(in srgb, var(--blue) 20%, transparent); padding: 4px 0; }
 .sg-sub-card { border-radius: 6px !important; margin: 2px 4px !important; }
 .sidebar-group-card { position: relative; }
@@ -2017,6 +2021,15 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   }
   #welcome-view { padding-top: 52px; padding-left: 56px; }
   #settings-page { padding-left: 56px; padding-top: 60px; }
+  /* Group card in collapsed sidebar: show only stacked avatars */
+  .sidebar-group-card .sg-info,
+  .sidebar-group-card .sg-chevron,
+  .sidebar-group-card .sg-disband { opacity: 0; pointer-events: none; width: 0; overflow: hidden; }
+  #sidebar.expanded .sidebar-group-card .sg-info { opacity: 1; pointer-events: auto; width: auto; overflow: visible; transition: opacity 0.15s ease-out 0.18s; }
+  #sidebar.expanded .sidebar-group-card .sg-chevron,
+  #sidebar.expanded .sidebar-group-card .sg-disband { opacity: 1; pointer-events: auto; width: auto; overflow: visible; transition: opacity 0.15s ease-out 0.18s; }
+  .sg-header { padding: 8px 6px; justify-content: center; }
+  #sidebar.expanded .sg-header { justify-content: flex-start; padding: 6px 8px; }
   /* Glass style for settings cards on mobile */
   .settings-card {
     background: var(--bg-glass) !important;

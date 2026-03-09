@@ -892,6 +892,12 @@ function _updateGroupCard(card, groupId, memberVoiceIds) {
       .map(vid => VOICE_NAMES[vid] || vid.replace(/^[a-z]{2}_/, '').replace(/^./, c => c.toUpperCase()))
       .join(', ');
   }
+  // Selected state: highlight when any member is the active session
+  const isMemberActive = memberVoiceIds.some(vid => {
+    for (const [sid, s] of sessions) { if (s.voice === vid && sid === activeSessionId) return true; }
+    return false;
+  });
+  card.classList.toggle('selected', isMemberActive);
 }
 
 async function _moveAgentToProject(voiceId, targetProjectSlug) {
