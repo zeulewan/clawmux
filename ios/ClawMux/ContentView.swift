@@ -858,11 +858,11 @@ struct ContentView: View {
             VStack(alignment: role == "user" ? .trailing : .leading, spacing: 0) {
                 Group {
                     if role == "assistant" {
-                        MarkdownContentView(text: msg.text, foreground: Color.cText)
+                        MarkdownContentView(text: msg.text, foreground: Color.cText, fontSize: CGFloat(vm.chatFontSize))
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } else if role == "user" {
                         Text(msg.text)
-                            .font(.system(size: 15))
+                            .font(.system(size: CGFloat(vm.chatFontSize)))
                             .lineSpacing(4)
                             .foregroundStyle(Color.white)
                             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -1485,6 +1485,7 @@ private struct ScrollBottomDetector: ViewModifier {
 private struct MarkdownContentView: View {
     let text: String
     let foreground: Color
+    var fontSize: CGFloat = 15
 
     /// Parses inline markdown (bold, italic, `code`) using AttributedString so
     /// backtick code spans render as monospaced — LocalizedStringKey does not handle `code`.
@@ -1554,13 +1555,13 @@ private struct MarkdownContentView: View {
 
         case .text(let str):
             Text(Self.inlineMarkdown(str))
-                .font(.system(size: 15))
+                .font(.system(size: fontSize))
                 .foregroundStyle(foreground)
                 .lineSpacing(4)
                 .fixedSize(horizontal: false, vertical: true)
 
         case .header(let level, let str):
-            let sz: CGFloat = level == 1 ? 19 : level == 2 ? 16 : 14
+            let sz: CGFloat = level == 1 ? fontSize + 4 : level == 2 ? fontSize + 1 : fontSize - 1
             let wt: Font.Weight = level <= 2 ? .bold : .semibold
             Text(Self.inlineMarkdown(str))
                 .font(.system(size: sz, weight: wt))
@@ -1570,11 +1571,11 @@ private struct MarkdownContentView: View {
         case .bullet(let str):
             HStack(alignment: .top, spacing: 6) {
                 Text("•")
-                    .font(.system(size: 15))
+                    .font(.system(size: fontSize))
                     .foregroundStyle(Color.cTextSec)
                     .frame(width: 10)
                 Text(Self.inlineMarkdown(str))
-                    .font(.system(size: 15))
+                    .font(.system(size: fontSize))
                     .foregroundStyle(foreground)
                     .lineSpacing(1)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1583,11 +1584,11 @@ private struct MarkdownContentView: View {
         case .numbered(let num, let str):
             HStack(alignment: .top, spacing: 6) {
                 Text("\(num).")
-                    .font(.system(size: 15))
+                    .font(.system(size: fontSize))
                     .foregroundStyle(Color.cTextSec)
                     .frame(width: 22, alignment: .trailing)
                 Text(Self.inlineMarkdown(str))
-                    .font(.system(size: 15))
+                    .font(.system(size: fontSize))
                     .foregroundStyle(foreground)
                     .lineSpacing(1)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1907,15 +1908,16 @@ struct SettingsView: View {
 
                 // AGENT — matches web "Agent" section
                 Section("Agent") {
-                    Picker("Default Model", selection: Binding(
-                        get: { vm.activeSession?.model ?? "opus" },
-                        set: { _ in }
-                    )) {
+                    Picker("Default Model", selection: $vm.defaultModel) {
                         Text("Opus").tag("opus")
                         Text("Sonnet").tag("sonnet")
                         Text("Haiku").tag("haiku")
                     }
-                    .onChange(of: vm.activeSession?.model ?? "opus") { _, v in vm.updateSetting("default_model", value: v) }
+                    Picker("Default Effort", selection: $vm.defaultEffort) {
+                        Text("High").tag("high")
+                        Text("Medium").tag("medium")
+                        Text("Low").tag("low")
+                    }
                     Toggle("Silent Startup", isOn: $vm.silentStartup)
                     Toggle("Show Agent Messages", isOn: $vm.showAgentMessages)
                     Toggle("Verbose Activity Log", isOn: $vm.verboseMode)
@@ -1925,6 +1927,12 @@ struct SettingsView: View {
                 Section("Sounds") {
                     Toggle("Thinking Sounds", isOn: $vm.soundThinkingAuto)
                     Toggle("Audio Cues", isOn: $vm.soundListeningAuto)
+                }
+
+                // CHAT — text size control (matches web adjustChatFontSize)
+                Section("Chat") {
+                    Stepper("Text Size: \(vm.chatFontSize)pt",
+                            value: $vm.chatFontSize, in: 11...22, step: 1)
                 }
 
                 // USAGE — matches web "Usage" section (always shown, fetches on appear)
