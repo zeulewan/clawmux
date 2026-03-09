@@ -490,8 +490,30 @@ function _loadMoreMessages() {
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       chatArea.scrollTop = chatArea.scrollHeight - oldHeight;
+      // Keep filling if viewport still not full after restoring scroll position
+      _fillViewportMessages();
     });
   });
+}
+
+// Load additional batches until the chat area fills the visible viewport.
+// Called after initial tab render and after load-more, so sparse histories
+// (e.g. mostly bare-acks or filtered agent messages) don't leave a blank screen.
+function _fillViewportMessages() {
+  if (!activeSessionId) return;
+  const s = sessions.get(activeSessionId);
+  if (!s) return;
+  let iterations = 0;
+  while (
+    iterations < 20 &&
+    chatArea.scrollHeight <= chatArea.clientHeight + 10 &&
+    _getChatLimit(activeSessionId) < s.messages.length
+  ) {
+    const newLimit = _getChatLimit(activeSessionId) + _CHAT_BATCH;
+    _chatRenderLimit.set(activeSessionId, newLimit);
+    renderChat(true);
+    iterations++;
+  }
 }
 
 // Scroll-to-top listener for lazy loading + scroll-to-bottom unloading

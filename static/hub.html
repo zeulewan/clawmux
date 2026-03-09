@@ -2600,6 +2600,8 @@ function switchTab(sessionId, manual = false) {
 
   // Render chat messages (force scroll — switching sessions)
   renderChat(true);
+  // Fill viewport if initial batch is all filtered/bare-ack messages (common on mobile)
+  if (typeof _fillViewportMessages === 'function') _fillViewportMessages();
   updateLayout();
   updateChatStopButton();
   updateHeaderProjectStatus();
