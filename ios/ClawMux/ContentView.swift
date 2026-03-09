@@ -1858,6 +1858,7 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                // Server connection (iOS-only — not in web settings)
                 Section("Server") {
                     TextField("Server URL", text: $draftURL)
                         .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
@@ -1877,91 +1878,105 @@ struct SettingsView: View {
                 }
                 .onAppear { draftURL = vm.serverURL }
 
-                if vm.activeSessionId != nil {
-                    Section("Active Session") {
-                        Picker("Speed", selection: Binding(get: { vm.activeSpeed }, set: { vm.activeSpeed = $0 })) {
+                // TEXT-TO-SPEECH — matches web "Text-to-Speech" section
+                Section("Text-to-Speech") {
+                    Toggle("Enabled", isOn: $vm.voiceResponses)
+                        .onChange(of: vm.voiceResponses) { _, v in vm.updateSetting("voice_responses", value: v) }
+                    if vm.voiceResponses {
+                        Picker("Playback Speed", selection: Binding(get: { vm.activeSpeed }, set: { vm.activeSpeed = $0 })) {
                             ForEach(SPEED_OPTIONS, id: \.value) { Text($0.label).tag($0.value) }
                         }
+                        Toggle("Auto Interrupt", isOn: $vm.autoInterrupt)
+                            .onChange(of: vm.autoInterrupt) { _, v in vm.updateSetting("auto_interrupt", value: v) }
                     }
                 }
 
-                Section("Global") {
-                    Toggle("Haptics", isOn: $vm.globalHaptics)
-                        .onChange(of: vm.globalHaptics) { _, on in
-                            vm.hapticsRecordingAuto = on; vm.hapticsPlaybackAuto = on; vm.hapticsSessionAuto = on
-                            vm.hapticsRecordingPTT  = on; vm.hapticsPlaybackPTT  = on; vm.hapticsSessionPTT  = on
-                            vm.hapticsSend = on; vm.hapticsSessionTyping = on
-                        }
-                    Toggle("Sounds", isOn: $vm.globalSounds)
-                        .onChange(of: vm.globalSounds) { _, on in
-                            vm.soundThinkingAuto = on; vm.soundListeningAuto = on; vm.soundProcessingAuto = on
-                            vm.soundReadyAuto = on; vm.soundThinkingPTT = on; vm.soundReadyPTT = on
-                        }
-                    Toggle("Notifications", isOn: $vm.globalNotifications)
-                        .onChange(of: vm.globalNotifications) { _, on in
-                            vm.notifyAuto = on; vm.notifyPTT = on; vm.notifyTyping = on
-                        }
-                }
-
-                Section("Voice") {
+                // SPEECH-TO-TEXT — matches web "Speech-to-Text" section
+                Section("Speech-to-Text") {
                     Toggle("Auto Record", isOn: $vm.autoRecord)
-                    Toggle("Thinking Sounds", isOn: $vm.soundThinkingAuto)
-                    Toggle("Listening Cue", isOn: $vm.soundListeningAuto)
-                }
-
-                Section { Toggle("Voice Responses", isOn: $vm.voiceResponses)
-                    .onChange(of: vm.voiceResponses) { _, v in vm.updateSetting("voice_responses", value: v) }
-                } footer: { Text("When off, the agent responds with text only — no speech.") }
-
-                Section {
-                    Toggle("Verbose Activity Log", isOn: $vm.verboseMode)
-                } header: { Text("Chat") } footer: {
-                    Text("Show agent tool use and system messages in chat. Off = minimal mode, only user and assistant messages.")
-                }
-
-                Section {
-                    Toggle("Background Mode", isOn: $vm.backgroundMode)
-                } header: { Text("Background") } footer: {
-                    Text(vm.backgroundMode
-                         ? "Voice sessions stay alive when the app is backgrounded using a silent audio loop."
-                         : "The WebSocket connection may drop when the app is backgrounded.")
-                }
-
-                if vm.usage5hPct != nil || vm.usage7dPct != nil {
-                    Section("Usage") {
-                        if let pct = vm.usage5hPct {
-                            HStack {
-                                Text("5-hour window"); Spacer()
-                                VStack(alignment: .trailing) {
-                                    Text("\(pct)%").font(.subheadline.bold())
-                                        .foregroundStyle(pct >= 80 ? Color(.systemRed) : pct >= 60 ? Color(.systemOrange) : Color(.systemGreen))
-                                    if let r = vm.usage5hReset { Text("resets in \(r)").font(.caption2).foregroundStyle(.tertiary) }
-                                }
-                            }
-                        }
-                        if let pct = vm.usage7dPct {
-                            HStack {
-                                Text("7-day window"); Spacer()
-                                VStack(alignment: .trailing) {
-                                    Text("\(pct)%").font(.subheadline.bold())
-                                        .foregroundStyle(pct >= 80 ? Color(.systemRed) : pct >= 60 ? Color(.systemOrange) : Color(.systemGreen))
-                                    if let r = vm.usage7dReset { Text("resets in \(r)").font(.caption2).foregroundStyle(.tertiary) }
-                                }
-                            }
-                        }
-                        Button { UIImpactFeedbackGenerator(style: .light).impactOccurred(); vm.fetchUsage() } label: {
-                            Label("Refresh", systemImage: "arrow.clockwise")
+                        .onChange(of: vm.autoRecord) { _, v in vm.updateSetting("auto_record", value: v) }
+                    Toggle("Auto End (VAD)", isOn: $vm.vadEnabled)
+                        .onChange(of: vm.vadEnabled) { _, v in vm.updateSetting("auto_end", value: v) }
+                    if vm.vadEnabled {
+                        Picker("Stop After", selection: $vm.vadSilenceDuration) {
+                            Text("0.5 s").tag(0.5); Text("1 s").tag(1.0); Text("1.5 s").tag(1.5)
+                            Text("2 s").tag(2.0); Text("3 s").tag(3.0)
                         }
                     }
                 }
 
-                Section("Debug") {
+                // AGENT — matches web "Agent" section
+                Section("Agent") {
+                    Picker("Default Model", selection: Binding(
+                        get: { vm.activeSession?.model ?? "opus" },
+                        set: { _ in }
+                    )) {
+                        Text("Opus").tag("opus")
+                        Text("Sonnet").tag("sonnet")
+                        Text("Haiku").tag("haiku")
+                    }
+                    .onChange(of: vm.activeSession?.model ?? "opus") { _, v in vm.updateSetting("default_model", value: v) }
+                    Toggle("Silent Startup", isOn: $vm.silentStartup)
+                    Toggle("Show Agent Messages", isOn: $vm.showAgentMessages)
+                    Toggle("Verbose Activity Log", isOn: $vm.verboseMode)
+                }
+
+                // SOUNDS — matches web "Sounds" section
+                Section("Sounds") {
+                    Toggle("Thinking Sounds", isOn: $vm.soundThinkingAuto)
+                    Toggle("Audio Cues", isOn: $vm.soundListeningAuto)
+                }
+
+                // USAGE — matches web "Usage" section (always shown, fetches on appear)
+                Section("Usage") {
+                    if let pct = vm.usage5hPct {
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text("5-hour window")
+                                if let r = vm.usage5hReset { Text("resets in \(r)").font(.caption2).foregroundStyle(.tertiary) }
+                            }
+                            Spacer()
+                            Text("\(pct)%").font(.subheadline.bold())
+                                .foregroundStyle(pct >= 80 ? Color(.systemRed) : pct >= 60 ? Color(.systemOrange) : Color(.systemGreen))
+                        }
+                    }
+                    if let pct = vm.usage7dPct {
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text("7-day window")
+                                if let r = vm.usage7dReset { Text("resets in \(r)").font(.caption2).foregroundStyle(.tertiary) }
+                            }
+                            Spacer()
+                            Text("\(pct)%").font(.subheadline.bold())
+                                .foregroundStyle(pct >= 80 ? Color(.systemRed) : pct >= 60 ? Color(.systemOrange) : Color(.systemGreen))
+                        }
+                    }
+                    if vm.usage5hPct == nil && vm.usage7dPct == nil {
+                        Text("Loading…").foregroundStyle(.secondary)
+                    }
+                    Button { UIImpactFeedbackGenerator(style: .light).impactOccurred(); vm.fetchUsage() } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+                }
+                .onAppear { vm.fetchUsage() }
+
+                // DEBUG — matches web "Open Debug Panel" button
+                Section {
                     Button {
                         dismiss()
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                             vm.showDebug = true; vm.startDebugRefresh()
                         }
                     } label: { Label("Open Debug Panel", systemImage: "ant") }
+                }
+
+                // iOS-ONLY: Background mode + Live Activity (no web equivalent)
+                Section {
+                    Toggle("Background Mode", isOn: $vm.backgroundMode)
+                } header: { Text("iOS") } footer: {
+                    Text(vm.backgroundMode
+                         ? "Voice sessions stay alive when backgrounded using a silent audio loop."
+                         : "WebSocket may drop when the app is backgrounded.")
                 }
 
                 Section {

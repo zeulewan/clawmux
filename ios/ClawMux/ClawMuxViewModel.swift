@@ -413,6 +413,18 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         didSet { UserDefaults.standard.set(backgroundMode, forKey: "backgroundMode") }
     }
     @Published var voiceResponses: Bool = true
+    @Published var silentStartup: Bool {
+        didSet {
+            UserDefaults.standard.set(silentStartup, forKey: "silentStartup")
+            updateSetting("silent_startup", value: silentStartup)
+        }
+    }
+    @Published var showAgentMessages: Bool {
+        didSet {
+            UserDefaults.standard.set(showAgentMessages, forKey: "showAgentMessages")
+            updateSetting("show_agent_messages", value: showAgentMessages)
+        }
+    }
     @Published var verboseMode: Bool {
         didSet { UserDefaults.standard.set(verboseMode, forKey: "verboseMode") }
     }
@@ -647,8 +659,10 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             UserDefaults.standard.object(forKey: "liveActivityAuto") as? Bool ?? true
         self.liveActivityPTT =
             UserDefaults.standard.object(forKey: "liveActivityPTT") as? Bool ?? true
-        self.showDebug    = UserDefaults.standard.bool(forKey: "showDebug")
-        self.verboseMode  = UserDefaults.standard.object(forKey: "verboseMode") as? Bool ?? false
+        self.showDebug        = UserDefaults.standard.bool(forKey: "showDebug")
+        self.verboseMode      = UserDefaults.standard.object(forKey: "verboseMode")      as? Bool ?? false
+        self.silentStartup    = UserDefaults.standard.object(forKey: "silentStartup")    as? Bool ?? false
+        self.showAgentMessages = UserDefaults.standard.object(forKey: "showAgentMessages") as? Bool ?? true
         self.recordingURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("recording.wav")
         super.init()
