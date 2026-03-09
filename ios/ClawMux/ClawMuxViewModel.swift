@@ -389,13 +389,13 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     }
 
     @Published var autoRecord: Bool {
-        didSet { UserDefaults.standard.set(autoRecord, forKey: "autoRecord") }
+        didSet { UserDefaults.standard.set(autoRecord, forKey: "autoRecord"); updateSetting("auto_record", value: autoRecord) }
     }
     @Published var vadEnabled: Bool {
-        didSet { UserDefaults.standard.set(vadEnabled, forKey: "vadEnabled") }
+        didSet { UserDefaults.standard.set(vadEnabled, forKey: "vadEnabled"); updateSetting("auto_end", value: vadEnabled) }
     }
     @Published var autoInterrupt: Bool {
-        didSet { UserDefaults.standard.set(autoInterrupt, forKey: "autoInterrupt") }
+        didSet { UserDefaults.standard.set(autoInterrupt, forKey: "autoInterrupt"); updateSetting("auto_interrupt", value: autoInterrupt) }
     }
     // VAD tuning
     @Published var vadSilenceDuration: Double {
@@ -419,7 +419,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     @Published var backgroundMode: Bool {
         didSet { UserDefaults.standard.set(backgroundMode, forKey: "backgroundMode") }
     }
-    @Published var voiceResponses: Bool = true
+    @Published var voiceResponses: Bool = true {
+        didSet { updateSetting("voice_responses", value: voiceResponses) }
+    }
     @Published var silentStartup: Bool {
         didSet {
             UserDefaults.standard.set(silentStartup, forKey: "silentStartup")
