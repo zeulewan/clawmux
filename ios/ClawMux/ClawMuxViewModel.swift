@@ -1071,6 +1071,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     }
 
     private func handleDisconnect() {
+        guard isConnected || isConnecting else { return }  // debounce duplicate calls
         isConnected = false
         isConnecting = false
         if isRecording { stopRecording(discard: true) }
@@ -1540,11 +1541,14 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
 
             // Resume paused audio for this session
             if pausedAudioSessionId == id, let player = audioPlayer {
-                player.play()
-                isPlaying = true
-                playingSessionId = id
+                if player.play() {
+                    isPlaying = true
+                    playingSessionId = id
+                    statusText = "Speaking..."
+                } else {
+                    audioPlayer = nil
+                }
                 pausedAudioSessionId = nil
-                statusText = "Speaking..."
             }
             // Play buffered audio received while in background
             else if let idx = sessionIndex(id), !sessions[idx].audioBuffer.isEmpty {
