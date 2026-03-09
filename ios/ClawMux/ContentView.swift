@@ -90,17 +90,33 @@ struct ContentView: View {
     @State private var thinkingExpanded        = false
     @State private var collapsedProjects:       Set<String> = []
     @State private var isAtBottom:             Bool = true
+    @State private var sidebarExpanded:        Bool = false
 
     var body: some View {
-        HStack(spacing: 0) {
-            sidebarStripView
+        ZStack(alignment: .leading) {
+            // Main content — always has 48px left offset for the collapsed sidebar
             mainAreaView
+                .padding(.leading, 48)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // Dim overlay behind expanded sidebar (z-index 49 matching web)
+            if sidebarExpanded {
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
+                    .padding(.leading, 48)
+                    .onTapGesture { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { sidebarExpanded = false } }
+                    .transition(.opacity)
+            }
+
+            // Sidebar (draws over main content when expanded, z-index 50)
+            sidebarStripView
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.canvas1.ignoresSafeArea())
         .preferredColorScheme(.dark)
         .onAppear { isPulsing = true }
         .sheet(isPresented: $vm.showSettings) { SettingsView(vm: vm) }
+        .sheet(isPresented: $vm.showNotes) { NotesPanelView(serverURL: vm.serverURL) { vm.showNotes = false } }
         .onOpenURL { vm.handleOpenURL($0) }
         .alert("Reset History", isPresented: $showResetConfirm) {
             Button("Reset", role: .destructive) {
@@ -137,22 +153,37 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - Sidebar Strip (48px icon-only, always visible)
+    // MARK: - Sidebar (collapsible, 48px → 220px, overlays main when expanded)
 
     private var sidebarStripView: some View {
         VStack(spacing: 0) {
-            Button { vm.showSettings = true } label: {
-                Image(systemName: "gearshape.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(Color.cTextTer)
-                    .frame(width: 48, height: 48)
-            }
-            Color.cBorder.opacity(0.5).frame(height: 0.5)
-
+            // Agent list — icons when collapsed, full cards when expanded
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 1) {
-                    ForEach(ALL_VOICES) { voice in
-                        sidebarIcon(for: voice)
+                VStack(spacing: sidebarExpanded ? 2 : 1) {
+                    if sidebarExpanded {
+                        let groups = projectGroups
+                        ForEach(groups.namedProjects, id: \.self) { project in
+                            projectSection(project, voices: groups.byProject[project] ?? [])
+                        }
+                        if !groups.ungrouped.isEmpty {
+                            if !groups.namedProjects.isEmpty {
+                                HStack {
+                                    Text("AGENTS")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundStyle(Color.cTextTer)
+                                        .tracking(0.8)
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.top, 8).padding(.bottom, 2)
+                            }
+                            VStack(spacing: 2) {
+                                ForEach(groups.ungrouped) { voice in agentCard(voice) }
+                            }
+                            .padding(.horizontal, 8)
+                        }
+                    } else {
+                        ForEach(ALL_VOICES) { voice in sidebarIcon(for: voice) }
                     }
                 }
                 .padding(.vertical, 4)
@@ -160,7 +191,7 @@ struct ContentView: View {
 
             Spacer()
 
-            // Connection dot
+            // Connection dot (above tray)
             let dotColor: Color = vm.isConnected ? .cSuccess : vm.isConnecting ? .cCaution : .cDanger
             Circle()
                 .fill(dotColor)
@@ -168,15 +199,59 @@ struct ContentView: View {
                 .scaleEffect(vm.isConnecting && isPulsing ? 1.15 : vm.isConnecting ? 0.7 : 1.0)
                 .opacity(vm.isConnecting && isPulsing ? 1.0 : vm.isConnecting ? 0.15 : 1.0)
                 .animation(vm.isConnecting ? .easeInOut(duration: 0.7).repeatForever(autoreverses: true) : .default, value: isPulsing)
-                .frame(width: 48, height: 28)
-                .padding(.bottom, 8)
+                .frame(width: 48, height: 20)
+
+            // Bottom tray: hamburger (always) + Notes + Settings (when expanded)
+            // Matches web #sidebar-tray: expand-btn(48px) + notes-btn(flex) + settings-btn(flex)
+            Color.cBorder.opacity(0.5).frame(height: 0.5)
+            HStack(spacing: 0) {
+                // Hamburger — always 48px, always visible
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                        sidebarExpanded.toggle()
+                    }
+                } label: {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.system(size: 16))
+                        .foregroundStyle(Color.cTextSec)
+                        .frame(width: 48, height: 52)
+                }
+                // Notes + Settings — visible only when expanded (clipped otherwise)
+                if sidebarExpanded {
+                    Button {
+                        vm.showNotes = true
+                        withAnimation(.spring(response: 0.3)) { sidebarExpanded = false }
+                    } label: {
+                        VStack(spacing: 3) {
+                            Image(systemName: "note.text").font(.system(size: 13))
+                            Text("Notes").font(.system(size: 8, weight: .medium))
+                        }
+                        .foregroundStyle(Color.cTextSec)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    Button {
+                        vm.showSettings = true
+                        withAnimation(.spring(response: 0.3)) { sidebarExpanded = false }
+                    } label: {
+                        VStack(spacing: 3) {
+                            Image(systemName: "gearshape.fill").font(.system(size: 13))
+                            Text("Settings").font(.system(size: 8, weight: .medium))
+                        }
+                        .foregroundStyle(Color.cTextSec)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+            }
+            .frame(height: 52)
         }
-        .frame(width: 48)
+        .frame(width: sidebarExpanded ? 220 : 48)
         .frame(maxHeight: .infinity)
         .background(Color.canvas2)
         .overlay(alignment: .trailing) {
             Color.cBorder.opacity(0.6).frame(width: 0.5)
         }
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: sidebarExpanded)
+        .clipped()
     }
 
     private func sidebarIcon(for voice: VoiceInfo) -> some View {
@@ -195,6 +270,7 @@ struct ContentView: View {
             } else if !spawning {
                 vm.spawnSession(voiceId: voice.id)
             }
+            withAnimation(.spring(response: 0.3)) { sidebarExpanded = false }
         } label: {
             ZStack {
                 // Selected background tint
@@ -384,6 +460,7 @@ struct ContentView: View {
             } else if !spawning {
                 vm.spawnSession(voiceId: voice.id)
             }
+            withAnimation(.spring(response: 0.3)) { sidebarExpanded = false }
         } label: {
             HStack(spacing: 10) {
                 // Avatar + state ring
@@ -1116,6 +1193,7 @@ struct ContentView: View {
                     Spacer()
 
                     if vm.isRecording && vm.pushToTalk {
+                        // PTT text-mode hint (swipe right gesture)
                         HStack(spacing: 4) {
                             Text("Aa").font(.system(size: 12, weight: .semibold))
                             Image(systemName: "chevron.right").font(.system(size: 11, weight: .bold))
@@ -1123,8 +1201,22 @@ struct ContentView: View {
                         .foregroundStyle(pttDragOffset > 40 ? Color.cAccent : Color.cTextTer)
                         .opacity(pttDragOffset > 10 ? min(1, Double(pttDragOffset - 10) / 50) : 0.3)
                         .frame(width: 60).transition(.opacity)
+                    } else if let s = vm.activeSession,
+                        s.isThinking || s.state == .processing || s.state == .compacting
+                    {
+                        // Interrupt button — mirrors web #controls-right voice-stop
+                        Button { vm.sendInterrupt() } label: {
+                            Image(systemName: "stop.fill")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(Color.cWarning)
+                                .frame(width: 44, height: 44)
+                                .background(Color.cWarning.opacity(0.12), in: Circle())
+                                .overlay(Circle().strokeBorder(Color.cWarning.opacity(0.25), lineWidth: 0.5))
+                        }
+                        .transition(.scale.combined(with: .opacity))
+                        .frame(width: 60)
                     } else {
-                        Color.clear.frame(width: 60, height: 40)
+                        Color.clear.frame(width: 60, height: 44)
                     }
                 }
                 .padding(.horizontal, 16).padding(.top, 8)
@@ -1538,6 +1630,35 @@ private struct MarkdownContentView: View {
 }
 
 // MARK: - Debug View
+
+// MARK: - Notes Placeholder (full implementation via Nova)
+
+// Stub — Nova replaces this with full /api/notes implementation
+struct NotesPanelView: View {
+    let serverURL: String
+    let onDismiss: () -> Void
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 16) {
+                Image(systemName: "note.text")
+                    .font(.system(size: 40))
+                    .foregroundStyle(Color.cTextTer)
+                Text("Notes")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(Color.cText)
+                Text("Coming soon")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.cTextSec)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.canvas1.ignoresSafeArea())
+            .preferredColorScheme(.dark)
+            .navigationTitle("Notes")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { onDismiss() } } }
+        }
+    }
+}
 
 struct DebugView: View {
     @ObservedObject var vm: ClawMuxViewModel
