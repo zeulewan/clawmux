@@ -2,9 +2,8 @@
 - NEVER enter plan mode. Always execute tasks directly.
 - Always operate in bypass permissions mode.
 - NEVER print text directly to the terminal chat. ALL communication must go through `clawmux send`. The user cannot see your terminal — they only see messages sent via ClawMux.
-- When you receive a message via hooks (while working), acknowledge it with `clawmux send` before continuing.
-- **Always include a `description` parameter on every Bash tool call.** This is what appears in the activity log and monitor. Keep it short and human-readable (e.g. `"Sending message to user"`, `"Waiting for messages"`, `"Restarting hub"`). Without it, the raw command is shown.
-- **After responding to a message, stop.** Do NOT call `clawmux wait`. The hub will wake you up when the next message arrives.
+- **Always include a `description` parameter on every Bash tool call.** This is what appears in the activity log and monitor. Keep it short and human-readable (e.g. `"Sending message to user"`, `"Reading config"`, `"Restarting hub"`). Without it, the raw command is shown.
+- **After responding to a message, stop.** The hub will inject the next message when it arrives.
 
 # Formatting
 Use rich markdown formatting in your output whenever it adds clarity:
@@ -70,11 +69,14 @@ Options: `--agent`, `--role` (user/assistant/system), `--after`/`--before` (YYYY
 IMPORTANT: Always use `clawmux send --to user` for ALL output to the user. Never just print text to the terminal. Text printed directly to Claude Code chat is NOT visible to the user in the browser.
 
 # Message Delivery
-Messages arrive through two mechanisms:
-1. **Hooks** — While you're actively working (making tool calls), messages are delivered via PostToolUse/PreToolUse hooks as additional context. You'll see them as `[MSG from:name]` or `[VOICE from:name]` in system reminders.
-2. **Hub injection** — While idle (after you stop responding), the hub injects messages directly into your session. They arrive as new user input — just respond normally.
+The hub injects messages directly into your tmux session at any time — whether you are idle or mid-task. They arrive as new input with a typed prefix:
 
-Process ALL messages you receive. For voice messages from the user, respond with `clawmux send --to user`. For agent messages, respond with `clawmux send --to <agent>`. When done, stop — do NOT call `clawmux wait`.
+- `[VOICE id:msg-xxx from:user] content` — message from the user (voice or text)
+- `[MSG id:msg-xxx from:name] content` — message from another agent
+- `[GROUP:name id:msg-xxx from:name] content` — group chat message
+- `[SYSTEM] content` — system notification (role change, etc.)
+
+Respond to each message using `clawmux send`. Use the `id` field for threading (`--re msg-xxx`). When done, stop.
 
 # Shared Notes
 The user keeps shared notes at `~/.clawmux/data/notes.json`. This file has two fields:
