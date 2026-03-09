@@ -448,6 +448,8 @@ struct ContentView: View {
         let thinking   = session?.isThinking == true
         let rc         = ringColor(session, spawning: spawning)
 
+        let dotPulsing = thinking || spawning || session?.state == .starting || session?.state == .compacting
+
         return Button {
             if let s = session {
                 vm.switchToSession(s.id)
@@ -457,31 +459,23 @@ struct ContentView: View {
             withAnimation(.spring(response: 0.3)) { sidebarExpanded = false }
         } label: {
             HStack(spacing: 10) {
-                // Avatar + state ring
+                // sb-icon: 32px circle with 2px state-color border + glow (hub.html mobile sb-icon)
                 ZStack {
-                    if thinking {
-                        Circle()
-                            .strokeBorder(color.opacity(isPulsing ? 0.5 : 0.05), lineWidth: 6)
-                            .frame(width: 48, height: 48)
-                            .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: isPulsing)
-                    }
                     Circle()
                         .fill(color.opacity(alive ? 0.15 : 0.06))
-                        .frame(width: 36, height: 36)
-                    if alive {
-                        Circle()
-                            .strokeBorder(rc, lineWidth: 2)
-                            .frame(width: 36, height: 36)
-                            .shadow(color: rc.opacity(0.4), radius: 4)
-                    }
+                    Circle()
+                        .strokeBorder(alive ? rc : Color.clear, lineWidth: 2)
+                        .shadow(color: rc.opacity(alive ? (dotPulsing ? (isPulsing ? 0.5 : 0.1) : 0.35) : 0), radius: 4)
+                        .animation(dotPulsing ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true) : .default, value: isPulsing)
                     Image(systemName: voiceIcon(voice.id))
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(alive ? color : color.opacity(0.30))
                 }
-                .frame(width: 48, height: 48)
+                .frame(width: 32, height: 32)
 
-                // Name + area + role + task + status  (hub.html hierarchy)
-                VStack(alignment: .leading, spacing: 2) {
+                // sb-info: name + area + role + task + status (hub.html hierarchy)
+                // This VStack starts at x=50 (8pad+32icon+10gap) — clipped at 48px when collapsed
+                VStack(alignment: .leading, spacing: 1) {
                     Text(voice.name)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(alive ? color : Color.cTextTer)
@@ -490,27 +484,26 @@ struct ContentView: View {
                         if !s.projectArea.isEmpty {
                             Text(s.projectArea.uppercased())
                                 .font(.system(size: 8, weight: .semibold))
-                                .foregroundStyle(Color.cAccent.opacity(0.85))
-                                .tracking(0.6)
+                                .foregroundStyle(Color(hex: 0x0A84FF).opacity(0.75))
+                                .tracking(0.5)
                                 .lineLimit(1)
                         }
                         if !s.role.isEmpty {
                             Text(s.role.uppercased())
-                                .font(.system(size: 9, weight: .medium))
+                                .font(.system(size: 9, weight: .semibold))
                                 .foregroundStyle(Color.cTextTer)
-                                .tracking(0.5)
+                                .tracking(0.6)
                                 .lineLimit(1)
                         }
                         if !s.task.isEmpty {
                             Text(s.task)
                                 .font(.system(size: 9))
-                                .foregroundStyle(Color.cTextTer)
+                                .foregroundStyle(Color.cTextSec.opacity(0.8))
                                 .lineLimit(2).truncationMode(.tail)
                         }
                     }
-                    // Status dot + text matching web .sb-dot / .sb-status
+                    // sb-status: dot + text (hub.html .sb-dot + .sb-status)
                     HStack(alignment: .center, spacing: 4) {
-                        let dotPulsing = thinking || spawning || session?.state == .starting || session?.state == .compacting
                         Circle()
                             .fill(rc)
                             .frame(width: 6, height: 6)
@@ -525,7 +518,7 @@ struct ContentView: View {
                     }
                 }
 
-                Spacer()
+                Spacer(minLength: 0)
 
                 // Unread badge
                 if let u = session?.unreadCount, u > 0 {
@@ -535,27 +528,20 @@ struct ContentView: View {
                         .frame(minWidth: 20, minHeight: 20)
                         .background(Color.cDanger, in: Circle())
                 }
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(alive ? Color.cTextTer : Color(hex: 0x2A3A52))
             }
-            .padding(.horizontal, 12).padding(.vertical, 7)
+            .padding(.horizontal, 8).padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(isSelected ? Color.cAccent.opacity(0.08) : Color.cCard)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .strokeBorder(isSelected ? Color.cAccent.opacity(0.3) : Color.cBorder, lineWidth: 0.5)
-                        )
-                    // Left accent bar — always purple per web .sidebar-card.selected::before
+                    // Transparent bg on mobile (hub.html selected overrides to transparent)
                     if isSelected {
-                        RoundedRectangle(cornerRadius: 2, style: .continuous)
-                            .fill(Color.cAccent)
-                            .frame(width: 3)
-                            .padding(.vertical, 8)
-                            .shadow(color: Color.cAccent.opacity(0.6), radius: 4)
+                        Color(hex: 0x0A84FF).opacity(0.05)
+                    }
+                    // Left accent bar: 3px × 28px blue (hub.html mobile .selected::before)
+                    if isSelected {
+                        Capsule()
+                            .fill(Color(hex: 0x0A84FF))
+                            .frame(width: 3, height: 28)
                     }
                 }
             )
@@ -1851,6 +1837,8 @@ struct SettingsView: View {
     @ObservedObject var vm: ClawMuxViewModel
     @Environment(\.dismiss) var dismiss
     @State private var draftURL: String = ""
+    @State private var draftTTSURL: String = ""
+    @State private var draftSTTURL: String = ""
 
     var urlChanged: Bool { draftURL.trimmingCharacters(in: .whitespaces) != vm.serverURL.trimmingCharacters(in: .whitespaces) }
     var appVersion: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—" }
@@ -1859,7 +1847,7 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // Server connection (iOS-only — not in web settings)
+                // Server (iOS-only — not in web settings)
                 Section("Server") {
                     TextField("Server URL", text: $draftURL)
                         .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
@@ -1877,13 +1865,14 @@ struct SettingsView: View {
                     }
                     Text("e.g. workstation.tailee9084.ts.net:3460").font(.caption).foregroundStyle(.secondary)
                 }
-                .onAppear { draftURL = vm.serverURL }
 
-                // TEXT-TO-SPEECH — matches web "Text-to-Speech" section
+                // Text-to-Speech
                 Section("Text-to-Speech") {
-                    Toggle("Enabled", isOn: $vm.voiceResponses)
-                        .onChange(of: vm.voiceResponses) { _, v in vm.updateSetting("voice_responses", value: v) }
-                    if vm.voiceResponses {
+                    Toggle("Enabled", isOn: $vm.ttsEnabled)
+                    if vm.ttsEnabled {
+                        TextField("TTS URL", text: $draftTTSURL)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
+                            .onSubmit { vm.ttsURL = draftTTSURL.trimmingCharacters(in: .whitespaces) }
                         Picker("Playback Speed", selection: Binding(get: { vm.activeSpeed }, set: { vm.activeSpeed = $0 })) {
                             ForEach(SPEED_OPTIONS, id: \.value) { Text($0.label).tag($0.value) }
                         }
@@ -1892,21 +1881,26 @@ struct SettingsView: View {
                     }
                 }
 
-                // SPEECH-TO-TEXT — matches web "Speech-to-Text" section
+                // Speech-to-Text
                 Section("Speech-to-Text") {
-                    Toggle("Auto Record", isOn: $vm.autoRecord)
-                        .onChange(of: vm.autoRecord) { _, v in vm.updateSetting("auto_record", value: v) }
-                    Toggle("Auto End (VAD)", isOn: $vm.vadEnabled)
-                        .onChange(of: vm.vadEnabled) { _, v in vm.updateSetting("auto_end", value: v) }
-                    if vm.vadEnabled {
-                        Picker("Stop After", selection: $vm.vadSilenceDuration) {
-                            Text("0.5 s").tag(0.5); Text("1 s").tag(1.0); Text("1.5 s").tag(1.5)
-                            Text("2 s").tag(2.0); Text("3 s").tag(3.0)
+                    Toggle("Enabled", isOn: $vm.sttEnabled)
+                    if vm.sttEnabled {
+                        TextField("STT URL", text: $draftSTTURL)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
+                            .onSubmit { vm.sttURL = draftSTTURL.trimmingCharacters(in: .whitespaces) }
+                        Picker("Whisper Model", selection: $vm.whisperModel) {
+                            Text("High (large-v3)").tag("high")
+                            Text("Medium").tag("medium")
+                            Text("Low (base)").tag("low")
                         }
+                        Toggle("Auto Record", isOn: $vm.autoRecord)
+                            .onChange(of: vm.autoRecord) { _, v in vm.updateSetting("auto_record", value: v) }
+                        Toggle("Auto End", isOn: $vm.vadEnabled)
+                            .onChange(of: vm.vadEnabled) { _, v in vm.updateSetting("auto_end", value: v) }
                     }
                 }
 
-                // AGENT — matches web "Agent" section
+                // Agent
                 Section("Agent") {
                     Picker("Default Model", selection: $vm.defaultModel) {
                         Text("Opus").tag("opus")
@@ -1921,21 +1915,48 @@ struct SettingsView: View {
                     Toggle("Silent Startup", isOn: $vm.silentStartup)
                     Toggle("Show Agent Messages", isOn: $vm.showAgentMessages)
                     Toggle("Verbose Activity Log", isOn: $vm.verboseMode)
+                        .onChange(of: vm.verboseMode) { _, v in vm.updateSetting("activity_verbose", value: v) }
                 }
 
-                // SOUNDS — matches web "Sounds" section
+                // Sounds
                 Section("Sounds") {
                     Toggle("Thinking Sounds", isOn: $vm.soundThinkingAuto)
                     Toggle("Audio Cues", isOn: $vm.soundListeningAuto)
                 }
 
-                // CHAT — text size control (matches web adjustChatFontSize)
+                // Chat
                 Section("Chat") {
-                    Stepper("Text Size: \(vm.chatFontSize)pt",
-                            value: $vm.chatFontSize, in: 11...22, step: 1)
+                    HStack {
+                        Text("Text Size")
+                        Spacer()
+                        Button { if vm.chatFontSize > 10 { vm.chatFontSize -= 1 } } label: {
+                            Image(systemName: "minus").frame(width: 28, height: 28)
+                        }.buttonStyle(.bordered)
+                        Text("\(vm.chatFontSize)").font(.subheadline).frame(minWidth: 32, alignment: .center)
+                        Button { if vm.chatFontSize < 24 { vm.chatFontSize += 1 } } label: {
+                            Image(systemName: "plus").frame(width: 28, height: 28)
+                        }.buttonStyle(.bordered)
+                    }
                 }
 
-                // USAGE — matches web "Usage" section (always shown, fetches on appear)
+                // Background Mode (iOS-only)
+                Section {
+                    Toggle("Background Mode", isOn: $vm.backgroundMode)
+                } header: { Text("Background") } footer: {
+                    Text(vm.backgroundMode
+                         ? "Voice sessions stay alive when the app is backgrounded using a silent audio loop."
+                         : "The WebSocket connection may drop when the app is backgrounded.")
+                }
+
+                // Live Activity (iOS-only)
+                Section {
+                    Toggle("Auto Mode", isOn: $vm.liveActivityAuto)
+                    Toggle("Push to Talk", isOn: $vm.liveActivityPTT)
+                } header: { Text("Live Activity") } footer: {
+                    Text("Show session status on Dynamic Island and Lock Screen.")
+                }
+
+                // Usage
                 Section("Usage") {
                     if let pct = vm.usage5hPct {
                         HStack {
@@ -1968,23 +1989,14 @@ struct SettingsView: View {
                 }
                 .onAppear { vm.fetchUsage() }
 
-                // DEBUG — matches web "Open Debug Panel" button
-                Section {
+                // Debug
+                Section("Debug") {
                     Button {
                         dismiss()
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                             vm.showDebug = true; vm.startDebugRefresh()
                         }
                     } label: { Label("Open Debug Panel", systemImage: "ant") }
-                }
-
-                // iOS-ONLY: Background mode + Live Activity (no web equivalent)
-                Section {
-                    Toggle("Background Mode", isOn: $vm.backgroundMode)
-                } header: { Text("iOS") } footer: {
-                    Text(vm.backgroundMode
-                         ? "Voice sessions stay alive when backgrounded using a silent audio loop."
-                         : "WebSocket may drop when the app is backgrounded.")
                 }
 
                 Section {
@@ -1997,6 +2009,11 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .onAppear {
+                draftURL    = vm.serverURL
+                draftTTSURL = vm.ttsURL
+                draftSTTURL = vm.sttURL
+            }
         }
     }
 }

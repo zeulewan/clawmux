@@ -428,6 +428,45 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     @Published var verboseMode: Bool {
         didSet { UserDefaults.standard.set(verboseMode, forKey: "verboseMode") }
     }
+    @Published var defaultModel: String {
+        didSet {
+            UserDefaults.standard.set(defaultModel, forKey: "defaultModel")
+            updateSetting("default_model", value: defaultModel)
+        }
+    }
+    @Published var defaultEffort: String {
+        didSet {
+            UserDefaults.standard.set(defaultEffort, forKey: "defaultEffort")
+            updateSetting("default_effort", value: defaultEffort)
+        }
+    }
+    @Published var ttsEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(ttsEnabled, forKey: "ttsEnabled")
+            updateSetting("tts_enabled", value: ttsEnabled)
+        }
+    }
+    @Published var ttsURL: String {
+        didSet { UserDefaults.standard.set(ttsURL, forKey: "ttsURL") }
+    }
+    @Published var sttEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(sttEnabled, forKey: "sttEnabled")
+            updateSetting("stt_enabled", value: sttEnabled)
+        }
+    }
+    @Published var sttURL: String {
+        didSet { UserDefaults.standard.set(sttURL, forKey: "sttURL") }
+    }
+    @Published var whisperModel: String {
+        didSet {
+            UserDefaults.standard.set(whisperModel, forKey: "whisperModel")
+            updateSetting("whisper_model", value: whisperModel)
+        }
+    }
+    @Published var chatFontSize: Int {
+        didSet { UserDefaults.standard.set(chatFontSize, forKey: "chatFontSize") }
+    }
 
     // Global master toggles
     @Published var globalHaptics: Bool {
@@ -663,6 +702,14 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         self.verboseMode      = UserDefaults.standard.object(forKey: "verboseMode")      as? Bool ?? false
         self.silentStartup    = UserDefaults.standard.object(forKey: "silentStartup")    as? Bool ?? false
         self.showAgentMessages = UserDefaults.standard.object(forKey: "showAgentMessages") as? Bool ?? true
+        self.ttsEnabled       = UserDefaults.standard.object(forKey: "ttsEnabled")       as? Bool ?? true
+        self.ttsURL           = UserDefaults.standard.string(forKey: "ttsURL")           ?? ""
+        self.sttEnabled       = UserDefaults.standard.object(forKey: "sttEnabled")       as? Bool ?? true
+        self.sttURL           = UserDefaults.standard.string(forKey: "sttURL")           ?? ""
+        self.whisperModel     = UserDefaults.standard.string(forKey: "whisperModel")     ?? "high"
+        self.defaultModel     = UserDefaults.standard.string(forKey: "defaultModel")     ?? "opus"
+        self.defaultEffort    = UserDefaults.standard.string(forKey: "defaultEffort")    ?? "medium"
+        self.chatFontSize     = UserDefaults.standard.object(forKey: "chatFontSize")     as? Int  ?? 14
         self.recordingURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("recording.wav")
         super.init()
