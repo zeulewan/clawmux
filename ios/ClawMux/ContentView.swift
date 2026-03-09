@@ -839,7 +839,7 @@ struct ContentView: View {
 
     private func ringColor(_ session: VoiceSession?, spawning: Bool) -> Color {
         if spawning { return .cCaution }                  // yellow: starting up
-        guard let s = session else { return Color(hex: 0x48484A) }
+        guard let s = session else { return .cTextTer }  // offline: var(--text-tertiary)
         if s.state == .starting { return .cCaution }      // yellow: starting
         if s.unreadCount > 0   { return .cDanger }        // red: unread
         if s.state == .compacting { return .cCaution }    // yellow: compacting
