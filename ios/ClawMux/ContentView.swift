@@ -1233,7 +1233,7 @@ struct ContentView: View {
         let bubbleBg: AnyShapeStyle = role == "user"
             ? AnyShapeStyle(userBubbleColor)
             : role == "assistant"
-                ? AnyShapeStyle(isPlaying ? color.opacity(0.22) : Color.cCard)
+                ? AnyShapeStyle(color.opacity(isPlaying ? 0.22 : 0.20))
                 : AnyShapeStyle(Color.clear)
 
         return AnyView(HStack(alignment: .bottom, spacing: 0) {
