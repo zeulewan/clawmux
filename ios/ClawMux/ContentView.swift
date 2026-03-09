@@ -688,7 +688,7 @@ struct ContentView: View {
                     } else if role == "user" {
                         Text(LocalizedStringKey(msg.text))
                             .font(.system(size: 15))
-                            .lineSpacing(2)
+                            .lineSpacing(4)
                             .foregroundStyle(Color.white)
                             .frame(maxWidth: .infinity, alignment: .trailing)
                     } else {
@@ -1342,7 +1342,7 @@ private struct MarkdownContentView: View {
             Text(LocalizedStringKey(str))
                 .font(.system(size: 15))
                 .foregroundStyle(foreground)
-                .lineSpacing(2)
+                .lineSpacing(4)
                 .fixedSize(horizontal: false, vertical: true)
 
         case .header(let level, let str):
