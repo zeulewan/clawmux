@@ -2204,20 +2204,10 @@ async def _inject_inbox(session, session_id: str) -> None:
     If the pane is not in input-ready state the messages stay in the inbox and
     will be retried on the next idle signal.
     """
-    await asyncio.sleep(0.3)
+    await asyncio.sleep(0.5)
 
     # Abort if the agent started working again before we got here
     if session.state != AgentState.IDLE:
-        return
-
-    # Verify Claude Code is at its input prompt before injecting
-    try:
-        pane = await session_mgr.backend.capture_pane(session.tmux_session)
-        if not pane or ("❯" not in pane and ">" not in pane):
-            log.warning("[%s] tmux injection skipped: Claude Code not at input prompt", session_id)
-            return
-    except Exception as exc:
-        log.warning("[%s] tmux injection skipped: pane capture failed (%s)", session_id, exc)
         return
 
     messages = await asyncio.to_thread(inbox.read_and_clear, session.work_dir)
@@ -2272,14 +2262,14 @@ async def _inbox_write_and_notify(session, msg_dict: dict) -> dict:
             "preview": msg_dict.get("content", "")[:100],
         },
     })
-    # Push to wait WS only if agent is IDLE (in wait mode).
-    # When not IDLE, hooks will deliver from the inbox file — pushing to
-    # the queue too would cause duplicate delivery.
-    if session.state == AgentState.IDLE and hasattr(session, "_wait_queue"):
-        try:
-            session._wait_queue.put_nowait(written)
-        except Exception:
-            pass
+    # If agent is IDLE, schedule tmux injection so the message is delivered
+    # immediately without waiting for the next stop hook cycle.
+    if session.state == AgentState.IDLE and session.work_dir:
+        prev = _pending_injections.pop(session.session_id, None)
+        if prev and not prev.done():
+            prev.cancel()
+        task = asyncio.create_task(_inject_inbox(session, session.session_id))
+        _pending_injections[session.session_id] = task
     return written
 
 
