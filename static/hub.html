@@ -2151,18 +2151,47 @@ _initChatScroll();
   _updateScrollBtnPos();
   new ResizeObserver(_updateScrollBtnPos).observe(controlsEl);
 })();
-// Show loading state on welcome screen until sessions are ready
-(function() {
-  const sub = document.getElementById('welcome-sub');
+// Loading progress bar — advances through stages, completes when sidebar ready
+window._loadingBar = (function() {
   const bar = document.getElementById('app-loading-bar');
+  const sub = document.getElementById('welcome-sub');
+  if (!bar) return { advance() {}, done() {} };
+  let _pct = 0;
+  let _slowTimer = null;
+  function _set(pct) {
+    _pct = pct;
+    bar.style.width = pct + '%';
+  }
+  function _slowCrawl(target) {
+    if (_slowTimer) clearInterval(_slowTimer);
+    _slowTimer = setInterval(function() {
+      if (_pct >= target) { clearInterval(_slowTimer); _slowTimer = null; return; }
+      _set(Math.min(_pct + 1, target));
+    }, 80);
+  }
+  // Kick off: snap to 15%, then slow-crawl toward 80%
+  _set(15);
+  _slowCrawl(80);
+  if (sub) sub.textContent = 'Loading…';
+  return {
+    advance: function(pct) { _set(pct); _slowCrawl(pct + 5); },
+    done: function() {
+      if (_slowTimer) { clearInterval(_slowTimer); _slowTimer = null; }
+      bar.style.transition = 'width 0.25s ease, opacity 0.5s 0.3s';
+      _set(100);
+      setTimeout(function() { bar.classList.remove('active'); bar.style.width = '0%'; bar.style.transition = ''; }, 900);
+      if (sub) sub.textContent = 'Select an agent from the sidebar to begin';
+    }
+  };
+})();
+
+// Watch for sidebar loading class removal to complete the bar
+(function() {
   const sidebar = document.getElementById('sidebar');
-  if (!sub || !sidebar) return;
-  sub.textContent = 'Loading…';
-  if (bar) bar.classList.add('active');
+  if (!sidebar) return;
   const obs = new MutationObserver(function() {
     if (!sidebar.classList.contains('loading')) {
-      sub.textContent = 'Select an agent from the sidebar to begin';
-      if (bar) bar.classList.remove('active');
+      window._loadingBar.done();
       obs.disconnect();
     }
   });

@@ -29,6 +29,7 @@ function connect() {
 
   ws.onopen = () => {
     setConnected('connected');
+    if (!_wsHasConnected && window._loadingBar) window._loadingBar.advance(50);
     if (_wsHasConnected) showCopyToast('Hub reconnected');
     _wsHasConnected = true;
     if (!activeSessionId) setStatus('Connected');
@@ -126,6 +127,7 @@ function handleMessage(data) {
   // Hub-level messages (no session_id)
   if (type === 'session_list') {
     _sessionsLoading = true;
+    if (window._loadingBar) window._loadingBar.advance(75);
     const promises = [];
     for (const s of data.sessions) {
       if (!sessions.has(s.session_id)) {

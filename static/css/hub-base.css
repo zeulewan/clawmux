@@ -454,29 +454,18 @@ body {
 /* App loading progress bar — fixed at top of viewport */
 #app-loading-bar {
   position: fixed;
-  top: 0; left: 0; right: 0;
+  top: 0; left: 0;
+  width: 0%;
   height: 3px;
-  overflow: hidden;
+  background: var(--blue);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.3s;
+  transition: width 0.4s ease, opacity 0.4s;
   z-index: 9999;
+  border-radius: 0 2px 2px 0;
+  box-shadow: 0 0 8px var(--blue);
 }
 #app-loading-bar.active { opacity: 1; }
-#app-loading-bar::after {
-  content: '';
-  position: absolute;
-  top: 0; left: -50%;
-  width: 50%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, var(--blue), var(--blue));
-  border-radius: 0 2px 2px 0;
-  animation: loading-bar-sweep 1s ease-in-out infinite;
-}
-@keyframes loading-bar-sweep {
-  0%   { left: -50%; }
-  100% { left: 110%; }
-}
 
 /* Focus mode */
 #focus-view {
