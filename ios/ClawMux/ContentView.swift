@@ -332,6 +332,42 @@ struct ContentView: View {
                     }
                 }
             }
+            // Set Role — matches web ctx-set-role submenu
+            if let s = session {
+                Menu {
+                    ForEach(["Manager", "Frontend", "Backend", "Researcher", "Worker"], id: \.self) { role in
+                        Button {
+                            vm.setSessionRole(s.id, role: role)
+                        } label: {
+                            if s.role.lowercased() == role.lowercased() {
+                                Label(role, systemImage: "checkmark")
+                            } else {
+                                Text(role)
+                            }
+                        }
+                    }
+                } label: {
+                    Label("Set Role", systemImage: "person.badge.key")
+                }
+            }
+            // Move to Project — matches web ctx-move-project submenu
+            if let s = session, !vm.knownProjects.isEmpty {
+                Menu {
+                    ForEach(vm.knownProjects, id: \.self) { proj in
+                        Button {
+                            vm.moveSessionToProject(s.id, project: proj)
+                        } label: {
+                            if s.project == proj {
+                                Label(proj, systemImage: "checkmark")
+                            } else {
+                                Text(proj)
+                            }
+                        }
+                    }
+                } label: {
+                    Label("Move to Project", systemImage: "folder")
+                }
+            }
             // Reset — matches web ctx-reset
             Button(role: .destructive) { resetVoiceId = voice.id; showResetConfirm = true } label: {
                 Label("Reset", systemImage: "arrow.counterclockwise")
@@ -569,6 +605,50 @@ struct ContentView: View {
         .buttonStyle(.plain)
         .contextMenu {
             if let s = session {
+                // Mark as Unread / Read
+                if s.unreadCount == 0 {
+                    Button { vm.markSessionUnread(s.id) } label: {
+                        Label("Mark as Unread", systemImage: "envelope.badge")
+                    }
+                } else {
+                    Button { vm.clearSessionUnread(s.id) } label: {
+                        Label("Mark as Read", systemImage: "checkmark.circle")
+                    }
+                }
+                // Set Role
+                Menu {
+                    ForEach(["Manager", "Frontend", "Backend", "Researcher", "Worker"], id: \.self) { role in
+                        Button {
+                            vm.setSessionRole(s.id, role: role)
+                        } label: {
+                            if s.role.lowercased() == role.lowercased() {
+                                Label(role, systemImage: "checkmark")
+                            } else {
+                                Text(role)
+                            }
+                        }
+                    }
+                } label: {
+                    Label("Set Role", systemImage: "person.badge.key")
+                }
+                // Move to Project
+                if !vm.knownProjects.isEmpty {
+                    Menu {
+                        ForEach(vm.knownProjects, id: \.self) { proj in
+                            Button {
+                                vm.moveSessionToProject(s.id, project: proj)
+                            } label: {
+                                if s.project == proj {
+                                    Label(proj, systemImage: "checkmark")
+                                } else {
+                                    Text(proj)
+                                }
+                            }
+                        }
+                    } label: {
+                        Label("Move to Project", systemImage: "folder")
+                    }
+                }
                 Button(role: .destructive) { vm.terminateSession(s.id) } label: {
                     Label("End Session", systemImage: "xmark.circle")
                 }

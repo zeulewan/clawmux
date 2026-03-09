@@ -1887,6 +1887,45 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     func clearSessionUnread(_ id: String) {
         guard let idx = sessionIndex(id) else { return }
         sessions[idx].unreadCount = 0
+        // Persist to server (matches web clearSessionUnread → POST /api/sessions/:id/mark-read)
+        guard let baseURL = httpBaseURL() else { return }
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/sessions/\(id)/mark-read"))
+        req.httpMethod = "POST"
+        URLSession.shared.dataTask(with: req) { _, _, _ in }.resume()
+    }
+
+    // Matches web _setRole → POST /api/project-status/:id { role }
+    func setSessionRole(_ id: String, role: String) {
+        guard let idx = sessionIndex(id), let baseURL = httpBaseURL() else { return }
+        sessions[idx].role = role
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/project-status/\(id)"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["role": role])
+        URLSession.shared.dataTask(with: req) { _, _, _ in }.resume()
+    }
+
+    // Matches web _moveToProject → POST /api/project-status/:id { project, area } + POST /api/agents/:voice/assign
+    func moveSessionToProject(_ id: String, project: String) {
+        guard let idx = sessionIndex(id), let baseURL = httpBaseURL() else { return }
+        let voice = sessions[idx].voice
+        let area = sessions[idx].projectArea
+        sessions[idx].project = project
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/project-status/\(id)"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["project": project, "area": area])
+        URLSession.shared.dataTask(with: req) { _, _, _ in }.resume()
+        var req2 = URLRequest(url: baseURL.appendingPathComponent("api/agents/\(voice)/assign"))
+        req2.httpMethod = "POST"
+        req2.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req2.httpBody = try? JSONSerialization.data(withJSONObject: ["project": project])
+        URLSession.shared.dataTask(with: req2) { _, _, _ in }.resume()
+    }
+
+    // Derived project list from live sessions (matches web project-selector options)
+    var knownProjects: [String] {
+        Array(Set(sessions.map(\.project).filter { !$0.isEmpty })).sorted()
     }
 
     private func markSessionViewing(_ id: String) {
