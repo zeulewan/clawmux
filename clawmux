@@ -1790,13 +1790,19 @@ def cmd_monitor(args):
         ("status-left", f"  {proj_display} "),
         ("status-left-style", "fg=colour255,bg=colour236,bold"),
         ("status-left-length", "30"),
-        ("status-right", f" {n} agents "),
+        ("status-right", f" ^B q: quit   {n} agents "),
         ("status-right-style", "fg=colour245,bg=colour236"),
-        ("status-right-length", "20"),
+        ("status-right-length", "30"),
         ("window-status-current-format", ""),
         ("window-status-format", ""),
     ]:
         tmux_run("set-option", "-t", MONITOR_SESSION, opt, val)
+
+    # Bind Ctrl+B q to kill the monitor — if-shell gates it to this session only
+    # so pressing Ctrl+B q in any agent session is a harmless no-op
+    tmux_run("bind-key", "-T", "prefix", "q",
+             "if-shell", f'[ "#{{session_name}}" = "{MONITOR_SESSION}" ]',
+             f"kill-session -t ={MONITOR_SESSION}")
 
     agents_list = ", ".join(s.get("label", "?") for s in agent_sessions)
     print(f"Monitor ready: {agents_list}")
