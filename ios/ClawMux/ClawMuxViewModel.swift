@@ -1928,6 +1928,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     // MARK: - Audio Playback
 
     private func playAudio(_ sessionId: String, data: Data) {
+        // Stop any message TTS replay to prevent delegate confusion
+        stopMessageTTS()
         if (isAutoMode && hapticsPlaybackAuto) || (pushToTalk && hapticsPlaybackPTT) {
             haptic(.soft)
         }
