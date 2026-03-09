@@ -727,8 +727,11 @@ function showTypingIndicator(sessionId) {
   el.className = 'msg assistant msg-typing-indicator';
   el.dataset.typingFor = sessionId;
   el.addEventListener('click', () => _toggleActivityExpand(el, sessionId));
-  el.innerHTML = '<div class="typing-main-row"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div>';
   chatArea.appendChild(el);
+  // Restore current tool activity text immediately (avoids blank dots until next tool call)
+  const s = typeof sessions !== 'undefined' ? sessions.get(sessionId) : null;
+  const savedText = s && s.toolStatusText ? s.toolStatusText : '';
+  _renderTypingBubble(el, sessionId, savedText);
   chatScrollToBottom(false);
 }
 
