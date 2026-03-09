@@ -732,11 +732,19 @@ body {
   background: var(--bg-glass);
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.25);
   opacity: 0;
   transform: translateX(16px);
   pointer-events: none;
   transition: opacity 0.2s ease, transform 0.2s ease;
   visibility: hidden;
+}
+/* Glass cards inside settings — same treatment as mobile */
+#settings-page .settings-card {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: rgba(255, 255, 255, 0.08);
 }
 #settings-page.open {
   opacity: 1;
