@@ -336,6 +336,7 @@ async def lifespan(app: FastAPI):
              hub_config.KOKORO_URL, hub_config.WHISPER_URL)
     voice.reload_pronunciation_overrides()
     await agents_store.load()
+    _load_groups()
     await session_mgr.cleanup_stale_sessions()
     broker.start()
     timeout_task = asyncio.create_task(session_mgr.run_timeout_loop())
@@ -1549,13 +1550,22 @@ def _append_group_history(group_id: str, role: str, text: str, sender: str = "",
 
 
 def _group_to_dict(g: dict) -> dict:
-    """Serialize a group chat dict, resolving session_ids to voice names."""
+    """Serialize a group chat dict, resolving voices to member info."""
     members = []
-    for sid in g["session_ids"]:
-        s = session_mgr.sessions.get(sid)
-        if s:
-            members.append({"session_id": sid, "voice": s.voice, "label": s.label})
-    return {"id": g["id"], "name": g["name"], "session_ids": g["session_ids"], "members": members}
+    # Build a voice→session lookup for online resolution
+    voice_to_session: dict[str, object] = {}
+    for s in session_mgr.sessions.values():
+        if s.voice and s.voice not in voice_to_session:
+            voice_to_session[s.voice] = s
+    for v in g.get("voices", []):
+        s = voice_to_session.get(v)
+        members.append({
+            "voice": v,
+            "label": s.label if s else _label_for_voice(v),
+            "online": s is not None,
+            "session_id": s.session_id if s else None,
+        })
+    return {"id": g["id"], "name": g["name"], "voices": list(g.get("voices", [])), "members": members}
 
 
 @app.get("/api/groupchats")
@@ -1573,8 +1583,9 @@ async def create_groupchat(request: Request):
     if key in _group_chats:
         return JSONResponse({"error": f"group '{name}' already exists"}, status_code=409)
     gid = "gc-" + uuid.uuid4().hex[:8]
-    session_ids = data.get("session_ids", [])
-    _group_chats[key] = {"id": gid, "name": name, "session_ids": list(session_ids)}
+    voices = data.get("voices", [])
+    _group_chats[key] = {"id": gid, "name": name, "voices": list(voices)}
+    _save_groups()
     await send_to_browser({"type": "groupchat_created", "group": _group_to_dict(_group_chats[key])})
     return JSONResponse(_group_to_dict(_group_chats[key]))
 
@@ -1585,6 +1596,7 @@ async def delete_groupchat(name: str):
     if key not in _group_chats:
         return JSONResponse({"error": "group not found"}, status_code=404)
     g = _group_chats.pop(key)
+    _save_groups()
     await send_to_browser({"type": "groupchat_deleted", "group_id": g["id"], "name": g["name"]})
     return JSONResponse({"status": "deleted", "name": g["name"]})
 
@@ -1595,18 +1607,19 @@ async def groupchat_add_member(name: str, request: Request):
     if key not in _group_chats:
         return JSONResponse({"error": "group not found"}, status_code=404)
     data = await request.json()
-    # Accept session_id or voice name
-    voice = data.get("voice") or data.get("session_id")
-    session = None
-    if voice:
-        for s in session_mgr.sessions.values():
-            if s.voice == voice or s.session_id == voice or s.label.lower() == voice.lower():
-                session = s; break
-    if not session:
-        return JSONResponse({"error": "session not found"}, status_code=404)
+    # Accept voice ID directly; also resolve session_id → voice for backwards compat
+    voice = data.get("voice", "")
+    if not voice:
+        sid = data.get("session_id", "")
+        if sid:
+            s = session_mgr.sessions.get(sid)
+            voice = s.voice if s else ""
+    if not voice:
+        return JSONResponse({"error": "voice is required"}, status_code=400)
     g = _group_chats[key]
-    if session.session_id not in g["session_ids"]:
-        g["session_ids"].append(session.session_id)
+    if voice not in g["voices"]:
+        g["voices"].append(voice)
+    _save_groups()
     await send_to_browser({"type": "groupchat_updated", "group": _group_to_dict(g)})
     return JSONResponse(_group_to_dict(g))
 
@@ -1617,15 +1630,16 @@ async def groupchat_remove_member(name: str, request: Request):
     if key not in _group_chats:
         return JSONResponse({"error": "group not found"}, status_code=404)
     data = await request.json()
-    voice = data.get("voice") or data.get("session_id")
-    session = None
-    if voice:
-        for s in session_mgr.sessions.values():
-            if s.voice == voice or s.session_id == voice or s.label.lower() == voice.lower():
-                session = s; break
+    voice = data.get("voice", "")
+    if not voice:
+        sid = data.get("session_id", "")
+        if sid:
+            s = session_mgr.sessions.get(sid)
+            voice = s.voice if s else ""
     g = _group_chats[key]
-    if session and session.session_id in g["session_ids"]:
-        g["session_ids"].remove(session.session_id)
+    if voice and voice in g["voices"]:
+        g["voices"].remove(voice)
+    _save_groups()
     await send_to_browser({"type": "groupchat_updated", "group": _group_to_dict(g)})
     return JSONResponse(_group_to_dict(g))
 
@@ -1648,10 +1662,14 @@ async def groupchat_send_message(name: str, request: Request):
     await asyncio.to_thread(
         _append_group_history, g["id"], role, text, sender, msg_id
     )
-    # Deliver to all members' inboxes
+    # Deliver to all online members' inboxes (look up sessions by voice)
     delivered = []
-    for sid in g["session_ids"]:
-        session = session_mgr.sessions.get(sid)
+    voice_to_session: dict[str, object] = {}
+    for s in session_mgr.sessions.values():
+        if s.voice and s.voice not in voice_to_session:
+            voice_to_session[s.voice] = s
+    for v in g.get("voices", []):
+        session = voice_to_session.get(v)
         if not session or not session.work_dir:
             continue
         # Don't deliver back to the sender
@@ -1666,7 +1684,7 @@ async def groupchat_send_message(name: str, request: Request):
             "group_id": g["id"],
         }
         await _inbox_write_and_notify(session, inbox_msg)
-        delivered.append(sid)
+        delivered.append(session.session_id)
     # Notify browser of new group history message
     await send_to_browser({
         "type": "groupchat_message",
@@ -2154,7 +2172,8 @@ async def _inject_inbox(session, session_id: str) -> None:
         return
 
     lines = []
-    if session.walking_mode:
+    has_user_msg = any(m.get("type") != "system" for m in messages)
+    if session.walking_mode and has_user_msg:
         lines.append("[SYSTEM] Walking mode active — respond in plain spoken text only. No markdown, no underscores, no special formatting.")
     for msg in messages:
         msg_type = msg.get("type", "system")
