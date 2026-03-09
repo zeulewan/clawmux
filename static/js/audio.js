@@ -646,10 +646,6 @@ function stopPlaybackVAD() {
     playbackVadCtx.close().catch(() => {});
     playbackVadCtx = null;
   }
-  if (_isDesktop && _playbackVadStream) {
-    _releaseMicStream(_playbackVadStream);
-    _playbackVadStream = null;
-  }
 }
 
 // --- Thinking VAD (auto-record interjections while agent is processing) ---
@@ -719,10 +715,6 @@ function stopThinkingVAD() {
     thinkingVadCtx = null;
   }
   thinkingVadSessionId = null;
-  if (_isDesktop && _thinkingVadStream) {
-    _releaseMicStream(_thinkingVadStream);
-    _thinkingVadStream = null;
-  }
 }
 
 // --- Status indicator stubs ---
@@ -1428,16 +1420,7 @@ function updateMicUI() {
 }
 
 // --- Persistent mic stream ---
-// On desktop: release stream when idle so browser exits communication audio mode (restores music quality).
-// On mobile: keep persistent stream to avoid getUserMedia latency on slow devices.
-const _isDesktop = !/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
-function _releaseMicStream(stream) {
-  if (!stream) return;
-  stream.getTracks().forEach(t => t.stop());
-  if (stream === persistentStream) persistentStream = null;
-}
-
+// Stream is kept alive for the session duration to avoid getUserMedia latency and audio playback interruptions.
 async function getMicStream() {
   if (persistentStream) {
     const tracks = persistentStream.getAudioTracks();
@@ -1446,11 +1429,12 @@ async function getMicStream() {
     }
     persistentStream = null;
   }
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  stream.getAudioTracks().forEach(t => { t.enabled = !micMuted; });
-  if (!_isDesktop) persistentStream = stream; // mobile: keep alive
-  return stream;
+  persistentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  persistentStream.getAudioTracks().forEach(t => { t.enabled = !micMuted; });
+  return persistentStream;
 }
+
+function _releaseMicStream(stream) { /* no-op — stream stays alive to prevent playback interruptions */ }
 
 // Prevent Space/Enter from reopening header dropdowns after selection
 ['session-model', 'project-selector'].forEach(id => {
@@ -1479,7 +1463,6 @@ async function startRecording(sessionId) {
     audioChunks = [];
     mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
     mediaRecorder.onstop = () => {
-      if (_isDesktop) _releaseMicStream(stream); // release immediately on desktop (restores audio quality)
       if (discardRecording) {
         discardRecording = false;
       } else {
