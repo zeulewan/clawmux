@@ -450,7 +450,10 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         }
     }
     @Published var ttsURL: String {
-        didSet { UserDefaults.standard.set(ttsURL, forKey: "ttsURL") }
+        didSet {
+            UserDefaults.standard.set(ttsURL, forKey: "ttsURL")
+            updateSetting("tts_url", value: ttsURL)
+        }
     }
     @Published var sttEnabled: Bool {
         didSet {
@@ -459,12 +462,15 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         }
     }
     @Published var sttURL: String {
-        didSet { UserDefaults.standard.set(sttURL, forKey: "sttURL") }
+        didSet {
+            UserDefaults.standard.set(sttURL, forKey: "sttURL")
+            updateSetting("stt_url", value: sttURL)
+        }
     }
     @Published var whisperModel: String {
         didSet {
             UserDefaults.standard.set(whisperModel, forKey: "whisperModel")
-            updateSetting("whisper_model", value: whisperModel)
+            updateSetting("quality_mode", value: whisperModel)  // server key is quality_mode
         }
     }
     @Published var chatFontSize: Int {
