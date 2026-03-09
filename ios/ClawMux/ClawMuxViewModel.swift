@@ -1738,39 +1738,45 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 sessions[idx].task = json["task"] as? String ?? ""
             }
 
-        case "group_created":
-            // { group_id: "grp-xxx", session_ids: [...] }
-            if let gid = json["group_id"] as? String,
-               let sids = json["session_ids"] as? [String]
+        case "groupchat_created", "groupchat_updated":
+            // { group: {id, name, voices, members: [{voice, session_id, ...}]} }
+            if let g = json["group"] as? [String: Any],
+               let gid = g["id"] as? String,
+               let name = g["name"] as? String
             {
-                for sid in sids {
-                    if let idx = sessionIndex(sid) { sessions[idx].groupId = gid }
+                let voices = g["voices"] as? [String] ?? []
+                // Update knownGroupChats
+                if let i = knownGroupChats.firstIndex(where: { $0.name.lowercased() == name.lowercased() }) {
+                    knownGroupChats[i] = (name: name, voices: voices)
+                } else {
+                    knownGroupChats.append((name: name, voices: voices))
                 }
-            }
-
-        case "group_updated":
-            // { group_id: "grp-xxx", session_ids: [...] } — new membership list
-            if let gid = json["group_id"] as? String,
-               let sids = json["session_ids"] as? [String]
-            {
-                let memberSet = Set(sids)
+                // Sync session groupId from members
+                let memberSessionIds = Set((g["members"] as? [[String: Any]] ?? []).compactMap { $0["session_id"] as? String })
                 for idx in sessions.indices {
-                    if sessions[idx].groupId == gid {
-                        sessions[idx].groupId = memberSet.contains(sessions[idx].id) ? gid : ""
+                    if memberSessionIds.contains(sessions[idx].id) {
+                        sessions[idx].groupId = gid
+                    } else if sessions[idx].groupId == gid {
+                        sessions[idx].groupId = ""
                     }
                 }
-                for sid in sids {
-                    if let idx = sessionIndex(sid) { sessions[idx].groupId = gid }
-                }
             }
 
-        case "group_disbanded":
-            // { group_id: "grp-xxx", session_ids: [...] }
+        case "groupchat_deleted":
+            // { group_id: "gc-xxx", name: "..." }
             if let gid = json["group_id"] as? String {
                 for idx in sessions.indices {
                     if sessions[idx].groupId == gid { sessions[idx].groupId = "" }
                 }
             }
+            if let name = json["name"] as? String {
+                knownGroupChats.removeAll { $0.name.lowercased() == name.lowercased() }
+            }
+
+        case "groupchat_message":
+            // { group_id, group_name, message: {id, role, text, sender, ts} }
+            // Delivered to agents via inbox_update; this event is for UI refresh only
+            break
 
         default:
             break
@@ -2242,7 +2248,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         let url = baseURL.appendingPathComponent("api/groupchats")
         URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
             guard let data,
-                let list = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                let list = json["groups"] as? [[String: Any]]
             else { return }
             Task { @MainActor in
                 guard let self else { return }
@@ -2250,6 +2257,18 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     guard let name = g["name"] as? String else { return nil }
                     let voices = g["voices"] as? [String] ?? []
                     return (name: name, voices: voices)
+                }
+                // Sync groupId on sessions from fetched group membership
+                for gc in list {
+                    guard let gid = gc["id"] as? String,
+                          let members = gc["members"] as? [[String: Any]]
+                    else { continue }
+                    let memberSessionIds = Set(members.compactMap { $0["session_id"] as? String })
+                    for idx in self.sessions.indices {
+                        if memberSessionIds.contains(self.sessions[idx].id) {
+                            self.sessions[idx].groupId = gid
+                        }
+                    }
                 }
             }
         }.resume()
@@ -2321,6 +2340,19 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         if hrs > 24 { return "\(hrs / 24)d" }
         if hrs > 0 { return "\(hrs)h \(mins)m" }
         return "\(mins)m"
+    }
+
+    func toggleWalkingMode() {
+        guard let sid = activeSessionId, let idx = sessionIndex(sid) else { return }
+        let newVal = !sessions[idx].walkingMode
+        sessions[idx].walkingMode = newVal
+        guard let baseURL = httpBaseURL() else { return }
+        let url = baseURL.appendingPathComponent("api/agents/\(sid)/walking")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["enabled": newVal])
+        URLSession.shared.dataTask(with: request) { _, _, _ in }.resume()
     }
 
     func updateSetting(_ key: String, value: Any) {

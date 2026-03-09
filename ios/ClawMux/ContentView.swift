@@ -2364,6 +2364,12 @@ struct SettingsView: View {
                     Toggle("Show Agent Messages", isOn: $vm.showAgentMessages)
                     Toggle("Verbose Activity Log", isOn: $vm.verboseMode)
                         .onChange(of: vm.verboseMode) { _, v in vm.updateSetting("activity_verbose", value: v) }
+                    if vm.activeSession != nil {
+                        Toggle("Walking Mode", isOn: Binding(
+                            get: { vm.activeSession?.walkingMode ?? false },
+                            set: { _ in vm.toggleWalkingMode() }
+                        ))
+                    }
                 }
 
                 // Sounds
