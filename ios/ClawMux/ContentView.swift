@@ -713,6 +713,14 @@ struct ContentView: View {
                     topLeadingRadius: tl, bottomLeadingRadius: bl,
                     bottomTrailingRadius: br, topTrailingRadius: tr,
                     style: .continuous))
+            .overlay(
+                // Voice color tint on assistant bubbles (matches web rgba(voiceColor, 0.20))
+                UnevenRoundedRectangle(
+                    topLeadingRadius: tl, bottomLeadingRadius: bl,
+                    bottomTrailingRadius: br, topTrailingRadius: tr,
+                    style: .continuous)
+                    .fill(role == "assistant" ? color.opacity(0.12) : Color.clear)
+            )
             .overlay {
                 if role == "assistant" {
                     UnevenRoundedRectangle(
@@ -720,7 +728,7 @@ struct ContentView: View {
                         bottomTrailingRadius: br, topTrailingRadius: tr,
                         style: .continuous)
                     .strokeBorder(
-                        isPlaying ? color.opacity(isPulsing ? 0.7 : 0.2) : Color.cBorder,
+                        isPlaying ? color.opacity(isPulsing ? 0.7 : 0.2) : Color(hex: 0x2A3A52),
                         lineWidth: 0.5)
                     .animation(
                         isPlaying ? .easeInOut(duration: 1.0).repeatForever(autoreverses: true) : .default,
@@ -816,12 +824,19 @@ struct ContentView: View {
             .padding(.horizontal, 14).padding(.vertical, 11)
             .background(Color.cCard,
                 in: UnevenRoundedRectangle(
-                    topLeadingRadius: 4, bottomLeadingRadius: 4,
+                    topLeadingRadius: 18, bottomLeadingRadius: 4,
                     bottomTrailingRadius: 18, topTrailingRadius: 18,
                     style: .continuous))
             .overlay(
                 UnevenRoundedRectangle(
-                    topLeadingRadius: 4, bottomLeadingRadius: 4,
+                    topLeadingRadius: 18, bottomLeadingRadius: 4,
+                    bottomTrailingRadius: 18, topTrailingRadius: 18,
+                    style: .continuous)
+                    .fill(color.opacity(0.1))
+            )
+            .overlay(
+                UnevenRoundedRectangle(
+                    topLeadingRadius: 18, bottomLeadingRadius: 4,
                     bottomTrailingRadius: 18, topTrailingRadius: 18,
                     style: .continuous)
                 .strokeBorder(Color.cBorder, lineWidth: 0.5))
