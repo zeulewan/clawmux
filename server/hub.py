@@ -739,6 +739,10 @@ async def set_project_status(session_id: str, request: Request):
     # Write role rules to .claude/CLAUDE.md (Claude Code auto-detects the change)
     if "role" in data and session.work_dir:
         await template_renderer.render_role_to_file(session.voice, Path(session.work_dir))
+        await _inbox_write_and_notify(session, {
+            "type": "system",
+            "content": f"Your role has been updated to: {session.role}. Your role rules file has been rewritten — Claude Code will pick up the changes automatically.",
+        })
     return JSONResponse({"ok": True})
 
 
