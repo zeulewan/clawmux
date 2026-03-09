@@ -87,7 +87,7 @@ struct ContentView: View {
     @State private var pttGestureCommitted     = false
     @FocusState private var pttTextFieldFocused: Bool
     @State private var showCopiedToast         = false
-    @State private var thinkingExpanded        = true
+    @State private var thinkingExpanded        = false
     @State private var collapsedProjects:       Set<String> = []
     @State private var isAtBottom:             Bool = true
 
@@ -986,13 +986,6 @@ struct ContentView: View {
                             .padding(.horizontal, 10).padding(.vertical, 4)
                             .background(Color.glass, in: Capsule())
                     }
-                    Button { vm.verboseMode.toggle() } label: {
-                        Text(vm.verboseMode ? "Verbose" : "Minimal")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(vm.verboseMode ? Color.cAccent : Color.cTextSec)
-                            .padding(.horizontal, 10).padding(.vertical, 4)
-                            .background(vm.verboseMode ? Color.cAccent.opacity(0.12) : Color.glass, in: Capsule())
-                    }
                     if !vm.statusText.isEmpty {
                         let sc = statusColor
                         Text(vm.statusText)
@@ -1042,13 +1035,6 @@ struct ContentView: View {
                         .font(.system(size: 11, weight: .semibold)).foregroundStyle(Color.cTextSec)
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(Color.glass, in: Capsule())
-                }
-                Button { vm.verboseMode.toggle() } label: {
-                    Text(vm.verboseMode ? "Verbose" : "Minimal")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(vm.verboseMode ? Color.cAccent : Color.cTextSec)
-                        .padding(.horizontal, 10).padding(.vertical, 4)
-                        .background(vm.verboseMode ? Color.cAccent.opacity(0.12) : Color.glass, in: Capsule())
                 }
                 if !vm.statusText.isEmpty {
                     let sc = statusColor
@@ -1569,6 +1555,12 @@ struct SettingsView: View {
                 Section { Toggle("Voice Responses", isOn: $vm.voiceResponses)
                     .onChange(of: vm.voiceResponses) { _, v in vm.updateSetting("voice_responses", value: v) }
                 } footer: { Text("When off, the agent responds with text only — no speech.") }
+
+                Section {
+                    Toggle("Verbose Activity Log", isOn: $vm.verboseMode)
+                } header: { Text("Chat") } footer: {
+                    Text("Show agent tool use and system messages in chat. Off = minimal mode, only user and assistant messages.")
+                }
 
                 Section {
                     Toggle("Background Mode", isOn: $vm.backgroundMode)
