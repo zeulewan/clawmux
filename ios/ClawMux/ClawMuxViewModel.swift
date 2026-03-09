@@ -2093,7 +2093,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     func fetchGroupHistory(groupName: String) {
         guard let baseURL = httpBaseURL() else { return }
         let encoded = groupName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? groupName
-        let url = baseURL.appendingPathComponent("api/groupchats/\(encoded)/history")
+        guard let url = URL(string: baseURL.absoluteString + "/api/groupchats/\(encoded)/history") else { return }
         URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
             guard let data,
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -2119,7 +2119,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     func sendGroupMessage(_ text: String, groupName: String) {
         guard let baseURL = httpBaseURL() else { return }
         let encoded = groupName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? groupName
-        var req = URLRequest(url: baseURL.appendingPathComponent("api/groupchats/\(encoded)/message"))
+        guard let url = URL(string: baseURL.absoluteString + "/api/groupchats/\(encoded)/message") else { return }
+        var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try? JSONSerialization.data(withJSONObject: ["text": text])
@@ -2131,7 +2132,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         guard let baseURL = httpBaseURL(),
               let name = groupIdToName[groupId] else { return }
         let encoded = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? name
-        var req = URLRequest(url: baseURL.appendingPathComponent("api/groupchats/\(encoded)"))
+        guard let url = URL(string: baseURL.absoluteString + "/api/groupchats/\(encoded)") else { return }
+        var req = URLRequest(url: url)
         req.httpMethod = "DELETE"
         URLSession.shared.dataTask(with: req) { _, _, _ in }.resume()
     }
