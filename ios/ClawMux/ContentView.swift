@@ -405,6 +405,22 @@ struct ContentView: View {
                     Label("Move to Project", systemImage: "folder")
                 }
             }
+            // Add to Group Chat — matches web ctx-add-group submenu
+            if session != nil && !vm.knownGroupChats.isEmpty {
+                Menu {
+                    ForEach(vm.knownGroupChats, id: \.name) { gc in
+                        let isMember = gc.voices.contains(voice.id)
+                        Button {
+                            vm.toggleGroupChatMember(voiceId: voice.id, groupName: gc.name, isMember: isMember)
+                        } label: {
+                            if isMember { Label(gc.name, systemImage: "checkmark") }
+                            else { Text(gc.name) }
+                        }
+                    }
+                } label: {
+                    Label("Add to Group Chat", systemImage: "bubble.left.and.bubble.right")
+                }
+            }
             // Reset — matches web ctx-reset
             Button(role: .destructive) { resetVoiceId = voice.id; showResetConfirm = true } label: {
                 Label("Reset", systemImage: "arrow.counterclockwise")
@@ -826,6 +842,24 @@ struct ContentView: View {
                             }
                         }
                     } label: { Label("Move to Project", systemImage: "folder") }
+                }
+                if !vm.knownGroupChats.isEmpty {
+                    Menu {
+                        ForEach(vm.knownGroupChats, id: \.name) { gc in
+                            let isMember = gc.voices.contains(voice.id)
+                            Button {
+                                vm.toggleGroupChatMember(voiceId: voice.id, groupName: gc.name, isMember: isMember)
+                            } label: {
+                                if isMember { Label(gc.name, systemImage: "checkmark") }
+                                else { Text(gc.name) }
+                            }
+                        }
+                    } label: { Label("Add to Group Chat", systemImage: "bubble.left.and.bubble.right") }
+                }
+                if !s.groupId.isEmpty {
+                    Button(role: .destructive) { vm.disbandGroup(s.groupId) } label: {
+                        Label("Disband Group Chat", systemImage: "person.2.slash")
+                    }
                 }
                 Button(role: .destructive) { vm.terminateSession(s.id) } label: {
                     Label("Terminate Session", systemImage: "xmark.circle")

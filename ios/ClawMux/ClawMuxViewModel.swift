@@ -60,6 +60,7 @@ struct VoiceSession: Identifiable {
     var isSpeaking: Bool = false  // audio actively playing — mirrors web 'speaking' sidebar state
     var groupId: String = ""      // non-empty when this session is in a group chat
     var hasOlderMessages: Bool = false  // true when server may have messages older than current history
+    var walkingMode: Bool = false  // agent responds in plain spoken text — no markdown
 
     // Derived helpers
     var isThinking: Bool { state == .thinking || state == .processing || state == .compacting }
@@ -318,6 +319,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         didSet { UserDefaults.standard.set(activeSessionId, forKey: "activeSessionId") }
     }
     @Published var spawningVoiceIds: Set<String> = []
+    @Published var knownGroupChats: [(name: String, voices: [String])] = []
     @Published var errorMessage: String?
     @Published var ttsPlayingMessageId: UUID?
 
@@ -1402,6 +1404,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                             if let area = s["project_area"] as? String { sessions[idx].projectArea = area }
                             if let unread = s["unread_count"] as? Int { sessions[idx].unreadCount = unread }
                             if let gid = s["group_id"] as? String { sessions[idx].groupId = gid }
+                            if let wm = s["walking_mode"] as? Bool { sessions[idx].walkingMode = wm }
                             // Cursor-based reconnect sync — appends missed messages (mirrors web _reconnectSyncSession)
                             if let voice = s["voice"] as? String {
                                 reconnectSyncHistory(voiceId: voice, sessionId: sid)
@@ -1806,6 +1809,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         session.toolName = dict["tool_name"] as? String ?? ""
         session.unreadCount = dict["unread_count"] as? Int ?? 0
         session.groupId = dict["group_id"] as? String ?? ""
+        session.walkingMode = dict["walking_mode"] as? Bool ?? false
 
         sessions.append(session)
 
@@ -2230,6 +2234,36 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     self.voiceResponses = voiceResp
                 }
             }
+        }.resume()
+    }
+
+    func fetchGroupChats() {
+        guard let baseURL = httpBaseURL() else { return }
+        let url = baseURL.appendingPathComponent("api/groupchats")
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+            guard let data,
+                let list = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+            else { return }
+            Task { @MainActor in
+                guard let self else { return }
+                self.knownGroupChats = list.compactMap { g in
+                    guard let name = g["name"] as? String else { return nil }
+                    let voices = g["voices"] as? [String] ?? []
+                    return (name: name, voices: voices)
+                }
+            }
+        }.resume()
+    }
+
+    func toggleGroupChatMember(voiceId: String, groupName: String, isMember: Bool) {
+        guard let baseURL = httpBaseURL() else { return }
+        let action = isMember ? "remove" : "add"
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/groupchats/\(groupName)/\(action)"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["voice": voiceId])
+        URLSession.shared.dataTask(with: req) { [weak self] _, _, _ in
+            Task { @MainActor in self?.fetchGroupChats() }
         }.resume()
     }
 
@@ -3180,6 +3214,7 @@ extension ClawMuxViewModel: URLSessionWebSocketDelegate {
             self.receiveMessage()
             self.fetchSettings()
             self.fetchUsage()
+            self.fetchGroupChats()
             self.usageRefreshTimer?.invalidate()
             self.usageRefreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
                 self?.fetchUsage()
