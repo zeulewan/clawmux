@@ -923,89 +923,105 @@ function renderSidebar() {
 
 function _renderGroupChatSection(list, afterIndex) {
   const gc = typeof groupChats !== 'undefined' ? groupChats : new Map();
-  // Remove stale group chat section or cards
-  for (const child of [...list.children]) {
-    if (child.dataset && child.dataset.gcSection) child.remove();
+
+  // Find or create the section — stable ID prevents orphan-removal from deleting it each render
+  let section = document.getElementById('sidebar-gc-section');
+  if (!section) {
+    section = document.createElement('div');
+    section.id = 'sidebar-gc-section';
+    section.className = 'sidebar-gc-section';
+    const hdr = document.createElement('div');
+    hdr.className = 'sidebar-gc-header';
+    hdr.innerHTML = '<span>Group Chats</span>';
+    const createBtn = document.createElement('button');
+    createBtn.className = 'sidebar-gc-new-btn';
+    createBtn.title = 'New group chat';
+    createBtn.textContent = '+';
+    createBtn.onclick = () => _promptNewGroupChat();
+    hdr.appendChild(createBtn);
+    section.appendChild(hdr);
+    list.appendChild(section);
   }
-  // Section header
-  const section = document.createElement('div');
-  section.dataset.gcSection = '1';
-  section.className = 'sidebar-gc-section';
 
-  const hdr = document.createElement('div');
-  hdr.className = 'sidebar-gc-header';
-  hdr.innerHTML = '<span>Group Chats</span>';
-  const createBtn = document.createElement('button');
-  createBtn.className = 'sidebar-gc-new-btn';
-  createBtn.title = 'New group chat';
-  createBtn.textContent = '+';
-  createBtn.onclick = () => _promptNewGroupChat();
-  hdr.appendChild(createBtn);
-  section.appendChild(hdr);
+  // Diff: build map of existing cards
+  const existingCards = new Map();
+  for (const el of section.querySelectorAll('.sidebar-gc-card')) {
+    existingCards.set(el.dataset.gcId, el);
+  }
 
+  const validIds = new Set();
   for (const g of gc.values()) {
-    const card = document.createElement('div');
-    card.className = 'sidebar-gc-card';
-    card.dataset.gcId = g.id;
-    card.draggable = true;
-    if (typeof activeGroupId !== 'undefined' && activeGroupId === g.id) card.classList.add('active');
+    validIds.add(g.id);
+    let card = existingCards.get(g.id);
+    if (!card) {
+      // Create new card and attach events once
+      card = document.createElement('div');
+      card.className = 'sidebar-gc-card';
+      card.dataset.gcId = g.id;
+      card.draggable = true;
 
-    const avatars = document.createElement('div');
-    avatars.className = 'gc-avatars';
-    for (const m of (g.members || []).slice(0, 4)) {
-      const dot = document.createElement('div');
-      dot.className = 'gc-avatar';
-      dot.style.background = (typeof voiceColor === 'function') ? voiceColor(m.voice) : '#4a9eff';
-      dot.textContent = m.label ? m.label[0].toUpperCase() : '?';
-      avatars.appendChild(dot);
+      const avatars = document.createElement('div');
+      avatars.className = 'gc-avatars';
+      for (const m of (g.members || []).slice(0, 4)) {
+        const dot = document.createElement('div');
+        dot.className = 'gc-avatar';
+        dot.style.background = (typeof voiceColor === 'function') ? voiceColor(m.voice) : '#4a9eff';
+        dot.textContent = m.label ? m.label[0].toUpperCase() : '?';
+        avatars.appendChild(dot);
+      }
+
+      const info = document.createElement('div');
+      info.className = 'gc-info';
+      const nameEl = document.createElement('div');
+      nameEl.className = 'gc-name';
+      nameEl.textContent = g.name;
+      const membersEl = document.createElement('div');
+      membersEl.className = 'gc-members-text';
+      membersEl.textContent = (g.members || []).map(m => m.label).join(', ') || 'No members';
+      info.appendChild(nameEl);
+      info.appendChild(membersEl);
+
+      card.appendChild(avatars);
+      card.appendChild(info);
+      card.onclick = () => { if (typeof openGroupChat === 'function') openGroupChat(g.id); };
+
+      card.addEventListener('dragstart', e => {
+        _gcDragId = g.id;
+        e.dataTransfer.effectAllowed = 'move';
+        card.classList.add('dragging');
+      });
+      card.addEventListener('dragend', () => {
+        _gcDragId = null;
+        card.classList.remove('dragging');
+        section.querySelectorAll('.sidebar-gc-card').forEach(c => c.classList.remove('drag-over'));
+      });
+      card.addEventListener('dragover', e => {
+        if (!_gcDragId || _gcDragId === g.id) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        section.querySelectorAll('.sidebar-gc-card').forEach(c => c.classList.remove('drag-over'));
+        card.classList.add('drag-over');
+      });
+      card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+      card.addEventListener('drop', e => {
+        e.preventDefault();
+        card.classList.remove('drag-over');
+        if (!_gcDragId || _gcDragId === g.id) return;
+        _reorderGroupChats(_gcDragId, g.id);
+        _gcDragId = null;
+      });
+
+      section.appendChild(card);
     }
-
-    const info = document.createElement('div');
-    info.className = 'gc-info';
-    const nameEl = document.createElement('div');
-    nameEl.className = 'gc-name';
-    nameEl.textContent = g.name;
-    const membersEl = document.createElement('div');
-    membersEl.className = 'gc-members-text';
-    membersEl.textContent = (g.members || []).map(m => m.label).join(', ') || 'No members';
-    info.appendChild(nameEl);
-    info.appendChild(membersEl);
-
-    card.appendChild(avatars);
-    card.appendChild(info);
-    card.onclick = () => { if (typeof openGroupChat === 'function') openGroupChat(g.id); };
-
-    // Drag-and-drop reorder
-    card.addEventListener('dragstart', e => {
-      _gcDragId = g.id;
-      e.dataTransfer.effectAllowed = 'move';
-      card.classList.add('dragging');
-    });
-    card.addEventListener('dragend', () => {
-      _gcDragId = null;
-      card.classList.remove('dragging');
-      section.querySelectorAll('.sidebar-gc-card').forEach(c => c.classList.remove('drag-over'));
-    });
-    card.addEventListener('dragover', e => {
-      if (!_gcDragId || _gcDragId === g.id) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      section.querySelectorAll('.sidebar-gc-card').forEach(c => c.classList.remove('drag-over'));
-      card.classList.add('drag-over');
-    });
-    card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
-    card.addEventListener('drop', e => {
-      e.preventDefault();
-      card.classList.remove('drag-over');
-      if (!_gcDragId || _gcDragId === g.id) return;
-      _reorderGroupChats(_gcDragId, g.id);
-      _gcDragId = null;
-    });
-
-    section.appendChild(card);
+    // Update active state in place
+    const isActive = typeof activeGroupId !== 'undefined' && activeGroupId === g.id;
+    card.classList.toggle('active', isActive);
   }
 
-  list.appendChild(section);
+  // Remove cards for deleted group chats
+  for (const [id, el] of existingCards) {
+    if (!validIds.has(id)) el.remove();
+  }
 }
 
 let _gcDragId = null;
