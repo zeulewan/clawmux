@@ -579,11 +579,7 @@ struct ContentView: View {
                 }
                 .defaultScrollAnchor(.bottom)
                 .id(vm.activeSessionId ?? "none")
-                .onScrollGeometryChange(for: Bool.self) { geo in
-                    geo.contentOffset.y >= geo.contentSize.height - geo.containerSize.height - 120
-                } action: { _, atBottom in
-                    isAtBottom = atBottom
-                }
+                .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
                 .onChange(of: vm.activeMessages.count)        { _, _ in scrollBottom(proxy) }
                 .onChange(of: vm.activeSession?.isThinking)   { _, _ in scrollBottom(proxy) }
                 .onChange(of: vm.activeSession?.activity)     { _, _ in scrollBottom(proxy) }
@@ -1227,6 +1223,23 @@ struct ContentView: View {
 
     private func effortIcon(_ e: String) -> String {
         switch e { case "low": "battery.25"; case "high": "bolt.fill"; default: "gauge.medium" }
+    }
+}
+
+// MARK: - Scroll Bottom Detector
+
+private struct ScrollBottomDetector: ViewModifier {
+    @Binding var isAtBottom: Bool
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.onScrollGeometryChange(for: Bool.self) { geo in
+                geo.contentOffset.y >= geo.contentSize.height - geo.containerSize.height - 120
+            } action: { _, atBottom in
+                isAtBottom = atBottom
+            }
+        } else {
+            content
+        }
     }
 }
 
