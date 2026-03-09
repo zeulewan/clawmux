@@ -216,7 +216,7 @@
 </div>
 
 <div id="chat-area" style="display:none;"></div>
-<button id="scroll-bottom-btn" title="Scroll to bottom" onclick="chatScrollToBottom(true)">↓</button>
+<button id="scroll-bottom-btn" title="Scroll to bottom" onclick="if(_scrollRaf){cancelAnimationFrame(_scrollRaf);_scrollRaf=null;}_easedScrollTo(chatArea)">↓</button>
 
 <div id="controls" style="display:none;">
   <div id="controls-left">
@@ -2007,6 +2007,19 @@ _applyChatFontSize();
 restoreInputMode();
 initDragDrop();
 _initChatScroll();
+
+// Keep scroll-to-bottom button above the controls pill
+(function() {
+  const controlsEl = document.getElementById('controls');
+  const scrollBtn = document.getElementById('scroll-bottom-btn');
+  if (!controlsEl || !scrollBtn) return;
+  function _updateScrollBtnPos() {
+    const h = controlsEl.offsetHeight;
+    scrollBtn.style.bottom = (h + 16) + 'px';
+  }
+  _updateScrollBtnPos();
+  new ResizeObserver(_updateScrollBtnPos).observe(controlsEl);
+})();
 renderSidebar();
 connect();
 loadSettings().then(() => loadProjects());

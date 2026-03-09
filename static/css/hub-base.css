@@ -819,7 +819,7 @@ body {
 /* Scroll-to-bottom button */
 #scroll-bottom-btn {
   position: fixed;
-  bottom: 100px;
+  bottom: 120px; /* overridden dynamically by ResizeObserver */
   right: 20px;
   width: 36px;
   height: 36px;
