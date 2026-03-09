@@ -558,6 +558,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     private var recordingStartedAt: Date?
     private var pingWatchdogTimer: Timer?
     private var reconnectAttempt = 0
+    private var backgroundListenWork: DispatchWorkItem?
 
     // MARK: - Init
 
@@ -1545,6 +1546,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             if isRecording { stopRecording(discard: true) }
             stopThinkingSound()
             suppressNextAutoRecord = false
+            pttInterrupted = false
             showPTTTextField = false
             pttPreviewText = ""
             pttTranscriptionError = nil
@@ -1742,6 +1744,15 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     }
 
     private func removeSession(_ id: String) {
+        // Clean up paused audio held for this session
+        if pausedAudioSessionId == id || playingSessionId == id {
+            stopPlaybackVAD()
+            audioPlayer?.stop()
+            audioPlayer = nil
+            isPlaying = false
+            playingSessionId = nil
+            pausedAudioSessionId = nil
+        }
         clearSavedChat(for: id)
         clearSessionPrefs(id)
         sessions.removeAll { $0.id == id }
@@ -2312,14 +2323,18 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     return
                 }
                 guard let data,
-                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                    let text = json["text"] as? String, !text.isEmpty
+                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
                 else {
                     self.pttTranscriptionError = "No speech detected"
                     return
                 }
+                // Check server error before text (matches transcribeAudio ordering)
                 if let serverError = json["error"] as? String {
                     self.pttTranscriptionError = "Transcription error: \(serverError)"
+                    return
+                }
+                guard let text = json["text"] as? String, !text.isEmpty else {
+                    self.pttTranscriptionError = "No speech detected"
                     return
                 }
                 self.transcriptPreviewText = text
@@ -2568,10 +2583,11 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     // MARK: - Mic Mute
 
     private func handleMuteActivated() {
-        // Stop any active recording
+        // Capture sessionId before stopRecording clears it
         if isRecording {
+            let sid = recordingSessionId ?? activeSessionId
             stopRecording(discard: true)
-            if let sid = recordingSessionId ?? activeSessionId {
+            if let sid {
                 sendJSON(["session_id": sid, "type": "audio", "data": ""])
             }
         }
@@ -2844,9 +2860,10 @@ extension ClawMuxViewModel: AVAudioPlayerDelegate {
     nonisolated func audioPlayerDidFinishPlaying(
         _ player: AVAudioPlayer, successfully flag: Bool
     ) {
+        let playerID = ObjectIdentifier(player)
         Task { @MainActor in
-            // Handle TTS message playback finishing
-            if self.ttsPlayer != nil && self.playingSessionId == nil {
+            // Use identity comparison — not heuristic state — to identify which player finished
+            if let tts = self.ttsPlayer, ObjectIdentifier(tts) == playerID {
                 self.ttsPlayer = nil
                 self.ttsPlayingMessageId = nil
                 return
@@ -2883,25 +2900,30 @@ extension ClawMuxViewModel: AVAudioPlayerDelegate {
                 }
             }
             // Background safety net: hub sends "listening" after playback_done,
-            // so pendingListen may not be set yet. Schedule a delayed re-check.
+            // so pendingListen may not be set yet. Schedule a cancellable delayed re-check.
             else if !sid.isEmpty, sid == self.activeSessionId,
                 UIApplication.shared.applicationState != .active,
                 self.backgroundMode, self.isAutoMode, !self.micMuted
             {
                 let capturedSid = sid
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-                    guard let self,
-                        let idx = self.sessionIndex(capturedSid),
-                        self.sessions[idx].pendingListen,
-                        !self.isRecording, !self.isPlaying,
-                        capturedSid == self.activeSessionId,
-                        UIApplication.shared.applicationState != .active
-                    else { return }
-                    self.sessions[idx].pendingListen = false
-                    self.suppressNextAutoRecord = false
-                    if self.globalSounds && self.soundListeningAuto { self.tonePlayer.cueListening() }
-                    self.startRecording(sessionId: capturedSid)
+                self.backgroundListenWork?.cancel()
+                let work = DispatchWorkItem { [weak self] in
+                    Task { @MainActor in
+                        guard let self,
+                            let idx = self.sessionIndex(capturedSid),
+                            self.sessions[idx].pendingListen,
+                            !self.isRecording, !self.isPlaying,
+                            capturedSid == self.activeSessionId,
+                            UIApplication.shared.applicationState != .active
+                        else { return }
+                        self.sessions[idx].pendingListen = false
+                        self.suppressNextAutoRecord = false
+                        if self.globalSounds && self.soundListeningAuto { self.tonePlayer.cueListening() }
+                        self.startRecording(sessionId: capturedSid)
+                    }
                 }
+                self.backgroundListenWork = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0, execute: work)
             }
         }
     }
@@ -2909,9 +2931,10 @@ extension ClawMuxViewModel: AVAudioPlayerDelegate {
     nonisolated func audioPlayerDecodeErrorDidOccur(
         _ player: AVAudioPlayer, error: (any Error)?
     ) {
+        let playerID = ObjectIdentifier(player)
         Task { @MainActor in
             // TTS message decode error — just clear state
-            if self.ttsPlayer != nil && self.playingSessionId == nil {
+            if let tts = self.ttsPlayer, ObjectIdentifier(tts) == playerID {
                 self.ttsPlayer = nil
                 self.ttsPlayingMessageId = nil
                 return
