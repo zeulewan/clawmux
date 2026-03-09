@@ -587,9 +587,12 @@ function transportPrev() {
   }
 }
 
+let _playbackVadStream = null;
+
 function startPlaybackVAD(sessionId) {
   stopPlaybackVAD();
   getMicStream().then(stream => {
+    _playbackVadStream = stream;
     playbackVadCtx = new AudioContext();
     const source = playbackVadCtx.createMediaStreamSource(stream);
     const analyser = playbackVadCtx.createAnalyser();
@@ -643,12 +646,17 @@ function stopPlaybackVAD() {
     playbackVadCtx.close().catch(() => {});
     playbackVadCtx = null;
   }
+  if (_isDesktop && _playbackVadStream) {
+    _releaseMicStream(_playbackVadStream);
+    _playbackVadStream = null;
+  }
 }
 
 // --- Thinking VAD (auto-record interjections while agent is processing) ---
 let thinkingVadInterval = null;
 let thinkingVadCtx = null;
 let thinkingVadSessionId = null;
+let _thinkingVadStream = null;
 
 function startThinkingVAD(sessionId) {
   if (!autoMode || micMuted) return;
@@ -656,6 +664,7 @@ function startThinkingVAD(sessionId) {
   thinkingVadSessionId = sessionId;
 
   getMicStream().then(stream => {
+    _thinkingVadStream = stream;
     thinkingVadCtx = new AudioContext();
     const source = thinkingVadCtx.createMediaStreamSource(stream);
     const analyser = thinkingVadCtx.createAnalyser();
@@ -710,6 +719,10 @@ function stopThinkingVAD() {
     thinkingVadCtx = null;
   }
   thinkingVadSessionId = null;
+  if (_isDesktop && _thinkingVadStream) {
+    _releaseMicStream(_thinkingVadStream);
+    _thinkingVadStream = null;
+  }
 }
 
 // --- Status indicator stubs ---
@@ -1415,16 +1428,28 @@ function updateMicUI() {
 }
 
 // --- Persistent mic stream ---
+// On desktop: release stream when idle so browser exits communication audio mode (restores music quality).
+// On mobile: keep persistent stream to avoid getUserMedia latency on slow devices.
+const _isDesktop = !/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+function _releaseMicStream(stream) {
+  if (!stream) return;
+  stream.getTracks().forEach(t => t.stop());
+  if (stream === persistentStream) persistentStream = null;
+}
+
 async function getMicStream() {
   if (persistentStream) {
     const tracks = persistentStream.getAudioTracks();
     if (tracks.length > 0 && tracks[0].readyState === 'live') {
       return persistentStream;
     }
+    persistentStream = null;
   }
-  persistentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  persistentStream.getAudioTracks().forEach(t => { t.enabled = !micMuted; });
-  return persistentStream;
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  stream.getAudioTracks().forEach(t => { t.enabled = !micMuted; });
+  if (!_isDesktop) persistentStream = stream; // mobile: keep alive
+  return stream;
 }
 
 // Prevent Space/Enter from reopening header dropdowns after selection
@@ -1454,7 +1479,7 @@ async function startRecording(sessionId) {
     audioChunks = [];
     mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
     mediaRecorder.onstop = () => {
-      // Don't stop persistent stream tracks — keep them alive
+      if (_isDesktop) _releaseMicStream(stream); // release immediately on desktop (restores audio quality)
       if (discardRecording) {
         discardRecording = false;
       } else {
