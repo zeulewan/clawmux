@@ -61,6 +61,7 @@
         const newW = Math.max(min, Math.min(max, startW + delta));
         if (key === 'notes') {
           panel.style.setProperty('--notes-width', newW + 'px');
+          document.documentElement.style.setProperty('--notes-width', newW + 'px');
         } else {
           panel.style.width = newW + 'px';
           panel.style.minWidth = newW + 'px';
@@ -115,6 +116,7 @@
       if (settings.notes_width && notes) {
         const w = Math.max(NOTES_MIN, Math.min(NOTES_MAX, settings.notes_width));
         notes.style.setProperty('--notes-width', w + 'px');
+        document.documentElement.style.setProperty('--notes-width', w + 'px');
         notes.dataset.savedWidth = w;
       }
     } catch (e) {}
@@ -128,6 +130,7 @@
     if (panel && panel.classList.contains('open') && panel.dataset.savedWidth) {
       const w = parseInt(panel.dataset.savedWidth);
       panel.style.setProperty('--notes-width', w + 'px');
+      document.documentElement.style.setProperty('--notes-width', w + 'px');
     }
   };
 
@@ -139,6 +142,7 @@
         if (panel.classList.contains('open') && panel.dataset.savedWidth) {
           const w = parseInt(panel.dataset.savedWidth);
           panel.style.setProperty('--notes-width', w + 'px');
+          document.documentElement.style.setProperty('--notes-width', w + 'px');
         }
       }
     }
