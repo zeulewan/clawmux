@@ -563,7 +563,9 @@ struct ContentView: View {
                     VStack(spacing: 20) {
                         Spacer(minLength: 0).frame(maxHeight: .infinity)
                         ForEach(messageGroups) { group in
-                            messageGroupView(group).id(group.id)
+                            messageGroupView(group)
+                                .id(group.id)
+                                .transition(.opacity.animation(.easeIn(duration: 0.4)))
                         }
                         if vm.activeSession?.isThinking == true {
                             thinkingBubble.id("thinking")
