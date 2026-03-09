@@ -412,6 +412,9 @@
   <div class="ctx-item ctx-has-submenu" id="ctx-move-project">Move to Project ▸
     <div class="ctx-submenu" id="ctx-project-list"></div>
   </div>
+  <div class="ctx-item ctx-has-submenu" id="ctx-add-group">Add to Group Chat ▸
+    <div class="ctx-submenu" id="ctx-group-list"></div>
+  </div>
   <div class="ctx-item" id="ctx-reset" style="color:#e63946;">Reset</div>
 <div class="ctx-item" id="ctx-terminate">Terminate Session</div>
 </div>
@@ -1663,6 +1666,27 @@ function showContextMenu(e, sessionId, voiceId) {
       }
     }
   }
+  // Populate Add to Group Chat submenu
+  const addGroupItem = document.getElementById('ctx-add-group');
+  const groupList = document.getElementById('ctx-group-list');
+  groupList.innerHTML = '';
+  if (groupChats && groupChats.size > 0) {
+    addGroupItem.style.display = 'block';
+    for (const g of groupChats.values()) {
+      const isMember = sessionId && g.session_ids && g.session_ids.includes(sessionId);
+      const div = document.createElement('div');
+      div.className = 'ctx-sub-item';
+      div.textContent = isMember ? `${g.name} ✓` : g.name;
+      if (isMember) div.classList.add('active');
+      div.addEventListener('click', () => {
+        _toggleGroupMember(g.name, sessionId, isMember);
+        hideContextMenu();
+      });
+      groupList.appendChild(div);
+    }
+  } else {
+    addGroupItem.style.display = 'none';
+  }
   menu.classList.add('visible');
   const mr = menu.getBoundingClientRect();
   let mx = e.clientX;
@@ -1705,6 +1729,20 @@ async function _moveToProject(sessionId, projectName) {
     }
   } catch (e) {
     console.error('Failed to move to project:', e);
+  }
+}
+
+async function _toggleGroupMember(groupName, sessionId, isMember) {
+  if (!sessionId) return;
+  const action = isMember ? 'remove' : 'add';
+  try {
+    await fetch(`/api/groupchats/${encodeURIComponent(groupName)}/${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+  } catch (e) {
+    console.error(`Failed to ${action} group member:`, e);
   }
 }
 
