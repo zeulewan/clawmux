@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - Theme (dark-mode-first, used by all views in this file)
 
