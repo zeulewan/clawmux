@@ -2053,7 +2053,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         let body: [String: Any] = ["text": text, "voice": voice ?? "af_sky", "speed": sessionSpeed]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         URLSession.shared.dataTask(with: request) { [weak self] data, resp, error in
-            DispatchQueue.main.async {
+            Task { @MainActor [weak self] in
                 guard let self, self.ttsPlayingMessageId == messageId else { return }
                 guard let data, error == nil,
                       let httpResp = resp as? HTTPURLResponse, httpResp.statusCode == 200 else {
