@@ -959,16 +959,16 @@ function _makeGroupMsgEl(msg) {
   div.className = `msg ${isUser ? 'user' : 'assistant'}`;
   const label = msg.sender || 'You';
   const color = isUser ? null : _voiceColorByLabel(label);
-  if (color) {
-    div.style.background = color + '18';
-    div.style.borderColor = color + '60';
+  // Match createMsgEl: assistant background = 20% voice color (same as individual chat)
+  if (color && typeof hexToRgba === 'function') {
+    div.style.background = hexToRgba(color, 0.20);
   }
   const labelEl = document.createElement('span');
   labelEl.className = 'msg-sender-label';
   labelEl.textContent = label;
   if (color) labelEl.style.color = color;
   div.appendChild(labelEl);
-  // Use markdown rendering if available, fall back to plain text
+  // Use the same markdown rendering as regular chat
   const mdEl = (typeof _renderMarkdown === 'function') ? _renderMarkdown(msg.text || '') : null;
   if (mdEl) {
     div.appendChild(mdEl);

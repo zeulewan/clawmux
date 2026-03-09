@@ -144,7 +144,7 @@ function updateLayout() {
   // Settings uses class-based visibility — don't touch display here
   // Both agent chats and group chats respect inputMode for input controls
   if (inChat) {
-    if (inputMode === 'typing') {
+    if (typeof inputMode !== 'undefined' && inputMode === 'typing') {
       controls.style.display = 'none';
       textInputBar.classList.add('active');
     } else {
