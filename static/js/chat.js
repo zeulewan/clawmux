@@ -509,16 +509,19 @@ function _loadMoreMessages() {
 
 // Fill the viewport on tab switch when the initial batch is mostly filtered messages.
 // Called deferred (via rAF in switchTab) so layout is settled before scrollHeight check.
-// Loads a fixed 3 extra batches max — never exhausts history (preserves load-more button).
+// Always leaves at least _CHAT_BATCH messages unloaded so the load-more button persists.
 function _fillViewportMessages() {
   if (!activeSessionId) return;
   const s = sessions.get(activeSessionId);
   if (!s) return;
   if (chatArea.scrollHeight > chatArea.clientHeight + 10) return; // viewport already filled
   const limit = _getChatLimit(activeSessionId);
-  if (limit >= s.messages.length) return;
-  // Load up to 3 extra batches (150 messages) — fixed cap to preserve load-more button
-  const newLimit = Math.min(limit + _CHAT_BATCH * 3, s.messages.length);
+  // Must leave at least _CHAT_BATCH messages unloaded so the "Load older messages" button stays
+  const available = s.messages.length - limit;
+  if (available <= _CHAT_BATCH) return; // not enough headroom to fill without eating the button
+  // Load up to 3 extra batches but never eat into the last _CHAT_BATCH
+  const newLimit = Math.min(limit + _CHAT_BATCH * 3, s.messages.length - _CHAT_BATCH);
+  if (newLimit <= limit) return;
   _chatRenderLimit.set(activeSessionId, newLimit);
   renderChat(true); // single render
 }
