@@ -592,7 +592,7 @@ let _playbackVadStream = null;
 function startPlaybackVAD(sessionId) {
   stopPlaybackVAD();
   getMicStream().then(stream => {
-    _playbackVadStream = stream;
+    _playbackVadStream = _isDesktop ? stream : null;
     playbackVadCtx = new AudioContext();
     const source = playbackVadCtx.createMediaStreamSource(stream);
     const analyser = playbackVadCtx.createAnalyser();
@@ -646,6 +646,7 @@ function stopPlaybackVAD() {
     playbackVadCtx.close().catch(() => {});
     playbackVadCtx = null;
   }
+  if (_playbackVadStream) { _releaseMicStream(_playbackVadStream); _playbackVadStream = null; }
 }
 
 // --- Thinking VAD (auto-record interjections while agent is processing) ---
@@ -660,7 +661,7 @@ function startThinkingVAD(sessionId) {
   thinkingVadSessionId = sessionId;
 
   getMicStream().then(stream => {
-    _thinkingVadStream = stream;
+    _thinkingVadStream = _isDesktop ? stream : null;
     thinkingVadCtx = new AudioContext();
     const source = thinkingVadCtx.createMediaStreamSource(stream);
     const analyser = thinkingVadCtx.createAnalyser();
@@ -715,6 +716,7 @@ function stopThinkingVAD() {
     thinkingVadCtx = null;
   }
   thinkingVadSessionId = null;
+  if (_thinkingVadStream) { _releaseMicStream(_thinkingVadStream); _thinkingVadStream = null; }
 }
 
 // --- Status indicator stubs ---
@@ -1419,22 +1421,76 @@ function updateMicUI() {
   }
 }
 
-// --- Persistent mic stream ---
-// Stream is kept alive for the session duration to avoid getUserMedia latency and audio playback interruptions.
-async function getMicStream() {
-  if (persistentStream) {
-    const tracks = persistentStream.getAudioTracks();
-    if (tracks.length > 0 && tracks[0].readyState === 'live') {
-      return persistentStream;
-    }
-    persistentStream = null;
+// --- Mic stream management ---
+// Desktop: release when idle to clear the browser mic indicator.
+//   - Keep alive while TTS is playing (re-acquiring during playback causes audio blip)
+//   - 2s warmup window after release so back-to-back PTT reuses the stream without getUserMedia
+//   - Pre-warm on spacebar keydown so stream is ready by the time PTT logic runs
+// Mobile: persistent stream (getUserMedia latency too high on slow devices)
+const _isDesktop = !/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+const _MIC_WARMUP_MS = 2000;
+let _warmStream = null;
+let _warmStreamTimer = null;
+
+function _checkWarmStreamRelease(stream) {
+  if (_warmStream !== stream) return; // superseded
+  if (currentAudio || currentBufferedPlayer) {
+    // TTS still playing — wait and check again
+    _warmStreamTimer = setTimeout(() => _checkWarmStreamRelease(stream), 500);
+  } else {
+    // TTS done — start the cooldown countdown
+    _warmStreamTimer = setTimeout(() => {
+      if (_warmStream === stream) {
+        stream.getTracks().forEach(t => t.stop());
+        _warmStream = null;
+        _warmStreamTimer = null;
+      }
+    }, _MIC_WARMUP_MS);
   }
-  persistentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  persistentStream.getAudioTracks().forEach(t => { t.enabled = !micMuted; });
-  return persistentStream;
 }
 
-function _releaseMicStream(stream) { /* no-op — stream stays alive to prevent playback interruptions */ }
+function _releaseMicStream(stream) {
+  if (!stream) return;
+  if (stream === persistentStream) persistentStream = null;
+  if (!_isDesktop) { stream.getTracks().forEach(t => t.stop()); return; }
+  // Desktop: keep warm, wait for TTS to finish before starting cooldown
+  if (_warmStream && _warmStream !== stream) _warmStream.getTracks().forEach(t => t.stop());
+  if (_warmStreamTimer) clearTimeout(_warmStreamTimer);
+  _warmStream = stream;
+  _checkWarmStreamRelease(stream);
+}
+
+async function getMicStream() {
+  // Reuse warm stream on desktop if still live
+  if (_isDesktop && _warmStream) {
+    const tracks = _warmStream.getAudioTracks();
+    if (tracks.length > 0 && tracks[0].readyState === 'live') {
+      if (_warmStreamTimer) { clearTimeout(_warmStreamTimer); _warmStreamTimer = null; }
+      const s = _warmStream; _warmStream = null;
+      s.getAudioTracks().forEach(t => { t.enabled = !micMuted; });
+      return s;
+    }
+    _warmStream = null;
+  }
+  if (persistentStream) {
+    const tracks = persistentStream.getAudioTracks();
+    if (tracks.length > 0 && tracks[0].readyState === 'live') return persistentStream;
+    persistentStream = null;
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  stream.getAudioTracks().forEach(t => { t.enabled = !micMuted; });
+  if (!_isDesktop) persistentStream = stream;
+  return stream;
+}
+
+// Pre-warm mic on spacebar keydown in voice mode (desktop) — stream ready before pttStart runs
+if (_isDesktop) {
+  document.addEventListener('keydown', e => {
+    if (e.code !== 'Space' || e.repeat || e.target !== document.body) return;
+    if (typeof inputMode === 'undefined' || inputMode !== 'voice') return;
+    if (!_warmStream && !persistentStream) getMicStream().then(s => { _warmStream = s; }).catch(() => {});
+  }, { capture: true, passive: true });
+}
 
 // Prevent Space/Enter from reopening header dropdowns after selection
 ['session-model', 'project-selector'].forEach(id => {
@@ -1463,6 +1519,7 @@ async function startRecording(sessionId) {
     audioChunks = [];
     mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
     mediaRecorder.onstop = () => {
+      _releaseMicStream(stream);
       if (discardRecording) {
         discardRecording = false;
       } else {
