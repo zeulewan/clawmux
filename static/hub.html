@@ -238,7 +238,12 @@
 
 
 <div id="settings-page">
-  <h2>Settings</h2>
+  <div class="settings-header">
+    <h2>Settings</h2>
+    <button class="settings-close-btn" onclick="showSettingsPage()" aria-label="Close settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" width="20" height="20"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
 
   <div class="settings-section" id="voice-settings-section">
     <h3 class="settings-section-title">Text-to-Speech</h3>
