@@ -893,6 +893,10 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         if let ts { msg.timestamp = Date(timeIntervalSince1970: ts) }
         msg.msgId = msgId
         sessions[idx].messages.append(msg)
+        // Keep underlying array bounded (match server-side 50-message history cap)
+        if sessions[idx].messages.count > 200 {
+            sessions[idx].messages.removeFirst(sessions[idx].messages.count - 200)
+        }
         saveChats()
     }
 
@@ -1255,7 +1259,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
 
                 // First time becoming idle from starting = session just connected
                 if prevState == .starting && newState != .starting && newState != .dead {
-                    addMessage(sid, role: "system", text: "Claude connected.")
+                    if verboseMode { addMessage(sid, role: "system", text: "Claude connected.") }
                     if globalSounds, (isAutoMode && soundReadyAuto) || (pushToTalk && soundReadyPTT) {
                         tonePlayer.cueSessionReady()
                     }
