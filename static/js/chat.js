@@ -515,22 +515,31 @@ function _loadMoreMessages() {
 }
 
 // Fill the viewport on tab switch when the initial batch is mostly filtered messages.
-// Called deferred (via rAF in switchTab) so layout is settled before scrollHeight check.
-// Always leaves at least _CHAT_BATCH messages unloaded so the load-more button persists.
+// Uses visible-counting (data-only, no per-batch render) so sessions with sparse visible
+// content (e.g. mostly tool-call activity) still surface real messages.
+// Always leaves _CHAT_BATCH messages unloaded to preserve the load-more button.
 function _fillViewportMessages() {
   if (!activeSessionId) return;
   const s = sessions.get(activeSessionId);
   if (!s) return;
-  if (chatArea.scrollHeight > chatArea.clientHeight + 10) return; // viewport already filled
-  const limit = _getChatLimit(activeSessionId);
-  // Must leave at least _CHAT_BATCH messages unloaded so the "Load older messages" button stays
-  const available = s.messages.length - limit;
-  if (available <= _CHAT_BATCH) return; // not enough headroom to fill without eating the button
-  // Load up to 3 extra batches but never eat into the last _CHAT_BATCH
-  const newLimit = Math.min(limit + _CHAT_BATCH * 3, s.messages.length - _CHAT_BATCH);
-  if (newLimit <= limit) return;
-  _chatRenderLimit.set(activeSessionId, newLimit);
-  // Guard scroll listener — renderChat clears innerHTML which resets scrollTop → scroll event
+  if (chatArea.scrollHeight > chatArea.clientHeight + 10) return; // already filled
+  let limit = _getChatLimit(activeSessionId);
+  // Hard floor: must leave at least one batch unloaded so button stays visible
+  const ceiling = Math.max(s.messages.length - _CHAT_BATCH, limit);
+  if (limit >= ceiling) return;
+  // Load batches (data-only) until we find MIN_VISIBLE visible messages or hit ceiling
+  const MIN_VISIBLE = 10;
+  const MAX_BATCHES = 20;
+  let visibleFound = 0;
+  let iters = 0;
+  while (iters < MAX_BATCHES && limit < ceiling && visibleFound < MIN_VISIBLE) {
+    const prevLimit = limit;
+    limit = Math.min(limit + _CHAT_BATCH, ceiling);
+    visibleFound += _countVisibleInBatch(s.messages.slice(s.messages.length - limit, s.messages.length - prevLimit));
+    iters++;
+  }
+  if (limit === _getChatLimit(activeSessionId)) return; // nothing to add
+  _chatRenderLimit.set(activeSessionId, limit);
   _scrollLoadPending = true;
   renderChat(true); // single render
   requestAnimationFrame(() => { _scrollLoadPending = false; });
