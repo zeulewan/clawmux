@@ -256,12 +256,9 @@ struct ContentView: View {
     // MARK: - Group Chat View
 
     private var groupChatMainView: some View {
-        VStack(spacing: 0) {
-            groupChatScrollArea
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            textInputBar
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        groupChatScrollArea
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .safeAreaInset(edge: .bottom, spacing: 0) { textInputBar }
     }
 
     private var groupChatHeader: some View {
