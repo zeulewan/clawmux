@@ -1939,16 +1939,16 @@ struct ContentView: View {
                 // RoundedRectangle extends below the screen edge via ignoresSafeArea —
                 // bottom corners are hidden behind the screen, pill appears to flow off naturally
                 if #available(iOS 26, *) {
-                    Color.clear.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 80, style: .continuous))
+                    Color.clear.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
                         .ignoresSafeArea(edges: .bottom)
                 } else {
-                    RoundedRectangle(cornerRadius: 80, style: .continuous)
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
                         .fill(.ultraThinMaterial)
                         .ignoresSafeArea(edges: .bottom)
                 }
             }
         }
-        .padding(.horizontal, 8).padding(.top, 4)
+        .padding(.horizontal, 16).padding(.top, 4)
         // Fill home indicator zone with canvas1 + voice tint, matching mainAreaView
         .background {
             ZStack {
