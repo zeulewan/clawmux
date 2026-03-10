@@ -1376,7 +1376,6 @@ struct ContentView: View {
                         .padding(.top, 64).padding(.bottom, 16)
                     }
                     .defaultScrollAnchor(.bottom)
-                    .id(vm.activeSessionId ?? "none")
                     .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
                     .onChange(of: vm.activeMessages.count)        { _, _ in scrollBottom(proxy) }
                     .onChange(of: vm.activeSession?.isThinking)   { _, thinking in
