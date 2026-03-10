@@ -703,9 +703,24 @@ struct ContentView: View {
                     .kerning(-0.36)
                     .foregroundStyle(Color.cTextSec)
 
-                Text("Select an agent to begin")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color.cTextTer)
+                if vm.isConnected {
+                    Text("Select an agent to begin")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color.cTextTer)
+                } else {
+                    Text(vm.serverURL.isEmpty ? "Tap Settings to configure server" : "Connecting…")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color.cTextTer)
+                    Button { vm.showSettings = true } label: {
+                        Label("Settings", systemImage: "gearshape.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.cText)
+                            .padding(.horizontal, 20).padding(.vertical, 10)
+                            .background(Color.cCard, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.cBorder, lineWidth: 1))
+                    }
+                    .padding(.top, 4)
+                }
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 32).padding(.bottom, 24)
