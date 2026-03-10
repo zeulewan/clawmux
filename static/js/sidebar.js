@@ -699,6 +699,10 @@ function _createAgentCard(voiceId, name, state) {
       _touchDragEnd(e.changedTouches[0]);
       touchDragging = false; lpFired = false; ctxShown = false; return;
     }
+    if (ctxShown) {
+      // Prevent synthetic click from immediately closing the context menu
+      e.preventDefault();
+    }
     lpFired = false; ctxShown = false;
   });
   card.addEventListener('touchcancel', _cancelTouchDrag);
