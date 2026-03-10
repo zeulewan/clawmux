@@ -33,19 +33,47 @@ class ProjectManager:
                             # Named project without voices — assign from pool
                             proj["voices"] = []
                         changed = True
+                # Ensure "default" project always exists
+                if "default" not in data.get("projects", {}):
+                    data.setdefault("projects", {})["default"] = {
+                        "name": "Default",
+                        "created": time.time(),
+                        "flat_layout": False,
+                        "voices": [],
+                    }
+                    changed = True
+                # Move any voices not in any project into default
+                all_assigned = set()
+                for slug, proj in data["projects"].items():
+                    if slug != "default":
+                        all_assigned.update(proj.get("voices", []))
+                pool_ids = [v[0] for v in VOICE_POOL]
+                orphaned = [v for v in pool_ids if v not in all_assigned
+                            and v not in data["projects"]["default"].get("voices", [])]
+                if orphaned:
+                    data["projects"]["default"].setdefault("voices", []).extend(orphaned)
+                    changed = True
                 if changed:
                     try:
                         self.projects_file.write_text(json.dumps(data, indent=2))
-                        log.info("Migrated projects.json: backfilled voices fields")
+                        log.info("Migrated projects.json: ensured default project and assigned orphaned voices")
                     except Exception as e:
                         log.error("Failed to save migrated projects.json: %s", e)
                 return data
             except Exception as e:
                 log.error("Failed to load projects.json: %s", e)
-        # Fresh install: no projects — user creates their first one
+        # Fresh install: create default project with all voices
+        pool_ids = [v[0] for v in VOICE_POOL]
         return {
-            "projects": {},
-            "active_project": None,
+            "projects": {
+                "default": {
+                    "name": "Default",
+                    "created": time.time(),
+                    "flat_layout": False,
+                    "voices": pool_ids,
+                }
+            },
+            "active_project": "default",
         }
 
     def _save(self) -> None:
@@ -158,16 +186,23 @@ class ProjectManager:
         return {"slug": slug, **self._data["projects"][slug]}
 
     def delete_project(self, slug: str) -> None:
-        """Remove a project from the registry. Does NOT delete session directories."""
+        """Remove a project from the registry. Moves its voices to default."""
         if slug == "default":
             raise ValueError("Cannot delete the default project")
         if slug not in self.projects:
             raise ValueError(f"Project '{slug}' not found")
+        # Move voices to default so agents stay visible
+        voices = self._data["projects"][slug].get("voices", [])
+        default = self._data["projects"].setdefault("default", {
+            "name": "Default", "created": time.time(), "flat_layout": False, "voices": []
+        })
+        existing = set(default.get("voices", []))
+        default.setdefault("voices", []).extend(v for v in voices if v not in existing)
         del self._data["projects"][slug]
         if self.active_project == slug:
             self._data["active_project"] = "default"
         self._save()
-        log.info("Deleted project: %s", slug)
+        log.info("Deleted project: %s (moved %d voices to default)", slug, len(voices))
 
     def switch_project(self, slug: str) -> None:
         """Switch the active project. Does NOT restart or move any sessions."""
