@@ -715,7 +715,12 @@ function showTypingIndicator(sessionId) {
   chatArea.appendChild(el);
   // Restore current tool activity text immediately (avoids blank dots until next tool call)
   const s = typeof sessions !== 'undefined' ? sessions.get(sessionId) : null;
-  const savedText = s && s.toolStatusText ? s.toolStatusText : '';
+  let savedText = s && s.toolStatusText ? s.toolStatusText : '';
+  // Fall back to last log entry if toolStatusText is stale/empty (e.g. switching back to a busy tab)
+  if (!savedText) {
+    const log = _activityLogStore.get(sessionId);
+    if (log && log.texts.length > 0) savedText = log.texts[log.texts.length - 1];
+  }
   _renderTypingBubble(el, sessionId, savedText);
   chatScrollToBottom(false);
 }
