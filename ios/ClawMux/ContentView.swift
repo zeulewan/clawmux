@@ -495,8 +495,10 @@ struct ContentView: View {
                 }
             }
             .frame(height: 52)
-            // Safe area buffer so hamburger/notes/settings don't touch screen corner radius
-            Color.clear.frame(height: 20)
+            // Safe area buffer — use actual safe area bottom (home indicator ~34pt on modern iPhones)
+            Color.clear.frame(height: max(34, UIApplication.shared.connectedScenes
+                .flatMap { ($0 as? UIWindowScene)?.windows ?? [] }
+                .first { $0.isKeyWindow }?.safeAreaInsets.bottom ?? 34))
         }
         .frame(width: sidebarExpanded ? 220 : 48)
         .frame(maxHeight: .infinity)

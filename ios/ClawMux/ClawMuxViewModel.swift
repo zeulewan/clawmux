@@ -354,6 +354,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     @Published var knownGroupChats: [(name: String, voices: [String])] = []
     @Published var activeGroupName: String? = nil  // non-nil when viewing a group chat
     @Published var groupMessages: [GroupChatMessage] = []
+    @Published var allProjects: [String] = []  // fetched from GET /api/projects on connect
     private var groupIdToName: [String: String] = [:]  // "gc-xxx" → "group name" for disband API
 
     func groupName(for groupId: String) -> String? { groupIdToName[groupId] }
@@ -1494,14 +1495,20 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 removeSession(sid)
             }
 
+        case "project_created":
+            if let slug = json["slug"] as? String, !allProjects.contains(slug) {
+                allProjects.append(slug)
+                allProjects.sort()
+            }
+
         case "project_deleted":
-            // Sessions in the deleted project arrive via session_terminated; no extra cleanup needed.
-            // currentProject will be updated by a following project_switched event if needed.
-            break
+            if let slug = json["slug"] as? String {
+                allProjects.removeAll { $0 == slug }
+            }
 
         case "project_renamed":
-            // Sessions store the project slug, which is unchanged on rename; no action needed.
-            break
+            // Slug is unchanged on rename; re-fetch to pick up any metadata changes.
+            fetchProjects()
 
         case "project_switched":
             let newProject = json["project"] as? String ?? "default"
@@ -2241,9 +2248,10 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         URLSession.shared.dataTask(with: req2) { _, _, _ in }.resume()
     }
 
-    // Derived project list from live sessions (matches web project-selector options)
+    // All projects: server-fetched list merged with live session projects
     var knownProjects: [String] {
-        Array(Set(sessions.map(\.project).filter { !$0.isEmpty })).sorted()
+        let fromSessions = sessions.map(\.project).filter { !$0.isEmpty }
+        return Array(Set(allProjects + fromSessions)).sorted()
     }
 
     private func markSessionViewing(_ id: String) {
@@ -2500,6 +2508,18 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     }
                 }
             }
+        }.resume()
+    }
+
+    func fetchProjects() {
+        guard let baseURL = httpBaseURL() else { return }
+        URLSession.shared.dataTask(with: baseURL.appendingPathComponent("api/projects")) { [weak self] data, _, _ in
+            guard let data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let projects = json["projects"] as? [String: Any]
+            else { return }
+            let slugs = Array(projects.keys).sorted()
+            Task { @MainActor in self?.allProjects = slugs }
         }.resume()
     }
 
@@ -3483,6 +3503,7 @@ extension ClawMuxViewModel: URLSessionWebSocketDelegate {
             self.fetchSettings()
             self.fetchUsage()
             self.fetchGroupChats()
+            self.fetchProjects()
             self.usageRefreshTimer?.invalidate()
             self.usageRefreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
                 self?.fetchUsage()
