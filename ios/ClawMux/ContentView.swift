@@ -126,29 +126,26 @@ struct ContentView: View {
     @State private var showCreateGroupChat     = false
     @State private var newGroupChatName        = ""
 
-    @State private var testTapCount = 0
-
     var body: some View {
-        // MINIMAL TOUCH TEST — if this button works, the bug is in the real UI below
-        ZStack {
-            Color(red: 0.04, green: 0.05, blue: 0.09).ignoresSafeArea()
-            VStack(spacing: 24) {
-                Text("conn:\(vm.isConnected ? "Y" : "N") sess:\(vm.activeSessionId != nil ? "Y" : "N")")
-                    .foregroundStyle(.white).font(.system(size: 14, design: .monospaced))
-                Button {
-                    testTapCount += 1
-                    vm.showSettings = true
-                } label: {
-                    Text(testTapCount == 0 ? "TAP TO OPEN SETTINGS" : "TAPPED \(testTapCount)x — Settings opening...")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(24)
-                        .background(testTapCount == 0 ? Color.red : Color.green)
-                        .cornerRadius(16)
+        VStack(spacing: 0) {
+            topBarView
+            ZStack(alignment: .leading) {
+                mainAreaView
+                    .padding(.leading, 48)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if sidebarExpanded {
+                    Color.black.opacity(0.3)
+                        .ignoresSafeArea()
+                        .padding(.leading, 48)
+                        .onTapGesture { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { sidebarExpanded = false } }
+                        .transition(.opacity)
                 }
+                sidebarStripView
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .ignoresSafeArea(edges: .bottom)
         }
-        .sheet(isPresented: $vm.showSettings) { SettingsView(vm: vm) }
+        .background(Color.canvas1.ignoresSafeArea())
         .preferredColorScheme(.dark)
         .onAppear { isPulsing = true }
         .sheet(isPresented: $vm.showSettings) { SettingsView(vm: vm) }
@@ -263,7 +260,7 @@ struct ContentView: View {
                 .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
         }
         .padding(.horizontal, 12).padding(.vertical, 5)
-        .background(Color.canvas1.opacity(0.70).background(.ultraThinMaterial))
+        .background(Color.canvas1.opacity(0.95))
     }
 
     private var groupChatScrollArea: some View {
@@ -489,10 +486,7 @@ struct ContentView: View {
         }
         .frame(width: sidebarExpanded ? 220 : 48)
         .frame(maxHeight: .infinity)
-        .background(
-            Color(red: 0.04, green: 0.05, blue: 0.09).opacity(0.55)
-                .background(.ultraThinMaterial)
-        )
+        .background(Color(red: 0.04, green: 0.05, blue: 0.09).opacity(0.92))
         .overlay(alignment: .trailing) {
             Color.cBorder.opacity(0.6).frame(width: 0.5)
         }
@@ -1147,7 +1141,7 @@ struct ContentView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color.cText)
                     .padding(.horizontal, 18).padding(.vertical, 9)
-                    .background(.ultraThinMaterial, in: Capsule())
+                    .background(Color.canvas2.opacity(0.90), in: Capsule())
                     .overlay(Capsule().strokeBorder(Color.cBorder, lineWidth: 0.5))
                     .shadow(color: .black.opacity(0.4), radius: 12)
                     .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
@@ -1286,7 +1280,7 @@ struct ContentView: View {
                 .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
         }
         .padding(.horizontal, 12).padding(.vertical, 5)  // mobile web: padding 3px 12px
-        .background(Color.canvas1.opacity(0.70).background(.ultraThinMaterial))
+        .background(Color.canvas1.opacity(0.95))
     }
 
     private func modelName(_ m: String) -> String {
@@ -1358,7 +1352,7 @@ struct ContentView: View {
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(Color.cText)
                                 .frame(width: 32, height: 32)
-                                .background(.ultraThinMaterial, in: Circle())
+                                .background(Color.canvas2.opacity(0.90), in: Circle())
                                 .overlay(Circle().strokeBorder(Color.glassBorder, lineWidth: 0.5))
                                 .shadow(color: .black.opacity(0.4), radius: 8, x: 0, y: 2)
                         }
@@ -1879,7 +1873,7 @@ struct ContentView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 8).padding(.bottom, 2)
             .background(
-                RoundedRectangle(cornerRadius: 28, style: .continuous).fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 28, style: .continuous).fill(Color.canvas2.opacity(0.92))
             )
         }
         .padding(.horizontal, 8).padding(.bottom, 4)
@@ -1947,7 +1941,7 @@ struct ContentView: View {
         .padding(.horizontal, 12).padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(.ultraThinMaterial)
+                .fill(Color.canvas2.opacity(0.92))
                 .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
         )
         .padding(.horizontal, 12).padding(.bottom, 8)  // wider margins clear rounded screen corners
@@ -2007,7 +2001,7 @@ struct ContentView: View {
             .padding(.horizontal, 14).padding(.bottom, 8)
         }
         .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.ultraThinMaterial)
+            RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.canvas2.opacity(0.92))
         )
         .padding(.horizontal, 8).padding(.bottom, 4)
         .onAppear { pttTextFieldFocused = true }
