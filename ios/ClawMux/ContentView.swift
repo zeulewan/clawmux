@@ -1481,29 +1481,25 @@ struct ContentView: View {
                 let agentColor = voiceColor(voiceIdByName(agentName))
                 return AnyView(
                     VStack(alignment: .leading, spacing: 0) {
-                        // Header: arrow + name + chevron — matches web .agent-msg collapsed state
-                        HStack(spacing: 4) {
-                            Text("\(arrow) \(agentName)")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(agentColor)
-                            Spacer()
-                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                                .font(.system(size: 9, weight: .medium))
-                                .foregroundStyle(Color.cTextTer)
-                        }
-                        // Body: hidden when collapsed (matches web), full text when expanded
+                        // Header: arrow + name — matches web .agent-msg border-left style
+                        Text("\(arrow) \(agentName)")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(agentColor)
+                        // Body: hidden when collapsed, shown on tap
                         if isExpanded {
                             Text(content)
                                 .font(.system(size: 11))
                                 .foregroundStyle(Color.cTextSec)
-                                .padding(.top, 4)
+                                .padding(.top, 3)
                                 .transition(.opacity.combined(with: .move(edge: .top)))
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 10).padding(.vertical, 5)
-                    .background(Color.cCard.opacity(0.4), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .opacity(isExpanded ? 1 : 0.75)
+                    .padding(.leading, 10).padding(.vertical, 4)
+                    .overlay(alignment: .leading) {
+                        agentColor.opacity(0.6).frame(width: 2)
+                    }
+                    .padding(.leading, 2)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         withAnimation(.easeOut(duration: 0.15)) {
