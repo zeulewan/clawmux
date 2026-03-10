@@ -1947,7 +1947,7 @@ struct ContentView: View {
         }
         // Bottom padding = float gap above home indicator. canvas1+tint background
         // (below) fills the remaining space + safe area zone with the right color.
-        .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 20)
+        .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 16)
         // Fill home indicator zone with canvas1 + voice tint, matching mainAreaView
         .background {
             ZStack {
