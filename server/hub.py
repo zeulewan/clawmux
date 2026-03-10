@@ -1469,20 +1469,13 @@ async def rename_project(slug: str, request: Request):
 @app.delete("/api/projects/{slug}")
 async def delete_project(slug: str):
     try:
-        # Terminate sessions belonging to this project first
-        to_terminate = [
-            sid for sid, s in session_mgr.sessions.items()
-            if s.project_slug == slug
-        ]
-        for sid in to_terminate:
-            await session_mgr.terminate_session(sid)
         was_active = project_mgr.active_project == slug
         project_mgr.delete_project(slug)
         # Notify browser so sidebar/header refresh immediately
         await send_to_browser({"type": "project_deleted", "slug": slug})
         if was_active:
             await send_to_browser({"type": "project_switched", "project": project_mgr.active_project})
-        return JSONResponse({"status": "deleted", "slug": slug, "terminated_sessions": len(to_terminate)})
+        return JSONResponse({"status": "deleted", "slug": slug})
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
