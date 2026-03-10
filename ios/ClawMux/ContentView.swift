@@ -1938,8 +1938,13 @@ struct ContentView: View {
             }
         }
         .padding(.horizontal, 8).padding(.top, 4)
-        // Fill home indicator zone with app background — no gap, no extra glass layer
-        .background { Color.canvas1.ignoresSafeArea(edges: .bottom) }
+        // Fill home indicator zone with canvas1 + voice tint, matching mainAreaView
+        .background {
+            ZStack {
+                Color.canvas1
+                voiceTintColor.opacity(0.10)
+            }.ignoresSafeArea(edges: .bottom)
+        }
     }
 
     // MARK: - Text Input Bar
