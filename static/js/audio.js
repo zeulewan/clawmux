@@ -1483,12 +1483,19 @@ async function getMicStream() {
   return stream;
 }
 
-// Pre-warm mic on spacebar keydown in voice mode (desktop) — stream ready before pttStart runs
+// Pre-warm mic on spacebar keydown in voice mode (desktop) — stream ready before pttStart runs.
+// Also starts the waveform immediately so OS mic indicator and in-app waveform are in sync.
 if (_isDesktop) {
   document.addEventListener('keydown', e => {
     if (e.code !== 'Space' || e.repeat || e.target !== document.body) return;
     if (typeof inputMode === 'undefined' || inputMode !== 'voice') return;
-    if (!_warmStream && !persistentStream) getMicStream().then(s => { _warmStream = s; }).catch(() => {});
+    if (!_warmStream && !persistentStream) {
+      getMicStream().then(s => {
+        _warmStream = s;
+        // Start waveform now so it appears at the same moment the OS mic light comes on
+        if (!waveAnimFrame) startWaveform(s);
+      }).catch(() => {});
+    }
   }, { capture: true, passive: true });
 }
 
@@ -1529,7 +1536,8 @@ async function startRecording(sessionId) {
     mediaRecorder.start();
     recording = true;
     updateMicUI();
-    startWaveform(stream);
+    // Only start waveform if not already running (pre-warm may have started it)
+    if (!waveAnimFrame) startWaveform(stream);
     setStatus('Recording...');
     if (vadEnabled) startVAD(stream);
   } catch (err) {
