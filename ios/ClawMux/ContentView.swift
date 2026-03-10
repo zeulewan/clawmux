@@ -452,6 +452,7 @@ struct ContentView: View {
                 }
                 .padding(.vertical, 4)
             }
+            .frame(maxHeight: .infinity)  // cap at available space — prevents content height (1188px) from extending hit-test into hamburger zone
             .clipped()  // clip visual overflow
             .contentShape(Rectangle())  // constrain hit-testing to visible frame
             .layoutPriority(1)  // take all remaining space before the tray, preventing overlap with hamburger hit area
