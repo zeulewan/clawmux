@@ -1791,7 +1791,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   border-radius: var(--radius-md);
   padding: 14px;
   margin-bottom: 12px;
-  overflow: hidden;
+  max-width: 100%;
 }
 .debug-title {
   font-size: 0.75rem;
