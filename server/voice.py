@@ -295,6 +295,21 @@ def _get_stt_prompt() -> str:
     # Legacy env var fallback
     return os.environ.get("VOICEMODE_STT_PROMPT", "")
 
+# Common Whisper hallucinations to suppress (case-insensitive exact or prefix match)
+_STT_HALLUCINATIONS = {
+    "thank you", "thank you.", "thank you!",
+    "thanks for watching", "thank you for watching",
+    "thank you for watching!", "thank you for watching.",
+    "please like, comment, and subscribe",
+    "please subscribe", "subscribe to my channel",
+    "please like and subscribe",
+    "you", "you.", ".",
+}
+
+def _is_hallucination(text: str) -> bool:
+    return text.lower().strip(" .!?,") in {h.strip(" .!?,") for h in _STT_HALLUCINATIONS}
+
+
 async def stt(audio_bytes: bytes) -> str:
     """Audio bytes → text via Whisper. Retries up to 3 times on failure."""
     stt_prompt = _get_stt_prompt()
@@ -311,7 +326,11 @@ async def stt(audio_bytes: bytes) -> str:
                     data=data,
                 )
                 resp.raise_for_status()
-            return resp.json().get("text", "").strip()
+            text = resp.json().get("text", "").strip()
+            if _is_hallucination(text):
+                log.info("STT hallucination suppressed: %r", text)
+                return ""
+            return text
         except Exception as e:
             last_err = e
             if attempt < 2:
