@@ -494,15 +494,10 @@ struct ContentView: View {
         }
         .frame(width: sidebarExpanded ? 220 : 48)
         .frame(maxHeight: .infinity)
-        .background {
-            // matches web: background: var(--bg-glass); backdrop-filter: blur(20px)
-            if #available(iOS 26, *) {
-                Color.clear.glassEffect(.regular, in: .rect)
-            } else {
-                Color(red: 0.04, green: 0.05, blue: 0.09).opacity(0.55)
-                    .background(.ultraThinMaterial)
-            }
-        }
+        .background(
+            Color(red: 0.04, green: 0.05, blue: 0.09).opacity(0.55)
+                .background(.ultraThinMaterial)
+        )
         .overlay(alignment: .trailing) {
             Color.cBorder.opacity(0.6).frame(width: 0.5)
         }
@@ -1296,14 +1291,7 @@ struct ContentView: View {
                 .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
         }
         .padding(.horizontal, 12).padding(.vertical, 5)  // mobile web: padding 3px 12px
-        .background {
-            if #available(iOS 26, *) {
-                Color.clear.glassEffect(.regular, in: .rect)
-            } else {
-                Color.canvas1.opacity(0.70)
-                    .background(.ultraThinMaterial)
-            }
-        }
+        .background(Color.canvas1.opacity(0.70).background(.ultraThinMaterial))
     }
 
     private func modelName(_ m: String) -> String {
