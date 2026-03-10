@@ -143,7 +143,6 @@ struct ContentView: View {
                 sidebarStripView
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .ignoresSafeArea(edges: .bottom)
         }
         .background(Color.canvas1.ignoresSafeArea())
         .preferredColorScheme(.dark)
@@ -1292,11 +1291,10 @@ struct ContentView: View {
     private var chatScrollArea: some View {
         // Voice-color ambient tint on the whole chat area — mirrors web #main-content backgroundColor
         let areaTint = vm.activeSession.map { voiceColor($0.voice) } ?? Color.clear
-        return GeometryReader { geo in
-            ScrollViewReader { proxy in
-                ZStack(alignment: .bottomTrailing) {
-                    ScrollView(showsIndicators: false) {
-                        VStack(spacing: 20) {
+        ScrollViewReader { proxy in
+            ZStack(alignment: .bottomTrailing) {
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 20) {
                             // Load older messages button (mirrors web ▲ Load older messages)
                             if vm.activeSession?.hasOlderMessages == true {
                                 Button {
@@ -1326,8 +1324,7 @@ struct ContentView: View {
                             Color.clear.frame(height: 1).id("bottom")
                         }
                         .padding(.horizontal, 24)
-                        .padding(.top, 20).padding(.bottom, 120) // safeAreaInset handles bar overlap; extra breathing room
-                        .frame(minHeight: geo.size.height)
+                        .padding(.top, 20).padding(.bottom, 120)
                     }
                     .defaultScrollAnchor(.bottom)
                     .id(vm.activeSessionId ?? "none")
@@ -1363,7 +1360,6 @@ struct ContentView: View {
                     }
                 }
             }
-        }
         .background(areaTint.opacity(0.10))
     }
 
