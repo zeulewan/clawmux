@@ -2134,7 +2134,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             print("[group-history] no baseURL, aborting")
             return
         }
-        let encoded = groupName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? groupName
+        // If passed a raw groupId (e.g. "gc-abc123"), resolve to display name — server looks up by name
+        let resolvedName = groupIdToName[groupName] ?? groupName
+        let encoded = resolvedName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? resolvedName
         guard let url = URL(string: baseURL.absoluteString + "/api/groupchats/\(encoded)/history") else {
             print("[group-history] invalid URL for group: \(groupName)")
             return

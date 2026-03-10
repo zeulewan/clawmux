@@ -1397,7 +1397,13 @@ struct ContentView: View {
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(Color.cText)
                                 .frame(width: 32, height: 32)
-                                .background(Color.canvas2.opacity(0.90), in: Circle())
+                                .background {
+                                    if #available(iOS 26, *) {
+                                        Color.clear.glassEffect(.regular, in: .circle)
+                                    } else {
+                                        Color.canvas2.opacity(0.90).background(.ultraThinMaterial, in: Circle())
+                                    }
+                                }
                                 .overlay(Circle().strokeBorder(Color.glassBorder, lineWidth: 0.5))
                                 .shadow(color: .black.opacity(0.4), radius: 8, x: 0, y: 2)
                         }
