@@ -278,7 +278,13 @@ struct ContentView: View {
                 .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
         }
         .padding(.horizontal, 12).padding(.vertical, 5)
-        .background(.ultraThinMaterial)
+        .background {
+            if #available(iOS 26, *) {
+                Color.clear.glassEffect(.regular, in: .rect).ignoresSafeArea(edges: .top)
+            } else {
+                Color.clear.background(.ultraThinMaterial).ignoresSafeArea(edges: .top)
+            }
+        }
     }
 
     private var groupChatScrollArea: some View {
@@ -1326,9 +1332,9 @@ struct ContentView: View {
         .padding(.horizontal, 12).padding(.vertical, 5)  // mobile web: padding 3px 12px
         .background {
             if #available(iOS 26, *) {
-                Color.clear.glassEffect(.regular, in: .rect)
+                Color.clear.glassEffect(.regular, in: .rect).ignoresSafeArea(edges: .top)
             } else {
-                Color.canvas1.opacity(0.85).background(.ultraThinMaterial)
+                Color.canvas1.opacity(0.85).background(.ultraThinMaterial).ignoresSafeArea(edges: .top)
             }
         }
     }
