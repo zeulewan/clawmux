@@ -519,9 +519,9 @@ struct ContentView: View {
         .frame(maxHeight: .infinity)
         .background {
             if #available(iOS 26, *) {
-                Color.clear.glassEffect(.regular, in: .rect)
+                Color.clear.glassEffect(.regular, in: .rect).ignoresSafeArea(edges: .bottom)
             } else {
-                Color(red: 0.04, green: 0.05, blue: 0.09).opacity(0.92)
+                Color(red: 0.04, green: 0.05, blue: 0.09).opacity(0.92).ignoresSafeArea(edges: .bottom)
             }
         }
         .overlay(alignment: .trailing) {
