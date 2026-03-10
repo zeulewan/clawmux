@@ -2448,6 +2448,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         } else if !base.hasPrefix("http://") && !base.hasPrefix("https://") {
             base = "https://" + base
         }
+        // Strip /ws suffix — serverURL may include it for WebSocket but HTTP base should not
+        if base.hasSuffix("/ws") { base = String(base.dropLast(3)) }
         return URL(string: base)
     }
 
