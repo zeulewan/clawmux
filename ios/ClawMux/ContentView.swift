@@ -234,11 +234,11 @@ struct ContentView: View {
     // MARK: - Group Chat View
 
     private var groupChatMainView: some View {
-        groupChatScrollArea
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                textInputBar
-            }
+        VStack(spacing: 0) {
+            groupChatScrollArea
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            textInputBar
+        }
     }
 
     private var groupChatHeader: some View {
@@ -1129,11 +1129,11 @@ struct ContentView: View {
             if vm.showDebug {
                 DebugView(vm: vm)
             } else {
-                chatScrollArea
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .safeAreaInset(edge: .bottom, spacing: 0) {
-                        bottomInputArea
-                    }
+                VStack(spacing: 0) {
+                    chatScrollArea
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    bottomInputArea
+                }
             }
             // Copy toast
             if showCopiedToast {
