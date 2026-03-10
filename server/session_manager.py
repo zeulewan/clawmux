@@ -188,18 +188,36 @@ class SessionManager:
             if not old_session_id:
                 continue
 
-            # Check if the tmux session for this session_id still exists
-            if old_session_id not in live_tmux:
+            # Compute the canonical (proper) session name from voice_id
+            voice_name = voice_names_map.get(voice_id, voice_id)
+            proper_id = voice_name.lower()
+
+            # Prefer the canonical name; fall back to stored name for live lookup
+            if proper_id in live_tmux:
+                adopt_id = proper_id
+            elif old_session_id in live_tmux:
+                # Legacy voice-ID name — rename tmux session to canonical name
+                if old_session_id != proper_id and proper_id not in live_tmux:
+                    import subprocess as _sp
+                    r = _sp.run(["tmux", "rename-session", "-t", old_session_id, proper_id],
+                                capture_output=True)
+                    if r.returncode == 0:
+                        log.info("Renamed tmux session %s → %s", old_session_id, proper_id)
+                        adopt_id = proper_id
+                    else:
+                        adopt_id = old_session_id
+                else:
+                    adopt_id = old_session_id
+            else:
                 log.info("No tmux for %s (%s), marking dead in agents.json", voice_id, old_session_id)
                 await self._sync_agent_store(voice_id)
                 continue
 
             # Already tracked by this hub instance
-            if old_session_id in self.sessions:
+            if adopt_id in self.sessions:
                 continue
 
-            # Adopt: create a Session object with the old session_id
-            voice_name = voice_names_map.get(voice_id, voice_id)
+            # Adopt: create a Session object with the canonical session_id
             raw_project = entry.project or "default"
             # Resolve display name → slug (guards against stale agents.json entries)
             known = self.project_mgr.projects
@@ -212,8 +230,8 @@ class SessionManager:
                 )
             work_dir = self.project_mgr.get_session_dir(voice_id, adopt_project)
             session = Session(
-                session_id=old_session_id,
-                tmux_session=old_session_id,
+                session_id=adopt_id,
+                tmux_session=adopt_id,
                 work_dir=str(work_dir),
                 status="ready",
                 label=voice_name,
