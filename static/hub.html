@@ -370,11 +370,11 @@
   </div>
 
   <div class="settings-section" id="settings-projects-section" style="display:none;">
-    <h3 class="settings-section-title">Projects</h3>
+    <h3 class="settings-section-title">Folders</h3>
     <div class="settings-card" style="padding:12px 16px;">
       <div id="settings-projects-list" style="margin-bottom:8px;"></div>
       <div style="display:flex; gap:8px; align-items:center;">
-        <input id="new-project-name" type="text" placeholder="New project name..." style="flex:1; padding:6px 10px; font-size:0.8rem; border:1px solid var(--border); border-radius:6px; background:var(--bg-card); color:var(--text); font-family:inherit;">
+        <input id="new-project-name" type="text" placeholder="New folder name..." style="flex:1; padding:6px 10px; font-size:0.8rem; border:1px solid var(--border); border-radius:6px; background:var(--bg-card); color:var(--text); font-family:inherit;">
         <button onclick="createProject()" style="padding:6px 12px; font-size:0.8rem; background:var(--voice-color, #4a9eff); color:white; border:none; border-radius:6px; cursor:pointer; font-family:inherit;">Create</button>
       </div>
     </div>
@@ -413,7 +413,7 @@
   <div class="ctx-item ctx-has-submenu" id="ctx-set-role">Set Role ▸
     <div class="ctx-submenu" id="ctx-role-list"></div>
   </div>
-  <div class="ctx-item ctx-has-submenu" id="ctx-move-project">Move to Project ▸
+  <div class="ctx-item ctx-has-submenu" id="ctx-move-project">Move to Folder ▸
     <div class="ctx-submenu" id="ctx-project-list"></div>
   </div>
   <div class="ctx-item ctx-has-submenu" id="ctx-add-group">Add to Group Chat ▸
@@ -934,7 +934,10 @@ async function openGroupChat(groupId) {
     const resp = await fetch(`/api/groupchats/${encodeURIComponent(g.name)}/history`);
     if (resp.ok) {
       const data = await resp.json();
-      renderGroupChat(data.messages || []);
+      // Guard: if user navigated away before fetch completed, don't render
+      if (activeGroupId === groupId) {
+        renderGroupChat(data.messages || []);
+      }
     }
   } catch (e) { /* empty */ }
 
@@ -1301,7 +1304,7 @@ async function renameProject(slug, currentName) {
 }
 
 async function deleteProject(slug) {
-  if (!confirm(`Delete project "${slug}"? This will terminate all its sessions.`)) return;
+  if (!confirm(`Delete folder "${slug}"?`)) return;
   try {
     const resp = await fetch(`/api/projects/${slug}`, { method: 'DELETE' });
     if (!resp.ok) { const err = await resp.json(); alert(err.error || 'Failed'); return; }
@@ -1325,7 +1328,7 @@ async function switchProject(slug) {
 // updateProjectLabel and toggleProjectPopup removed — project selector now in sidebar
 
 async function _promptNewProject() {
-  const name = prompt('Project name:');
+  const name = prompt('Folder name:');
   if (!name || !name.trim()) return;
   const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   if (!slug) return;

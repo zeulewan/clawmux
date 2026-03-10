@@ -102,6 +102,9 @@ async def _save_activity(session, text: str) -> None:
     """
     if not text:
         return
+    session.activity_log.append(text)
+    if len(session.activity_log) > 50:
+        session.activity_log = session.activity_log[-50:]
     await asyncio.to_thread(history.append, session.voice, session.label, "activity", text, _hist_prefix(session))
     await send_to_browser({
         "type": "activity_text",
@@ -348,6 +351,20 @@ async def lifespan(app: FastAPI):
     await agents_store.load()
     _load_groups()
     await session_mgr.cleanup_stale_sessions()
+    # Send Enter to every adopted session to clear any text that was left in the tmux
+    # input buffer by an injection that was killed mid-way during the previous hub run.
+    # On a clean Claude Code prompt, Enter is a no-op. On a stuck buffer, it submits it.
+    for session in list(session_mgr.sessions.values()):
+        if session.tmux_session:
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    "tmux", "send-keys", "-t", session.tmux_session, "Enter",
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                await proc.communicate()
+            except Exception as _e:
+                log.debug("[%s] Startup Enter failed: %s", session.session_id, _e)
     # Flush any pending interjections (saved across hub restarts) into inbox for delivery.
     # The agent is assumed idle after a hub restart, so we convert interjections to inbox
     # messages and trigger immediate injection rather than waiting for a new voice message.
@@ -403,6 +420,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.include_router(voice_router)
 STATIC_DIR = Path(__file__).parent.parent / "static"
+_SHARED_UPLOADS_DIR = hub_config.DATA_DIR / "uploads"
 
 
 @app.get("/")
@@ -423,6 +441,17 @@ async def static_file(filename: str):
             "Pragma": "no-cache",
         })
     return JSONResponse({"error": "not found"}, status_code=404)
+
+
+@app.get("/uploads/{filename:path}")
+async def serve_upload(filename: str):
+    """Serve agent-posted images from the shared uploads directory."""
+    path = (_SHARED_UPLOADS_DIR / filename).resolve()
+    if not str(path).startswith(str(_SHARED_UPLOADS_DIR.resolve())):
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    if not path.is_file():
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return FileResponse(path)
 
 
 # --- Browser WebSocket ---
@@ -1110,10 +1139,10 @@ async def upload_file(session_id: str, file: UploadFile):
     # Notify the agent via inbox
     umid = _gen_msg_id()
     await _inbox_write_and_notify(session, {
+        "id": umid,
         "from": "user",
         "type": "file_upload",
         "content": f"User uploaded a file: uploads/{safe_name}",
-        "msg_id": umid,
     })
 
     # Show in chat
@@ -1510,16 +1539,27 @@ async def reorder_voices(slug: str, request: Request):
 
 @app.put("/api/projects/{slug}")
 async def rename_project(slug: str, request: Request):
+    import re as _re
     data = await request.json()
     new_name = data.get("name", "").strip()
     if not new_name:
         return JSONResponse({"error": "name is required"}, status_code=400)
+    # Derive new slug from new name (folders are purely visual — slug follows name)
+    new_slug = _re.sub(r"[^a-z0-9]+", "-", new_name.lower()).strip("-") or slug
+    if new_slug == slug:
+        new_slug = None  # no slug change
     try:
-        result = project_mgr.rename_project(slug, new_name)
-        await send_to_browser({"type": "project_renamed", "slug": slug, "name": new_name})
+        result = project_mgr.rename_project(slug, new_name, new_slug)
+        actual_slug = result["slug"]
+        # Migrate any live sessions still referencing the old slug
+        if new_slug:
+            for s in session_mgr.sessions.values():
+                if getattr(s, "project_slug", None) == slug:
+                    s.project_slug = actual_slug
+        await send_to_browser({"type": "project_renamed", "old_slug": slug, "slug": actual_slug, "name": new_name})
         return JSONResponse(result)
     except ValueError as e:
-        return JSONResponse({"error": str(e)}, status_code=404)
+        return JSONResponse({"error": str(e)}, status_code=400)
 
 
 @app.delete("/api/projects/{slug}")
@@ -2155,6 +2195,42 @@ async def log_external_outbound(request: Request):
     return JSONResponse({"id": msg_id})
 
 
+@app.post("/api/messages/image")
+async def agent_post_image(request: Request, file: UploadFile):
+    """Agent posts an image into the chat. Saves to shared uploads dir, renders inline."""
+    sender_id = request.headers.get("X-ClawMux-Session-Id", "")
+    sender = session_mgr.sessions.get(sender_id)
+    if not sender:
+        return JSONResponse({"error": f"sender session '{sender_id}' not found"}, status_code=404)
+
+    contents = await file.read()
+    if len(contents) > _MAX_UPLOAD_SIZE:
+        return JSONResponse({"error": "file too large (50MB max)"}, status_code=413)
+
+    _SHARED_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    safe_name = Path(file.filename or "image.png").name
+    unique_name = f"{_gen_msg_id()}-{safe_name}"
+    (_SHARED_UPLOADS_DIR / unique_name).write_bytes(contents)
+
+    msg_id = _gen_msg_id()
+    url = f"/uploads/{unique_name}"
+    markdown = f"![{safe_name}]({url})"
+
+    await send_to_browser({
+        "session_id": sender_id,
+        "type": "assistant_text",
+        "text": markdown,
+        "msg_id": msg_id,
+        "fire_and_forget": True,
+    })
+    await asyncio.to_thread(
+        history.append, sender.voice, sender.label, "assistant",
+        markdown, _hist_prefix(sender), msg_id=msg_id
+    )
+    log.info("[%s] Agent posted image: %s", sender_id, unique_name)
+    return JSONResponse({"status": "ok", "url": url, "msg_id": msg_id})
+
+
 @app.post("/api/messages/speak")
 async def speak_to_user(request: Request):
     """Agent speaks to user via TTS — fire and forget."""
@@ -2363,7 +2439,7 @@ async def _inject_inbox(session, session_id: str) -> None:
         msg_id = msg.get("id", "")
         if msg_type == "agent":
             lines.append(f"[MSG id:{msg_id} from:{sender}] {content}")
-        elif msg_type in ("voice", "text"):
+        elif msg_type in ("voice", "text", "file_upload"):
             lines.append(f"[VOICE id:{msg_id} from:{sender}] {content}")
         elif msg_type == "group":
             group_name = msg.get("group_name", "group")
@@ -2376,7 +2452,9 @@ async def _inject_inbox(session, session_id: str) -> None:
 
     text = "\n".join(lines)
     try:
-        await session_mgr.backend.deliver_message(session.tmux_session, text)
+        # Shield delivery so cancellation (e.g. from agent_active hook) cannot interrupt
+        # between text-typed and Enter-sent — the tmux subprocess keeps running to completion.
+        await asyncio.shield(session_mgr.backend.deliver_message(session.tmux_session, text))
         log.info("[%s] Injected %d message(s) via tmux", session_id, len(messages))
         await send_to_browser({
             "type": "inbox_update",
@@ -2384,10 +2462,9 @@ async def _inject_inbox(session, session_id: str) -> None:
             "count": 0,
         })
     except asyncio.CancelledError:
-        log.warning("[%s] Injection cancelled after read — returning %d message(s) to inbox",
-                    session_id, len(messages))
-        for msg in messages:
-            await asyncio.to_thread(inbox.write, session.work_dir, msg)
+        # Delivery is shielded — text + Enter will still be sent by the background task.
+        # Do NOT return messages to inbox; that would cause a double-injection.
+        log.info("[%s] Injection cancelled — delivery shielded, Enter will fire", session_id)
         raise
     except Exception as exc:
         log.error("[%s] tmux injection FAILED: %s — %d message(s) returned to inbox",

@@ -781,8 +781,8 @@ function renderSidebar() {
       const welcome = document.createElement('div');
       welcome.style.cssText = 'padding:24px 16px;text-align:center;color:var(--text-secondary,#888);font-size:0.9em;';
       welcome.innerHTML = '<div style="font-size:1.3em;margin-bottom:8px;">Welcome to ClawMux</div>'
-        + '<div style="margin-bottom:16px;">Create a project to get started</div>'
-        + '<button style="padding:8px 20px;border-radius:8px;border:1px solid #4a9eff;background:none;color:#4a9eff;cursor:pointer;font-family:inherit;font-size:0.95em;" onclick="_promptNewProject()">+ New Project</button>';
+        + '<div style="margin-bottom:16px;">Create a folder to get started</div>'
+        + '<button style="padding:8px 20px;border-radius:8px;border:1px solid #4a9eff;background:none;color:#4a9eff;cursor:pointer;font-family:inherit;font-size:0.95em;" onclick="_promptNewProject()">+ New Folder</button>';
       list.appendChild(welcome);
       return;
     }
@@ -791,7 +791,7 @@ function renderSidebar() {
     return;
   }
 
-  // Grouped view: one collapsible section per project
+  // Grouped view: one collapsible section per folder
   const existingGroups = new Map();
   for (const el of list.querySelectorAll('.sidebar-project-group')) {
     existingGroups.set(el.dataset.projectSlug, el);

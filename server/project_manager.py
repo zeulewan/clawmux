@@ -176,13 +176,24 @@ class ProjectManager:
         log.info("Created project: %s (%s) with voices: %s", slug, name, voices)
         return {"slug": slug, **project}
 
-    def rename_project(self, slug: str, new_name: str) -> dict:
-        """Rename a project (display name only, slug stays the same)."""
+    def rename_project(self, slug: str, new_name: str, new_slug: str | None = None) -> dict:
+        """Rename a folder. Optionally moves to a new slug (updates all internal references)."""
         if slug not in self.projects:
-            raise ValueError(f"Project '{slug}' not found")
+            raise ValueError(f"Folder '{slug}' not found")
+        if new_slug and new_slug != slug:
+            if new_slug in self.projects:
+                raise ValueError(f"Folder '{new_slug}' already exists")
+            entry = self._data["projects"].pop(slug)
+            entry["name"] = new_name
+            self._data["projects"][new_slug] = entry
+            if self._data.get("active_project") == slug:
+                self._data["active_project"] = new_slug
+            self._save()
+            log.info("Renamed folder %s → %s (%s)", slug, new_slug, new_name)
+            return {"slug": new_slug, **entry}
         self._data["projects"][slug]["name"] = new_name
         self._save()
-        log.info("Renamed project %s to: %s", slug, new_name)
+        log.info("Renamed folder %s to: %s", slug, new_name)
         return {"slug": slug, **self._data["projects"][slug]}
 
     def delete_project(self, slug: str) -> None:

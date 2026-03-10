@@ -272,7 +272,12 @@ function handleMessage(data) {
     }
     return;
   }
-  if (type === 'project_deleted' || type === 'project_renamed') {
+  if (type === 'project_deleted') { loadProjects(); return; }
+  if (type === 'project_renamed') {
+    // If slug changed and it was the active folder, track new slug
+    if (data.old_slug && data.slug && data.old_slug !== data.slug && currentProject === data.old_slug) {
+      currentProject = data.slug;
+    }
     loadProjects();
     return;
   }
