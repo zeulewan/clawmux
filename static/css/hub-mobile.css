@@ -255,6 +255,10 @@
     padding-left: calc(48px + 8px) !important;
     padding-right: 8px !important;
   }
+  #debug-panel {
+    padding-left: calc(48px + 12px) !important;
+    padding-top: 60px !important;
+  }
   #welcome-view { padding-top: 52px; padding-left: 56px; }
   /* === Settings: slides in from the right like the notes panel === */
   #settings-page {
