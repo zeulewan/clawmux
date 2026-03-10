@@ -148,6 +148,13 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .overlay(alignment: .bottomTrailing) {
+            Text("build-47")
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundStyle(Color.white.opacity(0.4))
+                .padding(6)
+                .allowsHitTesting(false)
+        }
         .background(Color.canvas1.ignoresSafeArea())
         .preferredColorScheme(.dark)
         .onAppear { isPulsing = true }
