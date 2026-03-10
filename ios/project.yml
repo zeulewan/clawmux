@@ -57,3 +57,16 @@ targets:
         DEVELOPMENT_TEAM: 25QMAKVCBN
         SWIFT_VERSION: "6.0"
         GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  ClawMux:
+    build:
+      targets:
+        ClawMux: all
+        ClawMuxUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - ClawMuxUITests
