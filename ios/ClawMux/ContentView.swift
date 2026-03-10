@@ -298,7 +298,7 @@ struct ContentView: View {
                         }
                         Color.clear.frame(height: 16).id("gc-bottom")
                     }
-                    .padding(.horizontal, 12).padding(.top, 8)
+                    .padding(.horizontal, 12).padding(.top, 64).padding(.bottom, 8)
                 }
                 .onChange(of: vm.groupMessages.count) { _, _ in
                     withAnimation(.easeOut(duration: 0.18)) {
@@ -311,7 +311,7 @@ struct ContentView: View {
                     proxy.scrollTo("gc-bottom", anchor: .bottom)
                 }
             }
-            // Empty state with refresh button
+            // Empty state
             if vm.groupMessages.isEmpty {
                 VStack(spacing: 10) {
                     Image(systemName: "bubble.left.and.bubble.right")
@@ -323,15 +323,18 @@ struct ContentView: View {
                     Text("Start the conversation below")
                         .font(.system(size: 11))
                         .foregroundStyle(Color.cTextTer)
-                    if !vm.groupHistoryDebug.isEmpty {
-                        Text(vm.groupHistoryDebug)
-                            .font(.system(size: 9, design: .monospaced))
-                            .foregroundStyle(Color.cTextTer)
-                            .padding(.top, 4)
-                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .allowsHitTesting(false)
+            }
+            // Debug overlay — always visible, top-right corner
+            if !vm.groupHistoryDebug.isEmpty {
+                Text(vm.groupHistoryDebug)
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(Color.cTextTer)
+                    .padding(4)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .allowsHitTesting(false)
             }
         }
     }
