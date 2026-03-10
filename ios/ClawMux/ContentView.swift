@@ -124,7 +124,6 @@ struct ContentView: View {
     @State private var expandedAgentMsgIds:    Set<UUID> = []
     @State private var isAtBottom:             Bool = true
     @State private var sidebarExpanded:        Bool = false
-    @State private var hamburgerTapCount:      Int  = 0  // debug: increments on every hamburger tap
     @State private var showFilePicker:         Bool = false
     @State private var showCreateGroupChat     = false
     @State private var newGroupChatName        = ""
@@ -156,17 +155,11 @@ struct ContentView: View {
             topBarView
         }
         .overlay(alignment: .bottomTrailing) {
-            VStack(spacing: 2) {
-                Text("h:\(hamburgerTapCount) e:\(sidebarExpanded ? 1 : 0)")
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.5))
-                    .accessibilityIdentifier("DebugHamburgerState")
-                Text("build-\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?")")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.4))
-            }
-            .padding(6)
-            .allowsHitTesting(false)
+            Text("build-\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?")")
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundStyle(Color.white.opacity(0.4))
+                .padding(6)
+                .allowsHitTesting(false)
         }
         .background(Color.canvas1.ignoresSafeArea())
         .preferredColorScheme(.dark)
@@ -327,15 +320,6 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .allowsHitTesting(false)
             }
-            // Debug overlay — always visible, top-right corner
-            if !vm.groupHistoryDebug.isEmpty {
-                Text(vm.groupHistoryDebug)
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(Color.cTextTer)
-                    .padding(4)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .allowsHitTesting(false)
-            }
         }
     }
 
@@ -397,8 +381,10 @@ struct ContentView: View {
 
     private var sidebarStripView: some View {
         // Agent list — icons when collapsed, full cards when expanded
+        ScrollViewReader { sidebarProxy in
         ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: sidebarExpanded ? 2 : 1) {
+                    Color.clear.frame(height: 0).id("sidebar-top")
                     if sidebarExpanded {
                         // Agents first (matches mobile web — group chats section is below agents)
                         let groups = projectGroups
@@ -471,7 +457,6 @@ struct ContentView: View {
                 HStack(spacing: 0) {
                     // Hamburger — always 48px, border-right matches web #sidebar-expand-btn
                     Button {
-                        hamburgerTapCount += 1
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                             sidebarExpanded.toggle()
                         }
@@ -536,8 +521,12 @@ struct ContentView: View {
         .overlay(alignment: .trailing) {
             Color.cBorder.opacity(0.6).frame(width: 0.5)
         }
+        .onChange(of: sidebarExpanded) { expanded in
+            if !expanded { withAnimation { sidebarProxy.scrollTo("sidebar-top", anchor: .top) } }
+        }
         .animation(.spring(response: 0.3, dampingFraction: 0.85), value: sidebarExpanded)
         .clipped()
+        } // ScrollViewReader
     }
 
     private func sidebarIcon(for voice: VoiceInfo) -> some View {
