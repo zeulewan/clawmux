@@ -930,6 +930,7 @@ body {
 #debug-panel {
   padding-left: calc(var(--sidebar-w, 220px) + 20px) !important;
   padding-top: 72px !important;
+  overflow-x: hidden;
 }
 .msg {
   max-width: 75%;
@@ -1783,11 +1784,14 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 }
 /* Debug panel */
 .debug-section {
-  background: var(--bg-secondary);
+  background: var(--bg-glass);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 14px;
   margin-bottom: 12px;
+  overflow: hidden;
 }
 .debug-title {
   font-size: 0.75rem;
@@ -1799,12 +1803,16 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 }
 .debug-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
 }
 .debug-table th, .debug-table td {
   text-align: left;
   padding: 5px 8px;
   border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  overflow-wrap: break-word;
+  word-break: break-all;
 }
 .debug-table th { color: var(--text-tertiary); font-weight: 600; font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.04em; }
 .debug-table td { font-size: 0.72rem; color: var(--text-secondary); }
@@ -1823,9 +1831,9 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 .debug-badge.no { background: rgba(96,96,128,0.15); color: var(--text-tertiary); }
 .debug-badge.voice { background: var(--yellow-dim); color: var(--yellow); }
 .debug-badge.other { background: rgba(96,96,128,0.1); color: var(--text-tertiary); }
-.debug-kv { display: flex; gap: 8px; margin: 3px 0; }
-.debug-kv .k { color: var(--text-tertiary); min-width: 130px; font-size: 0.72rem; }
-.debug-kv .v { color: var(--text); font-size: 0.72rem; }
+.debug-kv { display: flex; gap: 8px; margin: 3px 0; min-width: 0; }
+.debug-kv .k { color: var(--text-tertiary); min-width: 130px; flex-shrink: 0; font-size: 0.72rem; }
+.debug-kv .v { color: var(--text); font-size: 0.72rem; overflow-wrap: break-word; word-break: break-all; min-width: 0; flex: 1; }
 
 /* Scrollbar styling — hidden by default, visible on hover */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
