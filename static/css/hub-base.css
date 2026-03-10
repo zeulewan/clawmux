@@ -1087,6 +1087,7 @@ body {
   padding: 10px 14px;
   min-width: 58px;
   max-width: min(320px, 80%);
+  align-self: flex-start;
   cursor: pointer;
   user-select: none;
   gap: 0;
