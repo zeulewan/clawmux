@@ -284,7 +284,7 @@ struct ContentView: View {
                 .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
         }
         .padding(.horizontal, 12).padding(.vertical, 5)
-        .background(Color.canvas1.opacity(0.95))
+        .background(.ultraThinMaterial)
     }
 
     private var groupChatScrollArea: some View {
@@ -1303,7 +1303,7 @@ struct ContentView: View {
                 .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
         }
         .padding(.horizontal, 12).padding(.vertical, 5)  // mobile web: padding 3px 12px
-        .background(Color.canvas1.opacity(0.95))
+        .background(.ultraThinMaterial)
     }
 
     private func modelName(_ m: String) -> String {
@@ -1893,7 +1893,7 @@ struct ContentView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 8).padding(.bottom, 2)
             .background(
-                RoundedRectangle(cornerRadius: 28, style: .continuous).fill(Color.canvas2.opacity(0.92))
+                RoundedRectangle(cornerRadius: 28, style: .continuous).fill(.ultraThinMaterial)
             )
         }
         .padding(.horizontal, 8).padding(.bottom, 4)
@@ -1961,7 +1961,7 @@ struct ContentView: View {
         .padding(.horizontal, 12).padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color.canvas2.opacity(0.92))
+                .fill(.ultraThinMaterial)
                 .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
         )
         .padding(.horizontal, 12).padding(.bottom, 8)  // wider margins clear rounded screen corners
@@ -2021,7 +2021,7 @@ struct ContentView: View {
             .padding(.horizontal, 14).padding(.bottom, 8)
         }
         .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.canvas2.opacity(0.92))
+            RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.ultraThinMaterial)
         )
         .padding(.horizontal, 8).padding(.bottom, 4)
         .onAppear { pttTextFieldFocused = true }
