@@ -1480,23 +1480,29 @@ struct ContentView: View {
                 let agentColor = voiceColor(voiceIdByName(agentName))
                 return AnyView(
                     VStack(alignment: .leading, spacing: 0) {
-                        // Header: arrow + agent name (colored) — always visible
+                        // Header: arrow + name + chevron — matches web .agent-msg collapsed state
                         HStack(spacing: 4) {
                             Text("\(arrow) \(agentName)")
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundStyle(agentColor)
+                            Spacer()
+                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundStyle(Color.cTextTer)
                         }
-                        // Body: preview line when collapsed, full text when expanded
-                        Text(content)
-                            .font(.system(size: 11))
-                            .foregroundStyle(Color.cTextSec.opacity(0.9))
-                            .lineLimit(isExpanded ? nil : 1)
-                            .padding(.top, 2)
+                        // Body: hidden when collapsed (matches web), full text when expanded
+                        if isExpanded {
+                            Text(content)
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color.cTextSec)
+                                .padding(.top, 4)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 10).padding(.vertical, 4)
+                    .padding(.horizontal, 10).padding(.vertical, 5)
                     .background(Color.cCard.opacity(0.4), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .opacity(isExpanded ? 1 : 0.85)
+                    .opacity(isExpanded ? 1 : 0.75)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         withAnimation(.easeOut(duration: 0.15)) {
