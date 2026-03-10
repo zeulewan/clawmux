@@ -796,6 +796,13 @@ function _toggleActivityExpand(el, sessionId) {
   // Snapshot BEFORE class toggle — scrollHeight grows after expanding
   const wasNearBottom = chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 200;
   el.classList.toggle('expanded');
+  // Scroll log to bottom (latest entry) after transition completes
+  if (el.classList.contains('expanded')) {
+    setTimeout(() => {
+      const logEl = el.querySelector('.typing-log-expanded');
+      if (logEl) logEl.scrollTop = logEl.scrollHeight;
+    }, 320); // after CSS transition (0.3s)
+  }
   // Don't call _renderTypingBubble here — resets dot animations causing flash.
   // .typing-log-expanded is already in DOM; CSS transition handles the reveal.
   if (wasNearBottom) {

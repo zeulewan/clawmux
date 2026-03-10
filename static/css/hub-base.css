@@ -1144,6 +1144,7 @@ body {
   text-overflow: ellipsis;
   padding: 1px 0;
   line-height: 1.4;
+  flex-shrink: 0;
 }
 .typing-log-line.current {
   color: var(--text-secondary);
