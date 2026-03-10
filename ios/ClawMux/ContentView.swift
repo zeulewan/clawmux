@@ -1366,7 +1366,6 @@ struct ContentView: View {
                                 .frame(maxWidth: .infinity)
                                 .padding(.top, 4)
                             }
-                            Spacer(minLength: 0).frame(maxHeight: .infinity)
                             ForEach(messageGroups) { group in
                                 messageGroupView(group)
                                     .id(group.id)
@@ -1938,7 +1937,16 @@ struct ContentView: View {
                 }
             }
         }
-        .padding(.horizontal, 8).padding(.bottom, 4)
+        .padding(.horizontal, 8).padding(.top, 4).padding(.bottom, 4)
+        // Full-width backdrop extends behind the home indicator so there's no visible gap
+        .background {
+            if #available(iOS 26, *) {
+                Color.clear.glassEffect(.regular, in: .rect).ignoresSafeArea(edges: .bottom)
+            } else {
+                Color.canvas1.opacity(0.95).background(.ultraThinMaterial, in: .rect)
+                    .ignoresSafeArea(edges: .bottom)
+            }
+        }
     }
 
     // MARK: - Text Input Bar
