@@ -2093,18 +2093,36 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
 
     // GET /api/groupchats/:name/history → populate groupMessages
     func fetchGroupHistory(groupName: String) {
-        guard let baseURL = httpBaseURL() else { return }
+        guard let baseURL = httpBaseURL() else {
+            print("[group-history] no baseURL, aborting")
+            return
+        }
         let encoded = groupName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? groupName
-        guard let url = URL(string: baseURL.absoluteString + "/api/groupchats/\(encoded)/history") else { return }
-        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+        guard let url = URL(string: baseURL.absoluteString + "/api/groupchats/\(encoded)/history") else {
+            print("[group-history] invalid URL for group: \(groupName)")
+            return
+        }
+        print("[group-history] fetching \(url)")
+        URLSession.shared.dataTask(with: url) { [weak self] data, resp, err in
+            if let err = err {
+                print("[group-history] network error: \(err)")
+                return
+            }
+            if let http = resp as? HTTPURLResponse {
+                print("[group-history] status \(http.statusCode)")
+            }
             guard let data,
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let msgs = json["messages"] as? [[String: Any]]
-            else { return }
+            else {
+                print("[group-history] parse failed, data: \(data.map { String(data: $0, encoding: .utf8) ?? "?" } ?? "nil")")
+                return
+            }
+            print("[group-history] got \(msgs.count) messages")
             let parsed = msgs.compactMap { m -> GroupChatMessage? in
                 guard let text = m["text"] as? String, !text.isEmpty
                 else { return nil }
-                let id = m["id"] as? String ?? UUID().uuidString  // fallback: some entries lack id
+                let id = m["id"] as? String ?? UUID().uuidString
                 return GroupChatMessage(
                     id: id,
                     role: m["role"] as? String ?? "assistant",
@@ -2113,6 +2131,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     ts: m["ts"] as? Double ?? 0
                 )
             }
+            print("[group-history] parsed \(parsed.count) messages")
             Task { @MainActor in self?.groupMessages = parsed }
         }.resume()
     }
