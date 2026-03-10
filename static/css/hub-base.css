@@ -400,26 +400,34 @@ body {
 }
 .gc-avatar:first-child { margin-left: 0; }
 
-/* Per-sender ACK dots on group chat messages */
+/* Per-sender ACK badges below group chat messages (siblings of .msg, not children) */
 .gc-ack-row {
   display: flex;
   gap: 4px;
   flex-wrap: wrap;
-  margin-top: 6px;
-  padding-top: 4px;
+  margin-top: 2px;
+  margin-bottom: 8px;
 }
-.gc-ack-dot {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  display: flex;
+.gc-ack-badge {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  font-size: 0.55rem;
+  gap: 3px;
+  padding: 2px 7px 2px 5px;
+  border-radius: 10px;
   border: 1.5px solid currentColor;
+  font-size: 0.75rem;
   flex-shrink: 0;
   cursor: default;
 }
+.gc-ack-icon {
+  display: flex;
+  align-items: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.gc-ack-icon svg { width: 14px; height: 14px; }
+.gc-ack-thumb { font-size: 0.8rem; line-height: 1; }
 .gc-info {
   flex: 1;
   min-width: 0;

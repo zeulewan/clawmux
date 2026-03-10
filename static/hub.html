@@ -955,37 +955,48 @@ function _voiceColorByLabel(label) {
   return null;
 }
 
-// Add a per-sender ACK dot to a group message element
+// Add a per-sender ACK badge below a group message element
+// Each badge shows [voice icon] [👍] as a pair, in a row OUTSIDE the bubble
 function _addGroupAckDot(msgEl, senderLabel, senderVoice) {
   if (!msgEl) return;
-  let row = msgEl.querySelector('.gc-ack-row');
-  if (!row) {
+  // Row goes AFTER the .msg element (sibling, not child — keeps it outside the bubble)
+  let row = msgEl.nextElementSibling;
+  if (!row || !row.classList.contains('gc-ack-row')) {
     row = document.createElement('div');
     row.className = 'gc-ack-row';
-    msgEl.appendChild(row);
-    // Hide the plain ack button since we now show dots
+    row.style.alignSelf = msgEl.classList.contains('user') ? 'flex-end' : 'flex-start';
+    msgEl.parentNode.insertBefore(row, msgEl.nextSibling);
+    // Hide the ack button inside the bubble (dots replace it)
     const ackBtn = msgEl.querySelector('.msg-ack-btn');
     if (ackBtn) { ackBtn.style.opacity = '0'; ackBtn.style.pointerEvents = 'none'; }
   }
   // Deduplicate — don't add same sender twice
-  const existing = row.querySelector(`[data-ack-sender="${CSS.escape(senderLabel)}"]`);
-  if (existing) return;
-  const dot = document.createElement('div');
-  dot.className = 'gc-ack-dot';
-  dot.dataset.ackSender = senderLabel;
-  dot.title = senderLabel;
+  if (row.querySelector(`[data-ack-sender="${CSS.escape(senderLabel)}"]`)) return;
+  const badge = document.createElement('div');
+  badge.className = 'gc-ack-badge';
+  badge.dataset.ackSender = senderLabel;
+  badge.title = senderLabel;
   const color = (senderVoice && typeof voiceColor === 'function') ? voiceColor(senderVoice) : (senderLabel === 'You' ? 'var(--blue)' : _voiceColorByLabel(senderLabel) || 'var(--blue)');
-  dot.style.background = color + '22';
-  dot.style.borderColor = color;
-  dot.style.color = color;
+  badge.style.background = color + '18';
+  badge.style.borderColor = color;
+  badge.style.color = color;
+  // Voice icon
+  const iconEl = document.createElement('span');
+  iconEl.className = 'gc-ack-icon';
   if (senderVoice && typeof voiceIcon === 'function') {
     const ico = voiceIcon(senderVoice);
-    if (ico.startsWith('<')) dot.innerHTML = ico;
-    else dot.textContent = ico;
+    if (ico.startsWith('<')) iconEl.innerHTML = ico;
+    else iconEl.textContent = ico;
   } else {
-    dot.textContent = senderLabel === 'You' ? '👍' : (senderLabel[0] || '?');
+    iconEl.textContent = senderLabel === 'You' ? '👤' : (senderLabel[0] || '?');
   }
-  row.appendChild(dot);
+  // Thumbs up
+  const thumbEl = document.createElement('span');
+  thumbEl.className = 'gc-ack-thumb';
+  thumbEl.textContent = '👍';
+  badge.appendChild(iconEl);
+  badge.appendChild(thumbEl);
+  row.appendChild(badge);
 }
 
 function _sendGroupAck(msgId) {
@@ -1017,17 +1028,20 @@ function _makeGroupMsgEl(msg) {
     if (color) labelEl.style.color = color;
     div.appendChild(labelEl);
   }
-  // Same markdown rendering as regular chat
-  const mdEl = (typeof _renderMarkdown === 'function') ? _renderMarkdown(msg.text || '') : null;
-  if (mdEl) {
-    div.appendChild(mdEl);
-  } else if (isUser) {
+  // User messages: plain text (same as regular chat — no markdown rendering)
+  // Agent messages: markdown rendered
+  if (isUser) {
     div.textContent = msg.text || '';
   } else {
-    const textEl = document.createElement('span');
-    textEl.className = 'msg-text';
-    textEl.textContent = msg.text || '';
-    div.appendChild(textEl);
+    const mdEl = (typeof _renderMarkdown === 'function') ? _renderMarkdown(msg.text || '') : null;
+    if (mdEl) {
+      div.appendChild(mdEl);
+    } else {
+      const textEl = document.createElement('span');
+      textEl.className = 'msg-text';
+      textEl.textContent = msg.text || '';
+      div.appendChild(textEl);
+    }
   }
   // Timestamp — same as createMsgEl
   const ts = msg.ts || Date.now() / 1000;
@@ -1076,7 +1090,7 @@ function _gcRenderSlice(chatArea, fromIdx, toIdx, prepend = false) {
   for (let i = fromIdx; i < toIdx; i++) {
     const msg = _gcAllMessages[i];
     const el = _makeGroupMsgEl(msg);
-    el.style.animation = 'none'; // no animation for history batch
+    el.classList.add('rendered'); // no animation for history batch
     if (msg.id && _gcAckCounts.has(msg.id) && typeof _showPermanentAck === 'function') {
       _showPermanentAck(el, _gcAckCounts.get(msg.id));
     }
