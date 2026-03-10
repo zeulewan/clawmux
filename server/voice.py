@@ -295,19 +295,35 @@ def _get_stt_prompt() -> str:
     # Legacy env var fallback
     return os.environ.get("VOICEMODE_STT_PROMPT", "")
 
-# Common Whisper hallucinations to suppress (case-insensitive exact or prefix match)
-_STT_HALLUCINATIONS = {
-    "thank you", "thank you.", "thank you!",
+# Hallucinations that are ALWAYS fake regardless of audio length (never real user speech)
+_STT_HALLUCINATIONS_ALWAYS = {
     "thanks for watching", "thank you for watching",
-    "thank you for watching!", "thank you for watching.",
     "please like, comment, and subscribe",
     "please subscribe", "subscribe to my channel",
     "please like and subscribe",
-    "you", "you.", ".",
+    "thank you for watching and i'll see you in the next one",
 }
 
-def _is_hallucination(text: str) -> bool:
-    return text.lower().strip(" .!?,") in {h.strip(" .!?,") for h in _STT_HALLUCINATIONS}
+# Short hallucinations only suppressed when audio is small (likely silence/noise)
+# If audio is long enough the user probably really said these
+_STT_HALLUCINATIONS_SHORT = {
+    "thank you", "thanks", "you", ".",
+}
+
+# Audio size threshold: below this (bytes) the recording is likely silence/noise
+_STT_MIN_AUDIO_BYTES = 8_000  # ~0.5s of real speech in webm/opus
+
+
+def _is_hallucination(text: str, audio_size: int = 0) -> bool:
+    normalized = text.lower().strip(" .!?,")
+    always = {h.strip(" .!?,") for h in _STT_HALLUCINATIONS_ALWAYS}
+    if normalized in always:
+        return True
+    if audio_size < _STT_MIN_AUDIO_BYTES:
+        short = {h.strip(" .!?,") for h in _STT_HALLUCINATIONS_SHORT}
+        if normalized in short:
+            return True
+    return False
 
 
 async def stt(audio_bytes: bytes) -> str:
@@ -327,8 +343,8 @@ async def stt(audio_bytes: bytes) -> str:
                 )
                 resp.raise_for_status()
             text = resp.json().get("text", "").strip()
-            if _is_hallucination(text):
-                log.info("STT hallucination suppressed: %r", text)
+            if _is_hallucination(text, len(audio_bytes)):
+                log.info("STT hallucination suppressed (audio=%db): %r", len(audio_bytes), text)
                 return ""
             return text
         except Exception as e:
