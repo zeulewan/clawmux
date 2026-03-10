@@ -453,9 +453,8 @@ struct ContentView: View {
                 .padding(.vertical, 4)
             }
             .clipped()  // clip visual overflow
-            .contentShape(Rectangle())  // constrain hit-testing to visible frame, prevents scroll content extending into hamburger area
-
-            Spacer()
+            .contentShape(Rectangle())  // constrain hit-testing to visible frame
+            .layoutPriority(1)  // take all remaining space before the tray, preventing overlap with hamburger hit area
 
             // Bottom tray: hamburger (always) + Notes + Settings (when expanded)
             // Note: sidebar-focus-card is hidden on mobile web — no Focus card here
