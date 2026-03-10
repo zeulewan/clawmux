@@ -490,6 +490,10 @@ function renderChat(forceScroll = false) {
   if (wasNearBottom) chatArea.scrollTop = chatArea.scrollHeight;
   // Mark all bulk-rendered messages as already-rendered so they don't animate
   chatArea.querySelectorAll('.msg').forEach(el => el.classList.add('rendered'));
+  // Restore typing indicator if session is currently active (e.g. switching back to a busy tab)
+  if (s && s.sessionState === 'processing' && typeof showTypingIndicator === 'function') {
+    showTypingIndicator(activeSessionId);
+  }
 }
 
 function _loadMoreMessages() {
