@@ -35,14 +35,14 @@
     margin-left: 0;
   }
   .resize-handle { display: none !important; }
-  /* Project header: chevron centered in 48px strip when collapsed, left-aligned when expanded */
-  .sidebar-project-header { justify-content: center; padding: 5px 0; gap: 6px; font-size: 0.55rem; }
+  /* Project header: chevron centered via padding-left when collapsed, slides left when expanded */
+  .sidebar-project-header { justify-content: flex-start; padding: 5px 8px 5px 16px; gap: 6px; font-size: 0.55rem; transition: padding-left 0.25s ease; }
   .sidebar-project-header .project-chevron { font-size: 0.7rem; flex-shrink: 0; }
   .sidebar-project-header .project-name,
-  .sidebar-project-header .project-agent-count { display: none; }
-  #sidebar.expanded .sidebar-project-header { justify-content: flex-start; padding: 5px 8px; }
+  .sidebar-project-header .project-agent-count { max-width: 0; overflow: hidden; opacity: 0; white-space: nowrap; transition: max-width 0.25s ease, opacity 0.15s ease; }
+  #sidebar.expanded .sidebar-project-header { padding-left: 8px; }
   #sidebar.expanded .sidebar-project-header .project-name,
-  #sidebar.expanded .sidebar-project-header .project-agent-count { display: inline; opacity: 1; pointer-events: auto; transition: opacity 0.15s ease-out 0.2s; }
+  #sidebar.expanded .sidebar-project-header .project-agent-count { max-width: 200px; opacity: 1; pointer-events: auto; }
   /* sb-info out of flow — starts past sidebar edge so no partial chars during slide */
   .sidebar-card .sb-info { position: absolute; left: 56px; top: 0; bottom: 0; width: 140px; overflow: hidden; display: flex; flex-direction: column; justify-content: center; gap: 1px; opacity: 1; }
   /* Remove min-heights that inflate the block */
