@@ -506,28 +506,15 @@ struct ContentView: View {
                 }
                 .frame(height: 52)
             }
-            .background {
-                if #available(iOS 26, *) {
-                    Color.clear.glassEffect(.regular, in: .rect).ignoresSafeArea(edges: .bottom)
-                } else {
-                    Color(red: 0.04, green: 0.05, blue: 0.09).opacity(0.92).ignoresSafeArea(edges: .bottom)
-                }
-            }
         }
         .frame(width: sidebarExpanded ? 220 : 48)
         .frame(maxHeight: .infinity)
         .ignoresSafeArea(edges: .bottom)
         .background {
-            // Bottom corners rounded (radius matches pill) — hidden below screen edge via ignoresSafeArea
-            let sidebarShape = UnevenRoundedRectangle(
-                topLeadingRadius: 0, bottomLeadingRadius: 80,
-                bottomTrailingRadius: 80, topTrailingRadius: 0,
-                style: .continuous)
             if #available(iOS 26, *) {
-                Color.clear.glassEffect(.regular, in: sidebarShape).ignoresSafeArea(edges: .bottom)
+                Color.clear.glassEffect(.regular, in: .rect).ignoresSafeArea(edges: .bottom)
             } else {
-                sidebarShape.fill(Color(red: 0.04, green: 0.05, blue: 0.09).opacity(0.92))
-                    .ignoresSafeArea(edges: .bottom)
+                Color(red: 0.04, green: 0.05, blue: 0.09).opacity(0.92).ignoresSafeArea(edges: .bottom)
             }
         }
         .overlay(alignment: .trailing) {
