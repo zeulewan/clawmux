@@ -481,6 +481,7 @@ struct ContentView: View {
                         .foregroundStyle(Color.cTextSec)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
+                    .accessibilityIdentifier("SidebarNotesButton")
                     Button {
                         vm.showSettings = true
                         withAnimation(.spring(response: 0.3)) { sidebarExpanded = false }
@@ -492,6 +493,7 @@ struct ContentView: View {
                         .foregroundStyle(Color.cTextSec)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
+                    .accessibilityIdentifier("SidebarSettingsButton")
                 }
             }
             .frame(height: 52)

@@ -91,25 +91,31 @@ final class TouchBlockerTests: XCTestCase {
     /// This is the simplest touch test: if anything is blocking, the sidebar stays collapsed.
     func testHamburgerExpandsSidebar() throws {
         saveScreenshot("hamburger_01_before")
-        // Hamburger is at bottom-left of screen: x≈24pt (center of 48px sidebar), y≈bottom-52pt
-        // Use normalized coordinates: x=0.06 (≈24/390), y=0.93 (near bottom)
+
+        // Confirm tray buttons do NOT exist before tapping (eliminates false positives)
+        let trayNotes    = app.buttons["SidebarNotesButton"].firstMatch
+        let traySettings = app.buttons["SidebarSettingsButton"].firstMatch
+        XCTAssertFalse(trayNotes.exists,    "SidebarNotesButton should not exist before hamburger tap")
+        XCTAssertFalse(traySettings.exists, "SidebarSettingsButton should not exist before hamburger tap")
+
+        // Hamburger is at bottom-left: x=0.06 (≈24pt in 48px sidebar), y=0.93 (near bottom)
         let hamburger = app.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.93))
         hamburger.tap()
         sleep(1)
         saveScreenshot("hamburger_02_after_tap")
 
-        // After tapping, check for "Notes" or "Settings" buttons which only appear when expanded
-        let notesButton = app.buttons["Notes"].firstMatch
-        let settingsButton = app.buttons["Settings"].firstMatch
-        let sidebarExpanded = notesButton.waitForExistence(timeout: 2) || settingsButton.waitForExistence(timeout: 2)
-
+        // Now check for the specific sidebar tray buttons (not the main Settings button)
+        let expanded = trayNotes.waitForExistence(timeout: 3) || traySettings.waitForExistence(timeout: 3)
         saveScreenshot("hamburger_03_expanded_state")
-        XCTAssertTrue(sidebarExpanded, "Sidebar should expand after tapping hamburger — if this fails, touch events are being blocked")
+        XCTAssertTrue(expanded, "Sidebar tray should appear after hamburger tap — SidebarNotesButton or SidebarSettingsButton must exist")
 
-        // Tap hamburger again to collapse
+        // Collapse
         hamburger.tap()
         sleep(1)
         saveScreenshot("hamburger_04_collapsed")
+
+        // Tray buttons should be gone again
+        XCTAssertFalse(trayNotes.exists,    "SidebarNotesButton should disappear after collapsing")
     }
 
     // MARK: - Center screen tap test
