@@ -1416,6 +1416,12 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         if let idx = sessionIndex(sid) { sessions[idx].effort = effort }
     }
 
+    func sendEffort(_ effort: String) {
+        guard let sid = activeSessionId else { return }
+        sendJSON(["session_id": sid, "type": "set_effort", "effort": effort])
+        if let idx = sessionIndex(sid) { sessions[idx].effort = effort }
+    }
+
     // MARK: - Hub Protocol
 
     private func handleMessage(_ message: URLSessionWebSocketTask.Message) {
