@@ -505,13 +505,12 @@ struct ContentView: View {
                     }
                 }
                 .frame(height: 52)
-                Color.clear.frame(height: 34)  // home indicator safe area
             }
             .background {
                 if #available(iOS 26, *) {
-                    Color.clear.glassEffect(.regular, in: .rect)
+                    Color.clear.glassEffect(.regular, in: .rect).ignoresSafeArea(edges: .bottom)
                 } else {
-                    Color(red: 0.04, green: 0.05, blue: 0.09).opacity(0.92)
+                    Color(red: 0.04, green: 0.05, blue: 0.09).opacity(0.92).ignoresSafeArea(edges: .bottom)
                 }
             }
         }
@@ -519,10 +518,10 @@ struct ContentView: View {
         .frame(maxHeight: .infinity)
         .ignoresSafeArea(edges: .bottom)
         .background {
-            // Bottom corners rounded (matching pill radius) — hidden below screen edge via ignoresSafeArea
+            // Bottom corners rounded (radius matches pill) — hidden below screen edge via ignoresSafeArea
             let sidebarShape = UnevenRoundedRectangle(
-                topLeadingRadius: 0, bottomLeadingRadius: 56,
-                bottomTrailingRadius: 56, topTrailingRadius: 0,
+                topLeadingRadius: 0, bottomLeadingRadius: 80,
+                bottomTrailingRadius: 80, topTrailingRadius: 0,
                 style: .continuous)
             if #available(iOS 26, *) {
                 Color.clear.glassEffect(.regular, in: sidebarShape).ignoresSafeArea(edges: .bottom)
