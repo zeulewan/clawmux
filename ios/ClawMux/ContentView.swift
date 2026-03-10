@@ -127,33 +127,29 @@ struct ContentView: View {
     @State private var newGroupChatName        = ""
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header — always full width, never covered by sidebar (matches mobile web #header z-index)
-            topBarView
+        // Sidebar + content ZStack — header overlays as glass so ultraThinMaterial blurs messages behind it
+        ZStack(alignment: .leading) {
+            // Content offset 48px right so messages/input bars never go under collapsed sidebar
+            mainAreaView
+                .padding(.leading, 48)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Body + Sidebar ZStack — sidebar is a fixed-width glass overlay on the left
-            ZStack(alignment: .leading) {
-                // Content offset 48px right so messages/input bars never go under collapsed sidebar
-                mainAreaView
+            // Dim overlay behind expanded sidebar (starts at sidebar edge)
+            if sidebarExpanded {
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
                     .padding(.leading, 48)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                // Dim overlay behind expanded sidebar (starts at sidebar edge)
-                if sidebarExpanded {
-                    Color.black.opacity(0.3)
-                        .ignoresSafeArea()
-                        .padding(.leading, 48)
-                        .onTapGesture { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { sidebarExpanded = false } }
-                        .transition(.opacity)
-                }
-
-                // Sidebar glass overlay — floats over content edge for proper blur
-                sidebarStripView
+                    .onTapGesture { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { sidebarExpanded = false } }
+                    .transition(.opacity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .ignoresSafeArea(edges: .bottom)  // let sidebar + input bars reach true screen bottom
+
+            // Sidebar glass overlay — floats over content edge for proper blur
+            sidebarStripView
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea(edges: .bottom)  // let sidebar + input bars reach true screen bottom
+        // Header overlays top of scroll content — material blurs messages scrolling behind it
+        .safeAreaInset(edge: .top, spacing: 0) { topBarView }
         .background(Color.canvas1.ignoresSafeArea())
         .preferredColorScheme(.dark)
         .onAppear { isPulsing = true }
