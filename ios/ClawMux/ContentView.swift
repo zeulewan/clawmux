@@ -105,6 +105,7 @@ private func usageColor(_ pct: Int) -> Color {
 
 struct ContentView: View {
     @StateObject private var vm = ClawMuxViewModel()
+    @State private var debugTapCount = 0
     @State private var isPulsing      = false
     @State private var showResetConfirm      = false
     @State private var resetVoiceId: String? = nil
@@ -190,6 +191,21 @@ struct ContentView: View {
             Button("Create") { vm.createGroupChat(name: newGroupChatName) }
             Button("Cancel", role: .cancel) {}
         } message: { Text("Enter a name for the new group chat.") }
+        // DEBUG OVERLAY — remove after diagnosing touch bug
+        .overlay(alignment: .topTrailing) {
+            Button {
+                debugTapCount += 1
+            } label: {
+                Text("DBG:\(debugTapCount) conn:\(vm.isConnected ? "Y" : "N") sid:\(vm.activeSessionId ?? "nil") set:\(vm.showSettings ? "Y" : "N")")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6).padding(.vertical, 4)
+                    .background(debugTapCount == 0 ? Color.red : Color.green)
+            }
+            .padding(.top, 60).padding(.trailing, 8)
+            .allowsHitTesting(true)
+            .zIndex(9999)
+        }
     }
 
     // MARK: - Split Layout
