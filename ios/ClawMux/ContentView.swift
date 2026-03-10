@@ -105,7 +105,6 @@ private func usageColor(_ pct: Int) -> Color {
 
 struct ContentView: View {
     @StateObject private var vm = ClawMuxViewModel()
-    @State private var debugInfo = "loading..."
     @State private var isPulsing      = false
     @State private var showResetConfirm      = false
     @State private var resetVoiceId: String? = nil
@@ -192,37 +191,15 @@ struct ContentView: View {
             Button("Cancel", role: .cancel) {}
         } message: { Text("Enter a name for the new group chat.") }
         // DEBUG OVERLAY — remove after diagnosing touch bug
-        .overlay(alignment: .topTrailing) {
-            Text(debugInfo)
-                .font(.system(size: 8, weight: .bold, design: .monospaced))
+        .overlay(alignment: .top) {
+            Text("conn:\(vm.isConnected ? "Y" : "N") sess:\(vm.activeSessionId != nil ? "Y" : "N") set:\(vm.showSettings ? "Y" : "N") err:\(vm.errorMessage != nil ? "Y" : "N") sid:\(vm.activeSessionId?.suffix(4) ?? "nil")")
+                .font(.system(size: 13, weight: .bold, design: .monospaced))
                 .foregroundStyle(.white)
-                .padding(.horizontal, 5).padding(.vertical, 3)
-                .background(Color.red)
-                .padding(.top, 55).padding(.trailing, 4)
+                .padding(.horizontal, 8).padding(.vertical, 5)
+                .background(Color.red.opacity(0.9))
                 .allowsHitTesting(false)
+                .padding(.top, 60)
         }
-        .onAppear {
-            updateDebugInfo()
-            // refresh a few times so we capture post-launch state
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { updateDebugInfo() }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { updateDebugInfo() }
-        }
-    }
-
-    // MARK: - Debug
-
-    private func updateDebugInfo() {
-        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        let wins = scenes.flatMap { $0.windows }
-        var parts: [String] = []
-        parts.append("wins:\(wins.count)")
-        for (i, w) in wins.enumerated() {
-            parts.append("w\(i):\(w.isKeyWindow ? "K" : ""):\(w.isHidden ? "H" : "V"):\(type(of: w))")
-        }
-        parts.append("set:\(vm.showSettings ? "Y" : "N")")
-        parts.append("notes:\(vm.showNotes ? "Y" : "N")")
-        parts.append("err:\(vm.errorMessage != nil ? "Y" : "N")")
-        debugInfo = parts.joined(separator: " ")
     }
 
     // MARK: - Split Layout
