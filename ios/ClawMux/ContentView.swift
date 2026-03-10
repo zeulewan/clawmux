@@ -249,7 +249,8 @@ struct ContentView: View {
             if #available(iOS 26, *) {
                 Color.clear.glassEffect(.regular, in: .rect)
             } else {
-                Color.canvas1.opacity(0.95)
+                Color.canvas1.opacity(0.70)
+                    .background(.ultraThinMaterial)
             }
         }
     }
@@ -1930,7 +1931,7 @@ struct ContentView: View {
                     .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
             }
         }
-        .padding(.horizontal, 8).padding(.bottom, 4)
+        .padding(.horizontal, 12).padding(.bottom, 8)  // wider margins clear rounded screen corners
         .fileImporter(
             isPresented: $showFilePicker,
             allowedContentTypes: [.item],
