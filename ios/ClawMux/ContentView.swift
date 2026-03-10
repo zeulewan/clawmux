@@ -181,6 +181,7 @@ struct ContentView: View {
             Button("Create") { vm.createGroupChat(name: newGroupChatName) }
             Button("Cancel", role: .cancel) {}
         } message: { Text("Enter a name for the new group chat.") }
+        .background(DebugWindowInstaller())
     }
 
     // MARK: - Split Layout
@@ -429,6 +430,7 @@ struct ContentView: View {
                 .padding(.vertical, 4)
             }
             .clipped()  // clip horizontal overflow at ScrollView level
+            .frame(width: sidebarExpanded ? 220 : 48)  // explicitly constrain hit-testing area
 
             Spacer()
 
@@ -491,6 +493,7 @@ struct ContentView: View {
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.85), value: sidebarExpanded)
         .clipped()
+        .contentShape(Rectangle())
     }
 
     private func sidebarIcon(for voice: VoiceInfo) -> some View {
