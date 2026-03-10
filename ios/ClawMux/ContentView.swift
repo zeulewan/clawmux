@@ -1929,15 +1929,15 @@ struct ContentView: View {
                         .transition(.opacity)
                 }
             }
-            .padding(.horizontal, 12).padding(.vertical, 8).padding(.bottom, 2)
+            .padding(.horizontal, 12).padding(.vertical, 8).padding(.bottom, 10)
             .background {
                 // RoundedRectangle extends below the screen edge via ignoresSafeArea —
                 // bottom corners are hidden behind the screen, pill appears to flow off naturally
                 if #available(iOS 26, *) {
-                    Color.clear.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+                    Color.clear.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 36, style: .continuous))
                         .ignoresSafeArea(edges: .bottom)
                 } else {
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    RoundedRectangle(cornerRadius: 36, style: .continuous)
                         .fill(.ultraThinMaterial)
                         .ignoresSafeArea(edges: .bottom)
                 }
