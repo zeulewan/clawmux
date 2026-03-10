@@ -64,6 +64,29 @@ final class TouchBlockerTests: XCTestCase {
         }
     }
 
+    // MARK: - Hamburger button test
+
+    /// Taps the hamburger button (bottom-left of sidebar) and verifies the sidebar expands.
+    /// This is the simplest touch test: if anything is blocking, the sidebar stays collapsed.
+    func testHamburgerExpandsSidebar() throws {
+        // Hamburger is at bottom-left of screen: x≈24pt (center of 48px sidebar), y≈bottom-52pt
+        // Use normalized coordinates: x=0.06 (≈24/390), y=0.93 (near bottom)
+        let hamburger = app.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.93))
+        hamburger.tap()
+        sleep(1)
+
+        // After tapping, check for "Notes" or "Settings" buttons which only appear when expanded
+        let notesButton = app.buttons["Notes"].firstMatch
+        let settingsButton = app.buttons["Settings"].firstMatch
+        let sidebarExpanded = notesButton.waitForExistence(timeout: 2) || settingsButton.waitForExistence(timeout: 2)
+
+        XCTAssertTrue(sidebarExpanded, "Sidebar should expand after tapping hamburger — if this fails, touch events are being blocked")
+
+        // Tap hamburger again to collapse
+        hamburger.tap()
+        sleep(1)
+    }
+
     // MARK: - Center screen tap test
 
     /// Taps the center of the screen. If a portal is blocking, this tap lands on the portal
