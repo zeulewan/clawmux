@@ -1358,6 +1358,9 @@ async def list_roles():
 @app.get("/api/projects")
 async def list_projects():
     """Return projects in {projects: {slug: {...}}, active_project: slug} format."""
+    # Sync: ensure any project seen in live sessions exists in projects.json
+    # and voices are placed in the right folder per session.project_slug
+    _sync_projects_from_sessions()
     projects_dict = {}
     for p in project_mgr.list_projects():
         slug = p.pop("slug")
@@ -1367,6 +1370,59 @@ async def list_projects():
         "projects": projects_dict,
         "active_project": project_mgr.active_project,
     })
+
+
+def _sync_projects_from_sessions():
+    """Ensure projects.json reflects actual session project_slug values.
+
+    - Creates any project that sessions reference but doesn't exist yet
+    - Moves each voice to the project its live session belongs to
+    """
+    # Build desired mapping: voice → project_slug from live sessions
+    voice_to_slug: dict[str, str] = {}
+    for s in session_mgr.sessions.values():
+        if s.voice:
+            slug = getattr(s, "project_slug", None) or "default"
+            voice_to_slug[s.voice] = slug
+
+    if not voice_to_slug:
+        return
+
+    # Ensure all referenced projects exist
+    for slug in set(voice_to_slug.values()):
+        if slug not in project_mgr.projects:
+            name = slug.replace("-", " ").title()
+            try:
+                project_mgr.create_project(slug, name, voices=[])
+            except ValueError:
+                pass  # already exists
+
+    # Rebuild each project's voices list from session truth
+    new_voices: dict[str, list[str]] = {slug: [] for slug in project_mgr.projects}
+    for voice, slug in voice_to_slug.items():
+        if slug in new_voices:
+            new_voices[slug].append(voice)
+
+    # Preserve voices not in any live session (agents that may be offline)
+    all_pool = [v[0] for v in __import__('hub_config').VOICE_POOL]
+    unassigned = [v for v in all_pool if v not in voice_to_slug]
+    # Leave unassigned voices where they currently are in projects.json
+    for slug, proj in project_mgr.projects.items():
+        for v in proj.get("voices", []):
+            if v in unassigned and v not in new_voices.get(slug, []):
+                new_voices.setdefault(slug, []).append(v)
+
+    # Apply changes
+    changed = False
+    for slug, voices in new_voices.items():
+        if slug in project_mgr.projects:
+            current = project_mgr.projects[slug].get("voices", [])
+            if sorted(current) != sorted(voices):
+                project_mgr.reorder_voices(slug, voices)
+                changed = True
+    if changed:
+        import logging
+        logging.getLogger("hub.projects").info("Synced project voices from live sessions")
 
 
 @app.post("/api/projects")

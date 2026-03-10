@@ -1865,17 +1865,32 @@ function showContextMenu(e, sessionId, voiceId) {
   if (hasSession) {
     const roleList = document.getElementById('ctx-role-list');
     roleList.innerHTML = '';
-    const roles = ['Manager', 'Frontend', 'Backend', 'Researcher', 'Worker'];
     const currentRole = sess ? (sess.role || '') : '';
-    for (const role of roles) {
+    const populateRoles = (roles) => {
+      roleList.innerHTML = '';
+      for (const role of roles) {
+        const div = document.createElement('div');
+        div.className = 'ctx-sub-item';
+        div.textContent = role;
+        if (currentRole.toLowerCase() === role.toLowerCase()) div.classList.add('active');
+        div.addEventListener('click', () => {
+          _setRole(contextMenuSessionId, role);
+          hideContextMenu();
+        });
+        roleList.appendChild(div);
+      }
+    };
+    fetch('/api/roles').then(r => r.json()).then(data => {
+      populateRoles((data.roles || []).map(r => r.charAt(0).toUpperCase() + r.slice(1)));
+    }).catch(() => {
+      populateRoles(['Manager', 'Frontend', 'Backend', 'Researcher', 'Worker']);
+    });
+    // Show placeholder while loading
+    {
       const div = document.createElement('div');
       div.className = 'ctx-sub-item';
-      div.textContent = role;
-      if (currentRole.toLowerCase() === role.toLowerCase()) div.classList.add('active');
-      div.addEventListener('click', () => {
-        _setRole(contextMenuSessionId, role);
-        hideContextMenu();
-      });
+      div.textContent = '…';
+      div.style.opacity = '0.4';
       roleList.appendChild(div);
     }
   }
