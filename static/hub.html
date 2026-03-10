@@ -1091,9 +1091,6 @@ function _gcRenderSlice(chatArea, fromIdx, toIdx, prepend = false) {
     const msg = _gcAllMessages[i];
     const el = _makeGroupMsgEl(msg);
     el.classList.add('rendered'); // no animation for history batch
-    if (msg.id && _gcAckCounts.has(msg.id) && typeof _showPermanentAck === 'function') {
-      _showPermanentAck(el, _gcAckCounts.get(msg.id));
-    }
     frag.appendChild(el);
   }
   if (prepend) {

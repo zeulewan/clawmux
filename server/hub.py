@@ -1387,6 +1387,7 @@ async def create_project(request: Request):
             session = next((s for s in session_mgr.sessions.values() if s.voice == vid), None)
             if session and session.work_dir:
                 await template_renderer.render_to_file(vid, Path(session.work_dir))
+        await send_to_browser({"type": "project_created", "slug": slug, "name": name})
         return JSONResponse(project)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -1546,7 +1547,7 @@ def _load_group_history(group_id: str) -> list:
 
 def _append_group_history(group_id: str, role: str, text: str, sender: str = "",
                            msg_id: str | None = None, parent_id: str | None = None,
-                           bare_ack: bool = False) -> None:
+                           bare_ack: bool = False, sender_voice: str = "") -> None:
     import fcntl
     p = _group_history_path(group_id)
     try:
@@ -1563,6 +1564,8 @@ def _append_group_history(group_id: str, role: str, text: str, sender: str = "",
         entry["parent_id"] = parent_id
     if bare_ack:
         entry["bare_ack"] = True
+    if sender_voice:
+        entry["sender_voice"] = sender_voice
     msgs.append(entry)
     data["messages"] = msgs
     try:
@@ -2115,7 +2118,8 @@ async def speak_to_user(request: Request):
             ack_id = _gen_msg_id()
             sender_label = sender.voice.replace("af_", "").replace("am_", "").replace("bm_", "").capitalize()
             await asyncio.to_thread(_append_group_history, group["id"], "user", "",
-                                    sender=sender_label, msg_id=ack_id, parent_id=parent_id, bare_ack=True)
+                                    sender=sender_label, msg_id=ack_id, parent_id=parent_id, bare_ack=True,
+                                    sender_voice=sender.voice)
             await send_to_browser({
                 "type": "groupchat_ack",
                 "group_id": group["id"],
