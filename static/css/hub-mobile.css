@@ -39,10 +39,10 @@
   .sidebar-project-header { justify-content: center; padding: 5px 0; gap: 6px; font-size: 0.55rem; }
   .sidebar-project-header .project-chevron { font-size: 0.7rem; flex-shrink: 0; }
   .sidebar-project-header .project-name,
-  .sidebar-project-header .project-agent-count { opacity: 0; pointer-events: none; width: 0; overflow: hidden; }
+  .sidebar-project-header .project-agent-count { display: none; }
   #sidebar.expanded .sidebar-project-header { justify-content: flex-start; padding: 5px 8px; }
   #sidebar.expanded .sidebar-project-header .project-name,
-  #sidebar.expanded .sidebar-project-header .project-agent-count { opacity: 1; pointer-events: auto; width: auto; overflow: visible; transition: opacity 0.15s ease-out 0.2s; }
+  #sidebar.expanded .sidebar-project-header .project-agent-count { display: inline; opacity: 1; pointer-events: auto; transition: opacity 0.15s ease-out 0.2s; }
   /* sb-info out of flow — starts past sidebar edge so no partial chars during slide */
   .sidebar-card .sb-info { position: absolute; left: 56px; top: 0; bottom: 0; width: 140px; overflow: hidden; display: flex; flex-direction: column; justify-content: center; gap: 1px; opacity: 1; }
   /* Remove min-heights that inflate the block */
