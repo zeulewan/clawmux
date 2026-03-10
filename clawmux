@@ -412,15 +412,21 @@ def _print_status_table(file=None):
         slug = s.get("project_slug", "default")
         by_project.setdefault(slug, []).append(s)
 
-    for slug in sorted(by_project.keys(), key=lambda s: (s != "default", s)):
+    # Show all known folders, even empty ones
+    all_slugs = sorted(set(list(by_project.keys()) + list(proj_info.keys())), key=lambda s: (s != "default", s))
+    for slug in all_slugs:
         proj = proj_info.get(slug, {})
         proj_name = proj.get("name", slug)
         active_marker = " *" if slug == active_project else ""
-        agent_count = len(by_project[slug])
+        agent_count = len(by_project.get(slug, []))
         print(f"  {proj_name}{active_marker} ({agent_count} agents)")
+        if not by_project.get(slug):
+            print(f"  (no live agents)")
+            print()
+            continue
         print(f"  {'Name':<10} {'Role':<14} {'Folder':<14} {'Area':<16} {'Task':<32} {'State':<10} {'tool_name':<14} {'activity':<30} {'ctx':<5} {'model':<8} {'effort'}")
         print(f"  {'-' * 165}")
-        for s in sorted(by_project[slug], key=lambda s: s.get("label", "")):
+        for s in sorted(by_project.get(slug, []), key=lambda s: s.get("label", "")):
             name = s.get("label", s.get("voice", "?"))
             project = s.get("project", "") or ""
             if len(project) > 12:
