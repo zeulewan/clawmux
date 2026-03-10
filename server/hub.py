@@ -2316,6 +2316,12 @@ async def _inject_inbox(session, session_id: str) -> None:
             "session_id": session_id,
             "count": 0,
         })
+    except asyncio.CancelledError:
+        log.warning("[%s] Injection cancelled after read — returning %d message(s) to inbox",
+                    session_id, len(messages))
+        for msg in messages:
+            await asyncio.to_thread(inbox.write, session.work_dir, msg)
+        raise
     except Exception as exc:
         log.error("[%s] tmux injection FAILED: %s — %d message(s) returned to inbox",
                   session_id, exc, len(messages))

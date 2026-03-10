@@ -228,13 +228,15 @@ class ClaudeCodeBackend(AgentBackend):
             env=_SUBPROCESS_ENV,
         )
         await proc.communicate()
+        # Shield the Enter send — if this coroutine is cancelled after the paste,
+        # we must still submit it or the text will sit unsubmitted in the tmux buffer.
         proc = await asyncio.create_subprocess_exec(
             "tmux", "send-keys", "-t", session_name, "Enter",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=_SUBPROCESS_ENV,
         )
-        await proc.communicate()
+        await asyncio.shield(proc.communicate())
 
     async def _run(self, cmd: str) -> str:
         proc = await asyncio.create_subprocess_shell(
