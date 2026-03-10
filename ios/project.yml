@@ -36,3 +36,17 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "6.0"
         INFOPLIST_FILE: ClawMuxWidget/Info.plist
+
+  ClawMuxUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - ClawMuxUITests
+    dependencies:
+      - target: ClawMux
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.zeul.clawmux.uitests
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 25QMAKVCBN
+        SWIFT_VERSION: "6.0"
