@@ -105,7 +105,7 @@ private func usageColor(_ pct: Int) -> Color {
 
 struct ContentView: View {
     @StateObject private var vm = ClawMuxViewModel()
-    @State private var debugTapCount = 0
+    @State private var debugInfo = "loading..."
     @State private var isPulsing      = false
     @State private var showResetConfirm      = false
     @State private var resetVoiceId: String? = nil
@@ -193,19 +193,36 @@ struct ContentView: View {
         } message: { Text("Enter a name for the new group chat.") }
         // DEBUG OVERLAY — remove after diagnosing touch bug
         .overlay(alignment: .topTrailing) {
-            Button {
-                debugTapCount += 1
-            } label: {
-                Text("DBG:\(debugTapCount) conn:\(vm.isConnected ? "Y" : "N") sid:\(vm.activeSessionId ?? "nil") set:\(vm.showSettings ? "Y" : "N")")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 6).padding(.vertical, 4)
-                    .background(debugTapCount == 0 ? Color.red : Color.green)
-            }
-            .padding(.top, 60).padding(.trailing, 8)
-            .allowsHitTesting(true)
-            .zIndex(9999)
+            Text(debugInfo)
+                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 5).padding(.vertical, 3)
+                .background(Color.red)
+                .padding(.top, 55).padding(.trailing, 4)
+                .allowsHitTesting(false)
         }
+        .onAppear {
+            updateDebugInfo()
+            // refresh a few times so we capture post-launch state
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { updateDebugInfo() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { updateDebugInfo() }
+        }
+    }
+
+    // MARK: - Debug
+
+    private func updateDebugInfo() {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let wins = scenes.flatMap { $0.windows }
+        var parts: [String] = []
+        parts.append("wins:\(wins.count)")
+        for (i, w) in wins.enumerated() {
+            parts.append("w\(i):\(w.isKeyWindow ? "K" : ""):\(w.isHidden ? "H" : "V"):\(type(of: w))")
+        }
+        parts.append("set:\(vm.showSettings ? "Y" : "N")")
+        parts.append("notes:\(vm.showNotes ? "Y" : "N")")
+        parts.append("err:\(vm.errorMessage != nil ? "Y" : "N")")
+        debugInfo = parts.joined(separator: " ")
     }
 
     // MARK: - Split Layout
