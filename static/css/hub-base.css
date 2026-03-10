@@ -579,6 +579,7 @@ body {
   border-bottom: 1px solid var(--border);
   gap: 8px;
   flex-shrink: 0;
+  min-width: var(--notes-width, 320px); /* prevent reflow during collapse animation */
 }
 #notes-panel-header .notes-tabs {
   display: flex;
@@ -626,6 +627,7 @@ body {
 .notes-editor {
   flex: 1;
   width: 100%;
+  min-width: var(--notes-width, 320px); /* prevent reflow during collapse animation */
   background: transparent;
   border: none;
   color: var(--text);
