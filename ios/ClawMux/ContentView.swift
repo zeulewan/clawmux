@@ -1883,14 +1883,9 @@ struct ContentView: View {
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 8).padding(.bottom, 2)
-            .background {
-                if #available(iOS 26, *) {
-                    Color.clear
-                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-                } else {
-                    RoundedRectangle(cornerRadius: 28, style: .continuous).fill(.ultraThinMaterial)
-                }
-            }
+            .background(
+                RoundedRectangle(cornerRadius: 28, style: .continuous).fill(.ultraThinMaterial)
+            )
         }
         .padding(.horizontal, 8).padding(.bottom, 4)
     }
@@ -1955,16 +1950,11 @@ struct ContentView: View {
             .disabled(vm.typingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
-        .background {
-            if #available(iOS 26, *) {
-                Color.clear
-                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            } else {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
-            }
-        }
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
+        )
         .padding(.horizontal, 12).padding(.bottom, 8)  // wider margins clear rounded screen corners
         .fileImporter(
             isPresented: $showFilePicker,
@@ -2021,14 +2011,9 @@ struct ContentView: View {
             }
             .padding(.horizontal, 14).padding(.bottom, 8)
         }
-        .background {
-            if #available(iOS 26, *) {
-                Color.clear
-                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-            } else {
-                RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.ultraThinMaterial)
-            }
-        }
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.ultraThinMaterial)
+        )
         .padding(.horizontal, 8).padding(.bottom, 4)
         .onAppear { pttTextFieldFocused = true }
     }

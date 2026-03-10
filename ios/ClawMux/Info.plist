@@ -8,7 +8,7 @@
     <key>CFBundleName</key>
     <string>$(PRODUCT_NAME)</string>
     <key>CFBundleDisplayName</key>
-    <string>Claw Hub</string>
+    <string>ClawMux</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>CFBundleShortVersionString</key>
@@ -20,7 +20,7 @@
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Claw Hub needs microphone access for voice conversations</string>
+    <string>ClawMux needs microphone access for voice conversations</string>
     <key>NSSupportsLiveActivities</key>
     <true/>
     <key>UIBackgroundModes</key>
