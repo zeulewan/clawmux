@@ -945,6 +945,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         }
 
         // Start keepalive engine with input tap (primary keepalive - active audio processing)
+        // Simulator has no real microphone — skip the input tap to avoid crash/double-tap errors
+        #if !targetEnvironment(simulator)
         if keepaliveEngine == nil {
             let engine = AVAudioEngine()
             let input = engine.inputNode
@@ -957,9 +959,11 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 keepaliveEngine = engine
                 print("[audio] Keepalive engine started")
             } catch {
+                input.removeTap(onBus: 0)  // clean up tap so next call can try again
                 print("[audio] Keepalive engine failed: \(error)")
             }
         }
+        #endif
 
         // Start silence player (secondary keepalive)
         guard silencePlayer == nil else { return }
