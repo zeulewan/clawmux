@@ -64,8 +64,10 @@ private func voiceIcon(_ id: String) -> String {
     case "af_sky":   return "cloud.fill"
     case "af_alloy": return "diamond.fill"
     case "af_sarah": return "heart.fill"
+    case "af_nova":  return "sparkles"
     case "am_adam":  return "leaf.fill"
     case "am_echo":  return "waveform"
+    case "am_eric":  return "bolt.fill"
     case "am_onyx":  return "shield.fill"
     case "bm_fable": return "book.fill"
     default:         return "person.fill"
@@ -108,17 +110,16 @@ struct ContentView: View {
             // Header — always full width, never covered by sidebar (matches mobile web #header z-index)
             topBarView
 
-            // Body + Sidebar ZStack — sidebar only overlays the content area, not the header
+            // Body + Sidebar ZStack — sidebar overlays content (matches web: position:absolute, margin-left:0)
+            // Content flows full-width under the sidebar so the glass blur has real content to render through
             ZStack(alignment: .leading) {
                 mainAreaView
-                    .padding(.leading, 48)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 // Dim overlay behind expanded sidebar
                 if sidebarExpanded {
                     Color.black.opacity(0.3)
                         .ignoresSafeArea()
-                        .padding(.leading, 48)
                         .onTapGesture { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { sidebarExpanded = false } }
                         .transition(.opacity)
                 }
@@ -472,7 +473,15 @@ struct ContentView: View {
         }
         .frame(width: sidebarExpanded ? 220 : 48)
         .frame(maxHeight: .infinity)
-        .background(.ultraThinMaterial)  // frosted glass — matches mobile web backdrop-filter: blur(20px)
+        .background {
+            // matches web: background: var(--bg-glass); backdrop-filter: blur(20px)
+            if #available(iOS 26, *) {
+                Color.clear.glassEffect(.regular, in: .rect)
+            } else {
+                Color(red: 0.04, green: 0.05, blue: 0.09).opacity(0.55)
+                    .background(.ultraThinMaterial)
+            }
+        }
         .overlay(alignment: .trailing) {
             Color.cBorder.opacity(0.6).frame(width: 0.5)
         }
