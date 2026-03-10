@@ -927,6 +927,10 @@ body {
   flex-direction: column;
   gap: 0;
 }
+#debug-panel {
+  padding-left: calc(var(--sidebar-w, 220px) + 20px);
+  padding-top: 72px;
+}
 .msg {
   max-width: 75%;
   padding: 10px 15px;
