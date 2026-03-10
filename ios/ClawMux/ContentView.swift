@@ -127,14 +127,22 @@ struct ContentView: View {
     @State private var newGroupChatName        = ""
 
     var body: some View {
-        // BINARY SEARCH: minimal body + sidebarStripView only
-        ZStack(alignment: .leading) {
-            Color.black.ignoresSafeArea()
-            Button("TAP TO OPEN SETTINGS") { vm.showSettings = true }
-                .font(.system(size: 28, weight: .bold))
-                .foregroundColor(.white)
-                .padding(.leading, 60)
-            sidebarStripView
+        VStack(spacing: 0) {
+            topBarView
+            ZStack(alignment: .leading) {
+                mainAreaView
+                    .padding(.leading, 48)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if sidebarExpanded {
+                    Color.black.opacity(0.3)
+                        .ignoresSafeArea()
+                        .padding(.leading, 48)
+                        .onTapGesture { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { sidebarExpanded = false } }
+                        .transition(.opacity)
+                }
+                sidebarStripView
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(Color.canvas1.ignoresSafeArea())
         .preferredColorScheme(.dark)
@@ -418,11 +426,11 @@ struct ContentView: View {
                         }
                     }
                 }
-                .frame(maxWidth: .infinity)
+                .frame(width: sidebarExpanded ? 220 : 48)  // constrain content width — NOT .infinity (iOS 26: vertical ScrollView gives content infinite width, .infinity escapes hit-test bounds)
                 .padding(.vertical, 4)
             }
-            .clipped()  // clip horizontal overflow at ScrollView level
-            .frame(width: sidebarExpanded ? 220 : 48)  // explicitly constrain hit-testing area
+            .clipped()
+            .frame(width: sidebarExpanded ? 220 : 48)
 
             Spacer()
 
