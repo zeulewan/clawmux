@@ -495,6 +495,8 @@ struct ContentView: View {
                 }
             }
             .frame(height: 52)
+            // Safe area buffer so hamburger/notes/settings don't touch screen corner radius
+            Color.clear.frame(height: 20)
         }
         .frame(width: sidebarExpanded ? 220 : 48)
         .frame(maxHeight: .infinity)
