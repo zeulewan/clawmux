@@ -124,6 +124,7 @@ struct ContentView: View {
     @State private var expandedAgentMsgIds:    Set<UUID> = []
     @State private var isAtBottom:             Bool = true
     @State private var sidebarExpanded:        Bool = false
+    @State private var hamburgerTapCount:      Int  = 0  // debug: increments on every hamburger tap
     @State private var showFilePicker:         Bool = false
     @State private var showCreateGroupChat     = false
     @State private var newGroupChatName        = ""
@@ -155,11 +156,17 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .overlay(alignment: .bottomTrailing) {
-            Text("build-\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?")")
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
-                .foregroundStyle(Color.white.opacity(0.4))
-                .padding(6)
-                .allowsHitTesting(false)
+            VStack(spacing: 2) {
+                Text("h:\(hamburgerTapCount) e:\(sidebarExpanded ? 1 : 0)")
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.5))
+                    .accessibilityIdentifier("DebugHamburgerState")
+                Text("build-\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?")")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.4))
+            }
+            .padding(6)
+            .allowsHitTesting(false)
         }
         .background(Color.canvas1.ignoresSafeArea())
         .preferredColorScheme(.dark)
@@ -457,6 +464,7 @@ struct ContentView: View {
             HStack(spacing: 0) {
                 // Hamburger — always 48px, border-right matches web #sidebar-expand-btn
                 Button {
+                    hamburgerTapCount += 1
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                         sidebarExpanded.toggle()
                     }
