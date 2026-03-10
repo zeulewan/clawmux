@@ -1086,6 +1086,7 @@ body {
   flex-direction: column;
   padding: 10px 14px;
   min-width: 58px;
+  width: max-content;
   max-width: min(320px, 80%);
   align-self: flex-start;
   cursor: pointer;
@@ -1096,6 +1097,7 @@ body {
   display: flex;
   align-items: center;
   gap: 5px;
+  overflow: hidden;
 }
 .typing-activity-text {
   font-size: 0.78em;
@@ -1104,7 +1106,6 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 200px;
 }
 .typing-count-badge {
   font-size: 0.7em;
@@ -1899,7 +1900,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 }
 .msg.assistant .md-content th { background: var(--md-th-bg, rgba(255,255,255,0.05)); }
 .msg.assistant .md-content hr { border: none; border-top: 1px solid var(--border); margin: 0.5em 0; }
-.msg.assistant .md-content img { max-width: 100%; border-radius: 6px; }
+.msg.assistant .md-content img { max-width: 100%; max-height: 70vh; object-fit: contain; border-radius: 6px; display: block; }
 .msg.assistant .md-content strong { color: var(--text); }
 .msg.assistant .md-content em { color: var(--text-secondary); }
 /* KaTeX overrides */
