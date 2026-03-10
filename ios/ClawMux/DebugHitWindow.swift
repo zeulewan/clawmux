@@ -28,8 +28,9 @@ final class DebugOverlayWindow: UIWindow {
     // NOTE: Do NOT override point(inside:) — that prevents hitTest from being called.
     // Returning nil from hitTest passes the touch to the window below.
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        guard let event,
-              event.allTouches?.first?.phase == .began else { return nil }
+        // event is nil during layout hit-testing — skip those; real touch events are non-nil.
+        // Do NOT check for .began phase — hitTest fires before phase is set.
+        guard event != nil else { return nil }
 
         let mainWindow = windowScene?.windows.first(where: { !($0 is DebugOverlayWindow) })
         let hit = mainWindow?.hitTest(point, with: nil)
