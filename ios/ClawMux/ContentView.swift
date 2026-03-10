@@ -130,30 +130,29 @@ struct ContentView: View {
     @State private var newGroupChatName        = ""
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header — full width, always above sidebar (never obscured)
-            topBarView
+        // Body + Sidebar ZStack — header floats above as safeAreaInset so content scrolls behind it
+        ZStack(alignment: .leading) {
+            // Content offset 48px right so messages/input bars never go under collapsed sidebar
+            mainAreaView
+                .padding(.leading, 48)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Body + Sidebar ZStack
-            ZStack(alignment: .leading) {
-                // Content offset 48px right so messages/input bars never go under collapsed sidebar
-                mainAreaView
+            // Dim overlay behind expanded sidebar (starts at sidebar edge)
+            if sidebarExpanded {
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
                     .padding(.leading, 48)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                // Dim overlay behind expanded sidebar (starts at sidebar edge)
-                if sidebarExpanded {
-                    Color.black.opacity(0.3)
-                        .ignoresSafeArea()
-                        .padding(.leading, 48)
-                        .onTapGesture { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { sidebarExpanded = false } }
-                        .transition(.opacity)
-                }
-
-                // Sidebar glass overlay — floats over content edge for proper blur
-                sidebarStripView
+                    .onTapGesture { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { sidebarExpanded = false } }
+                    .transition(.opacity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // Sidebar glass overlay — floats over content edge for proper blur
+            sidebarStripView
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Header as safeAreaInset: auto-insets scroll content + separate layer for glass blur
+        .safeAreaInset(edge: .top, spacing: 0) {
+            topBarView
         }
         .overlay(alignment: .bottomTrailing) {
             VStack(spacing: 2) {
@@ -1152,11 +1151,12 @@ struct ContentView: View {
             if vm.showDebug {
                 DebugView(vm: vm)
             } else {
-                VStack(spacing: 0) {
-                    chatScrollArea
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    bottomInputArea
-                }
+                chatScrollArea
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // Input bar as safeAreaInset: separate layer so messages scroll behind it
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        bottomInputArea
+                    }
             }
             // Copy toast
             if showCopiedToast {
@@ -1348,7 +1348,7 @@ struct ContentView: View {
                             Color.clear.frame(height: 1).id("bottom")
                         }
                         .padding(.horizontal, 24)
-                        .padding(.top, 20).padding(.bottom, 120)
+                        .padding(.top, 20).padding(.bottom, 16)
                     }
                     .defaultScrollAnchor(.bottom)
                     .id(vm.activeSessionId ?? "none")
