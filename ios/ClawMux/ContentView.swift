@@ -127,14 +127,26 @@ struct ContentView: View {
     @State private var newGroupChatName        = ""
 
     var body: some View {
-        // BINARY SEARCH 3: minimal body + fixed sidebarStripView only
-        ZStack(alignment: .leading) {
-            Color.black.ignoresSafeArea()
-            Button("TAP TO OPEN SETTINGS") { vm.showSettings = true }
-                .font(.system(size: 28, weight: .bold))
-                .foregroundColor(.white)
-                .padding(.leading, 60)
-            sidebarStripView
+        VStack(spacing: 0) {
+            topBarView
+            ZStack(alignment: .leading) {
+                // sidebarStripView is FIRST (lower SwiftUI hit priority) but .zIndex(2) keeps it visually on top.
+                // mainAreaView is LAST (highest SwiftUI hit priority for x=48+ area).
+                // This prevents sidebar's overflowing SwiftUI frame from eating touches in the main area.
+                sidebarStripView
+                    .zIndex(2)
+                mainAreaView
+                    .padding(.leading, 48)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if sidebarExpanded {
+                    Color.black.opacity(0.3)
+                        .ignoresSafeArea()
+                        .padding(.leading, 48)
+                        .onTapGesture { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { sidebarExpanded = false } }
+                        .transition(.opacity)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(Color.canvas1.ignoresSafeArea())
         .preferredColorScheme(.dark)
