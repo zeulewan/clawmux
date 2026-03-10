@@ -728,8 +728,17 @@ async def set_project_status(session_id: str, request: Request):
     data = await request.json()
     if "project" in data:
         session.project = data["project"]
-        # Also update the project_slug so grouping stays consistent
-        session.project_slug = data["project"]
+        # Resolve project_slug: prefer exact slug match, then match by display name
+        proj_val = data["project"]
+        known = project_mgr.projects
+        if proj_val in known:
+            session.project_slug = proj_val
+        else:
+            slug_by_name = next(
+                (slug for slug, p in known.items() if p.get("name") == proj_val),
+                proj_val,
+            )
+            session.project_slug = slug_by_name
     session.project_area = data.get("area", session.project_area)
     if "role" in data:
         role_val = data["role"].lower()
