@@ -1934,7 +1934,7 @@ struct ContentView: View {
                         .transition(.opacity)
                 }
             }
-            .padding(.horizontal, 12).padding(.vertical, 8).padding(.bottom, 10)
+            .padding(.horizontal, 12).padding(.vertical, 8).padding(.bottom, 22)
             .background {
                 // RoundedRectangle extends below the screen edge via ignoresSafeArea —
                 // bottom corners are hidden behind the screen, pill appears to flow off naturally
