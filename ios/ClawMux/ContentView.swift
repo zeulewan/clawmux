@@ -127,29 +127,32 @@ struct ContentView: View {
     @State private var newGroupChatName        = ""
 
     var body: some View {
-        // Sidebar + content ZStack — header overlays as glass so ultraThinMaterial blurs messages behind it
-        ZStack(alignment: .leading) {
-            // Content offset 48px right so messages/input bars never go under collapsed sidebar
-            mainAreaView
-                .padding(.leading, 48)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        VStack(spacing: 0) {
+            // Header — full width, always above sidebar (never obscured)
+            topBarView
 
-            // Dim overlay behind expanded sidebar (starts at sidebar edge)
-            if sidebarExpanded {
-                Color.black.opacity(0.3)
-                    .ignoresSafeArea()
+            // Body + Sidebar ZStack
+            ZStack(alignment: .leading) {
+                // Content offset 48px right so messages/input bars never go under collapsed sidebar
+                mainAreaView
                     .padding(.leading, 48)
-                    .onTapGesture { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { sidebarExpanded = false } }
-                    .transition(.opacity)
-            }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Sidebar glass overlay — floats over content edge for proper blur
-            sidebarStripView
+                // Dim overlay behind expanded sidebar (starts at sidebar edge)
+                if sidebarExpanded {
+                    Color.black.opacity(0.3)
+                        .ignoresSafeArea()
+                        .padding(.leading, 48)
+                        .onTapGesture { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { sidebarExpanded = false } }
+                        .transition(.opacity)
+                }
+
+                // Sidebar glass overlay — floats over content edge for proper blur
+                sidebarStripView
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .ignoresSafeArea(edges: .bottom)  // let sidebar + input bars reach true screen bottom
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .ignoresSafeArea(edges: .bottom)  // let sidebar + input bars reach true screen bottom
-        // Header overlays top of scroll content — material blurs messages scrolling behind it
-        .safeAreaInset(edge: .top, spacing: 0) { topBarView }
         .background(Color.canvas1.ignoresSafeArea())
         .preferredColorScheme(.dark)
         .onAppear { isPulsing = true }
@@ -265,14 +268,7 @@ struct ContentView: View {
                 .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
         }
         .padding(.horizontal, 12).padding(.vertical, 5)
-        .background {
-            if #available(iOS 26, *) {
-                Color.clear.glassEffect(.regular, in: .rect)
-            } else {
-                Color.canvas1.opacity(0.70)
-                    .background(.ultraThinMaterial)
-            }
-        }
+        .background(Color.canvas1.opacity(0.70).background(.ultraThinMaterial))
     }
 
     private var groupChatScrollArea: some View {
