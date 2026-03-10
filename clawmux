@@ -222,7 +222,7 @@ def cmd_status(args):
         print(f"  Session ID: {found.get('session_id', '?')}")
         if found.get("project"):
             area = f" · {found['project_area']}" if found.get("project_area") else ""
-            print(f"  Project: {found['project']}{area}")
+            print(f"  Folder: {found['project']}{area}")
         if found.get("work_dir"):
             print(f"  Work dir: {found['work_dir']}")
         if found.get("model"):
@@ -418,7 +418,7 @@ def _print_status_table(file=None):
         active_marker = " *" if slug == active_project else ""
         agent_count = len(by_project[slug])
         print(f"  {proj_name}{active_marker} ({agent_count} agents)")
-        print(f"  {'Name':<10} {'Role':<14} {'Project':<14} {'Area':<16} {'Task':<32} {'State':<10} {'tool_name':<14} {'activity':<30} {'ctx':<5} {'model':<8} {'effort'}")
+        print(f"  {'Name':<10} {'Role':<14} {'Folder':<14} {'Area':<16} {'Task':<32} {'State':<10} {'tool_name':<14} {'activity':<30} {'ctx':<5} {'model':<8} {'effort'}")
         print(f"  {'-' * 165}")
         for s in sorted(by_project[slug], key=lambda s: s.get("label", "")):
             name = s.get("label", s.get("voice", "?"))
@@ -487,10 +487,10 @@ def cmd_projects(args):
         counts[slug] = counts.get(slug, 0) + 1
 
     if not proj_info:
-        print("No projects configured.")
+        print("No folders configured.")
         return
 
-    print(f"{'Project':<15} {'Slug':<15} {'Agents':<8} {'Active'}")
+    print(f"{'Folder':<15} {'Slug':<15} {'Agents':<8} {'Active'}")
     print("-" * 45)
     for slug, proj in sorted(proj_info.items()):
         name = proj.get("name", slug)
@@ -639,6 +639,38 @@ def cmd_send(args):
     """Send a message to another agent or to the user."""
     sender_override = getattr(args, "sender_override", None)
     message = args.message or ""
+    image_path = getattr(args, "image", None)
+
+    # Image post: upload file and display inline in chat
+    if image_path:
+        import pathlib
+        session_id = require_session_id()
+        img_file = pathlib.Path(image_path)
+        if not img_file.is_file():
+            die(f"image file not found: {image_path}")
+        import urllib.request
+        port = os.environ.get("CLAWMUX_PORT", "3460")
+        url = f"http://localhost:{port}/api/messages/image"
+        with open(img_file, "rb") as fh:
+            data = fh.read()
+        boundary = "----ClawMuxBoundary"
+        body = (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="file"; filename="{img_file.name}"\r\n'
+            f"Content-Type: application/octet-stream\r\n\r\n"
+        ).encode() + data + f"\r\n--{boundary}--\r\n".encode()
+        req = urllib.request.Request(url, data=body, method="POST", headers={
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            "X-ClawMux-Session-Id": session_id,
+        })
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                import json as _json
+                result = _json.loads(resp.read())
+            print(result.get("msg_id", ""))
+        except Exception as e:
+            die(f"image upload failed: {e}")
+        return
 
     # Bare ack: --re with no content
     if not message and not getattr(args, "re", None):
@@ -895,7 +927,7 @@ def cmd_update(args):
         summary = _run_migration()
         print(f"  Migrated {summary['agents_migrated']} agent(s), {summary['live_sessions']} live session(s) preserved.")
         if summary["projects"]:
-            print(f"  Projects: {', '.join(summary['projects'])}")
+            print(f"  Folders: {', '.join(summary['projects'])}")
         print()
 
     # --clean: hard reinstall with legacy cleanup
@@ -1256,7 +1288,7 @@ def cmd_migrate(args):
     print(f"  Agents migrated: {summary['agents_migrated']}")
     print(f"  Live sessions:   {summary['live_sessions']} (left untouched)")
     if summary["projects"]:
-        print(f"  Projects:        {', '.join(summary['projects'])}")
+        print(f"  Folders:         {', '.join(summary['projects'])}")
     print(f"  History copied:  {'yes' if summary['history_copied'] else 'no'}")
     print(f"  Settings copied: {'yes' if summary['settings_copied'] else 'no'}")
 
@@ -2237,6 +2269,7 @@ examples:
     p.add_argument("--to", required=True, help="Recipient: agent name (e.g. sky, echo) or 'user' for TTS")
     p.add_argument("message", nargs="?", default="", help="Message text (optional with --re for bare acknowledgment)")
     p.add_argument("--re", help="Parent message ID for threaded reply (e.g. msg-abc123)")
+    p.add_argument("--image", metavar="PATH", help="Post an image file inline in the chat")
     p.add_argument("--from", dest="sender_override", metavar="NAME",
                    help="Override sender identity (for external senders without CLAWMUX_SESSION_ID)")
     p.add_argument("--via", metavar="SYSTEM",
