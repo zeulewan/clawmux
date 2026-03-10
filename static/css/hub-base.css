@@ -928,8 +928,8 @@ body {
   gap: 0;
 }
 #debug-panel {
-  padding-left: calc(var(--sidebar-w, 220px) + 20px);
-  padding-top: 72px;
+  padding-left: calc(var(--sidebar-w, 220px) + 20px) !important;
+  padding-top: 72px !important;
 }
 .msg {
   max-width: 75%;
