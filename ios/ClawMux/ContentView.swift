@@ -153,7 +153,7 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .overlay(alignment: .bottomTrailing) {
-            Text("build-51")
+            Text("build-52")
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                 .foregroundStyle(Color.white.opacity(0.4))
                 .padding(6)
@@ -441,7 +441,6 @@ struct ContentView: View {
                         }
                     }
                 }
-                .frame(maxWidth: .infinity)
                 .padding(.vertical, 4)
             }
             .clipped()  // clip horizontal overflow at ScrollView level
