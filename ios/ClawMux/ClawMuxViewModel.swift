@@ -785,11 +785,10 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         endStaleLiveActivities()
         requestNotificationPermission()
 
-        if serverURL.isEmpty {
-            showSettings = true
-        } else {
+        if !serverURL.isEmpty {
             connect()
         }
+        // If serverURL is empty, the welcome screen's Settings button handles first-run setup
     }
 
     deinit {
