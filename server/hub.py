@@ -1525,6 +1525,15 @@ def _group_history_path(group_id: str):
     return d / "history.json"
 
 
+def _find_group_for_message(msg_id: str) -> dict | None:
+    """Return the group chat dict that contains a message with the given ID, or None."""
+    for g in _group_chats.values():
+        for msg in _load_group_history(g["id"]):
+            if msg.get("id") == msg_id:
+                return g
+    return None
+
+
 def _load_group_history(group_id: str) -> list:
     p = _group_history_path(group_id)
     if not p.exists():
@@ -2097,7 +2106,21 @@ async def speak_to_user(request: Request):
 
     ack_only = data.get("ack_only", False)
     if ack_only and parent_id:
-        # Bare ack — just send thumbs up to browser, no TTS
+        # Bare ack — check if parent belongs to a group chat message
+        group = await asyncio.to_thread(_find_group_for_message, parent_id)
+        if group:
+            # Route to group chat: only shows in browser group chat view, not delivered to other agents
+            ack_id = _gen_msg_id()
+            await asyncio.to_thread(_append_group_history, group["id"], "user", "",
+                                    msg_id=ack_id, parent_id=parent_id, bare_ack=True)
+            await send_to_browser({
+                "type": "groupchat_ack",
+                "group_id": group["id"],
+                "msg_id": parent_id,
+                "ack_id": ack_id,
+            })
+            return {"id": ack_id, "status": "ack_sent"}
+        # Regular session ack — thumbs up in agent's own chat
         msg_id = _gen_msg_id()
         sender_name = sender.voice.replace("af_", "").replace("am_", "").replace("bm_", "")
         # Save to history so ack persists across reloads
