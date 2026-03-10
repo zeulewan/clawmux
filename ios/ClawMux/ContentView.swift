@@ -452,6 +452,7 @@ struct ContentView: View {
                 }
                 .padding(.vertical, 4)
         }
+        .accessibilityIdentifier("SidebarScrollView")
         // Tray in .safeAreaInset: completely separate view layer — eliminates
         // hit-test overlap between ScrollView icon buttons and the hamburger
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -907,6 +908,7 @@ struct ContentView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("GroupChatCard-\(groupId)")
 
         }
         .background(blue.opacity(isSelected ? 0.12 : 0.07), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -956,6 +958,7 @@ struct ContentView: View {
             .background(blue.opacity(0.07))
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("GroupChatIcon-\(groupId)")
     }
 
     private func agentCard(_ voice: VoiceInfo) -> some View {
