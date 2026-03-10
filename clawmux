@@ -414,7 +414,9 @@ def _print_status_table(file=None):
 
     # Show all known folders, even empty ones
     all_slugs = sorted(set(list(by_project.keys()) + list(proj_info.keys())), key=lambda s: (s != "default", s))
-    for slug in all_slugs:
+    for i, slug in enumerate(all_slugs):
+        if i > 0:
+            print()
         proj = proj_info.get(slug, {})
         proj_name = proj.get("name", slug)
         active_marker = " *" if slug == active_project else ""
@@ -477,6 +479,21 @@ def _print_status_table(file=None):
             else:
                 print(row)
         print()
+
+    # Group chats section
+    try:
+        gc_data = http_get("/api/groupchats")
+        groups = gc_data.get("groups", [])
+        if groups:
+            print()
+            print("  Group Chats")
+            print(f"  {'-' * 40}")
+            for g in groups:
+                members = [m["label"] for m in g.get("members", [])]
+                print(f"  {g['name']:<20} {', '.join(members)}")
+            print()
+    except Exception:
+        pass
 
 
 def cmd_projects(args):
