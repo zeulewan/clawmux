@@ -126,34 +126,29 @@ struct ContentView: View {
     @State private var showCreateGroupChat     = false
     @State private var newGroupChatName        = ""
 
+    @State private var testTapCount = 0
+
     var body: some View {
-        VStack(spacing: 0) {
-            // Header — full width, always above sidebar (never obscured)
-            topBarView
-
-            // Body + Sidebar ZStack
-            ZStack(alignment: .leading) {
-                // Content offset 48px right so messages/input bars never go under collapsed sidebar
-                mainAreaView
-                    .padding(.leading, 48)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                // Dim overlay behind expanded sidebar (starts at sidebar edge)
-                if sidebarExpanded {
-                    Color.black.opacity(0.3)
-                        .ignoresSafeArea()
-                        .padding(.leading, 48)
-                        .onTapGesture { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { sidebarExpanded = false } }
-                        .transition(.opacity)
+        // MINIMAL TOUCH TEST — if this button works, the bug is in the real UI below
+        ZStack {
+            Color(red: 0.04, green: 0.05, blue: 0.09).ignoresSafeArea()
+            VStack(spacing: 24) {
+                Text("conn:\(vm.isConnected ? "Y" : "N") sess:\(vm.activeSessionId != nil ? "Y" : "N")")
+                    .foregroundStyle(.white).font(.system(size: 14, design: .monospaced))
+                Button {
+                    testTapCount += 1
+                    vm.showSettings = true
+                } label: {
+                    Text(testTapCount == 0 ? "TAP TO OPEN SETTINGS" : "TAPPED \(testTapCount)x — Settings opening...")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(24)
+                        .background(testTapCount == 0 ? Color.red : Color.green)
+                        .cornerRadius(16)
                 }
-
-                // Sidebar glass overlay — floats over content edge for proper blur
-                sidebarStripView
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .ignoresSafeArea(edges: .bottom)  // let sidebar + input bars reach true screen bottom
         }
-        .background(Color.canvas1.ignoresSafeArea())
+        .sheet(isPresented: $vm.showSettings) { SettingsView(vm: vm) }
         .preferredColorScheme(.dark)
         .onAppear { isPulsing = true }
         .sheet(isPresented: $vm.showSettings) { SettingsView(vm: vm) }
@@ -190,16 +185,6 @@ struct ContentView: View {
             Button("Create") { vm.createGroupChat(name: newGroupChatName) }
             Button("Cancel", role: .cancel) {}
         } message: { Text("Enter a name for the new group chat.") }
-        // DEBUG OVERLAY — remove after diagnosing touch bug
-        .overlay(alignment: .top) {
-            Text("conn:\(vm.isConnected ? "Y" : "N") sess:\(vm.activeSessionId != nil ? "Y" : "N") set:\(vm.showSettings ? "Y" : "N") err:\(vm.errorMessage != nil ? "Y" : "N") sid:\(vm.activeSessionId?.suffix(4) ?? "nil")")
-                .font(.system(size: 13, weight: .bold, design: .monospaced))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 8).padding(.vertical, 5)
-                .background(Color.red.opacity(0.9))
-                .allowsHitTesting(false)
-                .padding(.top, 60)
-        }
     }
 
     // MARK: - Split Layout
