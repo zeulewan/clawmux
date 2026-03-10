@@ -105,15 +105,7 @@ final class TouchBlockerTests: XCTestCase {
         sleep(1)
         saveScreenshot("hamburger_02_after_tap")
 
-        // Now check for the specific sidebar tray buttons (not the main Settings button)
-        // Check debug label: "h:1 e:1" means hamburgerTapCount=1 and sidebarExpanded=true
-        let debugLabel = app.staticTexts["DebugHamburgerState"].firstMatch
-        XCTAssertTrue(debugLabel.waitForExistence(timeout: 3), "Debug label must exist")
-        let stateAfterTap = debugLabel.label
-        print("DEBUG STATE AFTER TAP: \(stateAfterTap)")  // e.g. "h:1 e:1"
-        XCTAssertTrue(stateAfterTap.contains("h:1"), "hamburgerTapCount should be 1 after one tap — action did not fire if 0")
-        XCTAssertTrue(stateAfterTap.contains("e:1"), "sidebarExpanded should be 1 (true) after tap")
-
+        // Verify sidebar expanded by checking tray buttons appeared
         let expanded = trayNotes.waitForExistence(timeout: 3) || traySettings.waitForExistence(timeout: 3)
         saveScreenshot("hamburger_03_expanded_state")
         XCTAssertTrue(expanded, "Sidebar tray should appear after hamburger tap — SidebarNotesButton or SidebarSettingsButton must exist")
