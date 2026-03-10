@@ -65,6 +65,16 @@ async def _on_session_death(session_id: str):
 session_mgr = SessionManager(history_store=history, project_mgr=project_mgr, agents_store=agents_store, backend=_backend, on_session_death=_on_session_death)
 broker = MessageBroker()
 
+def _resolve_slug(project_val: str) -> str:
+    """Resolve a project display name or slug to the canonical slug."""
+    known = project_mgr.projects
+    if project_val in known:
+        return project_val
+    return next(
+        (slug for slug, p in known.items() if p.get("name") == project_val),
+        project_val,
+    )
+
 # Named group chats: name -> {id, name, session_ids, created_at}
 # Independent of individual sessions — agents can still be messaged directly.
 _group_chats: dict[str, dict] = {}  # keyed by group name (lowercase)
@@ -728,17 +738,7 @@ async def set_project_status(session_id: str, request: Request):
     data = await request.json()
     if "project" in data:
         session.project = data["project"]
-        # Resolve project_slug: prefer exact slug match, then match by display name
-        proj_val = data["project"]
-        known = project_mgr.projects
-        if proj_val in known:
-            session.project_slug = proj_val
-        else:
-            slug_by_name = next(
-                (slug for slug, p in known.items() if p.get("name") == proj_val),
-                proj_val,
-            )
-            session.project_slug = slug_by_name
+        session.project_slug = _resolve_slug(data["project"])
     session.project_area = data.get("area", session.project_area)
     if "role" in data:
         role_val = data["role"].lower()
@@ -1004,7 +1004,7 @@ async def spawn_session(request: Request):
         body = await request.json() if request.headers.get("content-type") == "application/json" else {}
         label = body.get("label", "")
         voice = body.get("voice", "")
-        project = body.get("project")
+        project = _resolve_slug(body.get("project")) if body.get("project") else None
         session = await session_mgr.spawn_session(label, voice, project=project)
         # Notify browser of the new session so the sidebar updates immediately
         await send_to_browser({"type": "session_spawned", "session": session.to_dict()})
