@@ -1937,16 +1937,9 @@ struct ContentView: View {
                 }
             }
         }
-        .padding(.horizontal, 8).padding(.top, 4).padding(.bottom, 4)
-        // Full-width backdrop extends behind the home indicator so there's no visible gap
-        .background {
-            if #available(iOS 26, *) {
-                Color.clear.glassEffect(.regular, in: .rect).ignoresSafeArea(edges: .bottom)
-            } else {
-                Color.canvas1.opacity(0.95).background(.ultraThinMaterial, in: .rect)
-                    .ignoresSafeArea(edges: .bottom)
-            }
-        }
+        .padding(.horizontal, 8).padding(.top, 4)
+        // Fill home indicator zone with app background — no gap, no extra glass layer
+        .background { Color.canvas1.ignoresSafeArea(edges: .bottom) }
     }
 
     // MARK: - Text Input Bar
