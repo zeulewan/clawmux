@@ -128,6 +128,7 @@ struct ContentView: View {
     @State private var showFilePicker:         Bool = false
     @State private var showCreateGroupChat     = false
     @State private var newGroupChatName        = ""
+    @State private var voiceTintColor: Color   = .clear  // stable tint, updated via onChange only
 
     var body: some View {
         // Body + Sidebar ZStack — header floats above as safeAreaInset so content scrolls behind it
@@ -220,8 +221,7 @@ struct ContentView: View {
     }
 
     private var mainAreaView: some View {
-        let voiceTint = vm.activeSession.map { voiceColor($0.voice) } ?? Color.clear
-        return Group {
+        Group {
             if vm.isFocusMode {
                 focusModeView
             } else if vm.activeGroupName != nil {
@@ -233,9 +233,14 @@ struct ContentView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // Voice color background tint — matches web #main-content backgroundColor = hexToRgba(vc, 0.10)
-        // Animates on session switch with 0.4s ease (matches web transition: background-color 0.4s ease)
-        .background(voiceTint.opacity(0.10).animation(.easeInOut(duration: 0.4), value: vm.activeSessionId))
+        // Voice color background tint — uses @State so animation only fires on explicit onChange,
+        // not on every ViewModel re-render (fixes random color flicker on iOS 26)
+        .background(voiceTintColor.opacity(0.10))
+        .onChange(of: vm.activeSessionId) { _, _ in
+            withAnimation(.easeInOut(duration: 0.4)) {
+                voiceTintColor = vm.activeSession.map { voiceColor($0.voice) } ?? .clear
+            }
+        }
     }
 
     private var focusModeView: some View {
@@ -1161,7 +1166,13 @@ struct ContentView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color.cText)
                     .padding(.horizontal, 18).padding(.vertical, 9)
-                    .background(Color.canvas2.opacity(0.90), in: Capsule())
+                    .background {
+                        if #available(iOS 26, *) {
+                            Color.clear.glassEffect(.regular, in: Capsule())
+                        } else {
+                            Color.canvas2.opacity(0.90).background(.ultraThinMaterial, in: Capsule())
+                        }
+                    }
                     .overlay(Capsule().strokeBorder(Color.cBorder, lineWidth: 0.5))
                     .shadow(color: .black.opacity(0.4), radius: 12)
                     .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
@@ -1310,8 +1321,7 @@ struct ContentView: View {
     // MARK: - Chat Scroll Area
 
     private var chatScrollArea: some View {
-        // Voice-color ambient tint on the whole chat area — mirrors web #main-content backgroundColor
-        let areaTint = vm.activeSession.map { voiceColor($0.voice) } ?? Color.clear
+        // Note: voice-color tint applied once on mainAreaView (not duplicated here)
         return ScrollViewReader { proxy in
                 ZStack(alignment: .bottomTrailing) {
                     ScrollView(showsIndicators: false) {
@@ -1381,7 +1391,6 @@ struct ContentView: View {
                     }
                 }
         }
-        .background(areaTint.opacity(0.10))
     }
 
     private func scrollBottom(_ proxy: ScrollViewProxy) {
@@ -1889,9 +1898,13 @@ struct ContentView: View {
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 8).padding(.bottom, 2)
-            .background(
-                RoundedRectangle(cornerRadius: 28, style: .continuous).fill(.ultraThinMaterial)
-            )
+            .background {
+                if #available(iOS 26, *) {
+                    Color.clear.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+                } else {
+                    RoundedRectangle(cornerRadius: 28, style: .continuous).fill(.ultraThinMaterial)
+                }
+            }
         }
         .padding(.horizontal, 8).padding(.bottom, 4)
     }
@@ -1956,11 +1969,15 @@ struct ContentView: View {
             .disabled(vm.typingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
-        )
+        .background {
+            if #available(iOS 26, *) {
+                Color.clear.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            } else {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
+            }
+        }
         .padding(.horizontal, 12).padding(.bottom, 8)  // wider margins clear rounded screen corners
         .fileImporter(
             isPresented: $showFilePicker,
@@ -2017,9 +2034,13 @@ struct ContentView: View {
             }
             .padding(.horizontal, 14).padding(.bottom, 8)
         }
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.ultraThinMaterial)
-        )
+        .background {
+            if #available(iOS 26, *) {
+                Color.clear.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            } else {
+                RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.ultraThinMaterial)
+            }
+        }
         .padding(.horizontal, 8).padding(.bottom, 4)
         .onAppear { pttTextFieldFocused = true }
     }
