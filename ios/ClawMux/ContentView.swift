@@ -465,6 +465,7 @@ struct ContentView: View {
                         .foregroundStyle(Color.cTextSec)
                         .frame(width: 48, height: 52)
                 }
+                .accessibilityIdentifier("HamburgerButton")
                 .overlay(alignment: .trailing) {
                     Color.cBorder.frame(width: 0.5)  // web: border-right: 1px solid var(--border)
                 }

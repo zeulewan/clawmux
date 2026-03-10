@@ -98,8 +98,9 @@ final class TouchBlockerTests: XCTestCase {
         XCTAssertFalse(trayNotes.exists,    "SidebarNotesButton should not exist before hamburger tap")
         XCTAssertFalse(traySettings.exists, "SidebarSettingsButton should not exist before hamburger tap")
 
-        // Hamburger is at bottom-left: x=0.06 (≈24pt in 48px sidebar), y=0.93 (near bottom)
-        let hamburger = app.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.93))
+        // Tap by accessibility identifier — reliable across all screen sizes, no coordinate guessing
+        let hamburger = app.buttons["HamburgerButton"].firstMatch
+        XCTAssertTrue(hamburger.waitForExistence(timeout: 5), "HamburgerButton must exist")
         hamburger.tap()
         sleep(1)
         saveScreenshot("hamburger_02_after_tap")

@@ -13,6 +13,12 @@ targets:
       - ClawMuxShared
     dependencies:
       - target: ClawMuxWidgetExtension
+    preBuildScripts:
+      - name: Set Build Number from Git
+        script: |
+          BUILD=$(git -C "$SRCROOT" rev-list HEAD --count 2>/dev/null || echo "1")
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD" "$INFOPLIST_FILE"
+        basedOnDependencyAnalysis: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.zeul.clawmux
