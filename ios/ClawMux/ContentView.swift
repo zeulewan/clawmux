@@ -223,8 +223,6 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 textInputBar
-                    .frame(maxWidth: .infinity)
-                    .background(Color.canvas1.ignoresSafeArea(edges: .bottom))
             }
     }
 
@@ -257,23 +255,41 @@ struct ContentView: View {
     }
 
     private var groupChatScrollArea: some View {
-        ScrollViewReader { proxy in
-            ScrollView(showsIndicators: false) {
-                LazyVStack(spacing: 8) {
-                    ForEach(Array(vm.groupMessages.enumerated()), id: \.element.id) { idx, msg in
-                        groupMessageBubble(msg, isLast: idx == vm.groupMessages.count - 1)
+        ZStack {
+            ScrollViewReader { proxy in
+                ScrollView(showsIndicators: false) {
+                    LazyVStack(spacing: 8) {
+                        ForEach(Array(vm.groupMessages.enumerated()), id: \.element.id) { idx, msg in
+                            groupMessageBubble(msg, isLast: idx == vm.groupMessages.count - 1)
+                        }
+                        Color.clear.frame(height: 16).id("gc-bottom")
                     }
-                    Color.clear.frame(height: 90).id("gc-bottom")
+                    .padding(.horizontal, 12).padding(.top, 8)
                 }
-                .padding(.horizontal, 12).padding(.top, 8)
-            }
-            .onChange(of: vm.groupMessages.count) { _, _ in
-                withAnimation(.easeOut(duration: 0.18)) {
+                .onChange(of: vm.groupMessages.count) { _, _ in
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        proxy.scrollTo("gc-bottom", anchor: .bottom)
+                    }
+                }
+                .onAppear {
                     proxy.scrollTo("gc-bottom", anchor: .bottom)
                 }
             }
-            .onAppear {
-                proxy.scrollTo("gc-bottom", anchor: .bottom)
+            // Empty state
+            if vm.groupMessages.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                        .font(.system(size: 32, weight: .thin))
+                        .foregroundStyle(Color.cTextTer)
+                    Text("No messages yet")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Color.cTextSec)
+                    Text("Start the conversation below")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.cTextTer)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .allowsHitTesting(false)
             }
         }
     }
@@ -1087,8 +1103,6 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .safeAreaInset(edge: .bottom, spacing: 0) {
                         bottomInputArea
-                            .frame(maxWidth: .infinity)
-                            .background(Color.canvas1.ignoresSafeArea(edges: .bottom))
                     }
             }
             // Copy toast
@@ -1118,7 +1132,7 @@ struct ContentView: View {
             if let s = vm.activeSession {
                 // Agent name — mirrors web #active-voice
                 Text(vm.showDebug ? "Debug" : s.label)
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(Color.cText)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -1139,11 +1153,12 @@ struct ContentView: View {
                     }
                 } label: {
                     Text(modelName(s.model))
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(Color.cTextSec)
-                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .padding(.horizontal, 6).padding(.vertical, 3)
                         .background(Color.glass, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
+                        .fixedSize()
                 }
 
                 // Effort label — mirrors web #effort-label (clickable); hidden when haiku (matches web updateEffortLabel)
@@ -1158,11 +1173,12 @@ struct ContentView: View {
                         }
                     } label: {
                         Text(s.effort.isEmpty ? "High" : s.effort.capitalized)
-                            .font(.system(size: 10, weight: .medium))
+                            .font(.system(size: 9, weight: .medium))
                             .foregroundStyle(Color.cTextTer)
-                            .padding(.horizontal, 7).padding(.vertical, 3)
+                            .padding(.horizontal, 6).padding(.vertical, 3)
                             .background(Color.glass, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
                             .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
+                            .fixedSize()
                     }
                 }
 
@@ -1284,7 +1300,7 @@ struct ContentView: View {
                             Color.clear.frame(height: 1).id("bottom")
                         }
                         .padding(.horizontal, 24)
-                        .padding(.top, 20).padding(.bottom, 80) // safeAreaInset handles bar overlap; 80px breathing room
+                        .padding(.top, 20).padding(.bottom, 120) // safeAreaInset handles bar overlap; extra breathing room
                         .frame(minHeight: geo.size.height)
                     }
                     .defaultScrollAnchor(.bottom)
@@ -1395,18 +1411,17 @@ struct ContentView: View {
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundStyle(agentColor)
                         }
-                        // Body: collapsed by default, expands on tap
-                        if isExpanded {
-                            Text(content)
-                                .font(.system(size: 11))
-                                .foregroundStyle(Color.cTextSec.opacity(0.9))
-                                .lineLimit(nil)
-                                .padding(.top, 4)
-                        }
+                        // Body: preview line when collapsed, full text when expanded
+                        Text(content)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.cTextSec.opacity(0.9))
+                            .lineLimit(isExpanded ? nil : 1)
+                            .padding(.top, 2)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 10).padding(.vertical, 3)
-                    .opacity(isExpanded ? 1 : 0.7)
+                    .padding(.horizontal, 10).padding(.vertical, 4)
+                    .background(Color.cCard.opacity(0.4), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .opacity(isExpanded ? 1 : 0.85)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         withAnimation(.easeOut(duration: 0.15)) {
@@ -1878,6 +1893,19 @@ struct ContentView: View {
                 .foregroundStyle(Color.cText)
                 .padding(.horizontal, 4).padding(.vertical, 8)
                 .onSubmit { vm.sendText() }.submitLabel(.send)
+                .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button {
+                            UIApplication.shared.sendAction(
+                                #selector(UIResponder.resignFirstResponder),
+                                to: nil, from: nil, for: nil)
+                        } label: {
+                            Image(systemName: "keyboard.chevron.compact.down")
+                                .foregroundStyle(Color.primary)
+                        }
+                    }
+                }
 
             // Send button — mirrors web #text-send (38x38, blue circle)
             Button { vm.sendText() } label: {
