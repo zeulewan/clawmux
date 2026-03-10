@@ -1934,21 +1934,20 @@ struct ContentView: View {
                         .transition(.opacity)
                 }
             }
-            .padding(.horizontal, 12).padding(.vertical, 8).padding(.bottom, 22)
+            .padding(.horizontal, 12).padding(.vertical, 8)
             .background {
-                // RoundedRectangle extends below the screen edge via ignoresSafeArea —
-                // bottom corners are hidden behind the screen, pill appears to flow off naturally
+                // Pill glass — contained within its frame, does NOT bleed off-screen.
+                // The outer padding below provides the float gap above the home indicator.
                 if #available(iOS 26, *) {
                     Color.clear.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-                        .ignoresSafeArea(edges: .bottom)
                 } else {
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                        .ignoresSafeArea(edges: .bottom)
+                    RoundedRectangle(cornerRadius: 26, style: .continuous).fill(.ultraThinMaterial)
                 }
             }
         }
-        .padding(.horizontal, 16).padding(.top, 4)
+        // Bottom padding = float gap above home indicator. canvas1+tint background
+        // (below) fills the remaining space + safe area zone with the right color.
+        .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 20)
         // Fill home indicator zone with canvas1 + voice tint, matching mainAreaView
         .background {
             ZStack {
