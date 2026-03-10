@@ -112,6 +112,8 @@ struct ContentView: View {
     @State private var pendingModelSwitch      = ""
     @State private var showEffortRestartConfirm = false
     @State private var pendingEffortSwitch      = ""
+    @State private var showModelPicker         = false
+    @State private var showEffortPicker        = false
     @State private var pttDragOffset:  CGFloat = 0
     @State private var pttDragOffsetY: CGFloat = 0
     @State private var pttGestureCommitted     = false
@@ -1182,21 +1184,8 @@ struct ContentView: View {
                     .minimumScaleFactor(0.75)
                     .layoutPriority(1)  // protect name from being squeezed by fixed-size pills
 
-                // Model label — mirrors web #model-label (clickable)
-                Menu {
-                    ForEach([("opus","Opus"),("sonnet","Sonnet"),("haiku","Haiku")], id: \.0) { id, name in
-                        Button {
-                            let cur = vm.activeSession?.model ?? ""
-                            if cur != id { pendingModelSwitch = id; showModelRestartConfirm = true }
-                        } label: {
-                            let cur = vm.activeSession?.model ?? ""
-                            HStack {
-                                Text(name)
-                                if cur == id || (id == "opus" && cur.isEmpty) { Image(systemName: "checkmark") }
-                            }
-                        }
-                    }
-                } label: {
+                // Model label — confirmationDialog avoids iOS 26 Menu portal blocker
+                Button { showModelPicker = true } label: {
                     Text(modelName(s.model))
                         .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(Color.cTextSec)
@@ -1205,18 +1194,23 @@ struct ContentView: View {
                         .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
                         .fixedSize()
                 }
+                .confirmationDialog("Select Model", isPresented: $showModelPicker) {
+                    let cur = vm.activeSession?.model ?? ""
+                    Button(cur == "opus" || cur.isEmpty ? "Opus ✓" : "Opus") {
+                        if cur != "opus" { pendingModelSwitch = "opus"; showModelRestartConfirm = true }
+                    }
+                    Button(cur == "sonnet" ? "Sonnet ✓" : "Sonnet") {
+                        if cur != "sonnet" { pendingModelSwitch = "sonnet"; showModelRestartConfirm = true }
+                    }
+                    Button(cur == "haiku" ? "Haiku ✓" : "Haiku") {
+                        if cur != "haiku" { pendingModelSwitch = "haiku"; showModelRestartConfirm = true }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                }
 
-                // Effort label — mirrors web #effort-label (clickable); hidden when haiku (matches web updateEffortLabel)
+                // Effort label — confirmationDialog avoids iOS 26 Menu portal blocker
                 if s.model != "haiku" {
-                    Menu {
-                        ForEach(["high","medium","low"], id: \.self) { level in
-                            Button {
-                                if s.effort != level { pendingEffortSwitch = level; showEffortRestartConfirm = true }
-                            } label: {
-                                HStack { Text(level.capitalized); if s.effort == level { Image(systemName: "checkmark") } }
-                            }
-                        }
-                    } label: {
+                    Button { showEffortPicker = true } label: {
                         Text(s.effort.isEmpty ? "High" : s.effort.capitalized)
                             .font(.system(size: 9, weight: .medium))
                             .foregroundStyle(Color.cTextTer)
@@ -1224,6 +1218,14 @@ struct ContentView: View {
                             .background(Color.glass, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
                             .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
                             .fixedSize()
+                    }
+                    .confirmationDialog("Select Effort", isPresented: $showEffortPicker) {
+                        ForEach(["high","medium","low"], id: \.self) { level in
+                            Button(s.effort == level || (level == "high" && s.effort.isEmpty) ? "\(level.capitalized) ✓" : level.capitalized) {
+                                if s.effort != level { pendingEffortSwitch = level; showEffortRestartConfirm = true }
+                            }
+                        }
+                        Button("Cancel", role: .cancel) {}
                     }
                 }
 
