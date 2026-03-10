@@ -134,7 +134,7 @@ struct ContentView: View {
                 // mainAreaView is LAST (highest SwiftUI hit priority for x=48+ area).
                 // This prevents sidebar's overflowing SwiftUI frame from eating touches in the main area.
                 sidebarStripView
-                    .zIndex(2)
+                    .zIndex(sidebarExpanded ? 2 : 0)
                 mainAreaView
                     .padding(.leading, 48)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
