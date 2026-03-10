@@ -1291,7 +1291,7 @@ struct ContentView: View {
     private var chatScrollArea: some View {
         // Voice-color ambient tint on the whole chat area — mirrors web #main-content backgroundColor
         let areaTint = vm.activeSession.map { voiceColor($0.voice) } ?? Color.clear
-        ScrollViewReader { proxy in
+        return ScrollViewReader { proxy in
             ZStack(alignment: .bottomTrailing) {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 20) {
