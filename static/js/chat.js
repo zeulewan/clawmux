@@ -899,7 +899,11 @@ function _showContextMenu(msgEl, x, y) {
     ackBtn.textContent = '\uD83D\uDC4D';
     ackBtn.onclick = (e) => {
       e.stopPropagation();
-      _sendUserAck(msgId);
+      if (typeof activeGroupId !== 'undefined' && activeGroupId && typeof _sendGroupAck === 'function') {
+        _sendGroupAck(msgId);
+      } else {
+        _sendUserAck(msgId);
+      }
       _dismissContextMenu();
       showCopyToast('Ack sent');
     };

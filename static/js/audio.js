@@ -1623,9 +1623,20 @@ function sendAudio(sessionId) {
   micBtn.classList.add('processing');
   micBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22" style="animation:spin 1s linear infinite"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="31.4 31.4"/></svg>';
   micBtn.disabled = true;
+  // Safety timeout — if processing state lasts >30s, something went wrong; reset mic UI
+  const _processingTimeout = setTimeout(() => {
+    if (micBtn.classList.contains('processing')) {
+      console.warn('[sendAudio] processing timeout — resetting mic UI');
+      micBtn.classList.remove('processing');
+      micBtn.disabled = false;
+      updateMicUI();
+      setStatus('');
+    }
+  }, 30000);
 
   const reader = new FileReader();
   reader.onload = () => {
+    clearTimeout(_processingTimeout);
     const b64 = reader.result.split(',')[1];
     const msgType = isInterjection ? 'interjection' : 'audio';
     ws.send(JSON.stringify({ session_id: sessionId, type: msgType, data: b64 }));
@@ -1644,6 +1655,7 @@ function sendAudio(sessionId) {
     }
   };
   reader.onerror = () => {
+    clearTimeout(_processingTimeout);
     setStatus('Error reading audio');
     updateMicUI();
   };
