@@ -386,9 +386,8 @@ struct ContentView: View {
     // MARK: - Sidebar (collapsible, 48px → 220px, overlays main when expanded)
 
     private var sidebarStripView: some View {
-        VStack(spacing: 0) {
-            // Agent list — icons when collapsed, full cards when expanded
-            ScrollView(.vertical, showsIndicators: false) {
+        // Agent list — icons when collapsed, full cards when expanded
+        ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: sidebarExpanded ? 2 : 1) {
                     if sidebarExpanded {
                         // Agents first (matches mobile web — group chats section is below agents)
@@ -451,66 +450,62 @@ struct ContentView: View {
                     }
                 }
                 .padding(.vertical, 4)
-            }
-            .frame(maxHeight: .infinity)  // cap at available space — prevents content height (1188px) from extending hit-test into hamburger zone
-            .clipped()  // clip visual overflow
-            .contentShape(Rectangle())  // constrain hit-testing to visible frame
-            .layoutPriority(1)  // take all remaining space before the tray, preventing overlap with hamburger hit area
-
-            // Bottom tray: hamburger (always) + Notes + Settings (when expanded)
-            // Note: sidebar-focus-card is hidden on mobile web — no Focus card here
-            // Matches web #sidebar-tray: expand-btn(48px) + notes-btn(flex) + settings-btn(flex)
-            Color.cBorder.opacity(0.5).frame(height: 0.5)
-            HStack(spacing: 0) {
-                // Hamburger — always 48px, border-right matches web #sidebar-expand-btn
-                Button {
-                    hamburgerTapCount += 1
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                        sidebarExpanded.toggle()
-                    }
-                } label: {
-                    Image(systemName: "line.3.horizontal")
-                        .font(.system(size: 22))  // web: font-size 1.4rem ≈ 22pt
-                        .foregroundStyle(Color.cTextSec)
-                        .frame(width: 48, height: 52)
-                }
-                .accessibilityIdentifier("HamburgerButton")
-                .overlay(alignment: .trailing) {
-                    Color.cBorder.frame(width: 0.5)  // web: border-right: 1px solid var(--border)
-                }
-                // Notes + Settings — visible only when expanded (clipped otherwise)
-                if sidebarExpanded {
+        }
+        // Tray in .safeAreaInset: completely separate view layer — eliminates
+        // hit-test overlap between ScrollView icon buttons and the hamburger
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                // Matches web #sidebar-tray: expand-btn(48px) + notes-btn(flex) + settings-btn(flex)
+                Color.cBorder.opacity(0.5).frame(height: 0.5)
+                HStack(spacing: 0) {
+                    // Hamburger — always 48px, border-right matches web #sidebar-expand-btn
                     Button {
-                        vm.showNotes = true
-                        withAnimation(.spring(response: 0.3)) { sidebarExpanded = false }
-                    } label: {
-                        VStack(spacing: 3) {
-                            Image(systemName: "note.text").font(.system(size: 13))
-                            Text("Notes").font(.system(size: 10, weight: .medium))  // web: 0.6rem ≈ 10pt
+                        hamburgerTapCount += 1
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                            sidebarExpanded.toggle()
                         }
-                        .foregroundStyle(Color.cTextSec)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }
-                    .accessibilityIdentifier("SidebarNotesButton")
-                    Button {
-                        vm.showSettings = true
-                        withAnimation(.spring(response: 0.3)) { sidebarExpanded = false }
                     } label: {
-                        VStack(spacing: 3) {
-                            Image(systemName: "gearshape.fill").font(.system(size: 13))
-                            Text("Settings").font(.system(size: 10, weight: .medium))  // web: 0.6rem ≈ 10pt
-                        }
-                        .foregroundStyle(Color.cTextSec)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 22))  // web: font-size 1.4rem ≈ 22pt
+                            .foregroundStyle(Color.cTextSec)
+                            .frame(width: 48, height: 52)
                     }
-                    .accessibilityIdentifier("SidebarSettingsButton")
+                    .accessibilityIdentifier("HamburgerButton")
+                    .overlay(alignment: .trailing) {
+                        Color.cBorder.frame(width: 0.5)  // web: border-right: 1px solid var(--border)
+                    }
+                    // Notes + Settings — visible only when expanded (clipped otherwise)
+                    if sidebarExpanded {
+                        Button {
+                            vm.showNotes = true
+                            withAnimation(.spring(response: 0.3)) { sidebarExpanded = false }
+                        } label: {
+                            VStack(spacing: 3) {
+                                Image(systemName: "note.text").font(.system(size: 13))
+                                Text("Notes").font(.system(size: 10, weight: .medium))  // web: 0.6rem ≈ 10pt
+                            }
+                            .foregroundStyle(Color.cTextSec)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                        .accessibilityIdentifier("SidebarNotesButton")
+                        Button {
+                            vm.showSettings = true
+                            withAnimation(.spring(response: 0.3)) { sidebarExpanded = false }
+                        } label: {
+                            VStack(spacing: 3) {
+                                Image(systemName: "gearshape.fill").font(.system(size: 13))
+                                Text("Settings").font(.system(size: 10, weight: .medium))  // web: 0.6rem ≈ 10pt
+                            }
+                            .foregroundStyle(Color.cTextSec)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                        .accessibilityIdentifier("SidebarSettingsButton")
+                    }
                 }
+                .frame(height: 52)
+                Color.clear.frame(height: 34)  // home indicator safe area
             }
-            .frame(height: 52)
-            // Safe area buffer — use actual safe area bottom (home indicator ~34pt on modern iPhones)
-            Color.clear.frame(height: max(34, UIApplication.shared.connectedScenes
-                .flatMap { ($0 as? UIWindowScene)?.windows ?? [] }
-                .first { $0.isKeyWindow }?.safeAreaInsets.bottom ?? 34))
+            .background(Color(red: 0.04, green: 0.05, blue: 0.09).opacity(0.92))
         }
         .frame(width: sidebarExpanded ? 220 : 48)
         .frame(maxHeight: .infinity)
