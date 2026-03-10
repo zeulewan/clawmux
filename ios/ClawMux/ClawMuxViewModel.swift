@@ -354,6 +354,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     @Published var knownGroupChats: [(name: String, voices: [String])] = []
     @Published var activeGroupName: String? = nil  // non-nil when viewing a group chat
     @Published var groupMessages: [GroupChatMessage] = []
+    @Published var groupHistoryDebug: String = ""  // last fetch result for debug display
     @Published var allProjects: [String] = []  // fetched from GET /api/projects on connect
     private var groupIdToName: [String: String] = [:]  // "gc-xxx" → "group name" for disband API
 
@@ -2142,19 +2143,22 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             return
         }
         print("[group-history] fetching \(url)")
+        Task { @MainActor in self.groupHistoryDebug = "fetching…" }
         URLSession.shared.dataTask(with: url) { [weak self] data, resp, err in
             if let err = err {
                 print("[group-history] network error: \(err)")
+                Task { @MainActor in self?.groupHistoryDebug = "err: \(err.localizedDescription)" }
                 return
             }
-            if let http = resp as? HTTPURLResponse {
-                print("[group-history] status \(http.statusCode)")
-            }
+            let statusCode = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            print("[group-history] status \(statusCode)")
             guard let data,
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let msgs = json["messages"] as? [[String: Any]]
             else {
-                print("[group-history] parse failed, data: \(data.map { String(data: $0, encoding: .utf8) ?? "?" } ?? "nil")")
+                let raw = data.flatMap { String(data: $0, encoding: .utf8) } ?? "nil"
+                print("[group-history] parse failed: \(raw)")
+                Task { @MainActor in self?.groupHistoryDebug = "parse fail (\(statusCode)): \(raw.prefix(60))" }
                 return
             }
             print("[group-history] got \(msgs.count) messages")
@@ -2171,7 +2175,10 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 )
             }
             print("[group-history] parsed \(parsed.count) messages")
-            Task { @MainActor in self?.groupMessages = parsed }
+            Task { @MainActor in
+                self?.groupMessages = parsed
+                self?.groupHistoryDebug = "ok:\(statusCode) msgs:\(parsed.count)"
+            }
         }.resume()
     }
 

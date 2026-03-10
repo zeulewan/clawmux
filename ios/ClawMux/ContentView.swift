@@ -323,6 +323,12 @@ struct ContentView: View {
                     Text("Start the conversation below")
                         .font(.system(size: 11))
                         .foregroundStyle(Color.cTextTer)
+                    if !vm.groupHistoryDebug.isEmpty {
+                        Text(vm.groupHistoryDebug)
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(Color.cTextTer)
+                            .padding(.top, 4)
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .allowsHitTesting(false)
