@@ -269,13 +269,13 @@ class SessionManager:
                 session.model = hub_config.CLAUDE_MODEL
             # Restore effort from agents.json
             session.effort = getattr(entry, 'effort', '') or ""
-            self.sessions[old_session_id] = session
+            self.sessions[adopt_id] = session
             self._counter += 1
             adopted += 1
             log.info("Adopted orphaned session: %s (voice=%s, tmux=%s, model=%s)",
-                     old_session_id, voice_id, old_session_id, session.model)
+                     adopt_id, voice_id, adopt_id, session.model)
             # Apply agent-colored status bar to adopted session
-            await self.backend.apply_status_bar(old_session_id, voice_name, voice_id)
+            await self.backend.apply_status_bar(adopt_id, voice_name, voice_id)
             # Update agents.json with restored state
             await self._sync_agent_store(voice_id, session)
 
