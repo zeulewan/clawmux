@@ -153,7 +153,7 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .overlay(alignment: .bottomTrailing) {
-            Text("build-49")
+            Text("build-50")
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                 .foregroundStyle(Color.white.opacity(0.4))
                 .padding(6)
@@ -248,11 +248,12 @@ struct ContentView: View {
     // MARK: - Group Chat View
 
     private var groupChatMainView: some View {
-        groupChatScrollArea
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                textInputBar
-            }
+        VStack(spacing: 0) {
+            groupChatScrollArea
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            textInputBar
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var groupChatHeader: some View {
@@ -1146,11 +1147,11 @@ struct ContentView: View {
             if vm.showDebug {
                 DebugView(vm: vm)
             } else {
-                chatScrollArea
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .safeAreaInset(edge: .bottom, spacing: 0) {
-                        bottomInputArea
-                    }
+                VStack(spacing: 0) {
+                    chatScrollArea
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    bottomInputArea
+                }
             }
             // Copy toast
             if showCopiedToast {
