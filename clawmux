@@ -240,11 +240,9 @@ def cmd_status(args):
                     output = buf.getvalue()
                 except (Exception, SystemExit):
                     output = "Hub unreachable — waiting for reconnect...\n"
-                # Move cursor home and overwrite (no clear = no flash)
-                print("\033[H", end="", flush=True)
-                print(output, end="", flush=True)
-                # Clear any leftover lines from previous render
-                print("\033[J", end="", flush=True)
+                # Move cursor home, write new output, clear from cursor to end
+                sys.stdout.write("\033[H" + output + "\033[J")
+                sys.stdout.flush()
                 _time.sleep(0.5)
         except KeyboardInterrupt:
             pass
