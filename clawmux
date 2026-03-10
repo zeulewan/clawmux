@@ -426,7 +426,7 @@ def _print_status_table(file=None):
             print(f"  (no live agents)")
             print()
             continue
-        print(f"  {'Name':<10} {'Role':<14} {'Folder':<14} {'Area':<16} {'Task':<32} {'State':<10} {'tool_name':<14} {'activity':<30} {'ctx':<5} {'model':<8} {'effort'}")
+        print(f"  {'Name':<10} {'Role':<14} {'Project':<14} {'Area':<16} {'Task':<32} {'State':<10} {'tool_name':<14} {'activity':<30} {'ctx':<5} {'model':<8} {'effort'}")
         print(f"  {'-' * 165}")
         for s in sorted(by_project.get(slug, []), key=lambda s: s.get("label", "")):
             name = s.get("label", s.get("voice", "?"))
