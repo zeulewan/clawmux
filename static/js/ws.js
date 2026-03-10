@@ -264,7 +264,7 @@ function handleMessage(data) {
   }
   if (type === 'groupchat_ack') {
     if (activeGroupId === data.group_id && typeof appendGroupChatMessage === 'function') {
-      appendGroupChatMessage({ bare_ack: true, parent_id: data.msg_id, id: data.ack_id });
+      appendGroupChatMessage({ bare_ack: true, parent_id: data.msg_id, id: data.ack_id, sender: data.sender || 'You', sender_voice: data.sender_voice || '' });
     }
     return;
   }

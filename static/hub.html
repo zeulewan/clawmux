@@ -955,6 +955,39 @@ function _voiceColorByLabel(label) {
   return null;
 }
 
+// Add a per-sender ACK dot to a group message element
+function _addGroupAckDot(msgEl, senderLabel, senderVoice) {
+  if (!msgEl) return;
+  let row = msgEl.querySelector('.gc-ack-row');
+  if (!row) {
+    row = document.createElement('div');
+    row.className = 'gc-ack-row';
+    msgEl.appendChild(row);
+    // Hide the plain ack button since we now show dots
+    const ackBtn = msgEl.querySelector('.msg-ack-btn');
+    if (ackBtn) { ackBtn.style.opacity = '0'; ackBtn.style.pointerEvents = 'none'; }
+  }
+  // Deduplicate — don't add same sender twice
+  const existing = row.querySelector(`[data-ack-sender="${CSS.escape(senderLabel)}"]`);
+  if (existing) return;
+  const dot = document.createElement('div');
+  dot.className = 'gc-ack-dot';
+  dot.dataset.ackSender = senderLabel;
+  dot.title = senderLabel;
+  const color = (senderVoice && typeof voiceColor === 'function') ? voiceColor(senderVoice) : (senderLabel === 'You' ? 'var(--blue)' : _voiceColorByLabel(senderLabel) || 'var(--blue)');
+  dot.style.background = color + '22';
+  dot.style.borderColor = color;
+  dot.style.color = color;
+  if (senderVoice && typeof voiceIcon === 'function') {
+    const ico = voiceIcon(senderVoice);
+    if (ico.startsWith('<')) dot.innerHTML = ico;
+    else dot.textContent = ico;
+  } else {
+    dot.textContent = senderLabel === 'You' ? '👍' : (senderLabel[0] || '?');
+  }
+  row.appendChild(dot);
+}
+
 function _sendGroupAck(msgId) {
   const g = activeGroupId ? [...groupChats.values()].find(x => x.id === activeGroupId) : null;
   if (!g) return;
@@ -1023,7 +1056,7 @@ function _makeGroupMsgEl(msg) {
       e.stopPropagation();
       _sendGroupAck(msg.id);
       div.dataset.selfAcked = '1';
-      if (typeof _showPermanentAck === 'function') _showPermanentAck(div, 1);
+      _addGroupAckDot(div, 'You', '');
     };
     actions.appendChild(ackBtn);
   }
@@ -1080,10 +1113,13 @@ function renderGroupChat(messages) {
   _gcAckCounts = new Map();
   _gcAllMessages = [];
 
-  // Separate acks from real messages
+  // Separate acks from real messages; track per-sender acks
+  const _gcAcksBySender = new Map(); // parentId → [{sender, senderVoice}]
   for (const msg of messages) {
     if (msg.bare_ack && msg.parent_id) {
       _gcAckCounts.set(msg.parent_id, (_gcAckCounts.get(msg.parent_id) || 0) + 1);
+      if (!_gcAcksBySender.has(msg.parent_id)) _gcAcksBySender.set(msg.parent_id, []);
+      _gcAcksBySender.get(msg.parent_id).push({ sender: msg.sender || 'You', senderVoice: msg.sender_voice || '' });
     } else {
       _gcAllMessages.push(msg);
     }
@@ -1093,6 +1129,15 @@ function renderGroupChat(messages) {
   const total = _gcAllMessages.length;
   _gcRenderedStart = Math.max(0, total - _GC_BATCH);
   _gcRenderSlice(chatArea, _gcRenderedStart, total);
+
+  // Apply per-sender ack dots to rendered messages
+  requestAnimationFrame(() => {
+    for (const [parentId, ackers] of _gcAcksBySender) {
+      const el = chatArea.querySelector(`[data-msg-id="${CSS.escape(parentId)}"]`);
+      if (el) for (const { sender, senderVoice } of ackers) _addGroupAckDot(el, sender, senderVoice);
+    }
+  });
+
   _gcAttachScrollHandler(chatArea);
   requestAnimationFrame(() => { chatArea.scrollTop = chatArea.scrollHeight; });
 }
@@ -1103,13 +1148,10 @@ function appendGroupChatMessage(msg) {
   if (!g) return;
   const chatArea = document.getElementById('chat-area');
   if (msg.bare_ack && msg.parent_id) {
-    // Apply ack badge to existing parent element
     const parentEl = chatArea.querySelector(`[data-msg-id="${CSS.escape(msg.parent_id)}"]`);
     if (parentEl) {
-      if (parentEl.dataset.selfAcked) { delete parentEl.dataset.selfAcked; return; }
-      const existing = parentEl.querySelector('.msg-ack-permanent');
-      const count = existing ? parseInt(existing.dataset.count || '1') + 1 : 1;
-      if (typeof _showPermanentAck === 'function') _showPermanentAck(parentEl, count);
+      if (parentEl.dataset.selfAcked) { delete parentEl.dataset.selfAcked; }
+      _addGroupAckDot(parentEl, msg.sender || 'You', msg.sender_voice || '');
     }
     return;
   }

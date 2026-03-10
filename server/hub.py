@@ -1745,12 +1745,14 @@ async def groupchat_ack_message(name: str, request: Request):
     g = _group_chats[key]
     ack_id = _gen_msg_id()
     await asyncio.to_thread(_append_group_history, g["id"], "user", "",
-                            msg_id=ack_id, parent_id=msg_id, bare_ack=True)
+                            sender="You", msg_id=ack_id, parent_id=msg_id, bare_ack=True)
     await send_to_browser({
         "type": "groupchat_ack",
         "group_id": g["id"],
         "msg_id": msg_id,
         "ack_id": ack_id,
+        "sender": "You",
+        "sender_voice": "",
     })
     return JSONResponse({"status": "acked", "ack_id": ack_id})
 
@@ -2111,13 +2113,16 @@ async def speak_to_user(request: Request):
         if group:
             # Route to group chat: only shows in browser group chat view, not delivered to other agents
             ack_id = _gen_msg_id()
+            sender_label = sender.voice.replace("af_", "").replace("am_", "").replace("bm_", "").capitalize()
             await asyncio.to_thread(_append_group_history, group["id"], "user", "",
-                                    msg_id=ack_id, parent_id=parent_id, bare_ack=True)
+                                    sender=sender_label, msg_id=ack_id, parent_id=parent_id, bare_ack=True)
             await send_to_browser({
                 "type": "groupchat_ack",
                 "group_id": group["id"],
                 "msg_id": parent_id,
                 "ack_id": ack_id,
+                "sender": sender_label,
+                "sender_voice": sender.voice,
             })
             return {"id": ack_id, "status": "ack_sent"}
         # Regular session ack — thumbs up in agent's own chat

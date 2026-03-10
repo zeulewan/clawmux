@@ -965,8 +965,12 @@ function _renderGroupChatSection(list, afterIndex) {
       for (const m of (g.members || []).slice(0, 4)) {
         const dot = document.createElement('div');
         dot.className = 'gc-avatar';
-        dot.style.background = (typeof voiceColor === 'function') ? voiceColor(m.voice) : '#4a9eff';
-        dot.textContent = m.label ? m.label[0].toUpperCase() : '?';
+        const vc = (typeof voiceColor === 'function') ? voiceColor(m.voice) : '#4a9eff';
+        dot.style.background = vc + '22';
+        dot.style.color = vc;
+        const ico = (typeof voiceIcon === 'function') ? voiceIcon(m.voice) : (m.label ? m.label[0].toUpperCase() : '?');
+        if (ico && ico.startsWith('<')) dot.innerHTML = ico;
+        else dot.textContent = ico || (m.label ? m.label[0].toUpperCase() : '?');
         avatars.appendChild(dot);
       }
 
