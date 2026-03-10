@@ -150,8 +150,8 @@ struct ContentView: View {
             sidebarStripView
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // Header as safeAreaInset: auto-insets scroll content + separate layer for glass blur
-        .safeAreaInset(edge: .top, spacing: 0) {
+        // Header as overlay: floats above content so messages scroll behind the glass bar
+        .overlay(alignment: .top) {
             topBarView
         }
         .overlay(alignment: .bottomTrailing) {
@@ -1345,7 +1345,7 @@ struct ContentView: View {
                             Color.clear.frame(height: 1).id("bottom")
                         }
                         .padding(.horizontal, 24)
-                        .padding(.top, 20).padding(.bottom, 16)
+                        .padding(.top, 64).padding(.bottom, 16)
                     }
                     .defaultScrollAnchor(.bottom)
                     .id(vm.activeSessionId ?? "none")
