@@ -1931,16 +1931,15 @@ struct ContentView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 8).padding(.bottom, 2)
             .background {
-                // UnevenRoundedRectangle: top corners rounded, bottom flat so glass
-                // extends seamlessly behind the home indicator to the screen edge
-                let pillShape = UnevenRoundedRectangle(
-                    topLeadingRadius: 28, bottomLeadingRadius: 0,
-                    bottomTrailingRadius: 0, topTrailingRadius: 28,
-                    style: .continuous)
+                // RoundedRectangle extends below the screen edge via ignoresSafeArea —
+                // bottom corners are hidden behind the screen, pill appears to flow off naturally
                 if #available(iOS 26, *) {
-                    Color.clear.glassEffect(.regular, in: pillShape).ignoresSafeArea(edges: .bottom)
+                    Color.clear.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+                        .ignoresSafeArea(edges: .bottom)
                 } else {
-                    pillShape.fill(.ultraThinMaterial).ignoresSafeArea(edges: .bottom)
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .ignoresSafeArea(edges: .bottom)
                 }
             }
         }
