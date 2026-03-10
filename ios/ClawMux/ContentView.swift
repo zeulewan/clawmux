@@ -153,7 +153,7 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .overlay(alignment: .bottomTrailing) {
-            Text("build-50")
+            Text("build-51")
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                 .foregroundStyle(Color.white.opacity(0.4))
                 .padding(6)
@@ -275,7 +275,7 @@ struct ContentView: View {
                 .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
         }
         .padding(.horizontal, 12).padding(.vertical, 5)
-        .background(Color.canvas1.opacity(0.70).background(.ultraThinMaterial))
+        .background(Color.canvas1.opacity(0.95))
     }
 
     private var groupChatScrollArea: some View {
@@ -501,10 +501,7 @@ struct ContentView: View {
         }
         .frame(width: sidebarExpanded ? 220 : 48)
         .frame(maxHeight: .infinity)
-        .background(
-            Color(red: 0.04, green: 0.05, blue: 0.09).opacity(0.55)
-                .background(.ultraThinMaterial)
-        )
+        .background(Color(red: 0.04, green: 0.05, blue: 0.09).opacity(0.92))
         .overlay(alignment: .trailing) {
             Color.cBorder.opacity(0.6).frame(width: 0.5)
         }
@@ -1159,7 +1156,7 @@ struct ContentView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color.cText)
                     .padding(.horizontal, 18).padding(.vertical, 9)
-                    .background(.ultraThinMaterial, in: Capsule())
+                    .background(Color.canvas2.opacity(0.90), in: Capsule())
                     .overlay(Capsule().strokeBorder(Color.cBorder, lineWidth: 0.5))
                     .shadow(color: .black.opacity(0.4), radius: 12)
                     .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
@@ -1298,7 +1295,7 @@ struct ContentView: View {
                 .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
         }
         .padding(.horizontal, 12).padding(.vertical, 5)  // mobile web: padding 3px 12px
-        .background(Color.canvas1.opacity(0.70).background(.ultraThinMaterial))
+        .background(Color.canvas1.opacity(0.95))
     }
 
     private func modelName(_ m: String) -> String {
@@ -1310,8 +1307,7 @@ struct ContentView: View {
     private var chatScrollArea: some View {
         // Voice-color ambient tint on the whole chat area — mirrors web #main-content backgroundColor
         let areaTint = vm.activeSession.map { voiceColor($0.voice) } ?? Color.clear
-        return GeometryReader { geo in
-            ScrollViewReader { proxy in
+        return ScrollViewReader { proxy in
                 ZStack(alignment: .bottomTrailing) {
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: 20) {
@@ -1344,8 +1340,7 @@ struct ContentView: View {
                             Color.clear.frame(height: 1).id("bottom")
                         }
                         .padding(.horizontal, 24)
-                        .padding(.top, 20).padding(.bottom, 120) // safeAreaInset handles bar overlap; extra breathing room
-                        .frame(minHeight: geo.size.height)
+                        .padding(.top, 20).padding(.bottom, 120)
                     }
                     .defaultScrollAnchor(.bottom)
                     .id(vm.activeSessionId ?? "none")
@@ -1370,7 +1365,7 @@ struct ContentView: View {
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(Color.cText)
                                 .frame(width: 32, height: 32)
-                                .background(.ultraThinMaterial, in: Circle())
+                                .background(Color.canvas2.opacity(0.90), in: Circle())
                                 .overlay(Circle().strokeBorder(Color.glassBorder, lineWidth: 0.5))
                                 .shadow(color: .black.opacity(0.4), radius: 8, x: 0, y: 2)
                         }
@@ -1380,7 +1375,6 @@ struct ContentView: View {
                         .animation(.spring(response: 0.25), value: isAtBottom)
                     }
                 }
-            }
         }
         .background(areaTint.opacity(0.10))
     }
@@ -1891,7 +1885,7 @@ struct ContentView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 8).padding(.bottom, 2)
             .background(
-                RoundedRectangle(cornerRadius: 28, style: .continuous).fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 28, style: .continuous).fill(Color.canvas2.opacity(0.92))
             )
         }
         .padding(.horizontal, 8).padding(.bottom, 4)
@@ -1959,7 +1953,7 @@ struct ContentView: View {
         .padding(.horizontal, 12).padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(.ultraThinMaterial)
+                .fill(Color.canvas2.opacity(0.92))
                 .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
         )
         .padding(.horizontal, 12).padding(.bottom, 8)  // wider margins clear rounded screen corners
@@ -2019,7 +2013,7 @@ struct ContentView: View {
             .padding(.horizontal, 14).padding(.bottom, 8)
         }
         .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.ultraThinMaterial)
+            RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.canvas2.opacity(0.92))
         )
         .padding(.horizontal, 8).padding(.bottom, 4)
         .onAppear { pttTextFieldFocused = true }
