@@ -50,3 +50,4 @@ targets:
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 25QMAKVCBN
         SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: YES
