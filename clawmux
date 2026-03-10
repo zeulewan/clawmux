@@ -1655,7 +1655,7 @@ def cmd_monitor(args):
         ]
 
     if not agent_sessions:
-        die(f"no active agent sessions for project '{project_slug}'")
+        die(f"no active agent sessions for folder '{project_slug}'")
 
     # Filter by names if specified
     if args.agents:
@@ -2095,7 +2095,7 @@ def cmd_project(args):
         payload["task"] = args.task
     http_post(f"/api/project-status/{session_id}", payload)
     area = f" · {args.area}" if args.area else ""
-    print(f"Project: {args.project}{area}")
+    print(f"Folder: {args.project}{area}")
 
 
 def cmd_task(args):
@@ -2288,8 +2288,8 @@ examples:
     p.set_defaults(func=cmd_status)
 
     # projects
-    p = sub.add_parser("projects", help="List all projects",
-                       description="Show all configured projects with agent counts.")
+    p = sub.add_parser("projects", help="List all folders",
+                       description="Show all configured folders with agent counts.")
     p.set_defaults(func=cmd_projects)
 
     # start
@@ -2321,16 +2321,16 @@ examples:
 
     # monitor
     p = sub.add_parser("monitor", help="Open tiled tmux view of agent sessions",
-                       description="Create a tmux session with tiled panes showing agent sessions. Optionally specify a project slug to monitor only that project's agents.",
+                       description="Create a tmux session with tiled panes showing agent sessions. Optionally specify a folder slug to monitor only that folder's agents.",
                        formatter_class=argparse.RawDescriptionHelpFormatter,
                        epilog="""examples:
-    clawmux monitor                          # Monitor default project agents
-    clawmux monitor hnapp                    # Monitor hnapp project agents
+    clawmux monitor                          # Monitor active folder agents
+    clawmux monitor hnapp                    # Monitor hnapp folder agents
     clawmux monitor --agents sky adam echo   # Monitor specific agents
     clawmux monitor --detach                 # Create without attaching
     clawmux monitor --restart                # Kill existing and recreate
     clawmux monitor --no-live                # Static snapshot, no auto-update""")
-    p.add_argument("project", nargs="?", help="Project slug to monitor (default: default project)")
+    p.add_argument("project", nargs="?", help="Folder slug to monitor (default: active folder)")
     p.add_argument("--agents", nargs="*", help="Specific agent names to monitor (default: all)")
     p.add_argument("--detach", action="store_true", help="Create session without attaching")
     p.add_argument("--restart", action="store_true", help="Kill existing monitor and recreate")
@@ -2409,7 +2409,7 @@ examples:
     p.set_defaults(func=cmd_regenerate)
 
     # project
-    p = sub.add_parser("project", help="Set project status in sidebar",
+    p = sub.add_parser("project", help="Set project/area status in sidebar",
                        description="Update the sidebar to show what project and area you're working on.",
                        formatter_class=argparse.RawDescriptionHelpFormatter,
                        epilog="""examples:
