@@ -955,6 +955,19 @@ function _voiceColorByLabel(label) {
   return null;
 }
 
+function _voiceIdByLabel(label) {
+  // Resolve voice ID from display name — for rendering icons from label-only ack history
+  if (!label) return null;
+  const lc = label.toLowerCase();
+  for (const [, s] of sessions) {
+    if (s.label && s.label.toLowerCase() === lc) return s.voice;
+  }
+  for (const [vid, vname] of Object.entries(VOICE_NAMES)) {
+    if (vname.toLowerCase() === lc) return vid;
+  }
+  return null;
+}
+
 // Add a per-sender ACK badge below a group message element
 // Each badge shows [voice icon] [👍] as a pair, in a row OUTSIDE the bubble
 function _addGroupAckDot(msgEl, senderLabel, senderVoice) {
@@ -980,11 +993,12 @@ function _addGroupAckDot(msgEl, senderLabel, senderVoice) {
   badge.style.background = color + '18';
   badge.style.borderColor = color;
   badge.style.color = color;
-  // Voice icon
+  // Voice icon — resolve from stored voice ID, or fall back to label lookup
+  const resolvedVoice = senderVoice || (senderLabel !== 'You' ? _voiceIdByLabel(senderLabel) : '');
   const iconEl = document.createElement('span');
   iconEl.className = 'gc-ack-icon';
-  if (senderVoice && typeof voiceIcon === 'function') {
-    const ico = voiceIcon(senderVoice);
+  if (resolvedVoice && typeof voiceIcon === 'function') {
+    const ico = voiceIcon(resolvedVoice);
     if (ico.startsWith('<')) iconEl.innerHTML = ico;
     else iconEl.textContent = ico;
   } else {
