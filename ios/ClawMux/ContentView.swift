@@ -127,12 +127,14 @@ struct ContentView: View {
     @State private var newGroupChatName        = ""
 
     var body: some View {
-        // BINARY SEARCH: minimal content, all modifiers kept
-        ZStack {
+        // BINARY SEARCH: minimal body + sidebarStripView only
+        ZStack(alignment: .leading) {
             Color.black.ignoresSafeArea()
             Button("TAP TO OPEN SETTINGS") { vm.showSettings = true }
                 .font(.system(size: 28, weight: .bold))
                 .foregroundColor(.white)
+                .padding(.leading, 60)
+            sidebarStripView
         }
         .background(Color.canvas1.ignoresSafeArea())
         .preferredColorScheme(.dark)
