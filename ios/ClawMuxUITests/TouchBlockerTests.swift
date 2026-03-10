@@ -4,10 +4,11 @@ import XCTest
 /// Primary goal: catch iOS 26 portal overlay regressions (PortalGroupMarkerView blocking touches).
 final class TouchBlockerTests: XCTestCase {
 
-    let app = XCUIApplication()
+    var app: XCUIApplication!
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        app = XCUIApplication()
         app.launch()
         // Give app time to connect (or fail to connect — we just need the UI to render)
         sleep(3)
