@@ -445,7 +445,8 @@ struct ContentView: View {
                 }
                 .padding(.vertical, 4)
             }
-            .clipped()  // clip horizontal overflow at ScrollView level
+            .clipped()  // clip visual overflow
+            .contentShape(Rectangle())  // constrain hit-testing to visible frame, prevents scroll content extending into hamburger area
 
             Spacer()
 
