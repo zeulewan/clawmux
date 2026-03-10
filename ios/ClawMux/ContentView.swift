@@ -134,7 +134,7 @@ struct ContentView: View {
         .preferredColorScheme(.dark)
         .onAppear { isPulsing = true }
         .sheet(isPresented: $vm.showSettings) { SettingsView(vm: vm) }
-        .sheet(isPresented: $vm.showNotes) { NotesPanelView(serverURL: vm.serverURL) { vm.showNotes = false } }
+        .sheet(isPresented: $vm.showNotes) { NotesPanelView(baseURL: vm.httpBaseURL()) { vm.showNotes = false } }
         .onOpenURL { vm.handleOpenURL($0) }
         .alert("Reset History", isPresented: $showResetConfirm) {
             Button("Reset", role: .destructive) {
@@ -1133,7 +1133,7 @@ struct ContentView: View {
                 // Agent name — mirrors web #active-voice
                 Text(vm.showDebug ? "Debug" : s.label)
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(Color.cText)
+                    .foregroundStyle(color)  // agent voice color
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
 
@@ -1195,9 +1195,10 @@ struct ContentView: View {
                     }
                     .foregroundStyle(Color.cTextSec)
                     .lineLimit(1)
-                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .padding(.horizontal, 8).padding(.vertical, 2)
                     .background(Color.glass, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
+                    .fixedSize()
                 }
             }
 
@@ -1252,7 +1253,8 @@ struct ContentView: View {
             if #available(iOS 26, *) {
                 Color.clear.glassEffect(.regular, in: .rect)
             } else {
-                Color.canvas1.opacity(0.95)
+                Color.canvas1.opacity(0.70)
+                    .background(.ultraThinMaterial)
             }
         }
     }
@@ -2276,19 +2278,13 @@ private struct MarkdownContentView: View {
 
 // Stub — Nova replaces this with full /api/notes implementation
 struct NotesPanelView: View {
-    let serverURL: String
+    let baseURL: URL?
     let onDismiss: () -> Void
 
     @State private var nowText: String = ""
     @State private var laterText: String = ""
     @State private var activeTab: String = "now"
     @State private var saveStatus: String = ""
-    private var saveTimer: DispatchWorkItem? = nil
-
-    init(serverURL: String, onDismiss: @escaping () -> Void) {
-        self.serverURL = serverURL
-        self.onDismiss = onDismiss
-    }
 
     var body: some View {
         NavigationStack {
@@ -2346,14 +2342,8 @@ struct NotesPanelView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { saveNotes() }
     }
 
-    private func notesURL(_ path: String) -> URL? {
-        var base = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !base.hasPrefix("http://") && !base.hasPrefix("https://") { base = "https://" + base }
-        return URL(string: base + path)
-    }
-
     private func loadNotes() {
-        guard let url = notesURL("/api/notes") else { return }
+        guard let url = baseURL?.appendingPathComponent("api/notes") else { return }
         URLSession.shared.dataTask(with: url) { data, _, _ in
             guard let data,
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -2367,7 +2357,7 @@ struct NotesPanelView: View {
     }
 
     private func saveNotes() {
-        guard let url = notesURL("/api/notes") else { return }
+        guard let url = baseURL?.appendingPathComponent("api/notes") else { return }
         var req = URLRequest(url: url)
         req.httpMethod = "PUT"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")

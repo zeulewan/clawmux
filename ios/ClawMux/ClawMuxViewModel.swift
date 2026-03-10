@@ -2102,9 +2102,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                   let msgs = json["messages"] as? [[String: Any]]
             else { return }
             let parsed = msgs.compactMap { m -> GroupChatMessage? in
-                guard let id = m["id"] as? String,
-                      let text = m["text"] as? String
+                guard let text = m["text"] as? String, !text.isEmpty
                 else { return nil }
+                let id = m["id"] as? String ?? UUID().uuidString  // fallback: some entries lack id
                 return GroupChatMessage(
                     id: id,
                     role: m["role"] as? String ?? "assistant",
@@ -2375,7 +2375,11 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
 
     func httpBaseURL() -> URL? {
         var base = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !base.hasPrefix("http://") && !base.hasPrefix("https://") {
+        if base.hasPrefix("wss://") {
+            base = "https://" + base.dropFirst(6)
+        } else if base.hasPrefix("ws://") {
+            base = "http://" + base.dropFirst(5)
+        } else if !base.hasPrefix("http://") && !base.hasPrefix("https://") {
             base = "https://" + base
         }
         return URL(string: base)
