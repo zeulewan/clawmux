@@ -1940,10 +1940,10 @@ struct ContentView: View {
                 // RoundedRectangle extends below the screen edge via ignoresSafeArea —
                 // bottom corners are hidden behind the screen, pill appears to flow off naturally
                 if #available(iOS 26, *) {
-                    Color.clear.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 36, style: .continuous))
+                    Color.clear.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 80, style: .continuous))
                         .ignoresSafeArea(edges: .bottom)
                 } else {
-                    RoundedRectangle(cornerRadius: 36, style: .continuous)
+                    RoundedRectangle(cornerRadius: 80, style: .continuous)
                         .fill(.ultraThinMaterial)
                         .ignoresSafeArea(edges: .bottom)
                 }
