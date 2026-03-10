@@ -517,6 +517,7 @@ struct ContentView: View {
         }
         .frame(width: sidebarExpanded ? 220 : 48)
         .frame(maxHeight: .infinity)
+        .ignoresSafeArea(edges: .bottom)
         .background {
             if #available(iOS 26, *) {
                 Color.clear.glassEffect(.regular, in: .rect).ignoresSafeArea(edges: .bottom)
