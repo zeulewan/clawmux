@@ -147,6 +147,10 @@ function handleMessage(data) {
           if (s.activity) {
             existing.toolStatusText = s.activity;
           }
+          // Pre-populate activity log so thinking indicator shows full history on reconnect
+          if (s.activity_log && s.activity_log.length > 0 && typeof _activityLogStore !== 'undefined') {
+            _activityLogStore.set(s.session_id, { texts: s.activity_log.slice() });
+          }
           // Restore session state from server's canonical state field
           const serverState = s.state;
           if (serverState) {
