@@ -1,5 +1,4 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 // MARK: - Theme (dark-mode-first, used by all views in this file)
 
@@ -55,43 +54,16 @@ private func voiceColor(_ id: String) -> Color {
     }
 }
 
-private func voiceIdByName(_ name: String) -> String {
-    ALL_VOICES.first { $0.name.lowercased() == name.lowercased() }?.id ?? name.lowercased()
-}
-
 private func voiceIcon(_ id: String) -> String {
     switch id {
-    // Project 1
-    case "af_sky":      return "cloud.fill"
-    case "af_alloy":    return "diamond.fill"
-    case "af_nova":     return "star.fill"
-    case "af_sarah":    return "heart.fill"
-    case "am_adam":     return "paperplane.fill"
-    case "am_echo":     return "waveform"
-    case "am_eric":     return "chart.line.uptrend.xyaxis"
-    case "am_onyx":     return "shield.fill"
-    case "bm_fable":    return "book.fill"
-    // Project 2
-    case "af_bella":    return "info.circle.fill"
-    case "af_jessica":  return "checkmark.circle.fill"
-    case "af_heart":    return "heart.fill"
-    case "am_michael":  return "shield.lefthalf.filled"
-    case "am_liam":     return "chevron.left.forwardslash.chevron.right"
-    case "am_fenrir":   return "globe"
-    case "bf_emma":     return "envelope.fill"
-    case "bm_george":   return "doc.fill"
-    case "bm_daniel":   return "music.note"
-    // Project 3
-    case "af_aoede":    return "music.note.list"
-    case "af_jadzia":   return "figure.walk"
-    case "af_kore":     return "target"
-    case "af_nicole":   return "heart.fill"
-    case "af_river":    return "water.waves"
-    case "am_puck":     return "face.smiling.fill"
-    case "bf_alice":    return "bookmark.fill"
-    case "bf_lily":     return "leaf.fill"
-    case "bm_lewis":    return "checklist"
-    default:            return "mic.fill"
+    case "af_sky":   return "cloud.fill"
+    case "af_alloy": return "diamond.fill"
+    case "af_sarah": return "heart.fill"
+    case "am_adam":  return "leaf.fill"
+    case "am_echo":  return "waveform"
+    case "am_onyx":  return "shield.fill"
+    case "bm_fable": return "book.fill"
+    default:         return "person.fill"
     }
 }
 
@@ -110,8 +82,6 @@ struct ContentView: View {
     @State private var resetVoiceId: String? = nil
     @State private var showModelRestartConfirm = false
     @State private var pendingModelSwitch      = ""
-    @State private var showEffortRestartConfirm = false
-    @State private var pendingEffortSwitch      = ""
     @State private var pttDragOffset:  CGFloat = 0
     @State private var pttDragOffsetY: CGFloat = 0
     @State private var pttGestureCommitted     = false
@@ -119,37 +89,31 @@ struct ContentView: View {
     @State private var showCopiedToast         = false
     @State private var thinkingExpanded        = false
     @State private var collapsedProjects:       Set<String> = []
-    @State private var expandedAgentMsgIds:    Set<UUID> = []
     @State private var isAtBottom:             Bool = true
     @State private var sidebarExpanded:        Bool = false
-    @State private var showFilePicker:         Bool = false
-    @State private var showCreateGroupChat     = false
-    @State private var newGroupChatName        = ""
 
     var body: some View {
-        VStack(spacing: 0) {
-            topBarView
-            ZStack(alignment: .leading) {
-                // sidebarStripView is FIRST (lower SwiftUI hit priority) but .zIndex(2) keeps it visually on top.
-                // mainAreaView is LAST (highest SwiftUI hit priority for x=48+ area).
-                // This prevents sidebar's overflowing SwiftUI frame from eating touches in the main area.
-                sidebarStripView
-                    .zIndex(sidebarExpanded ? 2 : 0)
-                mainAreaView
+        ZStack(alignment: .leading) {
+            // Main content — always has 48px left offset for the collapsed sidebar
+            mainAreaView
+                .padding(.leading, 48)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // Dim overlay behind expanded sidebar (z-index 49 matching web)
+            if sidebarExpanded {
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
                     .padding(.leading, 48)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                if sidebarExpanded {
-                    Color.black.opacity(0.3)
-                        .ignoresSafeArea()
-                        .padding(.leading, 48)
-                        .onTapGesture { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { sidebarExpanded = false } }
-                        .transition(.opacity)
-                }
+                    .onTapGesture { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { sidebarExpanded = false } }
+                    .transition(.opacity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // Sidebar (draws over main content when expanded, z-index 50)
+            sidebarStripView
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .bottomTrailing) {
-            Text("build-47")
+            Text("build-48")
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                 .foregroundStyle(Color.white.opacity(0.4))
                 .padding(6)
@@ -159,7 +123,7 @@ struct ContentView: View {
         .preferredColorScheme(.dark)
         .onAppear { isPulsing = true }
         .sheet(isPresented: $vm.showSettings) { SettingsView(vm: vm) }
-        .sheet(isPresented: $vm.showNotes) { NotesPanelView(baseURL: vm.httpBaseURL()) { vm.showNotes = false } }
+        .sheet(isPresented: $vm.showNotes) { NotesPanelView(serverURL: vm.serverURL) { vm.showNotes = false } }
         .onOpenURL { vm.handleOpenURL($0) }
         .alert("Reset History", isPresented: $showResetConfirm) {
             Button("Reset", role: .destructive) {
@@ -176,46 +140,19 @@ struct ContentView: View {
         } message: {
             Text("This will restart the session with \(pendingModelSwitch.capitalized). The conversation will be preserved.")
         }
-        .alert("Switch Effort", isPresented: $showEffortRestartConfirm) {
-            Button("Restart", role: .destructive) { vm.restartWithEffort(pendingEffortSwitch) }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Switch to \(pendingEffortSwitch.capitalized) effort? This will restart the session. The conversation will be preserved.")
-        }
         .alert("Error", isPresented: Binding(
             get: { vm.errorMessage != nil },
             set: { if !$0 { vm.errorMessage = nil } }
         )) { Button("OK") { vm.errorMessage = nil }
         } message: { Text(vm.errorMessage ?? "") }
-        .alert("New Group Chat", isPresented: $showCreateGroupChat) {
-            TextField("Group name", text: $newGroupChatName)
-            Button("Create") { vm.createGroupChat(name: newGroupChatName) }
-            Button("Cancel", role: .cancel) {}
-        } message: { Text("Enter a name for the new group chat.") }
-        .background(DebugWindowInstaller())
     }
 
     // MARK: - Split Layout
 
-    // Top bar — full-width header always above the sidebar ZStack
-    private var topBarView: some View {
-        Group {
-            if vm.activeGroupName != nil {
-                groupChatHeader
-            } else {
-                chatHeader  // handles nil activeSession gracefully (shows just conn dot)
-            }
-        }
-    }
-
     private var mainAreaView: some View {
         let voiceTint = vm.activeSession.map { voiceColor($0.voice) } ?? Color.clear
         return Group {
-            if vm.isFocusMode {
-                focusModeView
-            } else if vm.activeGroupName != nil {
-                groupChatMainView
-            } else if vm.activeSessionId != nil {
+            if vm.activeSessionId != nil {
                 chatMainView
             } else {
                 welcomeView
@@ -227,162 +164,17 @@ struct ContentView: View {
         .background(voiceTint.opacity(0.10).animation(.easeInOut(duration: 0.4), value: vm.activeSessionId))
     }
 
-    private var focusModeView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "scope")
-                .font(.system(size: 48, weight: .thin))
-                .foregroundStyle(Color.cTextTer)
-            Text("Focus Mode")
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(Color.cTextSec)
-            Text("Tap an agent in the sidebar to switch.")
-                .font(.system(size: 13))
-                .foregroundStyle(Color.cTextTer)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    // MARK: - Group Chat View
-
-    private var groupChatMainView: some View {
-        VStack(spacing: 0) {
-            groupChatScrollArea
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            textInputBar
-        }
-    }
-
-    private var groupChatHeader: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "bubble.left.and.bubble.right.fill")
-                .font(.system(size: 13))
-                .foregroundStyle(Color.cAccent)
-            Text(vm.activeGroupName ?? "Group Chat")
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Color.cText)
-                .lineLimit(1)
-            Spacer()
-            let dotColor: Color = vm.isConnected ? .cSuccess : vm.isConnecting ? .cCaution : .cDanger
-            Circle()
-                .fill(dotColor)
-                .frame(width: 8, height: 8)
-                .padding(6)
-                .background(Color.glass, in: Capsule())
-                .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
-        }
-        .padding(.horizontal, 12).padding(.vertical, 5)
-        .background(Color.canvas1.opacity(0.95))
-    }
-
-    private var groupChatScrollArea: some View {
-        ZStack {
-            ScrollViewReader { proxy in
-                ScrollView(showsIndicators: false) {
-                    LazyVStack(spacing: 8) {
-                        ForEach(Array(vm.groupMessages.enumerated()), id: \.element.id) { idx, msg in
-                            groupMessageBubble(msg, isLast: idx == vm.groupMessages.count - 1)
-                        }
-                        Color.clear.frame(height: 16).id("gc-bottom")
-                    }
-                    .padding(.horizontal, 12).padding(.top, 8)
-                }
-                .onChange(of: vm.groupMessages.count) { _, _ in
-                    withAnimation(.easeOut(duration: 0.18)) {
-                        proxy.scrollTo("gc-bottom", anchor: .bottom)
-                    }
-                }
-                .onAppear {
-                    // Re-fetch history every time view appears (catches race where fetch completed before view was ready)
-                    if let name = vm.activeGroupName { vm.fetchGroupHistory(groupName: name) }
-                    proxy.scrollTo("gc-bottom", anchor: .bottom)
-                }
-            }
-            // Empty state with refresh button
-            if vm.groupMessages.isEmpty {
-                VStack(spacing: 10) {
-                    Image(systemName: "bubble.left.and.bubble.right")
-                        .font(.system(size: 32, weight: .thin))
-                        .foregroundStyle(Color.cTextTer)
-                    Text("No messages yet")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(Color.cTextSec)
-                    Text("Start the conversation below")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color.cTextTer)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .allowsHitTesting(false)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func groupMessageBubble(_ msg: GroupChatMessage, isLast: Bool) -> some View {
-        let isUser = msg.role == "user" && msg.sender.isEmpty
-        let color = isUser ? Color.clear : voiceColor(msg.sender)
-        let senderLabel = isUser ? nil : (ALL_VOICES.first { $0.id == msg.sender }?.name ?? msg.sender)
-
-        let shape = UnevenRoundedRectangle(
-            topLeadingRadius: isUser ? 18 : 4,
-            bottomLeadingRadius: 18,
-            bottomTrailingRadius: isUser ? 4 : 18,
-            topTrailingRadius: 18,
-            style: .continuous)
-
-        return HStack(alignment: .bottom, spacing: 0) {
-            if isUser { Spacer(minLength: 56) }
-            VStack(alignment: isUser ? .trailing : .leading, spacing: 2) {
-                // Sender label for agent messages
-                if let label = senderLabel {
-                    Text(label)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(color)
-                        .padding(.horizontal, 4)
-                }
-                // Message bubble
-                MarkdownContentView(text: msg.text, foreground: Color.cText,
-                                    fontSize: CGFloat(vm.chatFontSize))
-                    .padding(.horizontal, isUser ? 12 : 14)
-                    .padding(.vertical, 8)
-                    .background(shape.fill(isUser ? Color.cAccent.opacity(0.18) : Color.cCard))
-                    .overlay(shape.fill(isUser ? Color.clear : color.opacity(0.20)))
-                    .overlay(shape.strokeBorder(
-                        isUser ? Color.clear : Color(hex: 0x2A3A52), lineWidth: 1))
-                    .contextMenu {
-                        Button {
-                            UIPasteboard.general.string = msg.text
-                            withAnimation { showCopiedToast = true }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                                withAnimation { showCopiedToast = false }
-                            }
-                        } label: { Label("Copy", systemImage: "doc.on.doc") }
-                    }
-                // Timestamp on last message
-                if isLast {
-                    Text(shortTime(Date(timeIntervalSince1970: msg.ts)))
-                        .font(.system(size: 9))
-                        .foregroundStyle(Color.cTextTer)
-                        .padding(.horizontal, 4)
-                }
-            }
-            if !isUser { Spacer(minLength: 56) }
-        }
-        .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
-    }
-
     // MARK: - Sidebar (collapsible, 48px → 220px, overlays main when expanded)
 
     private var sidebarStripView: some View {
         VStack(spacing: 0) {
             // Agent list — icons when collapsed, full cards when expanded
-            ScrollView(.vertical, showsIndicators: false) {
+            ScrollView(showsIndicators: false) {
                 VStack(spacing: sidebarExpanded ? 2 : 1) {
                     if sidebarExpanded {
-                        // Agents first (matches mobile web — group chats section is below agents)
                         let groups = projectGroups
                         ForEach(groups.namedProjects, id: \.self) { project in
-                            let voices = groups.byProject[project] ?? []
-                            projectSection(project, voices: voices)
+                            projectSection(project, voices: groups.byProject[project] ?? [])
                         }
                         if !groups.ungrouped.isEmpty {
                             if !groups.namedProjects.isEmpty {
@@ -401,68 +193,39 @@ struct ContentView: View {
                             }
                             .padding(.horizontal, 8)
                         }
-
-                        // Group chats section below agents — matches web sidebar-gc-section placement
-                        let chatGroups = activeGroups
-                        if !chatGroups.isEmpty {
-                            HStack {
-                                Text("GROUP CHATS")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(Color.cTextTer)
-                                    .tracking(0.8)
-                                Spacer()
-                                Button {
-                                    newGroupChatName = ""
-                                    showCreateGroupChat = true
-                                } label: {
-                                    Image(systemName: "plus")
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(Color.cTextSec)
-                                }
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.top, 8).padding(.bottom, 2)
-                            ForEach(chatGroups, id: \.groupId) { g in
-                                groupCard(g.groupId, name: g.name, voices: g.voices)
-                            }
-                        }
                     } else {
-                        // Collapsed: all agent icons, then group icons at bottom
-                        ForEach(ALL_VOICES) { voice in
-                            sidebarIcon(for: voice)
-                        }
-                        let chatGroups = activeGroups
-                        ForEach(chatGroups, id: \.groupId) { g in
-                            groupIcon(g.groupId, voices: g.voices)
-                        }
+                        ForEach(ALL_VOICES) { voice in sidebarIcon(for: voice) }
                     }
                 }
-                .frame(width: sidebarExpanded ? 220 : 48)  // constrain content width — NOT .infinity (iOS 26: vertical ScrollView gives content infinite width, .infinity escapes hit-test bounds)
                 .padding(.vertical, 4)
             }
-            .clipped()
-            .frame(width: sidebarExpanded ? 220 : 48)
 
             Spacer()
 
+            // Connection dot (above tray)
+            let dotColor: Color = vm.isConnected ? .cSuccess : vm.isConnecting ? .cCaution : .cDanger
+            Circle()
+                .fill(dotColor)
+                .frame(width: 7, height: 7)
+                .scaleEffect(vm.isConnecting && isPulsing ? 1.15 : vm.isConnecting ? 0.7 : 1.0)
+                .opacity(vm.isConnecting && isPulsing ? 1.0 : vm.isConnecting ? 0.15 : 1.0)
+                .animation(vm.isConnecting ? .easeInOut(duration: 0.7).repeatForever(autoreverses: true) : .default, value: isPulsing)
+                .frame(width: 48, height: 20)
+
             // Bottom tray: hamburger (always) + Notes + Settings (when expanded)
-            // Note: sidebar-focus-card is hidden on mobile web — no Focus card here
             // Matches web #sidebar-tray: expand-btn(48px) + notes-btn(flex) + settings-btn(flex)
             Color.cBorder.opacity(0.5).frame(height: 0.5)
             HStack(spacing: 0) {
-                // Hamburger — always 48px, border-right matches web #sidebar-expand-btn
+                // Hamburger — always 48px, always visible
                 Button {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                         sidebarExpanded.toggle()
                     }
                 } label: {
                     Image(systemName: "line.3.horizontal")
-                        .font(.system(size: 22))  // web: font-size 1.4rem ≈ 22pt
+                        .font(.system(size: 16))
                         .foregroundStyle(Color.cTextSec)
                         .frame(width: 48, height: 52)
-                }
-                .overlay(alignment: .trailing) {
-                    Color.cBorder.frame(width: 0.5)  // web: border-right: 1px solid var(--border)
                 }
                 // Notes + Settings — visible only when expanded (clipped otherwise)
                 if sidebarExpanded {
@@ -472,7 +235,7 @@ struct ContentView: View {
                     } label: {
                         VStack(spacing: 3) {
                             Image(systemName: "note.text").font(.system(size: 13))
-                            Text("Notes").font(.system(size: 10, weight: .medium))  // web: 0.6rem ≈ 10pt
+                            Text("Notes").font(.system(size: 8, weight: .medium))
                         }
                         .foregroundStyle(Color.cTextSec)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -483,7 +246,7 @@ struct ContentView: View {
                     } label: {
                         VStack(spacing: 3) {
                             Image(systemName: "gearshape.fill").font(.system(size: 13))
-                            Text("Settings").font(.system(size: 10, weight: .medium))  // web: 0.6rem ≈ 10pt
+                            Text("Settings").font(.system(size: 8, weight: .medium))
                         }
                         .foregroundStyle(Color.cTextSec)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -491,32 +254,26 @@ struct ContentView: View {
                 }
             }
             .frame(height: 52)
-            // Safe area buffer — use actual safe area bottom (home indicator ~34pt on modern iPhones)
-            Color.clear.frame(height: max(34, UIApplication.shared.connectedScenes
-                .flatMap { ($0 as? UIWindowScene)?.windows ?? [] }
-                .first { $0.isKeyWindow }?.safeAreaInsets.bottom ?? 34))
         }
         .frame(width: sidebarExpanded ? 220 : 48)
         .frame(maxHeight: .infinity)
-        .background(Color(red: 0.04, green: 0.05, blue: 0.09).opacity(0.92))
+        .background(Color.canvas2)
         .overlay(alignment: .trailing) {
             Color.cBorder.opacity(0.6).frame(width: 0.5)
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.85), value: sidebarExpanded)
         .clipped()
-        .contentShape(Rectangle())
     }
 
     private func sidebarIcon(for voice: VoiceInfo) -> some View {
         let session   = vm.sessions.first { $0.voice == voice.id }
         let spawning  = vm.spawningVoiceIds.contains(voice.id)
-        let isSelected = !vm.isFocusMode && vm.activeSession?.voice == voice.id
+        let isSelected = vm.activeSession?.voice == voice.id
         let color     = voiceColor(voice.id)
         let alive     = session != nil || spawning
         let rc        = ringColor(session, spawning: spawning)
         let thinking  = session?.isThinking == true
         let hasUnread = (session?.unreadCount ?? 0) > 0
-        let inGroup   = !(session?.groupId ?? "").isEmpty
 
         return Button {
             if let s = session {
@@ -555,13 +312,6 @@ struct ContentView: View {
                             .frame(width: 7, height: 7)
                             .offset(x: 9, y: -9)
                     }
-                    // ⬡ group badge — bottom-right, blue, matches web .sb-group-badge
-                    if inGroup {
-                        Text("⬡")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(Color(hex: 0x0A84FF))
-                            .offset(x: 9, y: 9)
-                    }
                 }
 
                 // Left accent bar for selected state
@@ -581,91 +331,13 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
-            // Launch Session — only when no session (matches web ctx-launch)
-            if session == nil {
-                Button { vm.spawnSession(voiceId: voice.id) } label: {
-                    Label("Launch Session", systemImage: "play.circle")
-                }
-            }
-            // Mark as Unread / Read — matches web ctx-mark-unread / ctx-mark-read
-            if let s = session {
-                if s.unreadCount == 0 {
-                    Button { vm.markSessionUnread(s.id) } label: {
-                        Label("Mark as Unread", systemImage: "envelope.badge")
-                    }
-                } else {
-                    Button { vm.clearSessionUnread(s.id) } label: {
-                        Label("Mark as Read", systemImage: "checkmark.circle")
-                    }
-                }
-            }
-            // Set Role — matches web ctx-set-role submenu
-            if let s = session {
-                Menu {
-                    ForEach(["Manager", "Frontend", "Backend", "Researcher", "Worker"], id: \.self) { role in
-                        Button {
-                            vm.setSessionRole(s.id, role: role)
-                        } label: {
-                            if s.role.lowercased() == role.lowercased() {
-                                Label(role, systemImage: "checkmark")
-                            } else {
-                                Text(role)
-                            }
-                        }
-                    }
-                } label: {
-                    Label("Set Role", systemImage: "person.badge.key")
-                }
-            }
-            // Move to Project — matches web ctx-move-project submenu
-            if let s = session, !vm.knownProjects.isEmpty {
-                Menu {
-                    ForEach(vm.knownProjects, id: \.self) { proj in
-                        Button {
-                            vm.moveSessionToProject(s.id, project: proj)
-                        } label: {
-                            if s.project == proj {
-                                Label(proj, systemImage: "checkmark")
-                            } else {
-                                Text(proj)
-                            }
-                        }
-                    }
-                } label: {
-                    Label("Move to Project", systemImage: "folder")
-                }
-            }
-            // Add to Group Chat — matches web ctx-add-group submenu
-            if session != nil && !vm.knownGroupChats.isEmpty {
-                Menu {
-                    ForEach(vm.knownGroupChats, id: \.name) { gc in
-                        let isMember = gc.voices.contains(voice.id)
-                        Button {
-                            vm.toggleGroupChatMember(voiceId: voice.id, groupName: gc.name, isMember: isMember)
-                        } label: {
-                            if isMember { Label(gc.name, systemImage: "checkmark") }
-                            else { Text(gc.name) }
-                        }
-                    }
-                } label: {
-                    Label("Add to Group Chat", systemImage: "bubble.left.and.bubble.right")
-                }
-            }
-            // Reset — matches web ctx-reset
-            Button(role: .destructive) { resetVoiceId = voice.id; showResetConfirm = true } label: {
-                Label("Reset", systemImage: "arrow.counterclockwise")
-            }
-            // Disband Group Chat — matches web ctx-disband-group
-            if let s = session, !s.groupId.isEmpty {
-                Button(role: .destructive) { vm.disbandGroup(s.groupId) } label: {
-                    Label("Disband Group Chat", systemImage: "person.2.slash")
-                }
-            }
-            // Terminate Session — matches web ctx-terminate
             if let s = session {
                 Button(role: .destructive) { vm.terminateSession(s.id) } label: {
-                    Label("Terminate Session", systemImage: "xmark.circle")
+                    Label("End Session", systemImage: "xmark.circle")
                 }
+            }
+            Button(role: .destructive) { resetVoiceId = voice.id; showResetConfirm = true } label: {
+                Label("Reset History", systemImage: "trash")
             }
         }
     }
@@ -674,49 +346,26 @@ struct ContentView: View {
 
     private var welcomeView: some View {
         VStack(spacing: 0) {
-            // Welcome content — matches web #welcome-view: icon + title + subtitle
-            VStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(Color.cCard)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .strokeBorder(Color.cBorder, lineWidth: 1)
-                        )
-                        .shadow(color: .black.opacity(0.3), radius: 6, x: 0, y: 3)
-                        .frame(width: 60, height: 60)
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: 28))
-                        .foregroundStyle(Color.cAccent)
-                }
-                .padding(.bottom, 4)
-
-                Text("ClawMux")
-                    .font(.system(size: 18, weight: .bold))
-                    .kerning(-0.36)
-                    .foregroundStyle(Color.cTextSec)
-
-                if vm.isConnected {
-                    Text("Select an agent to begin")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color.cTextTer)
-                } else {
-                    Text(vm.serverURL.isEmpty ? "Tap Settings to configure server" : "Connecting…")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color.cTextTer)
-                    Button { vm.showSettings = true } label: {
-                        Label("Settings", systemImage: "gearshape.fill")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Color.cText)
-                            .padding(.horizontal, 20).padding(.vertical, 10)
-                            .background(Color.cCard, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.cBorder, lineWidth: 1))
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("ClawMux")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(Color.cText)
+                    HStack(spacing: 5) {
+                        let dotColor: Color = vm.isConnected ? .cSuccess : vm.isConnecting ? .cCaution : .cDanger
+                        Circle().fill(dotColor).frame(width: 7, height: 7)
+                        Text(vm.isConnected ? "Connected" : vm.isConnecting ? "Connecting…" : "Offline")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Color.cTextSec)
                     }
-                    .padding(.top, 4)
                 }
+                Spacer()
             }
-            .frame(maxWidth: .infinity)
-            .padding(.top, 32).padding(.bottom, 24)
+            .padding(.horizontal, 16).padding(.vertical, 12)
+            .background {
+                if #available(iOS 26, *) { Color.clear.glassEffect(.regular, in: .rect) }
+                else { Color.canvas1.opacity(0.95) }
+            }
 
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 0) {
@@ -807,144 +456,14 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Group Chat Card (mirrors web .sidebar-group-card)
-
-    private var activeGroups: [(groupId: String, name: String?, voices: [VoiceInfo])] {
-        var byGroup: [String: [String]] = [:]
-        for s in vm.sessions where !s.groupId.isEmpty {
-            if !(byGroup[s.groupId, default: []].contains(s.voice)) {
-                byGroup[s.groupId, default: []].append(s.voice)
-            }
-        }
-        return byGroup.map { gid, voiceIds in
-            let voices = ALL_VOICES.filter { voiceIds.contains($0.id) }
-            return (gid, vm.groupName(for: gid), voices)
-        }.sorted { $0.groupId < $1.groupId }
-    }
-
-    @ViewBuilder
-    private func groupCard(_ groupId: String, name: String? = nil, voices: [VoiceInfo]) -> some View {
-        let blue = Color(hex: 0x0A84FF)
-        let isSelected = !vm.isFocusMode && vm.activeGroupName == (name ?? groupId)
-        VStack(spacing: 0) {
-            // Header — tap to enter group chat mode
-            Button {
-                let firstName = name ?? groupId
-                var firstSid: String? = nil
-                for v in voices {
-                    if let s = vm.sessions.first(where: { $0.voice == v.id && !$0.isDead }) {
-                        firstSid = s.id
-                        break
-                    }
-                }
-                vm.switchToGroupChat(name: firstName, firstSessionId: firstSid)
-                withAnimation(.spring(response: 0.3)) { sidebarExpanded = false }
-            } label: {
-                HStack(spacing: 8) {
-                    // Stacked avatar circles — up to 4, -6px overlap (mirrors .sg-avatar)
-                    ZStack(alignment: .leading) {
-                        ForEach(Array(voices.prefix(4).enumerated()), id: \.offset) { i, v in
-                            Circle()
-                                .fill(voiceColor(v.id))
-                                .frame(width: 22, height: 22)
-                                .overlay(Circle().strokeBorder(Color.canvas2, lineWidth: 1.5))
-                                .offset(x: CGFloat(i) * 16)
-                        }
-                    }
-                    .frame(width: 22 + CGFloat(max(min(voices.count, 4) - 1, 0)) * 16, height: 22)
-
-                    // Info VStack: group name + member names (mirrors .gc-name + .gc-members-text)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(name ?? "GROUP CHAT")
-                            .font(.system(size: name != nil ? 12 : 8, weight: name != nil ? .semibold : .bold))
-                            .tracking(name != nil ? 0 : 0.5)
-                            .foregroundStyle(name != nil ? Color.cText : blue.opacity(0.85))
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                        Text(voices.map { $0.name }.joined(separator: ", "))
-                            .font(.system(size: 11))
-                            .foregroundStyle(Color.cTextSec)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    // × Disband button (mirrors .sg-disband)
-                    Button {
-                        vm.disbandGroup(groupId)
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(Color.cTextSec)
-                            .padding(4)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.horizontal, 8).padding(.vertical, 6)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-        }
-        .background(blue.opacity(isSelected ? 0.12 : 0.07), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(blue.opacity(0.35), lineWidth: 1))
-        // Left 3px inset bar when selected — mirrors web .sidebar-group-card.selected box-shadow: inset 3px 0 0 blue
-        .overlay(alignment: .leading) {
-            if isSelected {
-                RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .fill(blue)
-                    .frame(width: 3)
-                    .padding(.vertical, 8)
-                    .padding(.leading, 1)
-            }
-        }
-        .padding(.horizontal, 6).padding(.vertical, 2)
-    }
-
-    // Compact group icon for collapsed sidebar — stacked avatars in 48px strip
-    @ViewBuilder
-    private func groupIcon(_ groupId: String, voices: [VoiceInfo]) -> some View {
-        let blue = Color(hex: 0x0A84FF)
-        let groupName = vm.groupName(for: groupId) ?? groupId
-        Button {
-            var firstSid: String? = nil
-            for v in voices {
-                if let s = vm.sessions.first(where: { $0.voice == v.id && !$0.isDead }) {
-                    firstSid = s.id
-                    break
-                }
-            }
-            vm.switchToGroupChat(name: groupName, firstSessionId: firstSid)
-        } label: {
-            ZStack {
-                let shown = Array(voices.prefix(3))
-                ZStack(alignment: .leading) {
-                    ForEach(Array(shown.enumerated()), id: \.offset) { i, v in
-                        Circle()
-                            .fill(voiceColor(v.id))
-                            .frame(width: 16, height: 16)
-                            .overlay(Circle().strokeBorder(Color.canvas2, lineWidth: 1))
-                            .offset(x: CGFloat(i) * 11)
-                    }
-                }
-                .frame(width: 16 + CGFloat(max(shown.count - 1, 0)) * 11, height: 16)
-            }
-            .frame(width: 48, height: 44)
-            .background(blue.opacity(0.07))
-        }
-        .buttonStyle(.plain)
-    }
-
     private func agentCard(_ voice: VoiceInfo) -> some View {
         let session    = vm.sessions.first { $0.voice == voice.id }
         let spawning   = vm.spawningVoiceIds.contains(voice.id)
-        let isSelected = !vm.isFocusMode && vm.activeSession?.voice == voice.id
+        let isSelected = vm.activeSession?.voice == voice.id
         let color      = voiceColor(voice.id)
         let alive      = session != nil || spawning
         let thinking   = session?.isThinking == true
         let rc         = ringColor(session, spawning: spawning)
-
-        let dotPulsing = thinking || spawning || session?.state == .starting || session?.state == .compacting
 
         return Button {
             if let s = session {
@@ -954,24 +473,32 @@ struct ContentView: View {
             }
             withAnimation(.spring(response: 0.3)) { sidebarExpanded = false }
         } label: {
-            HStack(spacing: 8) {
-                // sb-icon: 34px circle with 2px state-color border + glow (hub.html .sb-icon 34×34)
+            HStack(spacing: 10) {
+                // Avatar + state ring
                 ZStack {
+                    if thinking {
+                        Circle()
+                            .strokeBorder(color.opacity(isPulsing ? 0.5 : 0.05), lineWidth: 6)
+                            .frame(width: 48, height: 48)
+                            .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: isPulsing)
+                    }
                     Circle()
                         .fill(color.opacity(alive ? 0.15 : 0.06))
-                    Circle()
-                        .strokeBorder(alive ? rc : Color.clear, lineWidth: 2)
-                        .shadow(color: rc.opacity(alive ? (dotPulsing ? (isPulsing ? 0.5 : 0.1) : 0.35) : 0), radius: 4)
-                        .animation(dotPulsing ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true) : .default, value: isPulsing)
+                        .frame(width: 36, height: 36)
+                    if alive {
+                        Circle()
+                            .strokeBorder(rc, lineWidth: 2)
+                            .frame(width: 36, height: 36)
+                            .shadow(color: rc.opacity(0.4), radius: 4)
+                    }
                     Image(systemName: voiceIcon(voice.id))
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(alive ? color : color.opacity(0.30))
                 }
-                .frame(width: 34, height: 34)
+                .frame(width: 48, height: 48)
 
-                // sb-info: name + area + role + task + status (hub.html hierarchy)
-                // This VStack starts at x=50 (8pad+32icon+10gap) — clipped at 48px when collapsed
-                VStack(alignment: .leading, spacing: 1) {
+                // Name + area + role + task + status  (hub.html hierarchy)
+                VStack(alignment: .leading, spacing: 2) {
                     Text(voice.name)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(alive ? color : Color.cTextTer)
@@ -980,26 +507,27 @@ struct ContentView: View {
                         if !s.projectArea.isEmpty {
                             Text(s.projectArea.uppercased())
                                 .font(.system(size: 8, weight: .semibold))
-                                .foregroundStyle(Color(hex: 0x0A84FF).opacity(0.75))
-                                .tracking(0.5)
+                                .foregroundStyle(Color.cAccent.opacity(0.85))
+                                .tracking(0.6)
                                 .lineLimit(1)
                         }
                         if !s.role.isEmpty {
                             Text(s.role.uppercased())
-                                .font(.system(size: 9, weight: .semibold))
+                                .font(.system(size: 9, weight: .medium))
                                 .foregroundStyle(Color.cTextTer)
-                                .tracking(0.6)
+                                .tracking(0.5)
                                 .lineLimit(1)
                         }
                         if !s.task.isEmpty {
                             Text(s.task)
                                 .font(.system(size: 9))
-                                .foregroundStyle(Color.cTextSec.opacity(0.8))
+                                .foregroundStyle(Color.cTextTer)
                                 .lineLimit(2).truncationMode(.tail)
                         }
                     }
-                    // sb-status: dot + text (hub.html .sb-dot + .sb-status)
+                    // Status dot + text matching web .sb-dot / .sb-status
                     HStack(alignment: .center, spacing: 4) {
+                        let dotPulsing = thinking || spawning || session?.state == .starting || session?.state == .compacting
                         Circle()
                             .fill(rc)
                             .frame(width: 6, height: 6)
@@ -1014,108 +542,57 @@ struct ContentView: View {
                     }
                 }
 
-                Spacer(minLength: 0)
+                Spacer()
 
-                // Badges (right side)
-                VStack(spacing: 4) {
-                    if let u = session?.unreadCount, u > 0 {
-                        Text("\(u)")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(minWidth: 20, minHeight: 20)
-                            .background(Color.cDanger, in: Circle())
-                    }
-                    if let s = session, !s.groupId.isEmpty {
-                        Text("⬡")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(Color(hex: 0x0A84FF))
-                    }
+                // Unread badge
+                if let u = session?.unreadCount, u > 0 {
+                    Text("\(u)")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(minWidth: 20, minHeight: 20)
+                        .background(Color.cDanger, in: Circle())
                 }
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(alive ? Color.cTextTer : Color(hex: 0x2A3A52))
             }
             .padding(.horizontal, 12).padding(.vertical, 7)
-            .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 ZStack(alignment: .leading) {
-                    // Selected bg: matches web .sidebar-card.selected { background: var(--selected-bg) }
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(isSelected ? Color.cAccent.opacity(0.08) : Color.cCard)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .strokeBorder(isSelected ? Color.cAccent.opacity(0.3) : Color.cBorder, lineWidth: 0.5)
+                        )
+                    // Left accent bar — always purple per web .sidebar-card.selected::before
                     if isSelected {
-                        Color(.systemPurple).opacity(0.08)
-                    }
-                    // Left accent bar: 3px × 55% height purple (hub.html .selected::before)
-                    if isSelected {
-                        Capsule()
-                            .fill(Color(.systemPurple))
-                            .frame(width: 3, height: 26)
-                            .shadow(color: Color(.systemPurple).opacity(0.6), radius: 3)
+                        RoundedRectangle(cornerRadius: 2, style: .continuous)
+                            .fill(Color.cAccent)
+                            .frame(width: 3)
+                            .padding(.vertical, 8)
+                            .shadow(color: Color.cAccent.opacity(0.6), radius: 4)
                     }
                 }
             )
         }
         .buttonStyle(.plain)
         .contextMenu {
-            if session == nil {
-                Button { vm.spawnSession(voiceId: voice.id) } label: {
-                    Label("Launch Session", systemImage: "play.circle")
-                }
-            }
             if let s = session {
-                if s.unreadCount == 0 {
-                    Button { vm.markSessionUnread(s.id) } label: {
-                        Label("Mark as Unread", systemImage: "envelope.badge")
-                    }
-                } else {
-                    Button { vm.clearSessionUnread(s.id) } label: {
-                        Label("Mark as Read", systemImage: "checkmark.circle")
-                    }
-                }
-                Menu {
-                    ForEach(["Manager", "Frontend", "Backend", "Researcher", "Worker"], id: \.self) { role in
-                        Button { vm.setSessionRole(s.id, role: role) } label: {
-                            if s.role.lowercased() == role.lowercased() { Label(role, systemImage: "checkmark") }
-                            else { Text(role) }
-                        }
-                    }
-                } label: { Label("Set Role", systemImage: "person.badge.key") }
-                if !vm.knownProjects.isEmpty {
-                    Menu {
-                        ForEach(vm.knownProjects, id: \.self) { proj in
-                            Button { vm.moveSessionToProject(s.id, project: proj) } label: {
-                                if s.project == proj { Label(proj, systemImage: "checkmark") }
-                                else { Text(proj) }
-                            }
-                        }
-                    } label: { Label("Move to Project", systemImage: "folder") }
-                }
-                if !vm.knownGroupChats.isEmpty {
-                    Menu {
-                        ForEach(vm.knownGroupChats, id: \.name) { gc in
-                            let isMember = gc.voices.contains(voice.id)
-                            Button {
-                                vm.toggleGroupChatMember(voiceId: voice.id, groupName: gc.name, isMember: isMember)
-                            } label: {
-                                if isMember { Label(gc.name, systemImage: "checkmark") }
-                                else { Text(gc.name) }
-                            }
-                        }
-                    } label: { Label("Add to Group Chat", systemImage: "bubble.left.and.bubble.right") }
-                }
-                if !s.groupId.isEmpty {
-                    Button(role: .destructive) { vm.disbandGroup(s.groupId) } label: {
-                        Label("Disband Group Chat", systemImage: "person.2.slash")
-                    }
-                }
                 Button(role: .destructive) { vm.terminateSession(s.id) } label: {
-                    Label("Terminate Session", systemImage: "xmark.circle")
+                    Label("End Session", systemImage: "xmark.circle")
                 }
             }
             Button(role: .destructive) { resetVoiceId = voice.id; showResetConfirm = true } label: {
-                Label("Reset", systemImage: "arrow.counterclockwise")
+                Label("Reset History", systemImage: "trash")
             }
         }
     }
 
     private func ringColor(_ session: VoiceSession?, spawning: Bool) -> Color {
         if spawning { return .cCaution }                  // yellow: starting up
-        guard let s = session else { return .cTextTer }  // offline: var(--text-tertiary)
+        guard let s = session else { return Color(hex: 0x48484A) }
         if s.state == .starting { return .cCaution }      // yellow: starting
         if s.unreadCount > 0   { return .cDanger }        // red: unread
         if s.state == .compacting { return .cCaution }    // yellow: compacting
@@ -1140,12 +617,19 @@ struct ContentView: View {
     private var chatMainView: some View {
         ZStack(alignment: .top) {
             if vm.showDebug {
-                DebugView(vm: vm)
+                VStack(spacing: 0) {
+                    chatHeader
+                    DebugView(vm: vm)
+                }
             } else {
                 VStack(spacing: 0) {
+                    chatHeader
                     chatScrollArea
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    bottomInputArea
+                        .overlay(alignment: .bottom) {
+                            bottomInputArea
+                                .frame(maxWidth: 380)
+                        }
                 }
             }
             // Copy toast
@@ -1154,41 +638,75 @@ struct ContentView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color.cText)
                     .padding(.horizontal, 18).padding(.vertical, 9)
-                    .background(Color.canvas2.opacity(0.90), in: Capsule())
+                    .background(Color.cCard, in: Capsule())
                     .overlay(Capsule().strokeBorder(Color.cBorder, lineWidth: 0.5))
-                    .shadow(color: .black.opacity(0.4), radius: 12)
+                    .shadow(color: .black.opacity(0.4), radius: 10)
                     .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
-                    .padding(.top, 12)
+                    .padding(.top, 68)
             }
         }
         .animation(.spring(response: 0.25, dampingFraction: 0.8), value: showCopiedToast)
     }
 
-    // MARK: - Chat Header (mirrors web #header mobile layout)
-    // Left: agent name · model · effort · mode toggle
-    // Right: connection dot (web header-pill)
-    // Settings/Notes hidden from header — they live in the sidebar tray
+    // MARK: - Chat Header (no back button — sidebar always visible)
 
     private var chatHeader: some View {
         let color = vm.activeSession.map { voiceColor($0.voice) } ?? Color.cTextSec
-        return HStack(spacing: 8) {
+        return HStack(spacing: 10) {
             if let s = vm.activeSession {
-                // Agent name — mirrors web #active-voice
-                Text(vm.showDebug ? "Debug" : s.label)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(color)  // agent voice color
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                    .layoutPriority(1)  // protect name from being squeezed by fixed-size pills
+                // Agent avatar
+                ZStack {
+                    Circle().fill(color.opacity(0.16)).frame(width: 32, height: 32)
+                    Image(systemName: voiceIcon(s.voice))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(color)
+                }
 
-                // Model label — mirrors web #model-label (clickable)
+                // Name + subtitle
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(vm.showDebug ? "Debug" : s.label)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color.cText)
+                        .lineLimit(1)
+                    Group {
+                        if !s.role.isEmpty || !s.task.isEmpty {
+                            HStack(spacing: 3) {
+                                if !s.role.isEmpty {
+                                    Text(s.role).italic().foregroundStyle(color.opacity(0.9))
+                                }
+                                if !s.role.isEmpty && !s.task.isEmpty {
+                                    Text("·").foregroundStyle(Color.cTextTer)
+                                }
+                                if !s.task.isEmpty {
+                                    Text(s.task).foregroundStyle(Color.cTextTer).lineLimit(1)
+                                }
+                            }
+                        } else if !s.project.isEmpty {
+                            Text(s.projectArea.isEmpty ? s.project : "\(s.project) · \(s.projectArea)")
+                                .foregroundStyle(Color.cTextTer).lineLimit(1)
+                        } else {
+                            let stateColor = ringColor(s, spawning: false)
+                            HStack(spacing: 4) {
+                                Circle().fill(stateColor).frame(width: 5, height: 5)
+                                Text(s.statusText.isEmpty ? "Idle" : s.statusText)
+                                    .foregroundStyle(Color.cTextTer)
+                            }
+                        }
+                    }
+                    .font(.system(size: 11))
+                }
+            }
+
+            Spacer()
+
+            // Model picker
+            if vm.activeSessionId != nil {
+                let cur = vm.activeSession?.model ?? ""
                 Menu {
                     ForEach([("opus","Opus"),("sonnet","Sonnet"),("haiku","Haiku")], id: \.0) { id, name in
                         Button {
-                            let cur = vm.activeSession?.model ?? ""
                             if cur != id { pendingModelSwitch = id; showModelRestartConfirm = true }
                         } label: {
-                            let cur = vm.activeSession?.model ?? ""
                             HStack {
                                 Text(name)
                                 if cur == id || (id == "opus" && cur.isEmpty) { Image(systemName: "checkmark") }
@@ -1196,104 +714,33 @@ struct ContentView: View {
                         }
                     }
                 } label: {
-                    Text(modelName(s.model))
-                        .font(.system(size: 9, weight: .medium))
+                    Text(modelName(vm.activeSession?.model ?? ""))
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundStyle(Color.cTextSec)
-                        .padding(.horizontal, 6).padding(.vertical, 3)
-                        .background(Color.glass, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
-                        .fixedSize()
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(Color.cCard, in: Capsule())
+                        .overlay(Capsule().strokeBorder(Color.cBorder, lineWidth: 0.5))
                 }
+            }
 
-                // Effort label — mirrors web #effort-label (clickable); hidden when haiku (matches web updateEffortLabel)
-                if s.model != "haiku" {
-                    Menu {
-                        ForEach(["high","medium","low"], id: \.self) { level in
-                            Button {
-                                if s.effort != level { pendingEffortSwitch = level; showEffortRestartConfirm = true }
-                            } label: {
-                                HStack { Text(level.capitalized); if s.effort == level { Image(systemName: "checkmark") } }
-                            }
-                        }
-                    } label: {
-                        Text(s.effort.isEmpty ? "High" : s.effort.capitalized)
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundStyle(Color.cTextTer)
-                            .padding(.horizontal, 6).padding(.vertical, 3)
-                            .background(Color.glass, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
-                            .fixedSize()
-                    }
-                }
-
-                // Mode toggle — mirrors web #mode-toggle (two-line: value + "MODE" label)
-                Button { cycleInputMode() } label: {
-                    VStack(spacing: 0) {
-                        Text(vm.typingMode ? "TEXT" : "VOICE")
-                            .font(.system(size: 8, weight: .semibold))
-                            .tracking(0.5)
-                        Text("MODE")
-                            .font(.system(size: 7, weight: .medium))
-                            .tracking(0.5)
-                            .opacity(0.7)
-                    }
+            // Settings
+            Button { vm.showSettings = true } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(Color.cTextSec)
-                    .lineLimit(1)
-                    .padding(.horizontal, 8).padding(.vertical, 2)
-                    .background(Color.glass, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
-                    .fixedSize()
-                }
+                    .frame(width: 36, height: 36)
+                    .background(Color.glass, in: Circle())
+                    .overlay(Circle().strokeBorder(Color.cBorder, lineWidth: 0.5))
             }
-
-            Spacer()
-
-            // Usage bar pill — mirrors web #usage-bar (ctx / 5h / 7d). Tap opens Settings.
-            let hasUsage = vm.contextPct != nil || vm.usage5hPct != nil || vm.usage7dPct != nil
-            if hasUsage {
-                Button { vm.showSettings = true } label: {
-                    HStack(spacing: 6) {
-                        if let pct = vm.contextPct {
-                            HStack(spacing: 2) {
-                                Text("ctx:").foregroundStyle(Color.cTextTer)
-                                Text("\(pct)%").foregroundStyle(usageColor(pct)).fontWeight(.semibold)
-                            }
-                        }
-                        if let pct = vm.usage5hPct {
-                            HStack(spacing: 2) {
-                                Text("5h:").foregroundStyle(Color.cTextTer)
-                                Text("\(pct)%").foregroundStyle(usageColor(pct)).fontWeight(.semibold)
-                            }
-                        }
-                        if let pct = vm.usage7dPct {
-                            HStack(spacing: 2) {
-                                Text("7d:").foregroundStyle(Color.cTextTer)
-                                Text("\(pct)%").foregroundStyle(usageColor(pct)).fontWeight(.semibold)
-                            }
-                        }
-                    }
-                    .font(.system(size: 9, weight: .medium))  // mobile web: font-size 0.72rem ≈ 9pt
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(Color.glass, in: Capsule())
-                    .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
-                }
-                .fixedSize() // prevent SwiftUI from compressing the usage pill
-            }
-
-            // Connection dot only — mobile web hides #conn-label text and #focus-link
-            let dotColor: Color = vm.isConnected ? .cSuccess : vm.isConnecting ? .cCaution : .cDanger
-            Circle()
-                .fill(dotColor)
-                .frame(width: 8, height: 8)
-                .scaleEffect(vm.isConnecting && isPulsing ? 1.15 : vm.isConnecting ? 0.7 : 1.0)
-                .opacity(vm.isConnecting && isPulsing ? 1.0 : vm.isConnecting ? 0.15 : 1.0)
-                .animation(vm.isConnecting ? .easeInOut(duration: 0.7).repeatForever(autoreverses: true) : .default, value: isPulsing)
-                .padding(6)
-                .background(Color.glass, in: Capsule())
-                .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
         }
-        .padding(.horizontal, 12).padding(.vertical, 5)  // mobile web: padding 3px 12px
-        .background(Color.canvas1.opacity(0.95))
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background {
+            if #available(iOS 26, *) {
+                Color.clear.glassEffect(.regular, in: .rect)
+            } else {
+                Color.canvas1.opacity(0.95)
+            }
+        }
     }
 
     private func modelName(_ m: String) -> String {
@@ -1303,78 +750,41 @@ struct ContentView: View {
     // MARK: - Chat Scroll Area
 
     private var chatScrollArea: some View {
-        // Voice-color ambient tint on the whole chat area — mirrors web #main-content backgroundColor
-        let areaTint = vm.activeSession.map { voiceColor($0.voice) } ?? Color.clear
-        return ScrollViewReader { proxy in
-            ZStack(alignment: .bottomTrailing) {
+        GeometryReader { geo in
+            ScrollViewReader { proxy in
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 20) {
-                            // Load older messages button (mirrors web ▲ Load older messages)
-                            if vm.activeSession?.hasOlderMessages == true {
-                                Button {
-                                    if let sid = vm.activeSessionId { vm.loadOlderMessages(sessionId: sid) }
-                                } label: {
-                                    Label("Load older messages", systemImage: "chevron.up")
-                                        .font(.system(size: 12, weight: .medium))
-                                        .foregroundStyle(Color.cTextTer)
-                                        .padding(.vertical, 6).padding(.horizontal, 12)
-                                        .background(Color.cCard.opacity(0.6), in: Capsule())
-                                        .overlay(Capsule().strokeBorder(Color.cBorder.opacity(0.5), lineWidth: 0.5))
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.top, 4)
-                            }
-                            Spacer(minLength: 0).frame(maxHeight: .infinity)
-                            ForEach(messageGroups) { group in
-                                messageGroupView(group)
-                                    .id(group.id)
-                                    .transition(.opacity.animation(.easeIn(duration: 0.55)))
-                            }
-                            if vm.activeSession?.isThinking == true {
-                                thinkingBubble.id("thinking")
-                                    .transition(.opacity.animation(.easeOut(duration: 0.18)))
-                            }
-                            // Bottom anchor
-                            Color.clear.frame(height: 1).id("bottom")
+                        Spacer(minLength: 0).frame(maxHeight: .infinity)
+                        ForEach(messageGroups) { group in
+                            messageGroupView(group)
+                                .id(group.id)
+                                .transition(.opacity.animation(.easeIn(duration: 0.55)))
                         }
-                        .padding(.horizontal, 24)
-                        .padding(.top, 20).padding(.bottom, 120)
-                    }
-                    .defaultScrollAnchor(.bottom)
-                    .id(vm.activeSessionId ?? "none")
-                    .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
-                    .onChange(of: vm.activeMessages.count)        { _, _ in scrollBottom(proxy) }
-                    .onChange(of: vm.activeSession?.isThinking)   { _, thinking in
-                        if thinking != true { thinkingExpanded = false }
-                        scrollBottom(proxy)
-                    }
-                    .onChange(of: vm.activeSession?.activity)     { _, _ in scrollBottom(proxy) }
-                    .onChange(of: vm.activeSessionId)             { _, _ in
-                        isAtBottom = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { scrollBottom(proxy) }
-                    }
-
-                    // Scroll-to-bottom FAB (mirrors web #scroll-bottom-btn)
-                    if !isAtBottom {
-                        Button {
-                            withAnimation(.spring(response: 0.3)) { proxy.scrollTo("bottom", anchor: .bottom) }
-                        } label: {
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(Color.cText)
-                                .frame(width: 32, height: 32)
-                                .background(Color.canvas2.opacity(0.90), in: Circle())
-                                .overlay(Circle().strokeBorder(Color.glassBorder, lineWidth: 0.5))
-                                .shadow(color: .black.opacity(0.4), radius: 8, x: 0, y: 2)
+                        if vm.activeSession?.isThinking == true {
+                            thinkingBubble.id("thinking")
                         }
-                        .padding(.trailing, 16)
-                        .padding(.bottom, 180)
-                        .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .bottomTrailing)))
-                        .animation(.spring(response: 0.25), value: isAtBottom)
+                        // Bottom anchor
+                        Color.clear.frame(height: 1).id("bottom")
                     }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 16).padding(.bottom, 170)
+                    .frame(minHeight: geo.size.height)
+                }
+                .defaultScrollAnchor(.bottom)
+                .id(vm.activeSessionId ?? "none")
+                .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
+                .onChange(of: vm.activeMessages.count)        { _, _ in scrollBottom(proxy) }
+                .onChange(of: vm.activeSession?.isThinking)   { _, thinking in
+                    if thinking != true { thinkingExpanded = false }
+                    scrollBottom(proxy)
+                }
+                .onChange(of: vm.activeSession?.activity)     { _, _ in scrollBottom(proxy) }
+                .onChange(of: vm.activeSessionId)             { _, _ in
+                    isAtBottom = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { scrollBottom(proxy) }
                 }
             }
-        .background(areaTint.opacity(0.10))
+        }
     }
 
     private func scrollBottom(_ proxy: ScrollViewProxy) {
@@ -1392,9 +802,8 @@ struct ContentView: View {
 
     private var messageGroups: [MessageGroup] {
         let filtered = vm.activeMessages.filter { msg in
+            if msg.role == "system" || msg.role == "agent" || msg.role == "activity" { return vm.verboseMode }
             if msg.isBareAck { return false }
-            if msg.role == "agent" { return vm.showAgentMessages }
-            if msg.role == "activity" { return vm.verboseMode }
             return true
         }
         var groups: [MessageGroup] = []
@@ -1428,43 +837,15 @@ struct ContentView: View {
         let color     = vm.activeSession.map { voiceColor($0.voice) } ?? Color.cTextSec
         let isPlaying = vm.ttsPlayingMessageId == msg.id
 
-        // Agent (inter-agent) messages: match web .msg.agent-msg — arrow+name header, collapsible body
+        // Agent (inter-agent) messages: compact inline style like web's agent-msg
         if role == "agent" {
-            // Parse "[Agent msg from/to Name] content" format
-            let agentMsgPattern = /^\[Agent msg (from|to) ([^\]]+)\] (.*)/
-            let isExpanded = expandedAgentMsgIds.contains(msg.id)
-            if let m = msg.text.firstMatch(of: agentMsgPattern) {
-                let direction = String(m.output.1)
-                let agentName = String(m.output.2)
-                let content   = String(m.output.3)
-                let arrow     = direction == "from" ? "←" : "→"
-                let agentColor = voiceColor(voiceIdByName(agentName))
-                return AnyView(
-                    VStack(alignment: .leading, spacing: 0) {
-                        // Header: arrow + agent name (colored) — always visible
-                        HStack(spacing: 4) {
-                            Text("\(arrow) \(agentName)")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(agentColor)
-                        }
-                        // Body: preview line when collapsed, full text when expanded
-                        Text(content)
-                            .font(.system(size: 11))
-                            .foregroundStyle(Color.cTextSec.opacity(0.9))
-                            .lineLimit(isExpanded ? nil : 1)
-                            .padding(.top, 2)
-                    }
+            return AnyView(
+                Text(msg.text)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.cTextSec.opacity(0.65))
+                    .lineLimit(3).truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(Color.cCard.opacity(0.4), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .opacity(isExpanded ? 1 : 0.85)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        withAnimation(.easeOut(duration: 0.15)) {
-                            if isExpanded { expandedAgentMsgIds.remove(msg.id) }
-                            else          { expandedAgentMsgIds.insert(msg.id) }
-                        }
-                    }
+                    .padding(.horizontal, 18).padding(.vertical, 2)
                     .contextMenu {
                         Button {
                             UIPasteboard.general.string = msg.text
@@ -1474,47 +855,36 @@ struct ContentView: View {
                             }
                         } label: { Label("Copy", systemImage: "doc.on.doc") }
                     }
-                )
-            }
-            // Fallback for non-matching agent text
-            return AnyView(
-                Text(msg.text)
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.cTextSec.opacity(0.65))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 10).padding(.vertical, 3)
             )
         }
 
         // Web-matched grouping: flatten tail corners in group, tail 4px on last
         let single = isFirst && isLast
         let tl: CGFloat = (role == "assistant" && !isFirst)  ? 8 : 16
-        let bl: CGFloat = role == "assistant" ? (isLast ? 5 : single ? 16 : 8) : 16
+        let bl: CGFloat = role == "assistant" ? (isLast ? 4 : single ? 16 : 8) : 16
         let tr: CGFloat = (role == "user"      && !isFirst)  ? 8 : 16
-        let br: CGFloat = role == "user"      ? (isLast ? 5 : single ? 16 : 8) : 16
+        let br: CGFloat = role == "user"      ? (isLast ? 4 : single ? 16 : 8) : 16
 
         let userBubbleColor = Color(hex: 0x2563EB)
         let bubbleBg: AnyShapeStyle = role == "user"
             ? AnyShapeStyle(userBubbleColor)
             : role == "assistant"
-                ? AnyShapeStyle(color.opacity(isPlaying ? 0.22 : 0.20))
+                ? AnyShapeStyle(isPlaying ? color.opacity(0.22) : Color.cCard)
                 : AnyShapeStyle(Color.clear)
 
         return AnyView(HStack(alignment: .bottom, spacing: 0) {
             if role == "user"   { Spacer(minLength: 56) }
             if role == "system" { Spacer() }
 
-            VStack(alignment: role == "user" ? .trailing : .leading, spacing: 3) {
-                // Bubble
+            VStack(alignment: role == "user" ? .trailing : .leading, spacing: 0) {
                 Group {
                     if role == "assistant" {
-                        MarkdownContentView(text: msg.text, foreground: Color.cText, fontSize: CGFloat(vm.chatFontSize))
+                        MarkdownContentView(text: msg.text, foreground: Color.cText)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } else if role == "user" {
                         Text(msg.text)
-                            .font(.system(size: CGFloat(vm.chatFontSize)))
+                            .font(.system(size: 15))
                             .lineSpacing(4)
-                            .tracking(CGFloat(vm.chatFontSize) * -0.01)
                             .foregroundStyle(Color.white)
                             .frame(maxWidth: .infinity, alignment: .trailing)
                     } else {
@@ -1524,71 +894,53 @@ struct ContentView: View {
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }
-                .padding(.horizontal, role == "system" ? 0 : 15)
-                .padding(.vertical, role == "system" ? 4 : 10)
-                .background(bubbleBg,
-                    in: UnevenRoundedRectangle(
-                        topLeadingRadius: tl, bottomLeadingRadius: bl,
-                        bottomTrailingRadius: br, topTrailingRadius: tr,
-                        style: .continuous))
-                // Voice tint moved to chatScrollArea background (matches web #main-content tint)
-                .overlay {
-                    if role == "assistant" {
-                        UnevenRoundedRectangle(
-                            topLeadingRadius: tl, bottomLeadingRadius: bl,
-                            bottomTrailingRadius: br, topTrailingRadius: tr,
-                            style: .continuous)
-                        .strokeBorder(
-                            isPlaying ? color.opacity(isPulsing ? 0.7 : 0.2) : Color(hex: 0x2A3A52),
-                            lineWidth: 1)
-                        .animation(
-                            isPlaying ? .easeInOut(duration: 1.0).repeatForever(autoreverses: true) : .default,
-                            value: isPulsing)
-                    }
-                }
-                .shadow(color: role == "assistant" ? Color.black.opacity(0.3) : Color.clear, radius: 3, x: 0, y: 1)
-                .contextMenu {
-                    if role == "assistant" {
-                        Button {
-                            vm.playMessageTTS(
-                                messageId: msg.id,
-                                text: msg.text,
-                                voice: vm.activeSession?.voice)
-                        } label: {
-                            Label(isPlaying ? "Stop Playing" : "Play",
-                                  systemImage: isPlaying ? "stop.fill" : "play.fill")
-                        }
-                        // 👍 user_ack — mirrors web context menu thumbs-up (non-user messages with ID)
-                        if let mid = msg.msgId {
-                            Button {
-                                vm.sendUserAck(msgId: mid)
-                                withAnimation { showCopiedToast = true }
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                                    withAnimation { showCopiedToast = false }
-                                }
-                            } label: {
-                                Label("Acknowledge", systemImage: "hand.thumbsup")
-                            }
-                        }
-                    }
-                    Button {
-                        UIPasteboard.general.string = msg.text
-                        withAnimation { showCopiedToast = true }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                            withAnimation { showCopiedToast = false }
-                        }
-                    } label: {
-                        Label("Copy", systemImage: "doc.on.doc")
-                    }
-                }
+                .padding(.horizontal, 15).padding(.top, 10).padding(.bottom, 4)
 
-                // Timestamp below bubble — shown only on last message in group (mirrors web .msg-ts)
-                if role != "system" && isLast {
+                if role != "system" {
                     Text(shortTime(msg.timestamp))
                         .font(.system(size: 9))
-                        .foregroundStyle(Color.cTextTer)
-                        .padding(.horizontal, 4)
+                        .foregroundStyle(role == "user" ? Color.white.opacity(0.45) : Color.cTextTer)
+                        .padding(.horizontal, 11).padding(.bottom, 6)
                         .frame(maxWidth: .infinity, alignment: role == "user" ? .trailing : .leading)
+                }
+            }
+            .background(bubbleBg,
+                in: UnevenRoundedRectangle(
+                    topLeadingRadius: tl, bottomLeadingRadius: bl,
+                    bottomTrailingRadius: br, topTrailingRadius: tr,
+                    style: .continuous))
+            .overlay(
+                // Voice color tint on assistant bubbles (matches web rgba(voiceColor, 0.20))
+                UnevenRoundedRectangle(
+                    topLeadingRadius: tl, bottomLeadingRadius: bl,
+                    bottomTrailingRadius: br, topTrailingRadius: tr,
+                    style: .continuous)
+                    .fill(role == "assistant" ? color.opacity(0.12) : Color.clear)
+            )
+            .overlay {
+                if role == "assistant" {
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: tl, bottomLeadingRadius: bl,
+                        bottomTrailingRadius: br, topTrailingRadius: tr,
+                        style: .continuous)
+                    .strokeBorder(
+                        isPlaying ? color.opacity(isPulsing ? 0.7 : 0.2) : Color(hex: 0x2A3A52),
+                        lineWidth: 0.5)
+                    .animation(
+                        isPlaying ? .easeInOut(duration: 1.0).repeatForever(autoreverses: true) : .default,
+                        value: isPulsing)
+                }
+            }
+            .shadow(color: role == "assistant" ? Color.black.opacity(0.3) : Color.clear, radius: 1.5, x: 0, y: 1)
+            .contextMenu {
+                Button {
+                    UIPasteboard.general.string = msg.text
+                    withAnimation { showCopiedToast = true }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        withAnimation { showCopiedToast = false }
+                    }
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
                 }
             }
 
@@ -1606,7 +958,8 @@ struct ContentView: View {
     // MARK: - Thinking Bubble
 
     private var thinkingBubble: some View {
-        let session  = vm.activeSession
+        let color   = vm.activeSession.map { voiceColor($0.voice) } ?? Color.cTextSec
+        let session = vm.activeSession
         let hasDetail = session.map { !$0.activity.isEmpty || !$0.toolName.isEmpty } ?? false
 
         return HStack(alignment: .bottom, spacing: 8) {
@@ -1618,41 +971,41 @@ struct ContentView: View {
                         thinkingExpanded.toggle()
                     }
                 } label: {
-                    // typing-main-row: gap 5px (matches web)
-                    HStack(spacing: 5) {
-                        // typingBounce dots — matches web CSS:
-                        // 0%,60%,100% { translateY(0), opacity 0.45 }  30% { translateY(-5px), opacity 1 }
-                        // period 1.3s, stagger 0.18s per dot, ease-in-out
+                    HStack(spacing: 8) {
+                        // Thinking dots — matches web thinkingPulse:
+                        // 0%,80%,100%{opacity:.15;scale:.7}  40%{opacity:1;scale:1.15}
+                        // Asymmetric: quick flash up, slow fade back, each dot staggered 0.24s
                         TimelineView(.animation) { tl in
                             HStack(spacing: 5) {
                                 ForEach(0..<3, id: \.self) { i in
                                     let t = tl.date.timeIntervalSinceReferenceDate
-                                    let period = 1.3
-                                    let phase = (t + Double(i) * 0.18).truncatingRemainder(dividingBy: period) / period
-                                    let (yOff, opacity): (Double, Double) = {
-                                        if phase < 0.3 {
-                                            let p = phase / 0.3
-                                            let e = p * p * (3 - 2 * p) // smoothstep ≈ ease-in-out
-                                            return (-5.0 * e, 0.45 + 0.55 * e)
-                                        } else if phase < 0.6 {
-                                            let p = (phase - 0.3) / 0.3
-                                            let e = p * p * (3 - 2 * p)
-                                            return (-5.0 * (1 - e), 1.0 - 0.55 * e)
+                                    let period = 1.2
+                                    let phase = (t + Double(i) * 0.24).truncatingRemainder(dividingBy: period) / period
+                                    // phase 0→0.4: ramp up (cubic ease-in), 0.4→0.8: ramp down, 0.8→1.0: hold dim
+                                    let (dotOpacity, dotScale): (Double, Double) = {
+                                        if phase < 0.4 {
+                                            let p = phase / 0.4
+                                            let eased = p * p * (3 - 2 * p) // smoothstep
+                                            return (0.15 + eased * 0.85, 0.7 + eased * 0.45)
+                                        } else if phase < 0.8 {
+                                            let p = (phase - 0.4) / 0.4
+                                            let eased = p * p * (3 - 2 * p)
+                                            return (1.0 - eased * 0.85, 1.15 - eased * 0.45)
                                         } else {
-                                            return (0, 0.45)
+                                            return (0.15, 0.7)
                                         }
                                     }()
                                     Circle()
-                                        .fill(Color.cTextTer.opacity(opacity)) // text-tertiary, not voice color
+                                        .fill(color.opacity(dotOpacity))
                                         .frame(width: 7, height: 7)
-                                        .offset(y: yOff)
+                                        .scaleEffect(dotScale)
                                 }
                             }
                         }
                         if hasDetail, let s = session {
                             let summary = s.activity.isEmpty ? s.toolName : s.activity
                             Text(summary)
-                                .font(.system(size: 11, weight: .medium)) // 0.78em ≈ 11pt
+                                .font(.system(size: 10, weight: .medium))
                                 .foregroundStyle(Color.cTextTer)
                                 .lineLimit(1).truncationMode(.middle)
                         }
@@ -1665,14 +1018,13 @@ struct ContentView: View {
                 }
                 .buttonStyle(.plain)
 
-                // Expanded detail (typing-log-expanded)
+                // Expanded detail
                 if thinkingExpanded, let s = session, hasDetail {
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: 2) {
                         if !s.activity.isEmpty {
                             Text(s.activity)
-                                .font(.system(size: 11, weight: .medium)) // .current line
-                                .foregroundStyle(Color.cTextSec)
-                                .lineLimit(2).truncationMode(.tail)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(color.opacity(0.9))
                         }
                         if !s.toolName.isEmpty {
                             Text(s.toolName)
@@ -1681,24 +1033,39 @@ struct ContentView: View {
                                 .lineLimit(2).truncationMode(.middle)
                         }
                     }
-                    .padding(.top, 7)
-                    .overlay(alignment: .top) {
-                        Divider().foregroundStyle(Color.cBorder)
-                    }
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
-            .padding(.horizontal, 14).padding(.vertical, 10) // matches web padding: 10px 14px
-            .background(Color.cCard,                          // matches web var(--bg-card)
+            .padding(.horizontal, 14).padding(.vertical, 11)
+            .background(Color.cCard,
                 in: UnevenRoundedRectangle(
                     topLeadingRadius: 18, bottomLeadingRadius: 4,
                     bottomTrailingRadius: 18, topTrailingRadius: 18,
                     style: .continuous))
-            // No voice color tint overlay — web typing indicator has no tint
-            // No border — web .msg-typing-indicator has no border
+            .overlay(
+                UnevenRoundedRectangle(
+                    topLeadingRadius: 18, bottomLeadingRadius: 4,
+                    bottomTrailingRadius: 18, topTrailingRadius: 18,
+                    style: .continuous)
+                    .fill(color.opacity(0.1))
+            )
+            .overlay(
+                UnevenRoundedRectangle(
+                    topLeadingRadius: 18, bottomLeadingRadius: 4,
+                    bottomTrailingRadius: 18, topTrailingRadius: 18,
+                    style: .continuous)
+                .strokeBorder(Color.cBorder, lineWidth: 0.5))
             .onAppear  { isPulsing = true }
             .onDisappear { isPulsing = false }
 
+            Button { vm.sendInterrupt() } label: {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.cDanger)
+                    .frame(width: 30, height: 30)
+                    .background(Color.cDanger.opacity(0.15), in: Circle())
+                    .overlay(Circle().strokeBorder(Color.cDanger.opacity(0.25), lineWidth: 0.5))
+            }
             Spacer(minLength: 40)
         }
     }
@@ -1767,16 +1134,25 @@ struct ContentView: View {
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
 
-                // Main row: cancel / mic / interrupt
+                // Main row: cancel / mic / text-hint
                 HStack(alignment: .center) {
-                    if vm.isRecording && !vm.pushToTalk {
-                        // Cancel recording (x) — matches web #mic-cancel (46×46, red, in mic-wrapper)
+                    if vm.isPlaying {
+                        // Stop TTS playback
+                        Button { vm.interruptPlayback() } label: {
+                            Image(systemName: "stop.fill")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(Color.cDanger)
+                                .frame(width: 44, height: 44)
+                                .background(Color.cDanger.opacity(0.12), in: Circle())
+                                .overlay(Circle().strokeBorder(Color.cDanger.opacity(0.25), lineWidth: 0.5))
+                        }
+                        .transition(.scale.combined(with: .opacity))
+                    } else if vm.isRecording && !vm.pushToTalk {
                         Button { vm.cancelRecording() } label: {
                             Image(systemName: "xmark").font(.system(size: 14, weight: .bold))
                                 .foregroundStyle(Color.cDanger)
-                                .frame(width: 46, height: 46)
-                                .background(Color.cDanger.opacity(0.10), in: Circle())
-                                .overlay(Circle().strokeBorder(Color.cDanger.opacity(0.30), lineWidth: 1))
+                                .frame(width: 40, height: 40)
+                                .background(Color.cDanger.opacity(0.15), in: Circle())
                         }
                         .transition(.scale.combined(with: .opacity))
                     } else if vm.isRecording && vm.pushToTalk {
@@ -1787,21 +1163,8 @@ struct ContentView: View {
                         .foregroundStyle(pttDragOffset < -80 ? Color.cDanger : Color.cTextTer)
                         .opacity(pttDragOffset < -10 ? min(1, Double(-pttDragOffset - 10) / 60) : 0.3)
                         .frame(width: 60).transition(.opacity)
-                    } else if vm.isPlaying || vm.isPlaybackPaused {
-                        // Transport pause — matches web #transport-pause (36×36, circular btn-icon)
-                        Button {
-                            if vm.isPlaybackPaused { vm.resumePlayback() } else { vm.pausePlayback() }
-                        } label: {
-                            Image(systemName: vm.isPlaybackPaused ? "play.fill" : "pause.fill")
-                                .font(.system(size: 14))
-                                .foregroundStyle(Color.cTextSec)
-                                .frame(width: 36, height: 36)
-                                .background(Color.cCard, in: Circle())
-                                .overlay(Circle().strokeBorder(Color.cBorder, lineWidth: 1))
-                        }
-                        .transition(.scale.combined(with: .opacity))
                     } else {
-                        Color.clear.frame(width: 60, height: 46)
+                        Color.clear.frame(width: 60, height: 40)
                     }
 
                     Spacer()
@@ -1851,16 +1214,16 @@ struct ContentView: View {
                         .opacity(pttDragOffset > 10 ? min(1, Double(pttDragOffset - 10) / 50) : 0.3)
                         .frame(width: 60).transition(.opacity)
                     } else if let s = vm.activeSession,
-                        s.isThinking || s.state == .starting || s.isSpeaking
+                        s.isThinking || s.state == .processing || s.state == .compacting
                     {
-                        // Interrupt button — mirrors web #voice-stop (red, 46×46)
+                        // Interrupt button — mirrors web #controls-right voice-stop
                         Button { vm.sendInterrupt() } label: {
                             Image(systemName: "stop.fill")
                                 .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(Color.cDanger)
-                                .frame(width: 46, height: 46)
-                                .background(Color.cDanger.opacity(0.10), in: Circle())
-                                .overlay(Circle().strokeBorder(Color.cDanger.opacity(0.30), lineWidth: 1))
+                                .foregroundStyle(Color.cWarning)
+                                .frame(width: 44, height: 44)
+                                .background(Color.cWarning.opacity(0.12), in: Circle())
+                                .overlay(Circle().strokeBorder(Color.cWarning.opacity(0.25), lineWidth: 0.5))
                         }
                         .transition(.scale.combined(with: .opacity))
                         .frame(width: 60)
@@ -1868,23 +1231,60 @@ struct ContentView: View {
                         Color.clear.frame(width: 60, height: 44)
                     }
                 }
-                .padding(.horizontal, 20).padding(.vertical, 14)
+                .padding(.horizontal, 16).padding(.top, 8)
 
-                // Status row — mirrors web #controls-status (grid-row: 3, centered, full-width)
-                if !vm.statusText.isEmpty {
-                    Text(vm.statusText)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(statusColor)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.horizontal, 8).padding(.top, 0).padding(.bottom, 4)
-                        .transition(.opacity)
+                // Status + mode + effort row
+                HStack(spacing: 8) {
+                    Button { cycleInputMode() } label: {
+                        VStack(spacing: 0) {
+                            Text(vm.typingMode ? "TYPING" : "VOICE")
+                                .font(.system(size: 8, weight: .semibold))
+                                .tracking(0.7)
+                            Text("MODE")
+                                .font(.system(size: 7, weight: .semibold))
+                                .tracking(0.7)
+                                .opacity(0.7)
+                        }
+                        .foregroundStyle(Color.cTextSec)
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background(Color.glass, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
+                    }
+                    if !vm.statusText.isEmpty {
+                        let sc = statusColor
+                        Text(vm.statusText)
+                            .font(.system(size: 11, weight: .semibold)).foregroundStyle(sc)
+                            .padding(.horizontal, 10).padding(.vertical, 4)
+                            .background(sc.opacity(0.12), in: Capsule())
+                    }
+                    Spacer()
+                    if let s = vm.activeSession {
+                        Menu {
+                            ForEach(["low","medium","high"], id: \.self) { level in
+                                Button { vm.sendEffort(level) } label: {
+                                    HStack { Text(level.capitalized); if s.effort == level { Image(systemName: "checkmark") } }
+                                }
+                            }
+                        } label: {
+                            Image(systemName: effortIcon(s.effort))
+                                .font(.system(size: 11)).foregroundStyle(Color.cTextSec)
+                                .frame(width: 28, height: 28)
+                                .background(Color.glass, in: Circle())
+                                .overlay(Circle().strokeBorder(Color.glassBorder, lineWidth: 0.5))
+                        }
+                    }
+                }
+                .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 4)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 10).padding(.bottom, 4)
+            .background {
+                if #available(iOS 26, *) {
+                    Color.clear
+                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+                } else {
+                    RoundedRectangle(cornerRadius: 28, style: .continuous).fill(.ultraThinMaterial)
                 }
             }
-            .padding(.horizontal, 12).padding(.vertical, 8).padding(.bottom, 2)
-            .background(
-                RoundedRectangle(cornerRadius: 28, style: .continuous).fill(Color.canvas2.opacity(0.92))
-            )
         }
         .padding(.horizontal, 8).padding(.bottom, 4)
     }
@@ -1892,78 +1292,62 @@ struct ContentView: View {
     // MARK: - Text Input Bar
 
     private var textInputBar: some View {
-        // Mirrors web #text-input-bar: single row [text-stop?] [textarea] [send]
-        // Container: padding 8px 12px, border-radius 20px, glass/blur
-        HStack(alignment: .bottom, spacing: 8) {
-            // Stop button — mirrors web #text-stop (38x38, red, in-flow, shown when agent working or speaking)
-            if let s = vm.activeSession, s.isThinking || s.state == .starting || s.isSpeaking {
-                Button { vm.sendInterrupt() } label: {
-                    Image(systemName: "stop.fill")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Color.cDanger)
-                        .frame(width: 38, height: 38)
-                        .background(Color.cDanger.opacity(0.10), in: Circle())
-                        .overlay(Circle().strokeBorder(Color.cDanger.opacity(0.30), lineWidth: 1))
-                }
-                .transition(.scale.combined(with: .opacity))
-            }
-
-            // File attach button — mirrors web drag-and-drop upload (POST /api/sessions/:id/upload)
-            Button { showFilePicker = true } label: {
-                Image(systemName: "paperclip")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(Color.cTextTer)
-                    .frame(width: 32, height: 32)
-            }
-
-            // Text input — mirrors web #text-input (flex:1, transparent, padding 8px 4px)
-            TextField("Type a message...", text: $vm.typingText, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: 15))
-                .lineLimit(1...5)
-                .foregroundStyle(Color.cText)
-                .padding(.horizontal, 4).padding(.vertical, 8)
-                .onSubmit { vm.sendText() }.submitLabel(.send)
-                .toolbar {
-                    ToolbarItemGroup(placement: .keyboard) {
-                        Spacer()
-                        Button {
-                            UIApplication.shared.sendAction(
-                                #selector(UIResponder.resignFirstResponder),
-                                to: nil, from: nil, for: nil)
-                        } label: {
-                            Image(systemName: "keyboard.chevron.compact.down")
-                                .foregroundStyle(Color.primary)
-                        }
+        VStack(spacing: 6) {
+            HStack(spacing: 8) {
+                Button { cycleInputMode() } label: {
+                    VStack(spacing: 0) {
+                        Text("VOICE")
+                            .font(.system(size: 8, weight: .semibold))
+                            .tracking(0.7)
+                        Text("MODE")
+                            .font(.system(size: 7, weight: .semibold))
+                            .tracking(0.7)
+                            .opacity(0.7)
                     }
+                    .foregroundStyle(Color.cTextSec)
+                    .padding(.horizontal, 7).padding(.vertical, 3)
+                    .background(Color.glass, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
                 }
+                if !vm.statusText.isEmpty {
+                    let sc = statusColor
+                    Text(vm.statusText)
+                        .font(.system(size: 11, weight: .semibold)).foregroundStyle(sc)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(sc.opacity(0.12), in: Capsule())
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
 
-            // Send button — mirrors web #text-send (38x38, blue circle)
-            Button { vm.sendText() } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundStyle(
-                        vm.typingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        ? Color.cTextTer : Color.cAccent)
+            HStack(spacing: 10) {
+                TextField("Message", text: $vm.typingText, axis: .vertical)
+                    .textFieldStyle(.plain).font(.subheadline).lineLimit(1...5)
+                    .foregroundStyle(Color.cText)
+                    .padding(.horizontal, 14).padding(.vertical, 10)
+                    .background(Color.glass, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
+                    .onSubmit { vm.sendText() }.submitLabel(.send)
+
+                Button { vm.sendText() } label: {
+                    Image(systemName: "arrow.up.circle.fill").font(.system(size: 30))
+                        .foregroundStyle(
+                            vm.typingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            ? Color.cTextTer : Color.cAccent)
+                }
+                .disabled(vm.typingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-            .disabled(vm.typingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .padding(.horizontal, 12).padding(.bottom, 8)
         }
-        .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color.canvas2.opacity(0.92))
-                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
-        )
-        .padding(.horizontal, 12).padding(.bottom, 8)  // wider margins clear rounded screen corners
-        .fileImporter(
-            isPresented: $showFilePicker,
-            allowedContentTypes: [.item],
-            allowsMultipleSelection: false
-        ) { result in
-            if case .success(let urls) = result, let url = urls.first {
-                vm.uploadFile(url: url)
+        .background {
+            if #available(iOS 26, *) {
+                Color.clear
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+            } else {
+                RoundedRectangle(cornerRadius: 28, style: .continuous).fill(.ultraThinMaterial)
             }
         }
+        .padding(.horizontal, 8).padding(.bottom, 4)
     }
 
     // MARK: - PTT Text Input Bar
@@ -2010,9 +1394,14 @@ struct ContentView: View {
             }
             .padding(.horizontal, 14).padding(.bottom, 8)
         }
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.canvas2.opacity(0.92))
-        )
+        .background {
+            if #available(iOS 26, *) {
+                Color.clear
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            } else {
+                RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.ultraThinMaterial)
+            }
+        }
         .padding(.horizontal, 8).padding(.bottom, 4)
         .onAppear { pttTextFieldFocused = true }
     }
@@ -2020,18 +1409,16 @@ struct ContentView: View {
     // MARK: - Waveform
 
     private var waveformView: some View {
-        // Mirrors web drawWaveform: voice color, opacity 0.35+level*0.65, bars 4px w / 2px gap
-        let waveColor = vm.activeSession.map { voiceColor($0.voice) } ?? Color.cAccent
-        return HStack(alignment: .center, spacing: 2) {
+        HStack(alignment: .center, spacing: 3) {
             ForEach(Array(vm.audioLevels.enumerated()), id: \.offset) { _, level in
-                RoundedRectangle(cornerRadius: 1.5)
-                    .fill(waveColor.opacity(0.35 + Double(level) * 0.65))
-                    .frame(width: 4, height: max(2, level * 8))
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Color.white.opacity(0.65 + Double(level) * 0.35))
+                    .frame(width: 3, height: max(4, level * 32))
                     .animation(.easeOut(duration: 0.08), value: level)
             }
         }
-        .frame(height: 12).frame(maxWidth: .infinity)
-        .padding(.horizontal, 20).padding(.vertical, 4)
+        .frame(height: 36).frame(maxWidth: .infinity)
+        .padding(.horizontal, 20).padding(.vertical, 6)
     }
 
     // MARK: - Mic Button
@@ -2041,30 +1428,30 @@ struct ContentView: View {
             // Pulsing glow ring during tap-to-record
             if vm.isRecording && !vm.pushToTalk {
                 Circle()
-                    .fill(micColor.opacity(0.18)).frame(width: 104, height: 104)
-                    .scaleEffect(isPulsing ? 1.12 : 1.0)
+                    .fill(micColor.opacity(0.18)).frame(width: 88, height: 88)
+                    .scaleEffect(isPulsing ? 1.15 : 1.0)
                     .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: isPulsing)
                 Circle()
                     .strokeBorder(micColor.opacity(isPulsing ? 0.5 : 0.1), lineWidth: 1.5)
-                    .frame(width: 104, height: 104)
+                    .frame(width: 88, height: 88)
                     .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: isPulsing)
             }
-            // Main button circle — matches web mobile #mic (80px)
+            // Main button circle
             Circle()
                 .fill(micColor)
-                .frame(width: 80, height: 80)
+                .frame(width: 68, height: 68)
                 .shadow(color: micColor.opacity(0.5), radius: 16, y: 4)
             // Inner highlight
             Circle()
                 .fill(LinearGradient(
                     colors: [.white.opacity(0.18), .clear],
                     startPoint: .topLeading, endPoint: .bottomTrailing))
-                .frame(width: 80, height: 80)
+                .frame(width: 68, height: 68)
             Image(systemName: micIcon)
-                .font(.system(size: 26, weight: .semibold))
+                .font(.system(size: 22, weight: .semibold))
                 .foregroundStyle(.white)
         }
-        .frame(width: 80, height: 80)
+        .frame(width: 92, height: 92)
     }
 
     private var micIcon: String {
@@ -2119,7 +1506,6 @@ private struct ScrollBottomDetector: ViewModifier {
 private struct MarkdownContentView: View {
     let text: String
     let foreground: Color
-    var fontSize: CGFloat = 15
 
     /// Parses inline markdown (bold, italic, `code`) using AttributedString so
     /// backtick code spans render as monospaced — LocalizedStringKey does not handle `code`.
@@ -2134,8 +1520,6 @@ private struct MarkdownContentView: View {
         case bullet(String)
         case numbered(String, String)
         case code(String, String)   // (language, content)
-        case blockquote(String)
-        case rule
         case spacing
     }
 
@@ -2160,27 +1544,17 @@ private struct MarkdownContentView: View {
             if line.hasPrefix("### ") { result.append(.header(3, String(line.dropFirst(4)))); i += 1; continue }
             if line.hasPrefix("## ")  { result.append(.header(2, String(line.dropFirst(3)))); i += 1; continue }
             if line.hasPrefix("# ")   { result.append(.header(1, String(line.dropFirst(2)))); i += 1; continue }
-            if line.hasPrefix("> ") { result.append(.blockquote(String(line.dropFirst(2)))); i += 1; continue }
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed == "---" || trimmed == "***" || trimmed == "___" { result.append(.rule); i += 1; continue }
-            let stripped = line.drop(while: { $0 == " " || $0 == "\t" })
-            if stripped.hasPrefix("- ") || stripped.hasPrefix("* ") || stripped.hasPrefix("+ ") {
-                result.append(.bullet(String(stripped.dropFirst(2)))); i += 1; continue
+            if line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("+ ") {
+                result.append(.bullet(String(line.dropFirst(2)))); i += 1; continue
             }
-            if let m = stripped.firstMatch(of: /^(\d+)\. (.+)/) {
+            if let m = line.firstMatch(of: /^(\d+)\. (.+)/) {
                 result.append(.numbered(String(m.output.1), String(m.output.2))); i += 1; continue
             }
             if line.trimmingCharacters(in: .whitespaces).isEmpty {
                 if case .spacing? = result.last {} else { result.append(.spacing) }
                 i += 1; continue
             }
-            // Merge consecutive plain text lines into one paragraph (matches web paragraph flow)
-            if case .text(let prev) = result.last {
-                result[result.count - 1] = .text(prev + "\n" + line)
-            } else {
-                result.append(.text(line))
-            }
-            i += 1
+            result.append(.text(line)); i += 1
         }
         return result
     }
@@ -2201,13 +1575,13 @@ private struct MarkdownContentView: View {
 
         case .text(let str):
             Text(Self.inlineMarkdown(str))
-                .font(.system(size: fontSize))
+                .font(.system(size: 15))
                 .foregroundStyle(foreground)
                 .lineSpacing(4)
                 .fixedSize(horizontal: false, vertical: true)
 
         case .header(let level, let str):
-            let sz: CGFloat = level == 1 ? fontSize + 4 : level == 2 ? fontSize + 1 : fontSize - 1
+            let sz: CGFloat = level == 1 ? 19 : level == 2 ? 16 : 14
             let wt: Font.Weight = level <= 2 ? .bold : .semibold
             Text(Self.inlineMarkdown(str))
                 .font(.system(size: sz, weight: wt))
@@ -2217,11 +1591,11 @@ private struct MarkdownContentView: View {
         case .bullet(let str):
             HStack(alignment: .top, spacing: 6) {
                 Text("•")
-                    .font(.system(size: fontSize))
+                    .font(.system(size: 15))
                     .foregroundStyle(Color.cTextSec)
                     .frame(width: 10)
                 Text(Self.inlineMarkdown(str))
-                    .font(.system(size: fontSize))
+                    .font(.system(size: 15))
                     .foregroundStyle(foreground)
                     .lineSpacing(1)
                     .fixedSize(horizontal: false, vertical: true)
@@ -2230,54 +1604,30 @@ private struct MarkdownContentView: View {
         case .numbered(let num, let str):
             HStack(alignment: .top, spacing: 6) {
                 Text("\(num).")
-                    .font(.system(size: fontSize))
+                    .font(.system(size: 15))
                     .foregroundStyle(Color.cTextSec)
                     .frame(width: 22, alignment: .trailing)
                 Text(Self.inlineMarkdown(str))
-                    .font(.system(size: fontSize))
+                    .font(.system(size: 15))
                     .foregroundStyle(foreground)
                     .lineSpacing(1)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-        case .blockquote(let str):
-            HStack(spacing: 8) {
-                RoundedRectangle(cornerRadius: 2).fill(Color.cTextTer.opacity(0.5)).frame(width: 3)
-                Text(Self.inlineMarkdown(str))
-                    .font(.system(size: fontSize))
-                    .foregroundStyle(foreground.opacity(0.75))
-                    .lineSpacing(2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.leading, 2)
-
-        case .rule:
-            Divider().background(Color.cBorder)
-
         case .code(let lang, let content):
             VStack(alignment: .leading, spacing: 0) {
-                // Header: language label + copy button (mirrors web .code-copy-btn)
-                HStack {
-                    Text(lang.isEmpty ? "code" : lang)
+                if !lang.isEmpty {
+                    Text(lang)
                         .font(.system(size: 9, weight: .medium, design: .monospaced))
                         .foregroundStyle(Color.cTextTer)
-                    Spacer()
-                    Button {
-                        UIPasteboard.general.string = content
-                    } label: {
-                        Image(systemName: "doc.on.doc")
-                            .font(.system(size: 10))
-                            .foregroundStyle(Color.cTextTer)
-                            .padding(4)
-                    }
+                        .padding(.horizontal, 10).padding(.top, 7).padding(.bottom, 2)
                 }
-                .padding(.horizontal, 10).padding(.top, 6).padding(.bottom, 2)
-
                 ScrollView(.horizontal, showsIndicators: false) {
                     Text(content)
                         .font(.system(size: 12, design: .monospaced))
                         .foregroundStyle(Color.cText)
                         .padding(.horizontal, 10)
+                        .padding(.vertical, lang.isEmpty ? 10 : 0)
                         .padding(.bottom, 8)
                         .fixedSize(horizontal: true, vertical: false)
                 }
@@ -2297,52 +1647,20 @@ private struct MarkdownContentView: View {
 
 // Stub — Nova replaces this with full /api/notes implementation
 struct NotesPanelView: View {
-    let baseURL: URL?
+    let serverURL: String
     let onDismiss: () -> Void
-
-    @State private var nowText: String = ""
-    @State private var laterText: String = ""
-    @State private var activeTab: String = "now"
-    @State private var saveStatus: String = ""
-
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Tab picker — matches web notes-tabs
-                Picker("Tab", selection: $activeTab) {
-                    Text("Now").tag("now")
-                    Text("Later").tag("later")
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 6)
-
-                // Editor
-                if activeTab == "now" {
-                    TextEditor(text: $nowText)
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color.cText)
-                        .scrollContentBackground(.hidden)
-                        .background(Color.clear)
-                        .padding(.horizontal, 12)
-                        .onChange(of: nowText) { _, _ in scheduleSave() }
-                } else {
-                    TextEditor(text: $laterText)
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color.cText)
-                        .scrollContentBackground(.hidden)
-                        .background(Color.clear)
-                        .padding(.horizontal, 12)
-                        .onChange(of: laterText) { _, _ in scheduleSave() }
-                }
-
-                // Save indicator — matches web .notes-save-indicator
-                if !saveStatus.isEmpty {
-                    Text(saveStatus)
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color.cTextTer)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 14).padding(.bottom, 6)
-                }
+            VStack(spacing: 16) {
+                Image(systemName: "note.text")
+                    .font(.system(size: 40))
+                    .foregroundStyle(Color.cTextTer)
+                Text("Notes")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(Color.cText)
+                Text("Coming soon")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.cTextSec)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.canvas1.ignoresSafeArea())
@@ -2350,44 +1668,7 @@ struct NotesPanelView: View {
             .navigationTitle("Notes")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { onDismiss() } } }
-            .onAppear { loadNotes() }
-            .onDisappear { saveNotes() }
         }
-    }
-
-    private func scheduleSave() {
-        saveStatus = "Saving…"
-        // Debounce — matches web 800ms save timer
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { saveNotes() }
-    }
-
-    private func loadNotes() {
-        guard let url = baseURL?.appendingPathComponent("api/notes") else { return }
-        URLSession.shared.dataTask(with: url) { data, _, _ in
-            guard let data,
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-            else { return }
-            DispatchQueue.main.async {
-                nowText   = json["now"]   as? String ?? ""
-                laterText = json["later"] as? String ?? ""
-                saveStatus = ""
-            }
-        }.resume()
-    }
-
-    private func saveNotes() {
-        guard let url = baseURL?.appendingPathComponent("api/notes") else { return }
-        var req = URLRequest(url: url)
-        req.httpMethod = "PUT"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try? JSONSerialization.data(withJSONObject: ["now": nowText, "later": laterText])
-        URLSession.shared.dataTask(with: req) { _, resp, _ in
-            DispatchQueue.main.async {
-                let ok = (resp as? HTTPURLResponse)?.statusCode == 200
-                saveStatus = ok ? "Saved" : "Save failed"
-                if ok { DispatchQueue.main.asyncAfter(deadline: .now() + 2) { saveStatus = "" } }
-            }
-        }.resume()
     }
 }
 
@@ -2520,8 +1801,6 @@ struct SettingsView: View {
     @ObservedObject var vm: ClawMuxViewModel
     @Environment(\.dismiss) var dismiss
     @State private var draftURL: String = ""
-    @State private var draftTTSURL: String = ""
-    @State private var draftSTTURL: String = ""
 
     var urlChanged: Bool { draftURL.trimmingCharacters(in: .whitespaces) != vm.serverURL.trimmingCharacters(in: .whitespaces) }
     var appVersion: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—" }
@@ -2530,7 +1809,6 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // Server (iOS-only — not in web settings)
                 Section("Server") {
                     TextField("Server URL", text: $draftURL)
                         .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
@@ -2548,89 +1826,50 @@ struct SettingsView: View {
                     }
                     Text("e.g. workstation.tailee9084.ts.net:3460").font(.caption).foregroundStyle(.secondary)
                 }
+                .onAppear { draftURL = vm.serverURL }
 
-                // Text-to-Speech
-                Section("Text-to-Speech") {
-                    Toggle("Enabled", isOn: $vm.ttsEnabled)
-                    if vm.ttsEnabled {
-                        TextField("TTS URL", text: $draftTTSURL)
-                            .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
-                            .onSubmit { vm.ttsURL = draftTTSURL.trimmingCharacters(in: .whitespaces) }
-                        Picker("Playback Speed", selection: Binding(get: { vm.activeSpeed }, set: { vm.activeSpeed = $0 })) {
+                if vm.activeSessionId != nil {
+                    Section("Active Session") {
+                        Picker("Speed", selection: Binding(get: { vm.activeSpeed }, set: { vm.activeSpeed = $0 })) {
                             ForEach(SPEED_OPTIONS, id: \.value) { Text($0.label).tag($0.value) }
                         }
-                        Toggle("Auto Interrupt", isOn: $vm.autoInterrupt)
-                            .onChange(of: vm.autoInterrupt) { _, v in vm.updateSetting("auto_interrupt", value: v) }
                     }
                 }
 
-                // Speech-to-Text
-                Section("Speech-to-Text") {
-                    Toggle("Enabled", isOn: $vm.sttEnabled)
-                    if vm.sttEnabled {
-                        TextField("STT URL", text: $draftSTTURL)
-                            .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
-                            .onSubmit { vm.sttURL = draftSTTURL.trimmingCharacters(in: .whitespaces) }
-                        Picker("Whisper Model", selection: $vm.whisperModel) {
-                            Text("High (large-v3)").tag("high")
-                            Text("Medium").tag("medium")
-                            Text("Low (base)").tag("low")
+                Section("Global") {
+                    Toggle("Haptics", isOn: $vm.globalHaptics)
+                        .onChange(of: vm.globalHaptics) { _, on in
+                            vm.hapticsRecordingAuto = on; vm.hapticsPlaybackAuto = on; vm.hapticsSessionAuto = on
+                            vm.hapticsRecordingPTT  = on; vm.hapticsPlaybackPTT  = on; vm.hapticsSessionPTT  = on
+                            vm.hapticsSend = on; vm.hapticsSessionTyping = on
                         }
-                        Toggle("Auto Record", isOn: $vm.autoRecord)
-                            .onChange(of: vm.autoRecord) { _, v in vm.updateSetting("auto_record", value: v) }
-                        Toggle("Auto End", isOn: $vm.vadEnabled)
-                            .onChange(of: vm.vadEnabled) { _, v in vm.updateSetting("auto_end", value: v) }
-                    }
+                    Toggle("Sounds", isOn: $vm.globalSounds)
+                        .onChange(of: vm.globalSounds) { _, on in
+                            vm.soundThinkingAuto = on; vm.soundListeningAuto = on; vm.soundProcessingAuto = on
+                            vm.soundReadyAuto = on; vm.soundThinkingPTT = on; vm.soundReadyPTT = on
+                        }
+                    Toggle("Notifications", isOn: $vm.globalNotifications)
+                        .onChange(of: vm.globalNotifications) { _, on in
+                            vm.notifyAuto = on; vm.notifyPTT = on; vm.notifyTyping = on
+                        }
                 }
 
-                // Agent
-                Section("Agent") {
-                    Picker("Default Model", selection: $vm.defaultModel) {
-                        Text("Opus").tag("opus")
-                        Text("Sonnet").tag("sonnet")
-                        Text("Haiku").tag("haiku")
-                    }
-                    Picker("Default Effort", selection: $vm.defaultEffort) {
-                        Text("High").tag("high")
-                        Text("Medium").tag("medium")
-                        Text("Low").tag("low")
-                    }
-                    Toggle("Silent Startup", isOn: $vm.silentStartup)
-                    Toggle("Show Agent Messages", isOn: $vm.showAgentMessages)
-                    Toggle("Verbose Activity Log", isOn: $vm.verboseMode)
-                        .onChange(of: vm.verboseMode) { _, v in vm.updateSetting("activity_verbose", value: v) }
-                    if vm.activeSession != nil {
-                        Toggle("Walking Mode", isOn: Binding(
-                            get: { vm.activeSession?.walkingMode ?? false },
-                            set: { _ in vm.toggleWalkingMode() }
-                        ))
-                    }
-                }
-
-                // Sounds
-                Section("Sounds") {
+                Section("Voice") {
+                    Toggle("Auto Record", isOn: $vm.autoRecord)
                     Toggle("Thinking Sounds", isOn: $vm.soundThinkingAuto)
-                        .onChange(of: vm.soundThinkingAuto) { _, v in vm.updateSetting("thinking_sounds", value: v) }
-                    Toggle("Audio Cues", isOn: $vm.soundListeningAuto)
-                        .onChange(of: vm.soundListeningAuto) { _, v in vm.updateSetting("audio_cues", value: v) }
+                    Toggle("Listening Cue", isOn: $vm.soundListeningAuto)
                 }
 
-                // Chat
-                Section("Chat") {
-                    HStack {
-                        Text("Text Size")
-                        Spacer()
-                        Button { if vm.chatFontSize > 10 { vm.chatFontSize -= 1 } } label: {
-                            Image(systemName: "minus").frame(width: 28, height: 28)
-                        }.buttonStyle(.bordered)
-                        Text("\(vm.chatFontSize)").font(.subheadline).frame(minWidth: 32, alignment: .center)
-                        Button { if vm.chatFontSize < 24 { vm.chatFontSize += 1 } } label: {
-                            Image(systemName: "plus").frame(width: 28, height: 28)
-                        }.buttonStyle(.bordered)
-                    }
+                Section { Toggle("Voice Responses", isOn: $vm.voiceResponses)
+                    .onChange(of: vm.voiceResponses) { _, v in vm.updateSetting("voice_responses", value: v) }
+                } footer: { Text("When off, the agent responds with text only — no speech.") }
+
+                Section {
+                    Toggle("Verbose Activity Log", isOn: $vm.verboseMode)
+                } header: { Text("Chat") } footer: {
+                    Text("Show agent tool use and system messages in chat. Off = minimal mode, only user and assistant messages.")
                 }
 
-                // Background Mode (iOS-only)
                 Section {
                     Toggle("Background Mode", isOn: $vm.backgroundMode)
                 } header: { Text("Background") } footer: {
@@ -2639,53 +1878,34 @@ struct SettingsView: View {
                          : "The WebSocket connection may drop when the app is backgrounded.")
                 }
 
-                // Live Activity (iOS-only)
-                Section {
-                    Toggle("Live Activity", isOn: $vm.liveActivityEnabled)
-                    if vm.liveActivityEnabled {
-                        Toggle("Auto Mode", isOn: $vm.liveActivityAuto)
-                        Toggle("Push to Talk", isOn: $vm.liveActivityPTT)
-                    }
-                } header: { Text("Live Activity") } footer: {
-                    Text(vm.liveActivityEnabled
-                         ? "Show session status on Dynamic Island and Lock Screen."
-                         : "Live Activity is disabled.")
-                }
-
-                // Usage
-                Section("Usage") {
-                    if let pct = vm.usage5hPct {
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text("5-hour window")
-                                if let r = vm.usage5hReset { Text("resets in \(r)").font(.caption2).foregroundStyle(.tertiary) }
+                if vm.usage5hPct != nil || vm.usage7dPct != nil {
+                    Section("Usage") {
+                        if let pct = vm.usage5hPct {
+                            HStack {
+                                Text("5-hour window"); Spacer()
+                                VStack(alignment: .trailing) {
+                                    Text("\(pct)%").font(.subheadline.bold())
+                                        .foregroundStyle(pct >= 80 ? Color(.systemRed) : pct >= 60 ? Color(.systemOrange) : Color(.systemGreen))
+                                    if let r = vm.usage5hReset { Text("resets in \(r)").font(.caption2).foregroundStyle(.tertiary) }
+                                }
                             }
-                            Spacer()
-                            Text("\(pct)%").font(.subheadline.bold())
-                                .foregroundStyle(pct >= 80 ? Color(.systemRed) : pct >= 60 ? Color(.systemOrange) : Color(.systemGreen))
+                        }
+                        if let pct = vm.usage7dPct {
+                            HStack {
+                                Text("7-day window"); Spacer()
+                                VStack(alignment: .trailing) {
+                                    Text("\(pct)%").font(.subheadline.bold())
+                                        .foregroundStyle(pct >= 80 ? Color(.systemRed) : pct >= 60 ? Color(.systemOrange) : Color(.systemGreen))
+                                    if let r = vm.usage7dReset { Text("resets in \(r)").font(.caption2).foregroundStyle(.tertiary) }
+                                }
+                            }
+                        }
+                        Button { UIImpactFeedbackGenerator(style: .light).impactOccurred(); vm.fetchUsage() } label: {
+                            Label("Refresh", systemImage: "arrow.clockwise")
                         }
                     }
-                    if let pct = vm.usage7dPct {
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text("7-day window")
-                                if let r = vm.usage7dReset { Text("resets in \(r)").font(.caption2).foregroundStyle(.tertiary) }
-                            }
-                            Spacer()
-                            Text("\(pct)%").font(.subheadline.bold())
-                                .foregroundStyle(pct >= 80 ? Color(.systemRed) : pct >= 60 ? Color(.systemOrange) : Color(.systemGreen))
-                        }
-                    }
-                    if vm.usage5hPct == nil && vm.usage7dPct == nil {
-                        Text("Loading…").foregroundStyle(.secondary)
-                    }
-                    Button { UIImpactFeedbackGenerator(style: .light).impactOccurred(); vm.fetchUsage() } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
-                    }
                 }
-                .onAppear { vm.fetchUsage() }
 
-                // Debug
                 Section("Debug") {
                     Button {
                         dismiss()
@@ -2705,11 +1925,6 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-            .onAppear {
-                draftURL    = vm.serverURL
-                draftTTSURL = vm.ttsURL
-                draftSTTURL = vm.sttURL
-            }
         }
     }
 }
