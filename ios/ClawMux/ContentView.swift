@@ -155,7 +155,7 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .overlay(alignment: .bottomTrailing) {
-            Text("build-52")
+            Text("build-\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?")")
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                 .foregroundStyle(Color.white.opacity(0.4))
                 .padding(6)
