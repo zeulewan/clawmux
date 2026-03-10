@@ -61,16 +61,37 @@ private func voiceIdByName(_ name: String) -> String {
 
 private func voiceIcon(_ id: String) -> String {
     switch id {
-    case "af_sky":   return "cloud.fill"
-    case "af_alloy": return "diamond.fill"
-    case "af_sarah": return "heart.fill"
-    case "af_nova":  return "sparkles"
-    case "am_adam":  return "leaf.fill"
-    case "am_echo":  return "waveform"
-    case "am_eric":  return "bolt.fill"
-    case "am_onyx":  return "shield.fill"
-    case "bm_fable": return "book.fill"
-    default:         return "person.fill"
+    // Project 1
+    case "af_sky":      return "cloud.fill"
+    case "af_alloy":    return "diamond.fill"
+    case "af_nova":     return "star.fill"
+    case "af_sarah":    return "heart.fill"
+    case "am_adam":     return "paperplane.fill"
+    case "am_echo":     return "waveform"
+    case "am_eric":     return "chart.line.uptrend.xyaxis"
+    case "am_onyx":     return "shield.fill"
+    case "bm_fable":    return "book.fill"
+    // Project 2
+    case "af_bella":    return "info.circle.fill"
+    case "af_jessica":  return "checkmark.circle.fill"
+    case "af_heart":    return "heart.fill"
+    case "am_michael":  return "shield.lefthalf.filled"
+    case "am_liam":     return "chevron.left.forwardslash.chevron.right"
+    case "am_fenrir":   return "globe"
+    case "bf_emma":     return "envelope.fill"
+    case "bm_george":   return "doc.fill"
+    case "bm_daniel":   return "music.note"
+    // Project 3
+    case "af_aoede":    return "music.note.list"
+    case "af_jadzia":   return "figure.walk"
+    case "af_kore":     return "target"
+    case "af_nicole":   return "heart.fill"
+    case "af_river":    return "water.waves"
+    case "am_puck":     return "face.smiling.fill"
+    case "bf_alice":    return "bookmark.fill"
+    case "bf_lily":     return "leaf.fill"
+    case "bm_lewis":    return "checklist"
+    default:            return "mic.fill"
     }
 }
 
@@ -110,21 +131,23 @@ struct ContentView: View {
             // Header — always full width, never covered by sidebar (matches mobile web #header z-index)
             topBarView
 
-            // Body + Sidebar ZStack — sidebar overlays content (matches web: position:absolute, margin-left:0)
-            // Content flows full-width under the sidebar so the glass blur has real content to render through
+            // Body + Sidebar ZStack — sidebar is a fixed-width glass overlay on the left
             ZStack(alignment: .leading) {
+                // Content offset 48px right so messages/input bars never go under collapsed sidebar
                 mainAreaView
+                    .padding(.leading, 48)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                // Dim overlay behind expanded sidebar
+                // Dim overlay behind expanded sidebar (starts at sidebar edge)
                 if sidebarExpanded {
                     Color.black.opacity(0.3)
                         .ignoresSafeArea()
+                        .padding(.leading, 48)
                         .onTapGesture { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { sidebarExpanded = false } }
                         .transition(.opacity)
                 }
 
-                // Sidebar (draws over content but NOT header)
+                // Sidebar glass overlay — floats over content edge for proper blur
                 sidebarStripView
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -274,10 +297,12 @@ struct ContentView: View {
                     }
                 }
                 .onAppear {
+                    // Re-fetch history every time view appears (catches race where fetch completed before view was ready)
+                    if let name = vm.activeGroupName { vm.fetchGroupHistory(groupName: name) }
                     proxy.scrollTo("gc-bottom", anchor: .bottom)
                 }
             }
-            // Empty state
+            // Empty state with refresh button
             if vm.groupMessages.isEmpty {
                 VStack(spacing: 10) {
                     Image(systemName: "bubble.left.and.bubble.right")
@@ -1145,7 +1170,8 @@ struct ContentView: View {
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(color)  // agent voice color
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .minimumScaleFactor(0.75)
+                    .layoutPriority(1)  // protect name from being squeezed by fixed-size pills
 
                 // Model label — mirrors web #model-label (clickable)
                 Menu {

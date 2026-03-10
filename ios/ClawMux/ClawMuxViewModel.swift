@@ -83,15 +83,36 @@ struct VoiceInfo: Identifiable {
 }
 
 let ALL_VOICES: [VoiceInfo] = [
-    VoiceInfo(id: "af_sky", name: "Sky"),
-    VoiceInfo(id: "af_alloy", name: "Alloy"),
-    VoiceInfo(id: "af_nova", name: "Nova"),
-    VoiceInfo(id: "af_sarah", name: "Sarah"),
-    VoiceInfo(id: "am_adam", name: "Adam"),
-    VoiceInfo(id: "am_echo", name: "Echo"),
-    VoiceInfo(id: "am_eric", name: "Eric"),
-    VoiceInfo(id: "am_onyx", name: "Onyx"),
-    VoiceInfo(id: "bm_fable", name: "Fable"),
+    // Project 1 — primary agents
+    VoiceInfo(id: "af_sky",     name: "Sky"),
+    VoiceInfo(id: "af_alloy",   name: "Alloy"),
+    VoiceInfo(id: "af_nova",    name: "Nova"),
+    VoiceInfo(id: "af_sarah",   name: "Sarah"),
+    VoiceInfo(id: "am_adam",    name: "Adam"),
+    VoiceInfo(id: "am_echo",    name: "Echo"),
+    VoiceInfo(id: "am_eric",    name: "Eric"),
+    VoiceInfo(id: "am_onyx",    name: "Onyx"),
+    VoiceInfo(id: "bm_fable",   name: "Fable"),
+    // Project 2
+    VoiceInfo(id: "af_bella",   name: "Bella"),
+    VoiceInfo(id: "af_jessica", name: "Jessica"),
+    VoiceInfo(id: "af_heart",   name: "Heart"),
+    VoiceInfo(id: "am_michael", name: "Michael"),
+    VoiceInfo(id: "am_liam",    name: "Liam"),
+    VoiceInfo(id: "am_fenrir",  name: "Fenrir"),
+    VoiceInfo(id: "bf_emma",    name: "Emma"),
+    VoiceInfo(id: "bm_george",  name: "George"),
+    VoiceInfo(id: "bm_daniel",  name: "Daniel"),
+    // Project 3
+    VoiceInfo(id: "af_aoede",   name: "Aoede"),
+    VoiceInfo(id: "af_jadzia",  name: "Jadzia"),
+    VoiceInfo(id: "af_kore",    name: "Kore"),
+    VoiceInfo(id: "af_nicole",  name: "Nicole"),
+    VoiceInfo(id: "af_river",   name: "River"),
+    VoiceInfo(id: "am_puck",    name: "Puck"),
+    VoiceInfo(id: "bf_alice",   name: "Alice"),
+    VoiceInfo(id: "bf_lily",    name: "Lily"),
+    VoiceInfo(id: "bm_lewis",   name: "Lewis"),
 ]
 
 let SPEED_OPTIONS: [(label: String, value: Double)] = [
@@ -1137,16 +1158,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         guard let idx = sessionIndex(sessionId),
               let baseURL = httpBaseURL() else { return }
         let session = sessions[idx]
-        // Find the oldest message with a server-assigned ID to use as the before-cursor
-        guard let oldestId = session.messages.first(where: { $0.msgId != nil })?.msgId else { return }
-        var comps = URLComponents(
-            url: baseURL.appendingPathComponent("api/history/\(session.voice)"),
-            resolvingAgainstBaseURL: false)!
-        comps.queryItems = [
-            URLQueryItem(name: "before", value: oldestId),
-            URLQueryItem(name: "limit", value: "50"),
-        ]
-        guard let url = comps.url else { return }
+        // Server has no before-cursor pagination — fetch full history and slice client-side
+        let url = baseURL.appendingPathComponent("api/history/\(session.voice)")
         URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
             guard let data,
                 let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -1154,7 +1167,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             else { return }
             Task { @MainActor in
                 guard let self, let i = self.sessionIndex(sessionId) else { return }
-                let older: [ChatMessage] = messages.compactMap { msg in
+                let all: [ChatMessage] = messages.compactMap { msg in
                     guard let role = msg["role"] as? String, let text = msg["text"] as? String else { return nil }
                     var m = ChatMessage(role: role, text: text)
                     if let ts = msg["ts"] as? Double { m.timestamp = Date(timeIntervalSince1970: ts) }
@@ -1163,12 +1176,20 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     if msg["bare_ack"] as? Bool == true { m.isBareAck = true }
                     return m
                 }
-                // Prepend — deduplicate by msgId
+                // Currently loaded messages are the last `currentCount` of the full history
+                let currentCount = self.sessions[i].messages.count
+                let totalCount = all.count
+                let olderEndIdx = max(0, totalCount - currentCount)
+                guard olderEndIdx > 0 else {
+                    self.sessions[i].hasOlderMessages = false
+                    return
+                }
+                let olderStartIdx = max(0, olderEndIdx - 50)
+                let older = Array(all[olderStartIdx..<olderEndIdx])
                 let existingIds = Set(self.sessions[i].messages.compactMap(\.msgId))
                 let newOlder = older.filter { $0.msgId == nil || !existingIds.contains($0.msgId!) }
                 self.sessions[i].messages = newOlder + self.sessions[i].messages
-                // If we got a full batch there may be even older messages
-                self.sessions[i].hasOlderMessages = older.count >= 50
+                self.sessions[i].hasOlderMessages = olderStartIdx > 0
             }
         }.resume()
     }
