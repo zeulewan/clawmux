@@ -1608,7 +1608,8 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   box-shadow: var(--shadow-lg);
   backdrop-filter: blur(16px);
 }
-#context-menu .ctx-has-submenu:hover > .ctx-submenu { display: block; }
+#context-menu .ctx-has-submenu:hover > .ctx-submenu,
+#context-menu .ctx-has-submenu.open > .ctx-submenu { display: block; }
 #context-menu .ctx-submenu .ctx-sub-item {
   padding: 8px 16px;
   font-size: 0.8rem;
@@ -1620,6 +1621,24 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 }
 #context-menu .ctx-submenu .ctx-sub-item:hover { background: rgba(128,128,128,0.1); }
 #context-menu .ctx-submenu .ctx-sub-item.active { color: var(--voice-color, #4a9eff); font-weight: 600; }
+/* Mobile: submenus expand inline below parent row instead of floating to the right */
+@media (max-width: 768px) {
+  #context-menu .ctx-submenu {
+    position: static;
+    left: auto;
+    top: auto;
+    box-shadow: none;
+    border: none;
+    border-left: 2px solid var(--border);
+    border-radius: 0;
+    margin: 2px 0 2px 12px;
+    padding: 2px 0;
+    min-width: unset;
+    background: transparent;
+    backdrop-filter: none;
+  }
+  #context-menu .ctx-submenu .ctx-sub-item { white-space: normal; }
+}
 /* Copy toast */
 #copy-toast {
   position: fixed;

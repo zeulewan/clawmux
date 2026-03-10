@@ -1999,10 +1999,26 @@ async function _toggleGroupMember(groupName, voiceId, isMember) {
 }
 
 function hideContextMenu() {
-  document.getElementById('context-menu').classList.remove('visible');
+  const menu = document.getElementById('context-menu');
+  menu.classList.remove('visible');
+  menu.querySelectorAll('.ctx-has-submenu.open').forEach(el => el.classList.remove('open'));
   contextMenuSessionId = null;
   contextMenuVoiceId = null;
 }
+
+// Tap-to-toggle submenus (mobile) + prevent document click from closing menu
+document.getElementById('context-menu').addEventListener('click', (e) => {
+  e.stopPropagation();
+  // If a sub-item was tapped, let its own handler run and stop here
+  if (e.target.closest('.ctx-sub-item')) return;
+  // If a submenu-parent row was tapped, toggle it open/closed
+  const parent = e.target.closest('.ctx-has-submenu');
+  if (parent) {
+    const isOpen = parent.classList.contains('open');
+    document.getElementById('context-menu').querySelectorAll('.ctx-has-submenu.open').forEach(el => el.classList.remove('open'));
+    if (!isOpen) parent.classList.add('open');
+  }
+});
 
 document.getElementById('ctx-launch').addEventListener('click', () => {
   if (contextMenuVoiceId) spawnSession(contextMenuVoiceId);
