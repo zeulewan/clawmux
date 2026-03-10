@@ -14,7 +14,6 @@ from hub_config import (
     DATA_DIR,
     HEALTH_CHECK_INTERVAL_SECONDS,
     HUB_PORT,
-    LEGACY_SESSION_DIR,
     SESSIONS_DIR,
     SESSION_TIMEOUT_MINUTES,
     TMUX_SESSION_PREFIX,
@@ -133,8 +132,6 @@ class SessionManager:
         self._on_session_death = on_session_death  # async callback(session_id)
         self._template_renderer = TemplateRenderer(agents_store) if agents_store else None
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-        if LEGACY_SESSION_DIR.exists():
-            log.info("Legacy session dir found at %s — will scan for orphans", LEGACY_SESSION_DIR)
 
     async def _sync_agent_store(self, voice_id: str, session: Session | None = None, **overrides) -> None:
         """Dual-write: update agents.json for a voice. If session is None, marks agent as dead."""
@@ -203,7 +200,16 @@ class SessionManager:
 
             # Adopt: create a Session object with the old session_id
             voice_name = voice_names_map.get(voice_id, voice_id)
-            adopt_project = entry.project or "default"
+            raw_project = entry.project or "default"
+            # Resolve display name → slug (guards against stale agents.json entries)
+            known = self.project_mgr.projects
+            if raw_project in known or raw_project == "default":
+                adopt_project = raw_project
+            else:
+                adopt_project = next(
+                    (slug for slug, p in known.items() if p.get("name") == raw_project),
+                    raw_project,
+                )
             work_dir = self.project_mgr.get_session_dir(voice_id, adopt_project)
             session = Session(
                 session_id=old_session_id,
@@ -267,8 +273,6 @@ class SessionManager:
                 log.warning("Killing unadoptable orphaned tmux session: %s", name)
                 await self.backend.terminate(name)
 
-        # Clean orphaned work dirs in SESSIONS_DIR only (our own directory).
-        # Never touch LEGACY_SESSION_DIR — it may belong to another hub instance.
         from hub_config import VOICE_POOL
         known_voice_ids = {v[0] for v in VOICE_POOL}
         project_slugs = set(self.project_mgr.projects.keys())
@@ -594,18 +598,11 @@ class SessionManager:
                             log.warning("on_session_death callback failed: %s", e)
                     continue
 
-                # Voice mode watchdog: detect agents that dropped out of wait loop
-                await self._voice_watchdog(session_id, session, now)
-
                 if timeout > 0:
                     idle = now - session.last_activity
                     if idle > timeout:
                         log.info("Session %s timed out (%.0fs idle)", session_id, idle)
                         await self.terminate_session(session_id)
-
-    async def _voice_watchdog(self, session_id: str, session: Session, now: float) -> None:
-        """Legacy watchdog — no-op in hub-push delivery model (v0.8.0+)."""
-        pass
 
     def _cleanup_workdir(self, session: Session) -> None:
         # Don't delete voice work dirs — they persist for --resume
