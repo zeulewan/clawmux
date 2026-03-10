@@ -2408,18 +2408,20 @@ examples:
     p.add_argument("agent", nargs="?", help="Voice ID to regenerate (default: all)")
     p.set_defaults(func=cmd_regenerate)
 
-    # project
-    p = sub.add_parser("project", help="Set project/area status in sidebar",
-                       description="Update the sidebar to show what project and area you're working on.",
-                       formatter_class=argparse.RawDescriptionHelpFormatter,
-                       epilog="""examples:
-    clawmux project voice-hub
-    clawmux project voice-hub --area frontend""")
-    p.add_argument("project", help="Project or repo name")
-    p.add_argument("--area", help="Sub-area (e.g. frontend, backend, docs)")
-    p.add_argument("--role", help="Agent role (e.g. Frontend, Backend)")
-    p.add_argument("--task", help="Current task description")
-    p.set_defaults(func=cmd_project)
+    # folder (canonical) + project (alias for backward compat)
+    for _cmd_name in ("folder", "project"):
+        _help = "Set project/area status in sidebar" if _cmd_name == "folder" else argparse.SUPPRESS
+        p = sub.add_parser(_cmd_name, help=_help,
+                           description="Update the sidebar to show what project and area you're working on.",
+                           formatter_class=argparse.RawDescriptionHelpFormatter,
+                           epilog="""examples:
+    clawmux folder voice-hub
+    clawmux folder voice-hub --area frontend""")
+        p.add_argument("project", help="Project or repo name")
+        p.add_argument("--area", help="Sub-area (e.g. frontend, backend, docs)")
+        p.add_argument("--role", help="Agent role (e.g. Frontend, Backend)")
+        p.add_argument("--task", help="Current task description")
+        p.set_defaults(func=cmd_project)
 
     # task
     p = sub.add_parser("task", help="Set current task description",

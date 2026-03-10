@@ -37,16 +37,18 @@ clawmux send --to echo 'Check the auth module'
 clawmux send --to sky --re msg-xxx 'Here is the answer'
 ```
 
-## Acknowledging a message (thumbs up)
+## Acknowledging a message (thumbs up / ACK)
 ```bash
 clawmux send --to sky --re msg-xxx
 ```
+
+A **thumbs up** (ACK) is a reply with no message body — just `--re <msg_id>` and nothing else. The hub renders it as a 👍 reaction on the original message. It means "got it" without saying anything out loud.
 
 **When the user sends a short affirmative** ("alright", "ok", "sounds good", "thanks", etc.) and no response is needed, ACK the message with a thumbs up instead of sending a reply. Use `clawmux send --to user --re <msg_id>` with no message body.
 
 ## Setting your project status
 ```bash
-clawmux project 'project-name' --area 'frontend'
+clawmux folder 'project-name' --area 'frontend'
 ```
 
 ## Updating your task status
@@ -96,8 +98,8 @@ You can read this file for context on what the user is focused on. Do not modify
 | `clawmux status <name>` | Show details for one agent | Yes |
 | `clawmux task 'description'` | Set your current task in sidebar | Yes |
 | `clawmux role <role>` | Set your role (must match a template) | Yes |
-| `clawmux project <name> --area <area>` | Set project/area in sidebar | Yes |
-| `clawmux projects` | List all projects | Yes |
+| `clawmux folder <name> --area <area>` | Set project/area in sidebar | Yes |
+| `clawmux projects` | List all folders | Yes |
 | `clawmux messages` | List recent inter-agent messages | Yes |
 | `clawmux search '<query>'` | Search all agent conversation histories | Yes |
 | `clawmux version` | Show version and commit | Yes |
