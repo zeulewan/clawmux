@@ -1857,6 +1857,13 @@ def cmd_monitor(args):
              "if-shell", f'[ "#{{session_name}}" = "{MONITOR_SESSION}" ]',
              f"kill-session -t ={MONITOR_SESSION}")
 
+    # Disable copy mode (Prefix+[) in the monitor — agent panes are read-only views.
+    # Use the mouse wheel to scroll. Falls back to normal copy-mode in non-monitor sessions.
+    tmux_run("bind-key", "-T", "prefix", "[",
+             "if-shell", f'[ "#{{session_name}}" = "{MONITOR_SESSION}" ]',
+             "display-message 'Use mouse wheel to scroll in monitor'",
+             "copy-mode")
+
     agents_list = ", ".join(s.get("label", "?") for s in agent_sessions)
     print(f"Monitor ready: {agents_list}")
 
