@@ -1792,6 +1792,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   padding: 14px;
   margin-bottom: 12px;
   max-width: 100%;
+  overflow-x: auto;
 }
 .debug-title {
   font-size: 0.75rem;
@@ -1802,17 +1803,14 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   letter-spacing: 0.05em;
 }
 .debug-table {
-  width: 100%;
-  table-layout: fixed;
   border-collapse: collapse;
+  min-width: 100%;
 }
 .debug-table th, .debug-table td {
   text-align: left;
   padding: 5px 8px;
   border-bottom: 1px solid var(--border);
-  overflow: hidden;
-  overflow-wrap: break-word;
-  word-break: break-all;
+  white-space: nowrap;
 }
 .debug-table th { color: var(--text-tertiary); font-weight: 600; font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.04em; }
 .debug-table td { font-size: 0.72rem; color: var(--text-secondary); }
