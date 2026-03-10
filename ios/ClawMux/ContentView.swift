@@ -1750,7 +1750,8 @@ struct ContentView: View {
             // No voice color tint overlay — web typing indicator has no tint
             // No border — web .msg-typing-indicator has no border
             .onAppear  { isPulsing = true }
-            .onDisappear { isPulsing = false }
+            // onDisappear intentionally omitted — setting isPulsing = false restarts
+            // all repeatForever animations simultaneously, causing a brightness flash
 
             Spacer(minLength: 40)
         }
