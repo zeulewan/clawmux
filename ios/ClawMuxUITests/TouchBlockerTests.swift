@@ -106,6 +106,11 @@ final class TouchBlockerTests: XCTestCase {
         saveScreenshot("hamburger_02_after_tap")
 
         // Now check for the specific sidebar tray buttons (not the main Settings button)
+        // Dump accessibility tree to diagnose why tray buttons aren't found
+        print("=== ACCESSIBILITY TREE AFTER HAMBURGER TAP ===")
+        print(app.debugDescription)
+        print("=== END TREE ===")
+
         let expanded = trayNotes.waitForExistence(timeout: 3) || traySettings.waitForExistence(timeout: 3)
         saveScreenshot("hamburger_03_expanded_state")
         XCTAssertTrue(expanded, "Sidebar tray should appear after hamburger tap — SidebarNotesButton or SidebarSettingsButton must exist")
