@@ -1931,10 +1931,16 @@ struct ContentView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 8).padding(.bottom, 2)
             .background {
+                // UnevenRoundedRectangle: top corners rounded, bottom flat so glass
+                // extends seamlessly behind the home indicator to the screen edge
+                let pillShape = UnevenRoundedRectangle(
+                    topLeadingRadius: 28, bottomLeadingRadius: 0,
+                    bottomTrailingRadius: 0, topTrailingRadius: 28,
+                    style: .continuous)
                 if #available(iOS 26, *) {
-                    Color.clear.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+                    Color.clear.glassEffect(.regular, in: pillShape).ignoresSafeArea(edges: .bottom)
                 } else {
-                    RoundedRectangle(cornerRadius: 28, style: .continuous).fill(.ultraThinMaterial)
+                    pillShape.fill(.ultraThinMaterial).ignoresSafeArea(edges: .bottom)
                 }
             }
         }
