@@ -2,12 +2,17 @@ import UIKit
 import SwiftUI
 import os.log
 
-/// Transparent pass-through UIWindow that logs every UIKit hitTest result via os_log.
+/// Transparent pass-through UIWindow that logs every UIKit hitTest result.
+/// Writes to Documents/debug_hits.txt (pullable via devicectl) and os_log.
 /// Install via DebugWindowInstaller() in any SwiftUI view body.
 final class DebugOverlayWindow: UIWindow {
 
     static var shared: DebugOverlayWindow?
     private static let log = Logger(subsystem: "com.zeul.clawmux", category: "HitTest")
+    private var logURL: URL? = {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("debug_hits.txt")
+    }()
 
     override init(windowScene: UIWindowScene) {
         super.init(windowScene: windowScene)
@@ -15,23 +20,31 @@ final class DebugOverlayWindow: UIWindow {
         isOpaque = false
         windowLevel = UIWindow.Level.normal + 1
         isHidden = false
+        // Clear old log on each launch
+        if let url = logURL { try? "".write(to: url, atomically: true, encoding: .utf8) }
     }
     required init?(coder: NSCoder) { fatalError() }
 
-    // Pass through all touches — we are only here to observe.
-    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool { false }
-
+    // NOTE: Do NOT override point(inside:) — that prevents hitTest from being called.
+    // Returning nil from hitTest passes the touch to the window below.
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        // Only log touch-began events to avoid spam.
         guard let event,
               event.allTouches?.first?.phase == .began else { return nil }
 
-        // Ask the real window what it would return (nil event = geometric check only).
         let mainWindow = windowScene?.windows.first(where: { !($0 is DebugOverlayWindow) })
         let hit = mainWindow?.hitTest(point, with: nil)
         let desc = hit.map { viewChain($0) } ?? "nil"
-        DebugOverlayWindow.log.info("TOUCH [\(Int(point.x)),\(Int(point.y))]: \(desc, privacy: .public)")
-        return nil
+        let line = "TOUCH [\(Int(point.x)),\(Int(point.y))]: \(desc)\n"
+
+        DebugOverlayWindow.log.info("\(line, privacy: .public)")
+        if let url = logURL {
+            if let handle = try? FileHandle(forWritingTo: url) {
+                handle.seekToEndOfFile()
+                handle.write(Data(line.utf8))
+                try? handle.close()
+            }
+        }
+        return nil  // pass through to main window
     }
 
     private func viewChain(_ v: UIView) -> String {
