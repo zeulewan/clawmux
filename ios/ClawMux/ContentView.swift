@@ -506,11 +506,23 @@ struct ContentView: View {
                 .frame(height: 52)
                 Color.clear.frame(height: 34)  // home indicator safe area
             }
-            .background(Color(red: 0.04, green: 0.05, blue: 0.09).opacity(0.92))
+            .background {
+                if #available(iOS 26, *) {
+                    Color.clear.glassEffect(.regular, in: .rect)
+                } else {
+                    Color(red: 0.04, green: 0.05, blue: 0.09).opacity(0.92)
+                }
+            }
         }
         .frame(width: sidebarExpanded ? 220 : 48)
         .frame(maxHeight: .infinity)
-        .background(Color(red: 0.04, green: 0.05, blue: 0.09).opacity(0.92))
+        .background {
+            if #available(iOS 26, *) {
+                Color.clear.glassEffect(.regular, in: .rect)
+            } else {
+                Color(red: 0.04, green: 0.05, blue: 0.09).opacity(0.92)
+            }
+        }
         .overlay(alignment: .trailing) {
             Color.cBorder.opacity(0.6).frame(width: 0.5)
         }
@@ -1311,7 +1323,13 @@ struct ContentView: View {
                 .overlay(Capsule().strokeBorder(Color.glassBorder, lineWidth: 0.5))
         }
         .padding(.horizontal, 12).padding(.vertical, 5)  // mobile web: padding 3px 12px
-        .background(.ultraThinMaterial)
+        .background {
+            if #available(iOS 26, *) {
+                Color.clear.glassEffect(.regular, in: .rect)
+            } else {
+                Color.canvas1.opacity(0.85).background(.ultraThinMaterial)
+            }
+        }
     }
 
     private func modelName(_ m: String) -> String {
