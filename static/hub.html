@@ -1276,7 +1276,7 @@ function renderProjectSettings() {
       renBtn.onclick = () => renameProject(opt.value, opt.textContent);
       btns.appendChild(renBtn);
     }
-    if (opt.value !== currentProject && opt.value !== 'default') {
+    if (opt.value !== 'default') {
       const delBtn = document.createElement('button');
       delBtn.textContent = 'Delete';
       delBtn.style.cssText = 'font-size:0.7rem;padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:none;color:#e63946;cursor:pointer;font-family:inherit;';
