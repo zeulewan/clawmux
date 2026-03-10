@@ -2528,6 +2528,12 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                         }
                     }
                 }
+                // Re-resolve activeGroupName if it was set to a raw groupId before map populated
+                if let current = self.activeGroupName,
+                   let resolvedName = self.groupIdToName[current], resolvedName != current {
+                    self.activeGroupName = resolvedName
+                    self.fetchGroupHistory(groupName: resolvedName)
+                }
             }
         }.resume()
     }
