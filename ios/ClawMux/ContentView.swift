@@ -519,10 +519,16 @@ struct ContentView: View {
         .frame(maxHeight: .infinity)
         .ignoresSafeArea(edges: .bottom)
         .background {
+            // Bottom corners rounded (matching pill radius) — hidden below screen edge via ignoresSafeArea
+            let sidebarShape = UnevenRoundedRectangle(
+                topLeadingRadius: 0, bottomLeadingRadius: 56,
+                bottomTrailingRadius: 56, topTrailingRadius: 0,
+                style: .continuous)
             if #available(iOS 26, *) {
-                Color.clear.glassEffect(.regular, in: .rect).ignoresSafeArea(edges: .bottom)
+                Color.clear.glassEffect(.regular, in: sidebarShape).ignoresSafeArea(edges: .bottom)
             } else {
-                Color(red: 0.04, green: 0.05, blue: 0.09).opacity(0.92).ignoresSafeArea(edges: .bottom)
+                sidebarShape.fill(Color(red: 0.04, green: 0.05, blue: 0.09).opacity(0.92))
+                    .ignoresSafeArea(edges: .bottom)
             }
         }
         .overlay(alignment: .trailing) {
@@ -1934,10 +1940,10 @@ struct ContentView: View {
                 // RoundedRectangle extends below the screen edge via ignoresSafeArea —
                 // bottom corners are hidden behind the screen, pill appears to flow off naturally
                 if #available(iOS 26, *) {
-                    Color.clear.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 56, style: .continuous))
+                    Color.clear.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 36, style: .continuous))
                         .ignoresSafeArea(edges: .bottom)
                 } else {
-                    RoundedRectangle(cornerRadius: 56, style: .continuous)
+                    RoundedRectangle(cornerRadius: 36, style: .continuous)
                         .fill(.ultraThinMaterial)
                         .ignoresSafeArea(edges: .bottom)
                 }
