@@ -17,6 +17,7 @@ from hub_config import (
     SESSIONS_DIR,
     SESSION_TIMEOUT_MINUTES,
     TMUX_SESSION_PREFIX,
+    VOICE_POOL,
     VOICES,
 )
 from agents_store import AgentEntry, AgentsStore
@@ -284,7 +285,6 @@ class SessionManager:
 
         # Kill orphaned tmux sessions that are in OUR agents.json but couldn't be adopted.
         # Only kill sessions we own — never touch tmux sessions from other hub instances.
-        from hub_config import VOICE_POOL
         known_tmux = {s.tmux_session for s in self.sessions.values()}
         our_session_ids = {e.session_id for e in all_agents.values() if e.session_id}
         # Also include all voice IDs so legacy voice-ID named sessions (af_bella, bm_daniel, etc.)
@@ -403,7 +403,7 @@ class SessionManager:
         if voice:
             # Use specified voice
             voice_id = voice
-            voice_name = pool_map.get(voice, dict(VOICES).get(voice, voice))
+            voice_name = pool_map.get(voice) or dict(VOICE_POOL).get(voice, voice)
         else:
             voice_id, voice_name = self._next_voice(project_slug)
 
