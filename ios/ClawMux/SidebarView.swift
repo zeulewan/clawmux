@@ -26,8 +26,41 @@ struct SidebarView: View {
                     Color.clear.frame(height: 60).id("sidebar-top")
                     let groups = projectGroups
                     let chatGroups = activeGroups
-                    if sidebarExpanded {
-                        // EXPANDED
+                    // ZStack keeps both branches always in the hierarchy — pure opacity crossfade,
+                    // no view creation/destruction so no layout jumps during transition.
+                    ZStack(alignment: .topLeading) {
+                        // COLLAPSED — always rendered, leading-aligned so icons stay at x=0
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(groups.namedProjects, id: \.self) { project in
+                                let voices = groups.byProject[project] ?? []
+                                let collapsed = collapsedProjects.contains(project)
+                                Button {
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                                        if collapsed { collapsedProjects.remove(project) }
+                                        else         { collapsedProjects.insert(project) }
+                                    }
+                                } label: {
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 6, weight: .bold))
+                                        .foregroundStyle(Color.cTextSec)
+                                        .rotationEffect(.degrees(collapsed ? 0 : 90))
+                                        .animation(.spring(response: 0.3), value: collapsed)
+                                        .frame(width: 48, height: 14)
+                                }
+                                if !collapsed {
+                                    ForEach(voices) { voice in
+                                        sidebarIcon(for: voice)
+                                    }
+                                }
+                            }
+                            ForEach(chatGroups, id: \.groupId) { g in
+                                groupIcon(g.groupId, voices: g.voices)
+                            }
+                        }
+                        .opacity(sidebarExpanded ? 0 : 1)
+                        .allowsHitTesting(!sidebarExpanded)
+
+                        // EXPANDED — always rendered
                         VStack(spacing: 0) {
                             ForEach(groups.namedProjects, id: \.self) { project in
                                 let voices = groups.byProject[project] ?? []
@@ -56,40 +89,10 @@ struct SidebarView: View {
                                 }
                             }
                         }
-                        .frame(maxWidth: .infinity)
-                        .transition(.opacity)
-                    } else {
-                        // COLLAPSED — leading alignment keeps icons at x=0 even while sidebar width animates
-                        VStack(alignment: .leading, spacing: 0) {
-                            ForEach(groups.namedProjects, id: \.self) { project in
-                                let voices = groups.byProject[project] ?? []
-                                let collapsed = collapsedProjects.contains(project)
-                                Button {
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                                        if collapsed { collapsedProjects.remove(project) }
-                                        else         { collapsedProjects.insert(project) }
-                                    }
-                                } label: {
-                                    Image(systemName: "chevron.right")
-                                        .font(.system(size: 6, weight: .bold))
-                                        .foregroundStyle(Color.cTextSec)
-                                        .rotationEffect(.degrees(collapsed ? 0 : 90))
-                                        .animation(.spring(response: 0.3), value: collapsed)
-                                        .frame(width: 48, height: 14)
-                                }
-                                if !collapsed {
-                                    ForEach(voices) { voice in
-                                        sidebarIcon(for: voice)
-                                    }
-                                }
-                            }
-                            ForEach(chatGroups, id: \.groupId) { g in
-                                groupIcon(g.groupId, voices: g.voices)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .transition(.opacity)
+                        .opacity(sidebarExpanded ? 1 : 0)
+                        .allowsHitTesting(sidebarExpanded)
                     }
+                    .frame(width: 220)
                 }
                 .padding(.vertical, 4)
         }
