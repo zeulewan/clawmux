@@ -12,7 +12,6 @@ struct SidebarView: View {
     @Binding var resetVoiceId: String?
     @Binding var showCreateGroupChat: Bool
     @Binding var newGroupChatName: String
-    @State private var contentExpanded = false
 
     var body: some View {
         sidebarStripView
@@ -27,7 +26,7 @@ struct SidebarView: View {
                     Color.clear.frame(height: 60).id("sidebar-top")
                     let groups = projectGroups
                     let chatGroups = activeGroups
-                    if contentExpanded {
+                    if sidebarExpanded {
                         // EXPANDED
                         VStack(spacing: 0) {
                             ForEach(groups.namedProjects, id: \.self) { project in
@@ -165,19 +164,9 @@ struct SidebarView: View {
             Color.cBorder.opacity(0.6).frame(width: 0.5)
         }
         .onChange(of: sidebarExpanded) { expanded in
-            if expanded {
-                // One-frame delay: let SwiftUI measure collapsed icon positions before switching
-                // content — matchedGeometryEffect then animates from correct origin, not (0,0)
-                DispatchQueue.main.async {
-                    guard sidebarExpanded else { return } // aborted if already collapsed
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { contentExpanded = true }
-                }
-            } else {
-                withAnimation(.easeIn(duration: 0.15)) { contentExpanded = false }
-                withAnimation { sidebarProxy.scrollTo("sidebar-top", anchor: .top) }
-            }
+            if !expanded { withAnimation { sidebarProxy.scrollTo("sidebar-top", anchor: .top) } }
         }
-        .animation(.spring(response: 0.22, dampingFraction: 0.9), value: sidebarExpanded)
+        .animation(.easeInOut(duration: 0.25), value: sidebarExpanded)
         } // ScrollViewReader
     }
 
