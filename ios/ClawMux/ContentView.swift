@@ -1936,10 +1936,10 @@ struct ContentView: View {
                 }
             }
         }
-        // Bottom padding = float gap above home indicator. canvas1+tint background
-        // (below) fills the remaining space + safe area zone with the right color.
-        .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 8)
-        // Fill home indicator zone with canvas1 + voice tint, matching mainAreaView
+        // ignoresSafeArea on the outer VStack so padding measures from actual screen
+        // bottom, not the safe area boundary — pill sits 16pt from screen edge on all sides
+        .ignoresSafeArea(edges: .bottom)
+        .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 16)
         .background {
             ZStack {
                 Color.canvas1
