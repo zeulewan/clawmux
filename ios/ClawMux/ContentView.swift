@@ -1170,10 +1170,9 @@ struct ContentView: View {
             } else {
                 chatScrollArea
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    // Input bar as safeAreaInset: separate layer so messages scroll behind it
-                    .safeAreaInset(edge: .bottom, spacing: 0) {
-                        bottomInputArea
-                    }
+                    // Overlay lets voiceControlBar position itself with true screen-edge padding.
+                    // Content margin compensates so messages don't scroll behind the input bar.
+                    .overlay(alignment: .bottom) { bottomInputArea }
             }
             // Copy toast
             if showCopiedToast {
@@ -1377,6 +1376,7 @@ struct ContentView: View {
                         .padding(.horizontal, 24)
                         .padding(.top, 64).padding(.bottom, 16)
                     }
+                    .contentMargins(.bottom, 140, for: .scrollContent)
                     .defaultScrollAnchor(.bottom)
                     .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
                     .onChange(of: vm.activeMessages.count)        { _, _ in scrollBottom(proxy) }
