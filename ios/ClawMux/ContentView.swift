@@ -23,21 +23,21 @@ private enum Theme {
 // MARK: - Canvas Colors (dark atmospheric palette)
 
 private extension Color {
-    static let canvas1     = Color(hex: 0x06090F)   // deep navy (matches browser --bg)
-    static let canvas2     = Color(hex: 0x0D1117)   // dark steel (matches browser --bg-secondary)
-    static let glass       = Color.white.opacity(0.06)
-    static let glassBright = Color.white.opacity(0.10)
-    static let glassBorder = Color.white.opacity(0.08)
-    static let cText       = Color(hex: 0xEEF2FF)   // browser --text
-    static let cTextSec    = Color(hex: 0x94A3B8)   // browser --text-secondary
-    static let cTextTer    = Color(hex: 0x7A8BA3)   // browser --text-tertiary
-    static let cAccent     = Color(hex: 0x818CF8)   // browser --blue (indigo, not blue!)
-    static let cDanger     = Color(hex: 0xFF453A)   // browser --red
-    static let cSuccess    = Color(hex: 0x30D158)   // browser --green
-    static let cWarning    = Color(hex: 0xFF9F0A)   // browser --orange
-    static let cCaution    = Color(hex: 0xFFD60A)   // browser --yellow (starting/connecting)
-    static let cCard       = Color(hex: 0x141B26)   // browser --bg-card
-    static let cBorder     = Color(hex: 0x1E2A3D)   // browser --border
+    static let canvas1     = Color(UIColor { tc in tc.userInterfaceStyle == .dark ? UIColor(hex: 0x06090F) : UIColor(hex: 0xF4F6FB) })
+    static let canvas2     = Color(UIColor { tc in tc.userInterfaceStyle == .dark ? UIColor(hex: 0x0D1117) : UIColor(hex: 0xEDF0F7) })
+    static let glass       = Color(UIColor { tc in tc.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(0.06) : UIColor.black.withAlphaComponent(0.06) })
+    static let glassBright = Color(UIColor { tc in tc.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(0.10) : UIColor.black.withAlphaComponent(0.10) })
+    static let glassBorder = Color(UIColor { tc in tc.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(0.08) : UIColor.black.withAlphaComponent(0.08) })
+    static let cText       = Color(UIColor { tc in tc.userInterfaceStyle == .dark ? UIColor(hex: 0xEEF2FF) : UIColor(hex: 0x0F172A) })
+    static let cTextSec    = Color(UIColor { tc in tc.userInterfaceStyle == .dark ? UIColor(hex: 0x94A3B8) : UIColor(hex: 0x3D4F6A) })
+    static let cTextTer    = Color(UIColor { tc in tc.userInterfaceStyle == .dark ? UIColor(hex: 0x7A8BA3) : UIColor(hex: 0x5A6E88) })
+    static let cAccent     = Color(UIColor { tc in tc.userInterfaceStyle == .dark ? UIColor(hex: 0x818CF8) : UIColor(hex: 0x007AFF) })
+    static let cDanger     = Color(UIColor { tc in tc.userInterfaceStyle == .dark ? UIColor(hex: 0xFF453A) : UIColor(hex: 0xFF3B30) })
+    static let cSuccess    = Color(UIColor { tc in tc.userInterfaceStyle == .dark ? UIColor(hex: 0x30D158) : UIColor(hex: 0x34C759) })
+    static let cWarning    = Color(UIColor { tc in tc.userInterfaceStyle == .dark ? UIColor(hex: 0xFF9F0A) : UIColor(hex: 0xFF9500) })
+    static let cCaution    = Color(UIColor { tc in tc.userInterfaceStyle == .dark ? UIColor(hex: 0xFFD60A) : UIColor(hex: 0xFFCC00) })
+    static let cCard       = Color(UIColor { tc in tc.userInterfaceStyle == .dark ? UIColor(hex: 0x141B26) : UIColor(hex: 0xFFFFFF) })
+    static let cBorder     = Color(UIColor { tc in tc.userInterfaceStyle == .dark ? UIColor(hex: 0x1E2A3D) : UIColor(hex: 0xD8DDE8) })
 }
 
 // MARK: - File-level Helpers
@@ -176,7 +176,6 @@ struct ContentView: View {
             topBarView
         }
         .background(Color.canvas1.ignoresSafeArea())
-        .preferredColorScheme(.dark)
         .onAppear { isPulsing = true }
         .sheet(isPresented: $vm.showSettings) { SettingsView(vm: vm) }
         .sheet(isPresented: $vm.showNotes) { NotesPanelView(baseURL: vm.httpBaseURL()) { vm.showNotes = false } }
@@ -2570,7 +2569,6 @@ struct NotesPanelView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.clear)
-            .preferredColorScheme(.dark)
             .navigationTitle("Notes")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { onDismiss() } } }
@@ -3069,5 +3067,13 @@ extension Color {
             green: Double((hex >> 8)  & 0xFF) / 255,
             blue:  Double( hex        & 0xFF) / 255
         )
+    }
+}
+
+private extension UIColor {
+    convenience init(hex: UInt) {
+        self.init(red: CGFloat((hex >> 16) & 0xFF) / 255,
+                  green: CGFloat((hex >> 8) & 0xFF) / 255,
+                  blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
     }
 }
