@@ -227,45 +227,36 @@ final class TouchBlockerTests: XCTestCase {
         // We should now be in a chat view — verify ChatScrollView exists
         let chatScroll = app.scrollViews["ChatScrollView"].firstMatch
         XCTAssertTrue(chatScroll.waitForExistence(timeout: 8), "ChatScrollView should exist after opening agent chat")
-
-        // Wait for history fetch to complete (need hasOlderMessages=true before scrolling)
-        sleep(6)
         saveScreenshot("infinitescroll_06_chat_visible")
 
-        // Helper: swipe to top (100 messages = lots of content; use 12 fast swipes)
-        func swipeToTop() {
-            for _ in 0..<12 { chatScroll.swipeDown(velocity: .fast) }
-        }
         let loadingSpinner = app.activityIndicators.firstMatch
 
-        // Helper: wait for spinner to appear and clear
-        func waitForLoad() -> Bool {
-            let seen = loadingSpinner.waitForExistence(timeout: 5)
+        // Helper: wait for spinner to appear and then clear (polls up to 15s)
+        func waitForLoad(timeout: TimeInterval = 15) -> Bool {
+            let seen = loadingSpinner.waitForExistence(timeout: timeout)
             if seen {
                 for _ in 0..<15 { if !loadingSpinner.exists { break }; sleep(1) }
             }
             return seen
         }
 
-        // --- Round 1: scroll to top ---
-        swipeToTop()
-        sleep(2)
-        saveScreenshot("infinitescroll_07_after_scroll1")
-        let spinnerSeen1 = waitForLoad()
-        saveScreenshot("infinitescroll_09_after_load1")
+        // --- Round 1: watch for auto-trigger immediately (short visible content → distanceFromTop fires) ---
+        // Do NOT sleep — catch the very first spinner cycle triggered by history loading
+        let spinnerSeen1 = waitForLoad(timeout: 15)
+        saveScreenshot("infinitescroll_07_after_round1")
 
-        // --- Round 2: scroll to top again ---
-        swipeToTop()
+        // --- Round 2: swipe to top and trigger again ---
+        for _ in 0..<12 { chatScroll.swipeDown(velocity: .fast) }
         sleep(2)
         saveScreenshot("infinitescroll_10_after_scroll2")
-        let spinnerSeen2 = waitForLoad()
+        let spinnerSeen2 = waitForLoad(timeout: 5)
         saveScreenshot("infinitescroll_12_after_load2")
 
-        // --- Round 3: scroll to top a third time ---
-        swipeToTop()
+        // --- Round 3: swipe to top again ---
+        for _ in 0..<12 { chatScroll.swipeDown(velocity: .fast) }
         sleep(2)
         saveScreenshot("infinitescroll_13_after_scroll3")
-        let spinnerSeen3 = waitForLoad()
+        let spinnerSeen3 = waitForLoad(timeout: 5)
         saveScreenshot("infinitescroll_15_final")
 
         // At minimum, the app must still be alive and the scroll view must exist
