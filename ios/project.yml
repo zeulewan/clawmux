@@ -19,6 +19,12 @@ targets:
           BUILD=$(git -C "$SRCROOT" rev-list HEAD --count 2>/dev/null || echo "1")
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD" "$INFOPLIST_FILE"
         basedOnDependencyAnalysis: false
+      - name: Set Git Commit Hash
+        script: |
+          HASH=$(git -C "$SRCROOT" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+          /usr/libexec/PlistBuddy -c "Set :GIT_COMMIT_HASH $HASH" "$INFOPLIST_FILE" 2>/dev/null || \
+          /usr/libexec/PlistBuddy -c "Add :GIT_COMMIT_HASH string $HASH" "$INFOPLIST_FILE"
+        basedOnDependencyAnalysis: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.zeul.clawmux
