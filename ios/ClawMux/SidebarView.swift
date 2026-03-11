@@ -75,7 +75,6 @@ struct SidebarView: View {
                                         .foregroundStyle(Color.cTextSec)
                                         .rotationEffect(.degrees(collapsed ? 0 : 90))
                                         .animation(.spring(response: 0.3), value: collapsed)
-                                        .matchedGeometryEffect(id: "chevron_\(project)", in: sidebarNS)
                                         .frame(width: 48, height: 14)
                                 }
                                 if !collapsed {
@@ -370,7 +369,6 @@ struct SidebarView: View {
                         .foregroundStyle(Color.cTextTer)
                         .rotationEffect(.degrees(collapsed ? 0 : 90))
                         .animation(.spring(response: 0.3), value: collapsed)
-                        .matchedGeometryEffect(id: "chevron_\(project)", in: sidebarNS)
                     Text(project.uppercased())
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(Color.cTextTer)
@@ -429,7 +427,6 @@ struct SidebarView: View {
             } label: {
                 HStack(spacing: 8) {
                     groupCluster(Array(voices.prefix(5)))
-                        .matchedGeometryEffect(id: "group_cluster_\(groupId)", in: sidebarNS)
                         .frame(width: 34, height: 34)
 
                     VStack(alignment: .leading, spacing: 1) {
@@ -543,12 +540,9 @@ struct SidebarView: View {
             }
             vm.switchToGroupChat(name: groupName, firstSessionId: firstSid)
         } label: {
-            ZStack {
-                Color.clear.frame(width: 48, height: 44)
-                groupCluster(voices)
-                    .matchedGeometryEffect(id: "group_cluster_\(groupId)", in: sidebarNS)
-            }
-            .background(blue.opacity(0.07))
+            groupCluster(voices)
+                .frame(width: 48, height: 44)
+                .background(blue.opacity(0.07))
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("GroupChatIcon-\(groupId)")

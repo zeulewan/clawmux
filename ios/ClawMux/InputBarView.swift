@@ -248,20 +248,8 @@ struct InputBarView: View {
                 .lineLimit(1...5)
                 .foregroundStyle(Color.cText)
                 .padding(.horizontal, 4).padding(.vertical, 8)
-                .submitLabel(.send)
-                .onSubmit { vm.sendText() }
+                .submitLabel(.return)
                 .focused($typingFieldFocused)
-
-            // Keyboard dismiss button — only visible when keyboard is up, moves with pill
-            if typingFieldFocused {
-                Button { typingFieldFocused = false } label: {
-                    Image(systemName: "keyboard.chevron.compact.down")
-                        .font(.system(size: 16))
-                        .foregroundStyle(Color.cTextSec)
-                        .frame(width: 32, height: 32)
-                }
-                .transition(.opacity)
-            }
 
             // Send button — mirrors web #text-send (38x38, blue circle)
             Button { vm.sendText() } label: {
@@ -269,7 +257,7 @@ struct InputBarView: View {
                     .font(.system(size: 30))
                     .foregroundStyle(
                         vm.typingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        ? Color.cTextTer : Color.cAccent)
+                        ? Color.cTextTer : Color(hex: 0x007AFF))
             }
             .disabled(vm.typingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
