@@ -1172,8 +1172,23 @@ async def interrupt_session(session_id: str):
         return JSONResponse({"error": str(e)}, status_code=500)
     log.info("Interrupted session %s (tmux: %s)", session_id, tmux_name)
 
-    # Signal idle so hub re-delivers any pending inbox messages after interrupt
-    asyncio.create_task(asyncio.sleep(3))  # Let Claude Code settle before hub can inject
+    # After Escape, Claude Code may not fire its Stop hook — force idle after a delay.
+    async def _delayed_idle():
+        await asyncio.sleep(3)
+        session.set_state(AgentState.IDLE)
+        session.activity = ""
+        session.tool_name = ""
+        session.tool_input = {}
+        await send_to_browser({"session_id": session_id, "type": "listening", "state": "idle"})
+        await send_to_browser({
+            "type": "session_status",
+            "session_id": session_id,
+            "state": session.state.value,
+            "activity": "",
+            "tool_name": "",
+            "tool_input": {},
+        })
+    asyncio.create_task(_delayed_idle())
 
     return JSONResponse({"status": "interrupted"})
 
@@ -1368,6 +1383,9 @@ async def agent_idle(session_id: str):
     IDLE state and schedules a tmux injection if inbox has pending messages.
     """
     session = session_mgr.sessions.get(session_id)
+    if not session:
+        # Legacy sessions may use voice_id (e.g. af_sarah) instead of label (sarah)
+        session = next((s for s in session_mgr.sessions.values() if s.voice == session_id), None)
     if not session or not session.work_dir:
         return JSONResponse({"ok": False, "reason": "session not found"})
 
