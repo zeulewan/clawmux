@@ -1373,7 +1373,7 @@ struct ContentView: View {
                             ForEach(messageGroups) { group in
                                 messageGroupView(group)
                                     .id(group.id)
-                                    .transition(.opacity.animation(.easeIn(duration: 0.55)))
+                                    .transition(.opacity.animation(.easeIn(duration: 0.15)))
                             }
                             if vm.activeSession?.isThinking == true {
                                 thinkingBubble.id("thinking")
@@ -1401,11 +1401,11 @@ struct ContentView: View {
                     }
                     .onChange(of: vm.activeSession?.activity)     { _, _ in scrollBottom(proxy) }
                     .onChange(of: vm.activeSessionId)             { _, _ in
-                        // Unconditional scroll — bypass isAtBottom guard to avoid race with ScrollBottomDetector
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            proxy.scrollTo("bottom", anchor: .bottom)
-                            isAtBottom = true
-                        }
+                        // Instant jump to bottom on agent switch — no animation so user lands there immediately
+                        var t = Transaction()
+                        t.disablesAnimations = true
+                        withTransaction(t) { proxy.scrollTo("bottom", anchor: .bottom) }
+                        isAtBottom = true
                     }
 
                     // Scroll-to-bottom FAB (mirrors web #scroll-bottom-btn)
