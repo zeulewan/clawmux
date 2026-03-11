@@ -786,8 +786,8 @@ struct ContentView: View {
         var byProject: [String: [VoiceInfo]] = [:]
         for voice in ALL_VOICES {
             // Active session project takes precedence; fall back to static VoiceInfo.project
-            let project = vm.sessions.first { $0.voice == voice.id }?.project
-                           .flatMap { $0.isEmpty ? nil : $0 } ?? voice.project
+            let sessionProject = vm.sessions.first(where: { $0.voice == voice.id })?.project ?? ""
+            let project = sessionProject.isEmpty ? voice.project : sessionProject
             byProject[project, default: []].append(voice)
         }
         let ordered = ["Default", "Personal", "Extended"] + byProject.keys.filter {
