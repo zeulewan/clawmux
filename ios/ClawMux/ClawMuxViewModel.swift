@@ -60,6 +60,7 @@ struct VoiceSession: Identifiable {
     var projectArea: String = ""
     var role: String = ""
     var task: String = ""
+    var projectRepo: String = ""
     var model: String = ""
     var effort: String = ""
     var activity: String = ""
@@ -1482,6 +1483,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                             if let effort = s["effort"] as? String, !effort.isEmpty { sessions[idx].effort = effort }
                             if let project = s["project"] as? String { sessions[idx].project = project }
                             if let area = s["project_area"] as? String { sessions[idx].projectArea = area }
+                            if let repo = s["project_repo"] as? String { sessions[idx].projectRepo = repo }
                             if let unread = s["unread_count"] as? Int { sessions[idx].unreadCount = unread }
                             if let gid = s["group_id"] as? String { sessions[idx].groupId = gid }
                             if let wm = s["walking_mode"] as? Bool { sessions[idx].walkingMode = wm }
@@ -1816,6 +1818,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 sessions[idx].projectArea = json["area"] as? String ?? ""
                 sessions[idx].role = json["role"] as? String ?? ""
                 sessions[idx].task = json["task"] as? String ?? ""
+                sessions[idx].projectRepo = json["project_repo"] as? String ?? ""
             }
 
         case "groupchat_created", "groupchat_updated":
@@ -1910,6 +1913,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         session.projectArea = dict["project_area"] as? String ?? ""
         session.role = dict["role"] as? String ?? ""
         session.task = dict["task"] as? String ?? ""
+        session.projectRepo = dict["project_repo"] as? String ?? ""
         session.model = dict["model"] as? String ?? ""
         session.effort = dict["effort"] as? String ?? ""
         session.activity = dict["activity"] as? String ?? ""

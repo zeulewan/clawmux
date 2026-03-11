@@ -1047,6 +1047,12 @@ struct ContentView: View {
                                 .tracking(0.5)
                                 .lineLimit(1)
                         }
+                        if !s.projectRepo.isEmpty {
+                            Text(s.projectRepo)
+                                .font(.system(size: 8, weight: .regular))
+                                .foregroundStyle(Color(hex: 0x3A86FF).opacity(0.75))
+                                .lineLimit(1)
+                        }
                         if !s.role.isEmpty {
                             Text(s.role.uppercased())
                                 .font(.system(size: 9, weight: .semibold))
