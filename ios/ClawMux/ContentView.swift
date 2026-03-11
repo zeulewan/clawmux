@@ -439,9 +439,30 @@ struct ContentView: View {
                             }
                         }
                     } else {
-                        // Collapsed: all agent icons, then group icons at bottom
-                        ForEach(ALL_VOICES) { voice in
-                            sidebarIcon(for: voice)
+                        // Collapsed: folder-grouped icons with chevron collapse buttons
+                        let groups = projectGroups
+                        ForEach(groups.namedProjects, id: \.self) { project in
+                            let voices = groups.byProject[project] ?? []
+                            let collapsed = collapsedProjects.contains(project)
+                            // Folder chevron button
+                            Button {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                                    if collapsed { collapsedProjects.remove(project) }
+                                    else         { collapsedProjects.insert(project) }
+                                }
+                            } label: {
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 6, weight: .bold))
+                                    .foregroundStyle(Color.cTextSec)
+                                    .rotationEffect(.degrees(collapsed ? 0 : 90))
+                                    .animation(.spring(response: 0.3), value: collapsed)
+                                    .frame(width: 48, height: 14)
+                            }
+                            if !collapsed {
+                                ForEach(voices) { voice in
+                                    sidebarIcon(for: voice)
+                                }
+                            }
                         }
                         let chatGroups = activeGroups
                         ForEach(chatGroups, id: \.groupId) { g in
