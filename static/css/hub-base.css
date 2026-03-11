@@ -1281,12 +1281,13 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   z-index: var(--z-sticky);
   padding: 8px 12px;
   background: var(--pill-bg);
+  border: 1px solid var(--border-light);
   border-radius: 20px;
   gap: 8px;
   align-items: flex-end;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04);
 }
 #text-input-bar.active { display: flex; }
 #text-input {
@@ -1390,10 +1391,11 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   max-width: 380px;
   z-index: var(--z-sticky);
   background: var(--pill-bg);
+  border: 1px solid var(--border-light);
   border-radius: 22px;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  box-shadow: 0 4px 6px rgba(0,0,0,0.3), 0 12px 40px rgba(0,0,0,0.5);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.3), 0 12px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08);
 }
 #controls-top {
   grid-column: 1 / -1;
