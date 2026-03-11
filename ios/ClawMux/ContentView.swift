@@ -155,11 +155,14 @@ struct ContentView: View {
             topBarView
         }
         .overlay(alignment: .bottomTrailing) {
-            Text("build-\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?")")
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
-                .foregroundStyle(Color.white.opacity(0.4))
-                .padding(6)
-                .allowsHitTesting(false)
+            // Hide when voice pill is visible — label overlaps pill's right gap
+            if vm.typingMode || vm.activeSessionId == nil {
+                Text("build-\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?")")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.4))
+                    .padding(6)
+                    .allowsHitTesting(false)
+            }
         }
         .background(Color.canvas1.ignoresSafeArea())
         .preferredColorScheme(.dark)
@@ -1935,7 +1938,7 @@ struct ContentView: View {
         }
         // Bottom padding = float gap above home indicator. canvas1+tint background
         // (below) fills the remaining space + safe area zone with the right color.
-        .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 16)
+        .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 8)
         // Fill home indicator zone with canvas1 + voice tint, matching mainAreaView
         .background {
             ZStack {
