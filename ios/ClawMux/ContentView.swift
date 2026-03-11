@@ -1170,6 +1170,7 @@ struct ContentView: View {
             } else {
                 chatScrollArea
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .ignoresSafeArea(edges: .bottom) // extends overlay parent to screen edge
                     // Overlay lets voiceControlBar position itself with true screen-edge padding.
                     // Content margin compensates so messages don't scroll behind the input bar.
                     .overlay(alignment: .bottom) { bottomInputArea }
