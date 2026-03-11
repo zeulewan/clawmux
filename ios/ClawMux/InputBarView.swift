@@ -245,7 +245,8 @@ struct InputBarView: View {
                 .lineLimit(1...5)
                 .foregroundStyle(Color.cText)
                 .padding(.horizontal, 4).padding(.vertical, 8)
-                .onSubmit { vm.sendText() }.submitLabel(.send)
+                .submitLabel(.send)
+                .onSubmit { vm.sendText() }
                 .toolbar {
                     ToolbarItemGroup(placement: .keyboard) {
                         Spacer()
@@ -319,7 +320,8 @@ struct InputBarView: View {
                             .padding(.horizontal, 12).padding(.vertical, 8)
                             .background(Color.glass, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                             .focused($pttTextFieldFocused)
-                            .onSubmit { vm.sendPreviewText() }.submitLabel(.send)
+                            .submitLabel(.send)
+                            .onSubmit { vm.sendPreviewText() }
                         if let err = vm.pttTranscriptionError {
                             Text(err).font(.system(size: 10)).foregroundStyle(Color.cTextTer).padding(.horizontal, 12)
                         }
