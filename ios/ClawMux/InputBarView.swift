@@ -208,7 +208,7 @@ struct InputBarView: View {
         }
         // Fully transparent outside the pill — body ZStack canvas1 covers the safe area zone.
         // Pill has its own glassEffect background; no outer background needed.
-        .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 4)
+        .padding(.horizontal, 16).padding(.top, 4)
     }
 
     // MARK: - Text Input Bar
