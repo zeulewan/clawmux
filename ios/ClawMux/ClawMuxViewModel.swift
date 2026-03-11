@@ -795,7 +795,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         var comps = URLComponents(
             url: baseURL.appendingPathComponent("api/history/\(voiceId)"),
             resolvingAgainstBaseURL: false)!
-        comps.queryItems = [URLQueryItem(name: "limit", value: "30")]
+        comps.queryItems = [URLQueryItem(name: "limit", value: "100")]
         guard let url = comps.url else { return }
         URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
             guard let data,
@@ -817,8 +817,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 }
                 if !chatMessages.isEmpty {
                     self.sessions[idx].messages = chatMessages
-                    // If server returned a full page, assume there are older messages
-                    self.sessions[idx].hasOlderMessages = messages.count >= 30
+                    // Use server's has_more — counts all stored messages, not just visible ones
+                    self.sessions[idx].hasOlderMessages = json["has_more"] as? Bool ?? false
                 } else if let state = initialState {
                     // No history yet — show appropriate placeholder (mirrors web addSession)
                     let isReady = state != .starting && state != .dead
@@ -912,7 +912,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         var comps = URLComponents(
             url: baseURL.appendingPathComponent("api/history/\(session.voice)"),
             resolvingAgainstBaseURL: false)!
-        var items: [URLQueryItem] = [URLQueryItem(name: "limit", value: "30")]
+        var items: [URLQueryItem] = [URLQueryItem(name: "limit", value: "100")]
         if let ts = oldestTs {
             items.append(URLQueryItem(name: "before_ts", value: String(ts)))
         }
@@ -940,12 +940,16 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     completion?()
                     return
                 }
-                // Deduplicate by timestamp to avoid overlap with existing messages
-                let existingTs = Set(self.sessions[i].messages.map { $0.timestamp.timeIntervalSince1970 })
-                let newOlder = older.filter { !existingTs.contains($0.timestamp.timeIntervalSince1970) }
+                // Deduplicate: prefer msgId match, fall back to timestamp
+                let existingIds = Set(self.sessions[i].messages.compactMap { $0.msgId })
+                let existingTs  = Set(self.sessions[i].messages.filter { $0.msgId == nil }.map { $0.timestamp.timeIntervalSince1970 })
+                let newOlder = older.filter { m in
+                    if let mid = m.msgId { return !existingIds.contains(mid) }
+                    return !existingTs.contains(m.timestamp.timeIntervalSince1970)
+                }
                 self.sessions[i].messages = newOlder + self.sessions[i].messages
-                // If server returned a full page, assume there may be more
-                self.sessions[i].hasOlderMessages = messages.count >= 30
+                // Use server's has_more — accurate count regardless of message types
+                self.sessions[i].hasOlderMessages = json["has_more"] as? Bool ?? (messages.count >= 100)
                 completion?()
             }
         }.resume()
