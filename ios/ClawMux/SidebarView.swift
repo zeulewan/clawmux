@@ -92,7 +92,7 @@ struct SidebarView: View {
                         .opacity(sidebarExpanded ? 1 : 0)
                         .allowsHitTesting(sidebarExpanded)
                     }
-                    .frame(width: 220)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(.vertical, 4)
         }
