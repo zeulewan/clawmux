@@ -2053,6 +2053,7 @@ struct ContentView: View {
                     RoundedRectangle(cornerRadius: 26, style: .continuous).fill(.ultraThinMaterial)
                 }
             }
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: vm.isRecording)
         }
         // Fully transparent outside the pill — body ZStack canvas1 covers the safe area zone.
         // Pill has its own glassEffect background; no outer background needed.
@@ -2216,17 +2217,6 @@ struct ContentView: View {
 
     private var micButtonVisual: some View {
         ZStack {
-            // Pulsing glow ring during tap-to-record
-            if vm.isRecording && !vm.pushToTalk {
-                Circle()
-                    .fill(micColor.opacity(0.18)).frame(width: 104, height: 104)
-                    .scaleEffect(isPulsing ? 1.12 : 1.0)
-                    .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: isPulsing)
-                Circle()
-                    .strokeBorder(micColor.opacity(isPulsing ? 0.5 : 0.1), lineWidth: 1.5)
-                    .frame(width: 104, height: 104)
-                    .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: isPulsing)
-            }
             // Main button circle — matches web mobile #mic (80px)
             Circle()
                 .fill(micColor)
