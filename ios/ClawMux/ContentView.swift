@@ -1486,56 +1486,57 @@ struct ContentView: View {
         let isPlaying = vm.ttsPlayingMessageId == msg.id
 
         // Agent (inter-agent) messages: match web .msg.agent-msg — arrow+name header, collapsible body
+        // Triggered by role=="agent" OR role=="system" when text matches [Agent msg from/to X] pattern
+        let agentMsgPattern = /^\[Agent msg (from|to) ([^\]]+)\] (.*)/
+        let isExpanded = expandedAgentMsgIds.contains(msg.id)
+        if (role == "agent" || role == "system"),
+           let m = msg.text.firstMatch(of: agentMsgPattern) {
+            // scoped block to avoid redeclaration of let m below
+            let direction = String(m.output.1)
+            let agentName = String(m.output.2)
+            let content   = String(m.output.3)
+            let arrow     = direction == "from" ? "←" : "→"
+            let agentColor = voiceColor(voiceIdByName(agentName))
+            return AnyView(
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("\(arrow) \(agentName)")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(agentColor)
+                    if isExpanded {
+                        Text(content)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.cTextSec)
+                            .padding(.top, 3)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 10).padding(.vertical, 4)
+                .overlay(alignment: .leading) {
+                    agentColor.opacity(0.6).frame(width: 2)
+                }
+                .padding(.leading, 2)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        if isExpanded { expandedAgentMsgIds.remove(msg.id) }
+                        else          { expandedAgentMsgIds.insert(msg.id) }
+                    }
+                }
+                .contextMenu {
+                    Button {
+                        UIPasteboard.general.string = msg.text
+                        withAnimation { showCopiedToast = true }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                            withAnimation { showCopiedToast = false }
+                        }
+                    } label: { Label("Copy", systemImage: "doc.on.doc") }
+                }
+            )
+        }
+
+        // Fallback for role=="agent" messages that don't match the [Agent msg] pattern
         if role == "agent" {
-            // Parse "[Agent msg from/to Name] content" format
-            let agentMsgPattern = /^\[Agent msg (from|to) ([^\]]+)\] (.*)/
-            let isExpanded = expandedAgentMsgIds.contains(msg.id)
-            if let m = msg.text.firstMatch(of: agentMsgPattern) {
-                let direction = String(m.output.1)
-                let agentName = String(m.output.2)
-                let content   = String(m.output.3)
-                let arrow     = direction == "from" ? "←" : "→"
-                let agentColor = voiceColor(voiceIdByName(agentName))
-                return AnyView(
-                    VStack(alignment: .leading, spacing: 0) {
-                        // Header: arrow + name — matches web .agent-msg border-left style
-                        Text("\(arrow) \(agentName)")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(agentColor)
-                        // Body: hidden when collapsed, shown on tap
-                        if isExpanded {
-                            Text(content)
-                                .font(.system(size: 11))
-                                .foregroundStyle(Color.cTextSec)
-                                .padding(.top, 3)
-                                .transition(.opacity.combined(with: .move(edge: .top)))
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.leading, 10).padding(.vertical, 4)
-                    .overlay(alignment: .leading) {
-                        agentColor.opacity(0.6).frame(width: 2)
-                    }
-                    .padding(.leading, 2)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        withAnimation(.easeOut(duration: 0.15)) {
-                            if isExpanded { expandedAgentMsgIds.remove(msg.id) }
-                            else          { expandedAgentMsgIds.insert(msg.id) }
-                        }
-                    }
-                    .contextMenu {
-                        Button {
-                            UIPasteboard.general.string = msg.text
-                            withAnimation { showCopiedToast = true }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                                withAnimation { showCopiedToast = false }
-                            }
-                        } label: { Label("Copy", systemImage: "doc.on.doc") }
-                    }
-                )
-            }
-            // Fallback for non-matching agent text
             return AnyView(
                 Text(msg.text)
                     .font(.system(size: 11))
