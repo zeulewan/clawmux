@@ -1300,7 +1300,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 }
 
                 if sid == activeSessionId {
-                    updateStatusText(newState.displayLabel, for: sid)
+                    // Thinking/processing/compacting show "Ready" in the pill — matches web behavior
+                    let pillLabel = newState.isWorking ? "Ready" : newState.displayLabel
+                    updateStatusText(pillLabel, for: sid)
                     switch newState {
                     case .thinking, .processing, .compacting:
                         if !typingMode { startThinkingSound() }
@@ -1324,7 +1326,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             // Legacy event — map to thinking state
             if let sid = sessionId, let idx = sessionIndex(sid) {
                 sessions[idx].state = .thinking
-                updateStatusText("Thinking...", for: sid)
+                updateStatusText("Ready", for: sid)
                 if sid == activeSessionId {
                     if !typingMode { startThinkingSound() }
                     updateLiveActivity()
