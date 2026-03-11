@@ -92,7 +92,7 @@ class TemplateRenderer:
         name = voice_id_to_name(voice_id)
         role = entry.role or "worker"
         project = entry.project or ""
-        area = entry.area or ""
+        repo = entry.repo or ""
 
         managers_section = self._build_managers_section(entry.project)
 
@@ -100,7 +100,7 @@ class TemplateRenderer:
             name=name,
             role=role,
             project=project,
-            area=area,
+            area=repo,
             managers_section=managers_section,
         )
 

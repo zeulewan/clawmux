@@ -48,7 +48,7 @@ A **thumbs up** (ACK) is a reply with no message body — just `--re <msg_id>` a
 
 ## Setting your project status
 ```bash
-clawmux folder 'project-name' --area 'frontend'
+clawmux folder 'project-name' --repo 'clawmux' --role 'backend' --task 'what you are working on'
 ```
 
 ## Updating your task status
@@ -98,7 +98,7 @@ You can read this file for context on what the user is focused on. Do not modify
 | `clawmux status <name>` | Show details for one agent | Yes |
 | `clawmux task 'description'` | Set your current task in sidebar | Yes |
 | `clawmux role <role>` | Set your role (must match a template) | Yes |
-| `clawmux folder <name> --area <area>` | Set project/area in sidebar | Yes |
+| `clawmux folder <name> --repo <repo>` | Set folder/repo in sidebar | Yes |
 | `clawmux projects` | List all folders | Yes |
 | `clawmux messages` | List recent inter-agent messages | Yes |
 | `clawmux search '<query>'` | Search all agent conversation histories | Yes |

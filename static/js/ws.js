@@ -141,7 +141,7 @@ function handleMessage(data) {
           existing.model = s.model || existing.model;
           existing.effort = s.effort || existing.effort;
           existing.project = s.project || existing.project || '';
-          existing.project_area = s.project_area || existing.project_area || '';
+          existing.project_repo = s.project_repo || existing.project_repo || '';
           existing.unreadCount = s.unread_count || 0;
           // Restore tool activity text from server (persists across reloads)
           if (s.activity) {

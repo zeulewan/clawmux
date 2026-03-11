@@ -220,7 +220,7 @@ def cmd_status(args):
             print(f"  Activity: {activity}")
         print(f"  Session ID: {found.get('session_id', '?')}")
         if found.get("project"):
-            area = f" · {found['project_area']}" if found.get("project_area") else ""
+            area = f" · {found['project_repo']}" if found.get("project_repo") else ""
             print(f"  Folder: {found['project']}{area}")
         if found.get("work_dir"):
             print(f"  Work dir: {found['work_dir']}")
@@ -1213,7 +1213,7 @@ def _run_migration(dry_run: bool = False) -> dict:
             "session_id": old_session_id if is_live else None,
             "project": project_slug,
             "role": "worker",
-            "area": "",
+            "repo": "",
             "backend": "claude-code",
             "last_active": os.path.getmtime(session_file),
             "model": "opus",
@@ -1225,7 +1225,7 @@ def _run_migration(dry_run: bool = False) -> dict:
                 proj = json.loads(open(project_file).read())
                 if not project_slug:
                     agent_entry["project"] = proj.get("project", "")
-                agent_entry["area"] = proj.get("area", "")
+                agent_entry["repo"] = proj.get("repo", proj.get("area", ""))
                 if proj.get("project"):
                     summary["projects"].add(proj["project"])
             except Exception:
