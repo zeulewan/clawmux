@@ -36,6 +36,7 @@ struct SidebarView: View {
                             if !chatGroups.isEmpty {
                                 HStack {
                                     Text("GROUP CHATS")
+
                                         .font(.system(size: 10, weight: .bold))
                                         .foregroundStyle(Color.cTextTer)
                                         .tracking(0.8)
@@ -56,7 +57,11 @@ struct SidebarView: View {
                                 }
                             }
                         }
-                        .transition(.opacity)
+                        // Delay fade-in until sidebar width is mostly open; collapse immediately
+                        .transition(.asymmetric(
+                            insertion: .opacity.animation(.easeIn(duration: 0.1).delay(0.18)),
+                            removal:   .opacity.animation(.easeOut(duration: 0.08))
+                        ))
                     } else {
                         VStack(spacing: 0) {
                             let groups = projectGroups
@@ -87,7 +92,11 @@ struct SidebarView: View {
                                 groupIcon(g.groupId, voices: g.voices)
                             }
                         }
-                        .transition(.opacity)
+                        // Icons fade out immediately on expand; reappear after width mostly closes
+                        .transition(.asymmetric(
+                            insertion: .opacity.animation(.easeIn(duration: 0.1).delay(0.15)),
+                            removal:   .opacity.animation(.easeOut(duration: 0.08))
+                        ))
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -426,6 +435,7 @@ struct SidebarView: View {
             } label: {
                 HStack(spacing: 8) {
                     groupCluster(Array(voices.prefix(5)))
+                        .matchedGeometryEffect(id: "group_cluster_\(groupId)", in: sidebarNS)
                         .frame(width: 34, height: 34)
 
                     VStack(alignment: .leading, spacing: 1) {
@@ -539,9 +549,12 @@ struct SidebarView: View {
             }
             vm.switchToGroupChat(name: groupName, firstSessionId: firstSid)
         } label: {
-            groupCluster(voices)
-                .frame(width: 48, height: 44)  // centered in collapsed 48pt strip
-                .background(blue.opacity(0.07))
+            ZStack {
+                Color.clear.frame(width: 48, height: 44)
+                groupCluster(voices)
+                    .matchedGeometryEffect(id: "group_cluster_\(groupId)", in: sidebarNS)
+            }
+            .background(blue.opacity(0.07))
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("GroupChatIcon-\(groupId)")
