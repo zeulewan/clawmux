@@ -100,6 +100,8 @@ _group_chats: dict[str, dict] = {}  # keyed by group name (lowercase)
 _pending_injections: dict[str, asyncio.Task] = {}
 # Per-session delivery locks — serializes concurrent injections so Enter never fires mid-paste
 _injection_locks: dict[str, asyncio.Lock] = {}
+# Recently-injected message IDs per session — prevents re-delivery of same msg within 5 minutes
+_injected_ids: dict[str, dict[str, float]] = {}  # session_id -> {msg_id -> timestamp}
 
 
 def _hist_prefix(session) -> str | None:
@@ -2551,6 +2553,26 @@ async def _inject_inbox(session, session_id: str) -> None:
         messages = await asyncio.to_thread(inbox.read_and_clear, session.work_dir)
         if not messages:
             return
+
+        # Dedup: drop messages whose IDs were already injected within the last 5 minutes
+        now = time.time()
+        seen = _injected_ids.setdefault(session_id, {})
+        # Prune expired entries
+        expired = [k for k, ts in seen.items() if now - ts > 300]
+        for k in expired:
+            del seen[k]
+        fresh = []
+        for msg in messages:
+            mid = msg.get("id", "")
+            if mid and mid in seen:
+                log.warning("[%s] Skipping duplicate injection of msg %s", session_id, mid)
+                continue
+            if mid:
+                seen[mid] = now
+            fresh.append(msg)
+        if not fresh:
+            return
+        messages = fresh
 
         lines = []
         has_user_msg = any(m.get("type") not in ("system", "ack") for m in messages)
