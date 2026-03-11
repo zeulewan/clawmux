@@ -1368,7 +1368,7 @@ struct ContentView: View {
                             // Bottom anchor
                             Color.clear.frame(height: 1).id("bottom")
                         }
-                        .padding(.horizontal, 24)
+                        .padding(.horizontal, 12)
                         .padding(.top, 64).padding(.bottom, 16)
                     }
                     .contentMargins(.leading, 48, for: .scrollContent)
@@ -2273,9 +2273,10 @@ private struct MarkdownContentView: View {
                 if case .spacing? = result.last {} else { result.append(.spacing) }
                 i += 1; continue
             }
-            // Merge consecutive plain text lines into one paragraph (matches web paragraph flow)
+            // Merge consecutive plain text lines into one paragraph — single newline = space
+            // (standard markdown: only double newline creates a paragraph break)
             if case .text(let prev) = result.last {
-                result[result.count - 1] = .text(prev + "\n" + line)
+                result[result.count - 1] = .text(prev + " " + line)
             } else {
                 result.append(.text(line))
             }
