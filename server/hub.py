@@ -230,7 +230,7 @@ async def stuck_buffer_monitor_loop() -> None:
         await asyncio.sleep(10)
         for session_id in list(session_mgr.sessions):
             session = session_mgr.sessions.get(session_id)
-            if not session or session.state == AgentState.DEAD or not session.work_dir:
+            if not session or session.state in (AgentState.DEAD, AgentState.PROCESSING, AgentState.COMPACTING) or not session.work_dir:
                 _stuck_seen.pop(session_id, None)
                 continue
             try:
