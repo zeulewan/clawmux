@@ -968,7 +968,8 @@ final class AudioManager: NSObject {
 
     private func startMetering() {
         stopMetering()
-        meteringTimer = Timer.scheduledTimer(withTimeInterval: 0.04, repeats: true) {
+        // Use .common RunLoop mode so the timer fires during scroll gestures (.UITrackingRunLoopMode)
+        let timer = Timer(timeInterval: 0.04, repeats: true) {
             [weak self] _ in
             Task { @MainActor in
                 guard let self, let vm = self.vm,
@@ -986,6 +987,8 @@ final class AudioManager: NSObject {
                 }
             }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        meteringTimer = timer
     }
 
     private func stopMetering() {
