@@ -1170,10 +1170,7 @@ struct ContentView: View {
             } else {
                 chatScrollArea
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .ignoresSafeArea(edges: .bottom) // extends overlay parent to screen edge
-                    // Overlay lets voiceControlBar position itself with true screen-edge padding.
-                    // Content margin compensates so messages don't scroll behind the input bar.
-                    .overlay(alignment: .bottom) { bottomInputArea }
+                    .safeAreaInset(edge: .bottom, spacing: 0) { bottomInputArea }
             }
             // Copy toast
             if showCopiedToast {
@@ -1377,7 +1374,6 @@ struct ContentView: View {
                         .padding(.horizontal, 24)
                         .padding(.top, 64).padding(.bottom, 16)
                     }
-                    .contentMargins(.bottom, 140, for: .scrollContent)
                     .defaultScrollAnchor(.bottom)
                     .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
                     .onChange(of: vm.activeMessages.count)        { _, _ in scrollBottom(proxy) }
@@ -1937,13 +1933,9 @@ struct ContentView: View {
                 }
             }
         }
-        // ignoresSafeArea on the outer VStack so padding measures from actual screen
-        // bottom, not the safe area boundary — pill sits 16pt from screen edge on all sides
-        .ignoresSafeArea(edges: .bottom)
+        // Fully transparent outside the pill — body ZStack canvas1 covers the safe area zone.
+        // Pill has its own glassEffect background; no outer background needed.
         .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 16)
-        // Transparent except for the subtle voice tint — canvas1 base comes from
-        // the body ZStack background so the pill glass blurs through to chat content
-        .background { voiceTintColor.opacity(0.10).ignoresSafeArea(edges: .bottom) }
     }
 
     // MARK: - Text Input Bar
