@@ -2324,7 +2324,7 @@ private struct SheetBackgroundModifier: ViewModifier {
         if #available(iOS 26, *) {
             content
         } else {
-            content.presentationBackground(Color.canvas1.opacity(0.92).background(.ultraThinMaterial))
+            content.presentationBackground(content: { Color.canvas1.opacity(0.92).background(.ultraThinMaterial) })
         }
     }
 }
