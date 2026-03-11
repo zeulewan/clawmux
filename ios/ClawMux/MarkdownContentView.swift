@@ -7,33 +7,23 @@ struct ScrollTopDetector: ViewModifier {
     var hasOlderMessages: Bool
     var sessionId: String?
     var load: (String, @escaping () -> Void) -> Void
-    @State private var nearTop = false
 
     func body(content: Content) -> some View {
         if #available(iOS 18.0, *) {
-            content
-                .onScrollGeometryChange(for: Bool.self) { geo in
-                    geo.contentOffset.y < 100 && geo.contentSize.height > geo.containerSize.height
-                } action: { _, isNear in
-                    nearTop = isNear
-                    if isNear { triggerLoad() }
+            // Use CGFloat so action fires on every scroll event — avoids Bool toggle dead zone
+            // where nearTop stays true after a load and action never re-fires.
+            content.onScrollGeometryChange(for: CGFloat.self) { geo in
+                geo.contentOffset.y
+            } action: { _, offsetY in
+                print("[ScrollTop] offsetY=\(offsetY) loading=\(isLoadingOlder) hasOlder=\(hasOlderMessages) sid=\(sessionId ?? "nil")")
+                guard offsetY < 100, !isLoadingOlder, hasOlderMessages, let sid = sessionId else { return }
+                isLoadingOlder = true
+                load(sid) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { isLoadingOlder = false }
                 }
-                .onChange(of: isLoadingOlder) { _, loading in
-                    // Re-check after load finishes — user may still be at top
-                    if !loading && nearTop {
-                        DispatchQueue.main.async { triggerLoad() }
-                    }
-                }
+            }
         } else {
             content
-        }
-    }
-
-    private func triggerLoad() {
-        guard nearTop, !isLoadingOlder, hasOlderMessages, let sid = sessionId else { return }
-        isLoadingOlder = true
-        load(sid) {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { isLoadingOlder = false }
         }
     }
 }
