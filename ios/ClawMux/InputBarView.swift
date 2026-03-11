@@ -411,13 +411,16 @@ struct InputBarView: View {
 /// Uses a reference-type smoother so state updates don't trigger SwiftUI redraws.
 private final class BandSmoother {
     var smooth: [CGFloat] = Array(repeating: 0, count: SpectrumProcessor.bandCount)
+    // Decay per display frame: bass=0.78 (slower), treble=0.45 (faster), at 120Hz
+    private let decayPerFrame: [CGFloat] = (0..<SpectrumProcessor.bandCount).map { b in
+        0.78 - CGFloat(b) / CGFloat(SpectrumProcessor.bandCount - 1) * 0.33
+    }
 
     func update(toward target: [CGFloat]) {
         guard target.count == smooth.count else { return }
         for i in 0..<smooth.count {
             let t = target[i]
-            // Instant attack, smooth decay — matches the feel of a physical VU meter
-            smooth[i] = t > smooth[i] ? t : smooth[i] + (t - smooth[i]) * 0.25
+            smooth[i] = t >= smooth[i] ? t : smooth[i] * decayPerFrame[i]
         }
     }
 }

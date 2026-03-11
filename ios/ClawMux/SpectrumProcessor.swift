@@ -33,11 +33,9 @@ final class SpectrumProcessor: @unchecked Sendable {
     private var realParts: [Float]
     private var imagParts: [Float]
     private var magnitudes: [Float]
-    private var prevBands: [Float]
 
     // Band configuration
     private let bandEdges: [Int]        // bandCount+1 FFT bin indices
-    private let decayFactors: [Float]   // per-band: low=slower, high=faster
 
     private let onBandsUpdated: @Sendable ([CGFloat]) -> Void
 
@@ -57,18 +55,12 @@ final class SpectrumProcessor: @unchecked Sendable {
         self.realParts = [Float](repeating: 0, count: n / 2)
         self.imagParts = [Float](repeating: 0, count: n / 2)
         self.magnitudes = [Float](repeating: 0, count: n / 2)
-        self.prevBands = [Float](repeating: 0, count: Self.bandCount)
 
         // 13 frequency edges → 12 log-spaced bands
         // ~60Hz, 120Hz, 250Hz, 500Hz, 1k, 2k, 4k, 8k, 12k, 16k, 20kHz
         let freqEdges: [Float] = [20, 60, 120, 250, 500, 1000, 2000, 4000, 8000, 12000, 16000, 20000, 22050]
         let binWidth = Float(sampleRate) / Float(n)
         self.bandEdges = freqEdges.map { f in max(1, min(n / 2 - 1, Int(f / binWidth))) }
-
-        // Decay: band 0 (low) = 0.80 (slow), band 11 (high) = 0.35 (fast)
-        self.decayFactors = (0..<Self.bandCount).map { b in
-            0.80 - Float(b) / Float(Self.bandCount - 1) * 0.45
-        }
     }
 
     deinit {
@@ -108,7 +100,7 @@ final class SpectrumProcessor: @unchecked Sendable {
             vDSP_vsmul(ptr, 1, &scale, ptr, 1, vDSP_Length(fftSize / 2))
         }
 
-        // Group bins into bands, apply attack/decay smoothing
+        // Group bins into bands — raw levels, no smoothing (BandSmoother handles that at display rate)
         var result = [CGFloat](repeating: 0, count: Self.bandCount)
         for b in 0..<Self.bandCount {
             let lo = bandEdges[b]
@@ -122,11 +114,7 @@ final class SpectrumProcessor: @unchecked Sendable {
             // RMS → dB → normalize to 0..1 over -60..0 dB range
             let rms = sqrtf(sum / Float(binCount))
             let db = 20.0 * log10f(rms + 1e-8)
-            let level = max(0.0, min(1.0, (db + 60.0) / 60.0))
-            // Instant attack, per-band decay
-            let prev = prevBands[b]
-            prevBands[b] = level >= prev ? level : prev * decayFactors[b]
-            result[b] = CGFloat(prevBands[b])
+            result[b] = CGFloat(max(0.0, min(1.0, (db + 60.0) / 60.0)))
         }
         onBandsUpdated(result)
     }
