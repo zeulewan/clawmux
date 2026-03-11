@@ -415,16 +415,8 @@ struct SidebarView: View {
                 withAnimation(.spring(response: 0.3)) { sidebarExpanded = false }
             } label: {
                 HStack(spacing: 8) {
-                    ZStack(alignment: .leading) {
-                        ForEach(Array(voices.prefix(4).enumerated()), id: \.offset) { i, v in
-                            Circle()
-                                .fill(voiceColor(v.id))
-                                .frame(width: 22, height: 22)
-                                .overlay(Circle().strokeBorder(Color.canvas2, lineWidth: 1.5))
-                                .offset(x: CGFloat(i) * 16)
-                        }
-                    }
-                    .frame(width: 22 + CGFloat(max(min(voices.count, 4) - 1, 0)) * 16, height: 22)
+                    groupCluster(Array(voices.prefix(5)))
+                        .frame(width: 34, height: 34)
 
                     VStack(alignment: .leading, spacing: 1) {
                         Text(name ?? "GROUP CHAT")
@@ -471,6 +463,58 @@ struct SidebarView: View {
         .padding(.horizontal, 6).padding(.vertical, 2)
     }
 
+    // MARK: - Group member mini circle (14pt)
+    @ViewBuilder
+    private func miniCircle(_ v: VoiceInfo) -> some View {
+        ZStack {
+            Circle().fill(voiceColor(v.id))
+            Image(systemName: voiceIcon(v.id))
+                .font(.system(size: 7, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.9))
+        }
+        .frame(width: 14, height: 14)
+        .overlay(Circle().strokeBorder(Color.canvas2, lineWidth: 1))
+    }
+
+    // MARK: - Group member cluster (32×32pt, up to 4 icons)
+    @ViewBuilder
+    private func groupCluster(_ voices: [VoiceInfo]) -> some View {
+        let n = voices.count
+        ZStack {
+            switch n {
+            case 0:
+                EmptyView()
+            case 1:
+                miniCircle(voices[0]).position(x: 16, y: 16)
+            case 2:
+                miniCircle(voices[0]).position(x: 7, y: 16)
+                miniCircle(voices[1]).position(x: 25, y: 16)
+            case 3:
+                miniCircle(voices[0]).position(x: 7, y: 9)
+                miniCircle(voices[1]).position(x: 25, y: 9)
+                miniCircle(voices[2]).position(x: 16, y: 25)
+            default:
+                miniCircle(voices[0]).position(x: 7, y: 7)
+                miniCircle(voices[1]).position(x: 25, y: 7)
+                miniCircle(voices[2]).position(x: 7, y: 25)
+                if n == 4 {
+                    miniCircle(voices[3]).position(x: 25, y: 25)
+                } else {
+                    ZStack {
+                        Circle().fill(Color.cCard)
+                        Text("+\(n - 3)")
+                            .font(.system(size: 6, weight: .bold))
+                            .foregroundStyle(Color.cTextSec)
+                    }
+                    .frame(width: 14, height: 14)
+                    .overlay(Circle().strokeBorder(Color.canvas2, lineWidth: 1))
+                    .position(x: 25, y: 25)
+                }
+            }
+        }
+        .frame(width: 32, height: 32)
+    }
+
     @ViewBuilder
     private func groupIcon(_ groupId: String, voices: [VoiceInfo]) -> some View {
         let blue = Color(hex: 0x0A84FF)
@@ -485,26 +529,9 @@ struct SidebarView: View {
             }
             vm.switchToGroupChat(name: groupName, firstSessionId: firstSid)
         } label: {
-            ZStack {
-                let shown = Array(voices.prefix(3))
-                ZStack(alignment: .leading) {
-                    ForEach(Array(shown.enumerated()), id: \.offset) { i, v in
-                        Circle()
-                            .fill(voiceColor(v.id))
-                            .frame(width: 16, height: 16)
-                            .overlay(Circle().strokeBorder(Color.canvas2, lineWidth: 1))
-                            .overlay(
-                                Image(systemName: voiceIcon(v.id))
-                                    .font(.system(size: 7, weight: .semibold))
-                                    .foregroundStyle(.white.opacity(0.9))
-                            )
-                            .offset(x: CGFloat(i) * 11)
-                    }
-                }
-                .frame(width: 16 + CGFloat(max(shown.count - 1, 0)) * 11, height: 16)
-            }
-            .frame(width: 48, height: 44)
-            .background(blue.opacity(0.07))
+            groupCluster(voices)
+                .frame(width: 48, height: 44)  // centered in collapsed 48pt strip
+                .background(blue.opacity(0.07))
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("GroupChatIcon-\(groupId)")
