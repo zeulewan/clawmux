@@ -524,6 +524,10 @@ final class AudioManager: NSObject {
     func stopRecording(discard: Bool = false) {
         guard let vm else { return }
         let (recordingDuration, sid) = stopRecordingHardware()
+        // Resume any paused audio from before recording started (matches web pause→record→resume)
+        if let pausedSid = pausedAudioSessionId {
+            _ = resumePlaybackForSession(pausedSid)
+        }
         guard sid != nil || discard else { return }
 
         guard !discard, let sid else {
@@ -610,7 +614,12 @@ final class AudioManager: NSObject {
         lastMicActionTime = now
 
         if vm.isPlaying {
-            interruptPlayback()
+            // Pause (don't discard) and start recording immediately — matches web behavior
+            pauseCurrentPlaybackForSessionSwitch()
+            if let sid = vm.activeSessionId {
+                startRecording(sessionId: sid)
+            }
+            return
         } else if vm.isRecording {
             stopRecording()
         } else if vm.micMuted {
