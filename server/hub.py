@@ -2936,6 +2936,9 @@ async def debug_info():
         },
         "system": system,
         "sessions": hub_sessions,
+        "context_usage": _context_cache,
+        "projects": session_mgr.project_mgr.projects,
+        "group_chats": [_group_to_dict(g) for g in _group_chats.values()],
         "tmux_sessions": tmux_sessions,
         "services": services,
         "messages": {
