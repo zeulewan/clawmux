@@ -1,5 +1,4 @@
 import SwiftUI
-import LaTeXSwift
 
 // MARK: - Scroll Top Detector (auto-load older messages)
 
@@ -262,17 +261,13 @@ struct MarkdownContentView: View {
                     .strokeBorder(Color.cBorder, lineWidth: 0.5))
 
         case .math(let expr, let isBlock):
-            if isBlock {
-                LaTeX(expr)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(foreground)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-            } else {
-                LaTeX(expr)
-                    .foregroundStyle(foreground)
-                    .font(.system(size: fontSize))
-            }
+            // LaTeX rendering placeholder — renders raw expression in monospaced block
+            // until a working native LaTeX library is integrated
+            Text(expr)
+                .font(.system(size: isBlock ? fontSize - 1 : fontSize, design: .monospaced))
+                .foregroundStyle(foreground.opacity(0.85))
+                .frame(maxWidth: isBlock ? .infinity : nil, alignment: .center)
+                .padding(isBlock ? 8 : 0)
         }
     }
 }
