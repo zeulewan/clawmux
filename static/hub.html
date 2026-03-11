@@ -401,7 +401,8 @@
     </div>
   </div>
 
-  <div style="margin-top:1.5rem;">
+  <div style="margin-top:1.5rem; display:flex; flex-direction:column; gap:8px;">
+    <button id="reload-hub-btn" style="width:100%; padding:10px 16px; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text-secondary); font-size:0.85rem; cursor:pointer; font-family:inherit; transition: all 0.15s;" onmouseover="this.style.borderColor='#f59e0b'; this.style.color='#f59e0b';" onmouseout="this.style.borderColor='var(--border)'; this.style.color='var(--text-secondary)';" onclick="reloadHub()">Reload Hub</button>
     <button style="width:100%; padding:10px 16px; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text-secondary); font-size:0.85rem; cursor:pointer; font-family:inherit; transition: all 0.15s;" onmouseover="this.style.borderColor='var(--border-light)'" onmouseout="this.style.borderColor='var(--border)'" onclick="showDebugPanel()">Open Debug Panel</button>
   </div>
 </div>
@@ -1700,6 +1701,18 @@ function toggleAutoMode() {
 // --- Debug panel ---
 let debugActive = false;
 let debugTimer = null;
+
+async function reloadHub() {
+  const btn = document.getElementById('reload-hub-btn');
+  if (btn) { btn.textContent = 'Reloading…'; btn.disabled = true; }
+  try {
+    await fetch('/api/shutdown', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({mode:'reload'}) });
+  } catch (_) {}
+  // Page will reconnect via websocket — just restore button after a moment
+  setTimeout(() => {
+    if (btn) { btn.textContent = 'Reload Hub'; btn.disabled = false; }
+  }, 3000);
+}
 
 function showDebugPanel() {
   // Stop audio/recording when switching to debug

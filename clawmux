@@ -81,11 +81,10 @@ def _install_hooks(repo_dir: str) -> None:
         data = {}
 
     hook_entry = {"hooks": [{
-        "type": "http",
-        "url": f"http://localhost:{HUB_PORT}/api/hooks/tool-status",
+        "type": "command",
+        "command": os.path.join(repo_dir, "hooks", "tool-status.sh"),
         "timeout": 5,
-        "headers": {"ClawMux-Session": "$CLAWMUX_SESSION_ID"},
-        "allowedEnvVars": ["CLAWMUX_SESSION_ID"],
+        "allowedEnvVars": ["CLAWMUX_SESSION_ID", "CLAWMUX_PORT"],
     }]}
     stop_entry = {"hooks": [{
         "type": "command",

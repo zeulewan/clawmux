@@ -86,7 +86,9 @@ class ClaudeCodeBackend(AgentBackend):
         return proc.returncode == 0
 
     async def deliver_message(self, session_name: str, text: str) -> None:
-        await self._tmux_type(session_name, text)
+        # Shield so both send-keys (text + Enter) complete even if the inject
+        # task is cancelled mid-flight during hub shutdown.
+        await asyncio.shield(self._tmux_type(session_name, text))
 
     async def restart(
         self,

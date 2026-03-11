@@ -41,6 +41,7 @@ class Session:
     voice: str = "af_sky"
     speed: float = 1.0
     activity: str = ""  # composed tool description (orthogonal to state)
+    activity_log: list = field(default_factory=list)  # recent activity strings (capped at 50)
     tool_name: str = ""  # raw tool name from last PreToolUse
     tool_input: dict = field(default_factory=dict)  # raw tool input from last PreToolUse
     project: str = ""  # current project/repo name (set by agent via set_project_status)
@@ -70,7 +71,7 @@ class Session:
         """Transition to a new state, syncing deprecated boolean flags."""
         self.state = new_state
         # Sync legacy booleans for backward compat
-        self.processing = new_state in (AgentState.PROCESSING, AgentState.THINKING)
+        self.processing = new_state == AgentState.PROCESSING
         self.in_wait = new_state == AgentState.IDLE
         self.compacting = new_state == AgentState.COMPACTING
         # Sync legacy status string
