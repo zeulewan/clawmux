@@ -22,6 +22,7 @@ struct ChatScrollAreaView: View {
                             ProgressView()
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 8)
+                                .accessibilityIdentifier("ChatLoadingOlder")
                         }
                         ForEach(messageGroups) { group in
                             messageGroupView(group)

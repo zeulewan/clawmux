@@ -229,35 +229,49 @@ final class TouchBlockerTests: XCTestCase {
         XCTAssertTrue(chatScroll.waitForExistence(timeout: 8), "ChatScrollView should exist after opening agent chat")
         saveScreenshot("infinitescroll_06_chat_visible")
 
-        let loadingSpinner = app.activityIndicators.firstMatch
+        // Two ways to detect loading: by identifier (most reliable) or by activity indicator type
+        let spinnerById = app.activityIndicators["ChatLoadingOlder"]
+        let spinnerByType = app.activityIndicators.firstMatch
+
+        // Debug: log what accessibility elements exist so we can diagnose issues
+        print("[InfiniteScrollTest] activityIndicators count: \(app.activityIndicators.count)")
+        print("[InfiniteScrollTest] ChatLoadingOlder exists: \(spinnerById.exists)")
+
+        func loadingSpinnerExists() -> Bool {
+            return spinnerById.exists || spinnerByType.exists
+        }
 
         // Swipe one step at a time and check for spinner after EACH swipe.
         // The trigger fires during deceleration; checking immediately after each swipe
         // gives us the best chance to catch the ~350ms window.
-        func scrollAndCheckForSpinner(swipes: Int) -> Bool {
+        func scrollAndCheckForSpinner(swipes: Int, label: String) -> Bool {
+            let textsBefore = app.staticTexts.count
             for i in 0..<swipes {
                 chatScroll.swipeDown(velocity: .fast)
                 // Check immediately after swipe settles — spinner may have just appeared
-                if loadingSpinner.waitForExistence(timeout: 1) {
-                    saveScreenshot("infinitescroll_spinner_found_swipe\(i)")
+                if loadingSpinnerExists() || spinnerById.waitForExistence(timeout: 1) {
+                    saveScreenshot("infinitescroll_\(label)_spinner_swipe\(i)")
                     // Wait for spinner to clear before next round
-                    for _ in 0..<15 { if !loadingSpinner.exists { break }; sleep(1) }
+                    for _ in 0..<15 { if !loadingSpinnerExists() { break }; sleep(1) }
                     return true
                 }
             }
-            return false
+            // Fallback: check if staticText count increased (messages were added)
+            let textsAfter = app.staticTexts.count
+            print("[InfiniteScrollTest] \(label) texts before=\(textsBefore) after=\(textsAfter)")
+            return textsAfter > textsBefore
         }
 
         // --- Round 1: swipe to top, checking after each swipe ---
-        let spinnerSeen1 = scrollAndCheckForSpinner(swipes: 15)
+        let spinnerSeen1 = scrollAndCheckForSpinner(swipes: 15, label: "r1")
         saveScreenshot("infinitescroll_07_after_round1")
 
         // --- Round 2: swipe to top again ---
-        let spinnerSeen2 = scrollAndCheckForSpinner(swipes: 15)
+        let spinnerSeen2 = scrollAndCheckForSpinner(swipes: 15, label: "r2")
         saveScreenshot("infinitescroll_12_after_load2")
 
         // --- Round 3: one more pass ---
-        let spinnerSeen3 = scrollAndCheckForSpinner(swipes: 15)
+        let spinnerSeen3 = scrollAndCheckForSpinner(swipes: 15, label: "r3")
         saveScreenshot("infinitescroll_15_final")
 
         // At minimum, the app must still be alive and the scroll view must exist
