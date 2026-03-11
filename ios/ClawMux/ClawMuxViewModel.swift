@@ -3132,7 +3132,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         if pttInterrupted { return }
         // Don't re-trigger if already recording
         if isRecording { return }
-        if isProcessing || micMuted || recordBlockedByThinking { return }
+        if isProcessing || micMuted { return }
         if let sid = activeSessionId {
             suppressNextAutoRecord = false
             if let idx = sessionIndex(sid), sessions[idx].pendingListen {

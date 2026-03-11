@@ -1978,8 +1978,8 @@ struct ContentView: View {
                             Button(action: vm.micAction) { micButtonVisual }
                         }
                     }
-                    .disabled(vm.isProcessing || vm.recordBlockedByThinking || (vm.micMuted && !vm.isPlaying && !vm.isRecording))
-                    .opacity(vm.isProcessing || vm.recordBlockedByThinking || (vm.micMuted && !vm.isPlaying) ? 0.45 : 1)
+                    .disabled(vm.isProcessing || (vm.micMuted && !vm.isPlaying && !vm.isRecording))
+                    .opacity(vm.isProcessing || (vm.micMuted && !vm.isPlaying) ? 0.45 : 1)
 
                     Spacer()
 
