@@ -39,6 +39,7 @@ struct ChatScrollAreaView: View {
                 }
                 .defaultScrollAnchor(.bottom)
                 .scrollDismissesKeyboard(.interactively)
+                .accessibilityIdentifier("ChatScrollView")
                 .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
                 .modifier(ScrollTopDetector(
                     isLoadingOlder: $isLoadingOlder,

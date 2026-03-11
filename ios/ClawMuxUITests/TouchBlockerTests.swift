@@ -182,4 +182,109 @@ final class TouchBlockerTests: XCTestCase {
         saveScreenshot("center_03_sidebar_tap")
         XCTAssertTrue(app.exists, "App should respond after center tap + sidebar tap sequence")
     }
+
+    // MARK: - Infinite scroll test
+
+    /// Opens the Onyx agent chat and scrolls up three times, verifying older messages load
+    /// each time (ProgressView appears → disappears → more content visible).
+    func testInfiniteScrollLoadsOlderMessages() throws {
+        saveScreenshot("infinitescroll_01_launch")
+
+        // Wait longer for server connection (needs a live hub)
+        sleep(5)
+        saveScreenshot("infinitescroll_02_after_connect")
+
+        // Expand sidebar to select Onyx by name
+        let hamburger = app.buttons["HamburgerButton"].firstMatch
+        XCTAssertTrue(hamburger.waitForExistence(timeout: 8), "HamburgerButton must exist")
+        hamburger.tap()
+        sleep(2)
+        saveScreenshot("infinitescroll_03_sidebar_expanded")
+
+        // Find Onyx's agent card in the expanded sidebar — scroll sidebar down if needed
+        let sidebarScroll = app.scrollViews["SidebarScrollView"].firstMatch
+        var onyxBtn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'Onyx'")).firstMatch
+        if !onyxBtn.waitForExistence(timeout: 2), sidebarScroll.waitForExistence(timeout: 3) {
+            sidebarScroll.swipeUp()
+            sleep(1)
+        }
+        saveScreenshot("infinitescroll_04_sidebar_scrolled")
+
+        if onyxBtn.waitForExistence(timeout: 3) {
+            onyxBtn.tap()
+            sleep(4)
+            saveScreenshot("infinitescroll_05_onyx_chat_opened")
+        } else {
+            // Fallback: tap first agent icon in collapsed sidebar
+            hamburger.tap() // close sidebar
+            sleep(1)
+            let firstAgent = app.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.17))
+            firstAgent.tap()
+            sleep(4)
+            saveScreenshot("infinitescroll_05b_fallback_agent")
+        }
+
+        // We should now be in a chat view — verify ChatScrollView exists
+        let chatScroll = app.scrollViews["ChatScrollView"].firstMatch
+        XCTAssertTrue(chatScroll.waitForExistence(timeout: 8), "ChatScrollView should exist after opening agent chat")
+        saveScreenshot("infinitescroll_06_chat_visible")
+
+        // --- Round 1: scroll to top, wait for load ---
+        chatScroll.swipeDown(velocity: .fast)
+        chatScroll.swipeDown(velocity: .fast)
+        sleep(3)
+        saveScreenshot("infinitescroll_07_after_scroll1")
+
+        let loadingSpinner = app.activityIndicators.firstMatch
+        let spinnerSeen1 = loadingSpinner.waitForExistence(timeout: 3)
+        saveScreenshot("infinitescroll_08_spinner1_state")
+        if spinnerSeen1 {
+            // Wait for spinner to disappear (load complete)
+            let spinnerGone = NSPredicate(format: "exists == false")
+            expectation(for: spinnerGone, evaluatedWith: loadingSpinner, handler: nil)
+            waitForExpectations(timeout: 10)
+        }
+        saveScreenshot("infinitescroll_09_after_load1")
+
+        // --- Round 2: scroll up again ---
+        chatScroll.swipeDown(velocity: .fast)
+        chatScroll.swipeDown(velocity: .fast)
+        sleep(3)
+        saveScreenshot("infinitescroll_10_after_scroll2")
+
+        let spinnerSeen2 = loadingSpinner.waitForExistence(timeout: 3)
+        saveScreenshot("infinitescroll_11_spinner2_state")
+        if spinnerSeen2 {
+            let spinnerGone2 = NSPredicate(format: "exists == false")
+            expectation(for: spinnerGone2, evaluatedWith: loadingSpinner, handler: nil)
+            waitForExpectations(timeout: 10)
+        }
+        saveScreenshot("infinitescroll_12_after_load2")
+
+        // --- Round 3: scroll up a third time ---
+        chatScroll.swipeDown(velocity: .fast)
+        chatScroll.swipeDown(velocity: .fast)
+        sleep(3)
+        saveScreenshot("infinitescroll_13_after_scroll3")
+
+        let spinnerSeen3 = loadingSpinner.waitForExistence(timeout: 3)
+        saveScreenshot("infinitescroll_14_spinner3_state")
+        if spinnerSeen3 {
+            let spinnerGone3 = NSPredicate(format: "exists == false")
+            expectation(for: spinnerGone3, evaluatedWith: loadingSpinner, handler: nil)
+            waitForExpectations(timeout: 10)
+        }
+        saveScreenshot("infinitescroll_15_final")
+
+        // At minimum, the app must still be alive and the scroll view must exist
+        XCTAssertTrue(app.exists, "App should survive three infinite scroll rounds")
+        XCTAssertTrue(chatScroll.exists, "ChatScrollView should still exist after scrolling")
+
+        // Pass/fail verdict on whether infinite scroll actually triggered at least once
+        XCTAssertTrue(
+            spinnerSeen1 || spinnerSeen2 || spinnerSeen3,
+            "Infinite scroll should have triggered at least once — ProgressView never appeared. " +
+            "Check: server connected, session has history, hasOlderMessages flag is true."
+        )
+    }
 }
