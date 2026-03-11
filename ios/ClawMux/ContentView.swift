@@ -2318,12 +2318,11 @@ private struct ScrollBottomDetector: ViewModifier {
     }
 }
 
-/// On iOS 26 the system provides liquid glass sheet presentation automatically.
-/// On older iOS, apply a material fallback as the sheet background.
+/// Frosted glass sheet background: .regularMaterial on iOS 26, canvas1+ultraThinMaterial fallback.
 private struct SheetBackgroundModifier: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 26, *) {
-            content
+            content.presentationBackground(.regularMaterial)
         } else {
             content.presentationBackground(content: { Color.canvas1.opacity(0.92).background(.ultraThinMaterial) })
         }
