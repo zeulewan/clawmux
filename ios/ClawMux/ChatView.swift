@@ -351,6 +351,7 @@ struct ChatScrollAreaView: View {
                         .frame(maxWidth: .infinity, alignment: role == "user" ? .trailing : .leading)
                 }
             }
+            .frame(maxWidth: .infinity)
 
             if role == "assistant" { Spacer(minLength: 56) }
             if role == "system"   { Spacer() }
