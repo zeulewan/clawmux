@@ -1,4 +1,5 @@
 import SwiftUI
+import LaTeXSwift
 
 // MARK: - Scroll Top Detector (auto-load older messages)
 
@@ -70,6 +71,7 @@ struct MarkdownContentView: View {
         case blockquote(String)
         case rule
         case spacing
+        case math(String, Bool)     // (expression incl. delimiters, isBlock/display)
     }
 
     private func parse(_ raw: String) -> [Block] {
@@ -78,6 +80,43 @@ struct MarkdownContentView: View {
         var i = 0
         while i < lines.count {
             let line = lines[i]
+            let trimmedLine = line.trimmingCharacters(in: .whitespaces)
+            // Block math fence: $$ ... $$ (may span lines)
+            if trimmedLine.hasPrefix("$$") {
+                // Check if opening and closing $$ are on the same line (e.g. "$$expr$$")
+                let afterOpen = String(trimmedLine.dropFirst(2))
+                if afterOpen.hasSuffix("$$") && afterOpen.count > 2 {
+                    // Single-line block math: $$expr$$
+                    let expr = "$$" + String(afterOpen.dropLast(2)) + "$$"
+                    result.append(.math(expr, true))
+                    i += 1; continue
+                } else if afterOpen == "" || afterOpen.hasSuffix("$$") == false {
+                    // Multi-line block math: collect until closing $$
+                    var mathLines: [String] = []
+                    if !afterOpen.isEmpty { mathLines.append(afterOpen) }
+                    i += 1
+                    while i < lines.count {
+                        let ml = lines[i].trimmingCharacters(in: .whitespaces)
+                        if ml == "$$" || ml.hasSuffix("$$") {
+                            if ml != "$$" { mathLines.append(String(ml.hasSuffix("$$") ? String(ml.dropLast(2)) : ml)) }
+                            i += 1; break
+                        }
+                        mathLines.append(lines[i]); i += 1
+                    }
+                    let expr = "$$" + mathLines.joined(separator: "\n") + "$$"
+                    result.append(.math(expr, true))
+                    continue
+                }
+            }
+            // Inline math: line is purely $...$ with no other content
+            if trimmedLine.hasPrefix("$") && trimmedLine.hasSuffix("$") && trimmedLine.count > 2
+                && !trimmedLine.hasPrefix("$$") {
+                let inner = String(trimmedLine.dropFirst().dropLast())
+                if !inner.contains("$") {
+                    result.append(.math("$" + inner + "$", false))
+                    i += 1; continue
+                }
+            }
             // Code fence
             if line.hasPrefix("```") {
                 let lang = String(line.dropFirst(3)).trimmingCharacters(in: .whitespaces)
@@ -221,6 +260,19 @@ struct MarkdownContentView: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .strokeBorder(Color.cBorder, lineWidth: 0.5))
+
+        case .math(let expr, let isBlock):
+            if isBlock {
+                LaTeX(expr)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(foreground)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+            } else {
+                LaTeX(expr)
+                    .foregroundStyle(foreground)
+                    .font(.system(size: fontSize))
+            }
         }
     }
 }

@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		1599B53E39A3CDEE562D5033 /* MarkdownContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84B700834F3EECA10468DC91 /* MarkdownContentView.swift */; };
+		AA000001LATEX000000000001 /* LaTeXSwift in Frameworks */ = {isa = PBXBuildFile; productRef = AA000002LATEX000000000002 /* LaTeXSwift */; };
 		31BD7BC304045245A8CD50E0 /* AudioManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBE370FB4A09E91CFDAB57F9 /* AudioManager.swift */; };
 		34708E5BA49DCFE09A2770E8 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 472435D7BEC5E6A66C89A71A /* ContentView.swift */; };
 		3BDA61563FEF791C08A9111B /* SpectrumProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E27E8D2876D7E37F89DAEACD /* SpectrumProcessor.swift */; };
@@ -64,6 +65,17 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		AA000003LATEX000000000003 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA000001LATEX000000000001 /* LaTeXSwift in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXFileReference section */
 		00A4C7BB4CA3E05A29B0F976 /* ClawMuxWidgetExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = ClawMuxWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -198,6 +210,7 @@
 				E3429F5B042E50AAA4C4242E /* Set Build Number from Git */,
 				B2D10572D96A269F4010FD26 /* Set Git Commit Hash */,
 				8216CD92EC86B17D67C3CBCE /* Sources */,
+				AA000003LATEX000000000003 /* Frameworks */,
 				70777560356440824A9DAAE3 /* Resources */,
 				6B116D902C5AE7661A35DD62 /* Embed Foundation Extensions */,
 			);
@@ -208,6 +221,7 @@
 			);
 			name = ClawMux;
 			packageProductDependencies = (
+				AA000002LATEX000000000002 /* LaTeXSwift */,
 			);
 			productName = ClawMux;
 			productReference = A98C93E4123AFD12DB5663DE /* ClawMux.app */;
@@ -264,6 +278,9 @@
 			);
 			mainGroup = 6802FEA71CF56CFC9E5FA1B9;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				AA000004LATEX000000000004 /* XCRemoteSwiftPackageReference "LaTeXSwift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E4CEA8DE9DC00C53FB1E0E5D /* Products */;
 			projectDirPath = "";
@@ -662,6 +679,25 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		AA000004LATEX000000000004 /* XCRemoteSwiftPackageReference "LaTeXSwift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/colinc86/LaTeXSwift";
+			requirement = {
+				kind = exactVersion;
+				version = "1.3.4";
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AA000002LATEX000000000002 /* LaTeXSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA000004LATEX000000000004 /* XCRemoteSwiftPackageReference "LaTeXSwift" */;
+			productName = LaTeXSwift;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = E0B23EC30C301FA1C780E9AC /* Project object */;
 }
