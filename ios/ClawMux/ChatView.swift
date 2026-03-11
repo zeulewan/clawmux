@@ -274,7 +274,7 @@ struct ChatScrollAreaView: View {
                         MarkdownContentView(text: msg.text, foreground: Color.cText, fontSize: CGFloat(vm.chatFontSize))
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } else if role == "user" {
-                        Text(msg.text)
+                        Text(msg.text.trimmingCharacters(in: .whitespacesAndNewlines))
                             .font(.system(size: CGFloat(vm.chatFontSize)))
                             .lineSpacing(4)
                             .tracking(CGFloat(vm.chatFontSize) * -0.01)
