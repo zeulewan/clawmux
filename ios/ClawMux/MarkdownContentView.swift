@@ -13,10 +13,15 @@ struct ScrollTopDetector: ViewModifier {
             // Use CGFloat so action fires on every scroll event — avoids Bool toggle dead zone
             // where nearTop stays true after a load and action never re-fires.
             content.onScrollGeometryChange(for: CGFloat.self) { geo in
-                // Distance from top: 0 = at top, large positive = at bottom.
-                // defaultScrollAnchor(.bottom) makes contentOffset.y negative near top, so
-                // use this derived value instead of raw contentOffset.y.
-                geo.contentOffset.y + geo.contentSize.height - geo.containerSize.height
+                // Distance from top — supports both standard and bottom-anchored coordinate systems.
+                // With defaultScrollAnchor(.bottom): contentOffset.y is 0 at bottom, negative at top
+                //   → derived formula: contentOffset.y + contentSize.height - containerSize.height → 0 at top
+                // In some iOS versions contentOffset.y may use standard UIKit coords (0 at top, max at bottom)
+                //   → direct value: contentOffset.y → 0 at top
+                // Return the MINIMUM of both interpretations — whichever gives 0 at top will correctly be < 200
+                let anchored = geo.contentOffset.y + geo.contentSize.height - geo.containerSize.height
+                let standard = geo.contentOffset.y
+                return min(anchored, standard)
             } action: { _, distanceFromTop in
                 print("[ScrollTop] dt=\(Int(distanceFromTop)) loading=\(isLoadingOlder) hasMore=\(hasOlderMessages) sid=\(sessionId ?? "nil")")
                 guard distanceFromTop < 200, !isLoadingOlder, hasOlderMessages, let sid = sessionId else { return }
