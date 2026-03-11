@@ -225,7 +225,6 @@ struct SidebarView: View {
                             .offset(x: 9, y: 9)
                     }
                 }
-                .matchedGeometryEffect(id: "sidebar_icon_\(voice.id)", in: sidebarNS)
                 if isSelected {
                     HStack(spacing: 0) {
                         RoundedRectangle(cornerRadius: 2, style: .continuous)
@@ -580,7 +579,6 @@ struct SidebarView: View {
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(alive ? color : color.opacity(0.30))
                 }
-                .matchedGeometryEffect(id: "sidebar_icon_\(voice.id)", in: sidebarNS)
                 .frame(width: 34, height: 34)
 
                 VStack(alignment: .leading, spacing: 1) {
