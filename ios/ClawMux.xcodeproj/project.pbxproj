@@ -16,6 +16,13 @@
 		D8A747936F0FDA5E95EA77BB /* ClawMuxApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFF810E4C0B9F68B1E4AA4AD /* ClawMuxApp.swift */; };
 		DCDC60E202EB951E0C20A61E /* ClawMuxWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC5EB4981879BDC3BE644216 /* ClawMuxWidgetBundle.swift */; };
 		F138DA556E94E3230F50457B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4678CAE85F0CB0CD3AC78DD6 /* Assets.xcassets */; };
+		AA000001000000000000001 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000002 /* Theme.swift */; };
+		AA000001000000000000003 /* MarkdownContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000004 /* MarkdownContentView.swift */; };
+		AA000001000000000000005 /* NotesPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000006 /* NotesPanelView.swift */; };
+		AA000001000000000000007 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000008 /* SettingsView.swift */; };
+		AA000001000000000000009 /* ShapeHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000010 /* ShapeHelpers.swift */; };
+		AA000001000000000000011 /* TonePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000012 /* TonePlayer.swift */; };
+		AA000001000000000000013 /* VADProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000014 /* VADProcessor.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -54,6 +61,13 @@
 		BC5EB4981879BDC3BE644216 /* ClawMuxWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMuxWidgetBundle.swift; sourceTree = "<group>"; };
 		D7C804BA345F7AE206CF5AF7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		DFF810E4C0B9F68B1E4AA4AD /* ClawMuxApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMuxApp.swift; sourceTree = "<group>"; };
+		AA000001000000000000002 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		AA000001000000000000004 /* MarkdownContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownContentView.swift; sourceTree = "<group>"; };
+		AA000001000000000000006 /* NotesPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesPanelView.swift; sourceTree = "<group>"; };
+		AA000001000000000000008 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		AA000001000000000000010 /* ShapeHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShapeHelpers.swift; sourceTree = "<group>"; };
+		AA000001000000000000012 /* TonePlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TonePlayer.swift; sourceTree = "<group>"; };
+		AA000001000000000000014 /* VADProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VADProcessor.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -62,8 +76,15 @@
 			children = (
 				4678CAE85F0CB0CD3AC78DD6 /* Assets.xcassets */,
 				DFF810E4C0B9F68B1E4AA4AD /* ClawMuxApp.swift */,
-					72290AAFED98C8436AD778EF /* ClawMuxViewModel.swift */,
+				72290AAFED98C8436AD778EF /* ClawMuxViewModel.swift */,
 				472435D7BEC5E6A66C89A71A /* ContentView.swift */,
+				AA000001000000000000002 /* Theme.swift */,
+				AA000001000000000000004 /* MarkdownContentView.swift */,
+				AA000001000000000000006 /* NotesPanelView.swift */,
+				AA000001000000000000008 /* SettingsView.swift */,
+				AA000001000000000000010 /* ShapeHelpers.swift */,
+				AA000001000000000000012 /* TonePlayer.swift */,
+				AA000001000000000000014 /* VADProcessor.swift */,
 				D7C804BA345F7AE206CF5AF7 /* Info.plist */,
 			);
 			path = ClawMux;
@@ -213,8 +234,15 @@
 			files = (
 				CE452A75046106310CA1884D /* ClawMuxActivityAttributes.swift in Sources */,
 				D8A747936F0FDA5E95EA77BB /* ClawMuxApp.swift in Sources */,
-					8EBD594CEA424C07342CD79A /* ClawMuxViewModel.swift in Sources */,
+				8EBD594CEA424C07342CD79A /* ClawMuxViewModel.swift in Sources */,
 				34708E5BA49DCFE09A2770E8 /* ContentView.swift in Sources */,
+				AA000001000000000000001 /* Theme.swift in Sources */,
+				AA000001000000000000003 /* MarkdownContentView.swift in Sources */,
+				AA000001000000000000005 /* NotesPanelView.swift in Sources */,
+				AA000001000000000000007 /* SettingsView.swift in Sources */,
+				AA000001000000000000009 /* ShapeHelpers.swift in Sources */,
+				AA000001000000000000011 /* TonePlayer.swift in Sources */,
+				AA000001000000000000013 /* VADProcessor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
