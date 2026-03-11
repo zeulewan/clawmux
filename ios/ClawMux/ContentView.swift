@@ -2318,6 +2318,18 @@ private struct ScrollBottomDetector: ViewModifier {
     }
 }
 
+/// On iOS 26 the system provides liquid glass sheet presentation automatically.
+/// On older iOS, apply a material fallback as the sheet background.
+private struct SheetBackgroundModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content
+        } else {
+            content.presentationBackground(Color.canvas1.opacity(0.92).background(.ultraThinMaterial))
+        }
+    }
+}
+
 /// Rect shape extended 1000pt above its bounds so glassEffect's top rim is off-screen.
 private struct TopOpenRect: Shape {
     func path(in rect: CGRect) -> Path {
@@ -2564,13 +2576,10 @@ struct NotesPanelView: View {
             .onAppear { loadNotes() }
             .onDisappear { saveNotes() }
         }
-        .presentationBackground {
-            if #available(iOS 26, *) {
-                Color.clear.glassEffect(.regular, in: .rect)
-            } else {
-                Color.canvas1.opacity(0.92).background(.ultraThinMaterial)
-            }
-        }
+        .background(Color.clear)
+        // iOS 26: system provides liquid glass sheet automatically — no presentationBackground needed
+        // iOS <26: apply material fallback
+        .modifier(SheetBackgroundModifier())
     }
 
     private func scheduleSave() {
@@ -2937,13 +2946,10 @@ struct SettingsView: View {
                 draftSTTURL = vm.sttURL
             }
         }
-        .presentationBackground {
-            if #available(iOS 26, *) {
-                Color.clear.glassEffect(.regular, in: .rect)
-            } else {
-                Color.canvas1.opacity(0.92).background(.ultraThinMaterial)
-            }
-        }
+        .background(Color.clear)
+        // iOS 26: system provides liquid glass sheet automatically — no presentationBackground needed
+        // iOS <26: apply material fallback
+        .modifier(SheetBackgroundModifier())
     }
 }
 
