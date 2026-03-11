@@ -203,7 +203,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     @Published var isPlaying = false {
         didSet {
             // Keep session.isSpeaking in sync so ringColor uses canonical state, not statusText strings
-            let sid = playingSessionId
+            let sid = audio.currentPlayingSessionId
             if let sid, let idx = sessionIndex(sid) {
                 sessions[idx].isSpeaking = isPlaying
             } else if !isPlaying {
@@ -285,7 +285,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     @Published var micMuted: Bool {
         didSet {
             UserDefaults.standard.set(micMuted, forKey: "micMuted")
-            if micMuted { handleMuteActivated() }
+            if micMuted { audio.handleMuteActivated() }
         }
     }
     @Published var backgroundMode: Bool {
@@ -499,39 +499,21 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     }
 
     // Stash audio recorded while WS was disconnected — flushed as interjection on reconnect
-    private var pendingAudioSend: (sessionId: String, data: Data, isInterjection: Bool)?
+    var pendingAudioSend: (sessionId: String, data: Data, isInterjection: Bool)?
+
+    // Audio subsystem — owns all audio I/O, recording, playback, VAD, metering
+    private(set) lazy var audio: AudioManager = AudioManager(vm: self)
 
     // Private
     private var webSocketTask: URLSessionWebSocketTask?
     private var urlSession: URLSession?
-    private var audioPlayer: AVAudioPlayer?
-    private var audioRecorder: AVAudioRecorder?
     private var reconnectWork: DispatchWorkItem?
-    private let recordingURL: URL
-    private var playingSessionId: String?
-    private var recordingSessionId: String?
-    private lazy var tonePlayer = TonePlayer()
-    private var thinkingSoundTimer: Timer?
-    private var meteringTimer: Timer?
-    private var backgroundRecordingTimer: Timer?
-    private let maxLevelSamples = 50
     private var debugRefreshTimer: Timer?
     private var usageRefreshTimer: Timer?
-    private var pausedAudioSessionId: String?
-    private var suppressNextAutoRecord = false
     private var currentActivity: Activity<ClawMuxActivityAttributes>?
-    private var silencePlayer: AVAudioPlayer?
-    private var ttsPlayer: AVAudioPlayer?
-    private var keepaliveEngine: AVAudioEngine?
-    private var playbackVADEngine: AVAudioEngine?
-    private var playbackVADProcessor: PlaybackVADProcessor?
     private var lastPingTime: Date?
-    private var lastMicActionTime: Date?
-    private var pttInterrupted = false
-    private var recordingStartedAt: Date?
     private var pingWatchdogTimer: Timer?
     private var reconnectAttempt = 0
-    private var backgroundListenWork: DispatchWorkItem?
 
     // MARK: - Init
 
@@ -608,14 +590,12 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         self.defaultModel     = UserDefaults.standard.string(forKey: "defaultModel")     ?? "opus"
         self.defaultEffort    = UserDefaults.standard.string(forKey: "defaultEffort")    ?? "medium"
         self.chatFontSize     = UserDefaults.standard.object(forKey: "chatFontSize")     as? Int  ?? 14
-        self.recordingURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("recording.wav")
         super.init()
 
         // One-time migration: remove stale UserDefaults chat cache (server API is source of truth)
         UserDefaults.standard.removeObject(forKey: "voice-hub-chats")
 
-        setupAudioSession()
+        audio.setupAudioSession()
         observeAppLifecycle()
         endStaleLiveActivities()
         requestNotificationPermission()
@@ -646,7 +626,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                         UIApplication.shared.endBackgroundTask(self.backgroundTaskID)
                         self.backgroundTaskID = .invalid
                     }
-                    self.startSilenceLoop()
+                    self.audio.startSilenceLoop()
                     // End background task after silence is playing
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                         if self.backgroundTaskID != .invalid {
@@ -662,7 +642,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
-                self.stopSilenceLoop()
+                self.audio.stopSilenceLoop()
                 // Reconnect if WebSocket dropped while in background (preserve backoff state)
                 if !self.isConnected && !self.isConnecting && !self.serverURL.isEmpty {
                     self.connectInternal()
@@ -690,28 +670,27 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 switch kind {
                 case .began:
                     // Another app took audio focus — stop recording/TTS, pause keepalive
-                    if self.isRecording { self.stopRecording(discard: false) }
+                    if self.isRecording { self.audio.stopRecording(discard: false) }
                     if self.isPlaying {
-                        let sid = self.playingSessionId
-                        self.stopPlaybackVAD()
-                        self.audioPlayer?.stop(); self.audioPlayer = nil
-                        self.isPlaying = false; self.playingSessionId = nil
+                        let sid = self.audio.currentPlayingSessionId
+                        self.audio.stopPlaybackVAD()
+                        self.isPlaying = false
                         // Notify server so session isn't left waiting for playback_done
                         if let sid { self.sendJSON(["session_id": sid, "type": "playback_done"]) }
                     }
-                    self.stopMessageTTS()
-                    self.silencePlayer?.pause()
+                    self.audio.stopMessageTTS()
+                    self.audio.pauseSilencePlayer()
                 case .ended:
                     // Re-activate audio session and restart keepalive
                     if self.backgroundMode && !self.sessions.isEmpty {
-                        self.setupAudioSession()
-                        if self.appInBackground {
+                        self.audio.setupAudioSession()
+                        if self.audio.appInBackground {
                             // Restart keepalive engine if it died
-                            if self.keepaliveEngine?.isRunning != true {
-                                self.stopSilenceLoop()
-                                self.startSilenceLoop()
+                            if !self.audio.keepaliveEngineIsRunning {
+                                self.audio.stopSilenceLoop()
+                                self.audio.startSilenceLoop()
                             } else {
-                                self.silencePlayer?.play()
+                                self.audio.resumeSilencePlayer()
                             }
                         }
                     }
@@ -734,17 +713,16 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 case .oldDeviceUnavailable:
                     // Output device removed — stop playback so it doesn't redirect unexpectedly
                     if self.isPlaying {
-                        let sid = self.playingSessionId
-                        self.stopPlaybackVAD()
-                        self.audioPlayer?.stop(); self.audioPlayer = nil
-                        self.isPlaying = false; self.playingSessionId = nil
+                        let sid = self.audio.currentPlayingSessionId
+                        self.audio.stopPlaybackVAD()
+                        self.isPlaying = false
                         if let sid { self.sendJSON(["session_id": sid, "type": "playback_done"]) }
                     }
                     // Restart keepalive engine if it died on route change
-                    if self.backgroundMode && self.appInBackground {
-                        if self.keepaliveEngine?.isRunning != true {
-                            self.stopSilenceLoop()
-                            self.startSilenceLoop()
+                    if self.backgroundMode && self.audio.appInBackground {
+                        if !self.audio.keepaliveEngineIsRunning {
+                            self.audio.stopSilenceLoop()
+                            self.audio.startSilenceLoop()
                         }
                     }
                 default:
@@ -770,101 +748,14 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         UNUserNotificationCenter.current().add(request)
     }
 
-    private func startSilenceLoop() {
-        // Ensure audio session is active
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setActive(true)
-        } catch {
-            print("[audio] Failed to activate session for background: \(error)")
-        }
-
-        // Start keepalive engine with input tap (primary keepalive - active audio processing)
-        // Simulator has no real microphone — skip the input tap to avoid crash/double-tap errors
-        #if !targetEnvironment(simulator)
-        if keepaliveEngine == nil {
-            let engine = AVAudioEngine()
-            let input = engine.inputNode
-            let fmt = input.outputFormat(forBus: 0)
-            input.installTap(onBus: 0, bufferSize: 4096, format: fmt) { _, _ in
-                // Discard audio - just keeps the engine alive
-            }
-            do {
-                try engine.start()
-                keepaliveEngine = engine
-                print("[audio] Keepalive engine started")
-            } catch {
-                input.removeTap(onBus: 0)  // clean up tap so next call can try again
-                print("[audio] Keepalive engine failed: \(error)")
-            }
-        }
-        #endif
-
-        // Start silence player (secondary keepalive)
-        guard silencePlayer == nil else { return }
-        let sampleRate: Int = 8000
-        let numSamples = sampleRate  // 1 second
-        var header = Data()
-        let dataSize = numSamples * 2
-        let fileSize = 36 + dataSize
-        header.append(contentsOf: [0x52, 0x49, 0x46, 0x46])  // RIFF
-        header.append(contentsOf: withUnsafeBytes(of: UInt32(fileSize).littleEndian) { Array($0) })
-        header.append(contentsOf: [0x57, 0x41, 0x56, 0x45])  // WAVE
-        header.append(contentsOf: [0x66, 0x6D, 0x74, 0x20])  // fmt
-        header.append(contentsOf: withUnsafeBytes(of: UInt32(16).littleEndian) { Array($0) })
-        header.append(contentsOf: withUnsafeBytes(of: UInt16(1).littleEndian) { Array($0) })  // PCM
-        header.append(contentsOf: withUnsafeBytes(of: UInt16(1).littleEndian) { Array($0) })  // mono
-        header.append(contentsOf: withUnsafeBytes(of: UInt32(sampleRate).littleEndian) {
-            Array($0)
-        })
-        header.append(contentsOf: withUnsafeBytes(of: UInt32(sampleRate * 2).littleEndian) {
-            Array($0)
-        })
-        header.append(contentsOf: withUnsafeBytes(of: UInt16(2).littleEndian) { Array($0) })
-        header.append(contentsOf: withUnsafeBytes(of: UInt16(16).littleEndian) { Array($0) })
-        header.append(contentsOf: [0x64, 0x61, 0x74, 0x61])  // data
-        header.append(contentsOf: withUnsafeBytes(of: UInt32(dataSize).littleEndian) {
-            Array($0)
-        })
-        // Near-silent samples (amplitude 1 out of 32767)
-        var samples = Data(count: dataSize)
-        for i in stride(from: 0, to: dataSize, by: 2) {
-            samples[i] = 1
-            samples[i + 1] = 0
-        }
-        header.append(samples)
-
-        do {
-            silencePlayer = try AVAudioPlayer(data: header)
-            silencePlayer?.numberOfLoops = -1
-            silencePlayer?.volume = 0.0
-            silencePlayer?.prepareToPlay()
-            silencePlayer?.play()
-            print("[audio] Silence loop started for background keepalive")
-        } catch {
-            print("[audio] Silence loop failed: \(error)")
-        }
-    }
-
-    private func stopSilenceLoop() {
-        silencePlayer?.stop()
-        silencePlayer = nil
-        if let engine = keepaliveEngine {
-            engine.inputNode.removeTap(onBus: 0)
-            engine.stop()
-            keepaliveEngine = nil
-            print("[audio] Keepalive engine stopped")
-        }
-    }
-
     // MARK: - Helpers
 
-    private func sessionIndex(_ id: String) -> Int? {
+    func sessionIndex(_ id: String) -> Int? {
         sessions.firstIndex { $0.id == id }
     }
 
     /// Update status text for a session, and if it's the active session, also update the top-level statusText.
-    private func updateStatusText(_ text: String, for sessionId: String) {
+    func updateStatusText(_ text: String, for sessionId: String) {
         if let idx = sessionIndex(sessionId) {
             sessions[idx].statusText = text
         }
@@ -1062,48 +953,43 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         }
     }
 
-    // MARK: - Audio Session
+    // MARK: - Audio Delegation (see AudioManager.swift)
+    // These methods delegate to AudioManager. All @Published audio state stays on ViewModel.
 
-    private func setupAudioSession() {
-        do {
-            let session = AVAudioSession.sharedInstance()
-            // No .mixWithOthers — voice assistant needs exclusive mic focus during recording.
-            // .mixWithOthers allows other app audio to bleed into the mic, corrupting VAD
-            // energy levels and triggering false speech detection.
-            try session.setCategory(
-                .playAndRecord, mode: .spokenAudio,
-                options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .allowBluetoothHFP])
-            try session.setPreferredSampleRate(48000)
-            try session.setPreferredIOBufferDuration(0.02)
-            try session.setActive(true)
-        } catch {
-            print("[audio] Session setup failed: \(error)")
-        }
+    func startThinkingSound()  { audio.startThinkingSound() }
+    func stopThinkingSound()   { audio.stopThinkingSound() }
+
+    func startRecording(sessionId: String? = nil)  { audio.startRecording(sessionId: sessionId) }
+    func stopRecording(discard: Bool = false)       { audio.stopRecording(discard: discard) }
+    func cancelRecording()                          { audio.cancelRecording() }
+
+    func pausePlayback()     { audio.pausePlayback() }
+    func resumePlayback()    { audio.resumePlayback() }
+    func interruptPlayback() { audio.interruptPlayback() }
+
+    func micAction() { audio.micAction() }
+
+    func pttPressed()            { audio.pttPressed() }
+    func pttReleased()           { audio.pttReleased() }
+    func pttSwipeUpSend()        { audio.pttSwipeUpSend() }
+    func pttReleasedForPreview() { audio.pttReleasedForPreview() }
+    func enterPTTTextMode()      { audio.enterPTTTextMode() }
+
+    func tapTranscriptToEdit()   { audio.tapTranscriptToEdit() }
+    func sendTranscriptPreview() { audio.sendTranscriptPreview() }
+    func sendPreviewText()       { audio.sendPreviewText() }
+    func dismissPTTTextField()   { audio.dismissPTTTextField() }
+
+    func playMessageTTS(messageId: UUID, text: String, voice: String?) {
+        audio.playMessageTTS(messageId: messageId, text: text, voice: voice)
     }
+    func stopMessageTTS() { audio.stopMessageTTS() }
 
-    // MARK: - Audio Cues (background only)
-
-    private var appInBackground: Bool {
-        UIApplication.shared.applicationState != .active
-    }
-
-    // MARK: - Thinking Sound
-
-    func startThinkingSound() {
-        stopThinkingSound()
-        guard globalSounds, (isAutoMode && soundThinkingAuto) || (pushToTalk && soundThinkingPTT) else { return }
-        thinkingSoundTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: true) {
-            [weak self] _ in
-            Task { @MainActor in
-                guard let self, !self.appInBackground else { return }
-                self.tonePlayer.thinkingTick()
-            }
-        }
-    }
-
-    func stopThinkingSound() {
-        thinkingSoundTimer?.invalidate()
-        thinkingSoundTimer = nil
+    func clearTranscriptPreview() {
+        showTranscriptPreview = false
+        transcriptPreviewText = ""
+        isTranscribingPreview = false
+        pttTranscriptionError = nil
     }
 
     // MARK: - WebSocket
@@ -1192,19 +1078,16 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         guard isConnected || isConnecting else { return }  // debounce duplicate calls
         isConnected = false
         isConnecting = false
-        if isRecording { stopRecording(discard: true) }
-        recordingSessionId = nil
+        if isRecording { audio.stopRecording(discard: true) }
         if isPlaying {
-            audioPlayer?.stop()
-            audioPlayer = nil
+            audio.stopPlaybackVAD()
             isPlaying = false
-            playingSessionId = nil
         }
         isProcessing = false
-        suppressNextAutoRecord = false
+        audio.currentSuppressNextAutoRecord = false
         clearTranscriptPreview()
-        stopPlaybackVAD()
-        stopMessageTTS()
+        audio.stopPlaybackVAD()
+        audio.stopMessageTTS()
         statusText = "Disconnected"
         pingWatchdogTimer?.invalidate()
         pingWatchdogTimer = nil
@@ -1213,7 +1096,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         scheduleReconnect()
     }
 
-    private func sendJSON(_ dict: [String: Any]) {
+    func sendJSON(_ dict: [String: Any]) {
         guard let data = try? JSONSerialization.data(withJSONObject: dict),
             let string = String(data: data, encoding: .utf8)
         else { return }
@@ -1259,6 +1142,12 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         if isPlaying || isPlaybackPaused { interruptPlayback() }
         guard let sid = activeSessionId else { return }
         sendJSON(["session_id": sid, "type": "interrupt"])
+    }
+
+    // Matches web transportPause() — pause/resume in-progress audio without discarding
+    func sendUserAck(msgId: String) {
+        guard let sid = activeSessionId else { return }
+        sendJSON(["session_id": sid, "type": "user_ack", "msg_id": msgId])
     }
 
     func restartWithEffort(_ effort: String) {
@@ -1384,7 +1273,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 if prevState == .starting && newState != .starting && newState != .dead {
                     if verboseMode { addMessage(sid, role: "system", text: "Claude connected.") }
                     if globalSounds, (isAutoMode && soundReadyAuto) || (pushToTalk && soundReadyPTT) {
-                        tonePlayer.cueSessionReady()
+                        audio.cueSessionReady()
                     }
                     if (isAutoMode && hapticsSessionAuto) || (pushToTalk && hapticsSessionPTT)
                         || (typingMode && hapticsSessionTyping)
@@ -1444,7 +1333,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     if !fireAndForget { sessions[idx].state = .idle }
                 }
                 // Notify in background, gated by per-mode toggle
-                if appInBackground {
+                if audio.appInBackground {
                     let shouldNotify =
                         (isAutoMode && notifyAuto) || (pushToTalk && notifyPTT)
                         || (typingMode && notifyTyping)
@@ -1536,7 +1425,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     sessions[idx].audioBuffer.append(audioData)
                 }
                 if sid == activeSessionId {
-                    if !isPlaying && !isPlaybackPaused { _drainAudioBuffer(sid) }
+                    if !isPlaying && !isPlaybackPaused { audio.drainAudioBuffer(sid) }
                     updateLiveActivity()
                 }
             }
@@ -1545,7 +1434,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             if let sid = sessionId {
                 if let idx = sessionIndex(sid) { sessions[idx].state = .idle }
                 // Skip if already recording for this session
-                if isRecording, recordingSessionId == sid { break }
+                if isRecording, audio.currentRecordingSessionId == sid { break }
 
                 // Skip repeated listening if session already has pending listen
                 if let idx = sessionIndex(sid), sessions[idx].pendingListen { break }
@@ -1566,7 +1455,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 // Background mode should auto-record even if autoRecord setting is off
                 let bgAutoRecord = isBackground && backgroundMode && isAutoMode
                 if isActive || (isBackground && (effectiveAutoRecord || bgAutoRecord)) {
-                    if suppressNextAutoRecord {
+                    if audio.currentSuppressNextAutoRecord {
                         if let idx = sessionIndex(sid) {
                             sessions[idx].pendingListen = true
                         }
@@ -1584,7 +1473,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                                 sessions[idx].pendingListen = true
                             }
                         } else {
-                            if globalSounds && soundListeningAuto { tonePlayer.cueListening() }
+                            if globalSounds && soundListeningAuto { audio.cueListening() }
                             startRecording(sessionId: sid)
                         }
                     } else {
@@ -1611,7 +1500,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             if let sid = sessionId, let idx = sessionIndex(sid) {
                 // Mirror web: if audio still active (playing or buffered), stay — let
                 // playback completion drive the next transition via _checkPendingListen
-                let audioStillActive = (isPlaying && playingSessionId == sid)
+                let audioStillActive = (isPlaying && audio.currentPlayingSessionId == sid)
                     || !sessions[idx].audioBuffer.isEmpty
                 if !audioStillActive {
                     sessions[idx].state = .idle
@@ -1759,11 +1648,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     }
 
     func switchToFocus() {
-        if isPlaying, let player = audioPlayer, player.isPlaying {
-            stopPlaybackVAD()
-            player.pause()
-            isPlaying = false
-        }
+        audio.pauseCurrentPlaybackForSessionSwitch()
         if isRecording { stopRecording(discard: true) }
         stopThinkingSound()
         isFocusMode = true
@@ -1778,16 +1663,10 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     func switchToSession(_ id: String) {
         if activeSessionId != id {
             // Pause audio from previous session (don't stop/interrupt)
-            if isPlaying, let player = audioPlayer, player.isPlaying {
-                stopPlaybackVAD()
-                player.pause()
-                pausedAudioSessionId = playingSessionId
-                isPlaying = false
-            }
+            audio.pauseCurrentPlaybackForSessionSwitch()
             if isRecording { stopRecording(discard: true) }
             stopThinkingSound()
-            suppressNextAutoRecord = false
-            pttInterrupted = false
+            audio.clearSessionSwitchState()
             showPTTTextField = false
             pttPreviewText = ""
             pttTranscriptionError = nil
@@ -1822,19 +1701,14 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             }
 
             // Resume paused audio for this session
-            if pausedAudioSessionId == id, let player = audioPlayer {
-                if player.play() {
-                    isPlaying = true
-                    playingSessionId = id
-                    statusText = "Speaking..."
-                } else {
-                    audioPlayer = nil
+            if audio.hasPausedAudioForSession == id {
+                if !audio.resumePlaybackForSession(id) {
+                    // resume failed — nothing to drain
                 }
-                pausedAudioSessionId = nil
             }
             // Play buffered audio received while in background
             else if let idx = sessionIndex(id), !sessions[idx].audioBuffer.isEmpty {
-                _drainAudioBuffer(id)
+                audio.drainAudioBuffer(id)
             }
             // Handle pending listen
             else if session.pendingListen {
@@ -1848,7 +1722,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                         sendJSON(["session_id": id, "type": "audio", "data": ""])
                         statusText = "Muted"
                     } else if effectiveAutoRecord {
-                        if globalSounds && soundListeningAuto { tonePlayer.cueListening() }
+                        if globalSounds && soundListeningAuto { audio.cueListening() }
                         startRecording(sessionId: id)
                     } else {
                         statusText = pushToTalk ? "Hold to Talk" : "Tap Record"
@@ -2133,61 +2007,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         URLSession.shared.dataTask(with: request) { _, _, _ in }.resume()
     }
 
-    func playMessageTTS(messageId: UUID, text: String, voice: String?) {
-        // Toggle off if already playing this message
-        if ttsPlayingMessageId == messageId {
-            stopMessageTTS()
-            return
-        }
-        stopMessageTTS()
-        ttsPlayingMessageId = messageId
-        guard let baseURL = httpBaseURL() else { ttsPlayingMessageId = nil; return }
-        let url = baseURL.appendingPathComponent("api/tts")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let sessionSpeed = activeSessionId.flatMap { sessionIndex($0) }.map { sessions[$0].speed } ?? 1.0
-        let body: [String: Any] = ["text": text, "voice": voice ?? "af_sky", "speed": sessionSpeed]
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        URLSession.shared.dataTask(with: request) { [weak self] data, resp, error in
-            Task { @MainActor [weak self] in
-                guard let self, self.ttsPlayingMessageId == messageId else { return }
-                guard let data, error == nil,
-                      let httpResp = resp as? HTTPURLResponse, httpResp.statusCode == 200 else {
-                    self.ttsPlayingMessageId = nil
-                    return
-                }
-                do {
-                    let player = try AVAudioPlayer(data: data)
-                    self.ttsPlayer = player
-                    player.delegate = self
-                    if !player.play() {
-                        self.ttsPlayer = nil
-                        self.ttsPlayingMessageId = nil
-                    }
-                } catch {
-                    self.ttsPlayingMessageId = nil
-                }
-            }
-        }.resume()
-    }
-
-    func stopMessageTTS() {
-        ttsPlayer?.stop()
-        ttsPlayer = nil
-        ttsPlayingMessageId = nil
-    }
-
     private func removeSession(_ id: String) {
-        // Clean up paused audio held for this session
-        if pausedAudioSessionId == id || playingSessionId == id {
-            stopPlaybackVAD()
-            audioPlayer?.stop()
-            audioPlayer = nil
-            isPlaying = false
-            playingSessionId = nil
-            pausedAudioSessionId = nil
-        }
+        // Clean up audio state for this session (delegates to AudioManager)
+        audio.cleanupSession(id)
         clearSessionPrefs(id)
         sessions.removeAll { $0.id == id }
         if activeSessionId == id {
@@ -2211,15 +2033,11 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     func goHome() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         // Pause audio (don't interrupt) so it resumes on switch back
-        if isPlaying, let player = audioPlayer, player.isPlaying {
-            player.pause()
-            pausedAudioSessionId = playingSessionId
-            isPlaying = false
-        }
+        audio.pauseCurrentPlaybackForSessionSwitch()
         if isRecording { stopRecording(discard: true) }
         stopThinkingSound()
-        stopPlaybackVAD()
-        suppressNextAutoRecord = false
+        audio.stopPlaybackVAD()
+        audio.clearSessionSwitchState()
         showPTTTextField = false
         pttPreviewText = ""
         pttTranscriptionError = nil
@@ -2509,678 +2327,6 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         }.resume()
     }
 
-    // MARK: - Audio Playback
-
-    private func playAudio(_ sessionId: String, data: Data) {
-        // Stop any message TTS replay to prevent delegate confusion
-        stopMessageTTS()
-        if (isAutoMode && hapticsPlaybackAuto) || (pushToTalk && hapticsPlaybackPTT) {
-            haptic(.soft)
-        }
-        statusText = "Speaking..."
-        isPlaying = true
-        playingSessionId = sessionId
-
-        do {
-            // Ensure audio session is active (important for background playback)
-            try AVAudioSession.sharedInstance().setActive(true)
-            audioPlayer = try AVAudioPlayer(data: data)
-            audioPlayer?.delegate = self
-            let started = audioPlayer?.play() ?? false
-            if started {
-                startPlaybackVAD()
-            } else {
-                // play() returned false — audio session issue; notify server and reset
-                print("[audio] play() returned false for session \(sessionId)")
-                audioPlayer = nil
-                isPlaying = false
-                playingSessionId = nil
-                sendJSON(["session_id": sessionId, "type": "playback_done"])
-            }
-        } catch {
-            print("[audio] Playback error: \(error)")
-            statusText = "Audio error"
-            isPlaying = false
-            sendJSON([
-                "session_id": sessionId,
-                "type": "playback_done",
-            ])
-        }
-    }
-
-    // Matches web transportPause() — pause/resume in-progress audio without discarding
-    func sendUserAck(msgId: String) {
-        guard let sid = activeSessionId else { return }
-        sendJSON(["session_id": sid, "type": "user_ack", "msg_id": msgId])
-    }
-
-    func pausePlayback() {
-        guard isPlaying, let player = audioPlayer else { return }
-        player.pause()
-        isPlaying = false
-        isPlaybackPaused = true
-    }
-
-    func resumePlayback() {
-        guard isPlaybackPaused, let player = audioPlayer else {
-            isPlaybackPaused = false
-            return
-        }
-        if player.play() {
-            isPlaybackPaused = false
-            isPlaying = true
-        } else {
-            isPlaybackPaused = false
-        }
-    }
-
-    func interruptPlayback() {
-        guard isPlaying || isPlaybackPaused, let sid = playingSessionId else { return }
-        stopPlaybackVAD()
-        audioPlayer?.stop()
-        audioPlayer = nil
-        isPlaying = false
-        isPlaybackPaused = false
-        playingSessionId = nil
-        pausedAudioSessionId = nil
-        // Clear any remaining buffered audio
-        if let idx = sessionIndex(sid) {
-            sessions[idx].audioBuffer.removeAll()
-            sessions[idx].statusText = "Ready"
-        }
-        statusText = "Ready"
-        sendJSON(["session_id": sid, "type": "playback_done"])
-    }
-
-    /// Pops the next chunk from the session's audioBuffer and starts playback.
-    /// Matches web _playNextQueued — never called while isPlaying is true.
-    private func _drainAudioBuffer(_ sessionId: String) {
-        guard let idx = sessionIndex(sessionId),
-              !sessions[idx].audioBuffer.isEmpty else { return }
-        let data = sessions[idx].audioBuffer.removeFirst()
-        playAudio(sessionId, data: data)
-    }
-
-    // MARK: - Recording
-
-    func startRecording(sessionId: String? = nil) {
-        let sid = sessionId ?? activeSessionId
-        guard let sid else { return }
-        if showTranscriptPreview { clearTranscriptPreview() }
-        recordingSessionId = sid
-
-        // Check permission status directly (avoid async request which is unreliable in background)
-        switch AVAudioApplication.shared.recordPermission {
-        case .granted:
-            beginRecording()
-        case .undetermined:
-            AVAudioApplication.requestRecordPermission { [weak self] granted in
-                Task { @MainActor in
-                    guard let self, granted else {
-                        self?.statusText = "Microphone access denied"
-                        return
-                    }
-                    self.beginRecording()
-                }
-            }
-        default:
-            statusText = "Microphone access denied"
-        }
-    }
-
-    private func beginRecording() {
-        if (isAutoMode && hapticsRecordingAuto) || (pushToTalk && hapticsRecordingPTT) {
-            haptic(.medium)
-        }
-        let settings: [String: Any] = [
-            AVFormatIDKey: Int(kAudioFormatLinearPCM),
-            AVSampleRateKey: 16000,
-            AVNumberOfChannelsKey: 1,
-            AVLinearPCMBitDepthKey: 16,
-            AVLinearPCMIsFloatKey: false,
-            AVLinearPCMIsBigEndianKey: false,
-        ]
-
-        do {
-            // Ensure audio session is active (critical for background recording)
-            try AVAudioSession.sharedInstance().setActive(true)
-            audioRecorder = try AVAudioRecorder(url: recordingURL, settings: settings)
-            audioRecorder?.isMeteringEnabled = true
-            audioRecorder?.record()
-            isRecording = true
-            recordingStartedAt = Date()
-            audioLevels = []
-            if let sid = recordingSessionId {
-                updateStatusText("Recording...", for: sid)
-            } else {
-                statusText = "Recording..."
-            }
-            updateLiveActivity()
-            startMetering()
-
-            let isBackground = UIApplication.shared.applicationState != .active
-            // Always enable VAD in background (only way to stop recording without UI)
-            if effectiveVAD || isBackground {
-                startVAD()
-            }
-            // Safety timeout: auto-stop recording after 30s in background
-            if isBackground {
-                backgroundRecordingTimer?.invalidate()
-                backgroundRecordingTimer = Timer.scheduledTimer(
-                    withTimeInterval: 30, repeats: false
-                ) { [weak self] _ in
-                    Task { @MainActor in
-                        if self?.isRecording == true {
-                            self?.stopRecording()
-                        }
-                    }
-                }
-            }
-        } catch {
-            print("[mic] Recording error: \(error)")
-            statusText = "Recording error"
-        }
-    }
-
-    /// Stops recording hardware and returns duration + session ID. Does NOT handle send/transcribe logic.
-    private func stopRecordingHardware() -> (duration: TimeInterval, sessionId: String?) {
-        guard let recorder = audioRecorder, recorder.isRecording else { return (0, nil) }
-        recorder.stop()
-        audioRecorder = nil
-        isRecording = false
-        let duration = recordingStartedAt.map { Date().timeIntervalSince($0) } ?? 0
-        recordingStartedAt = nil
-        stopMetering()
-        stopVAD()
-        backgroundRecordingTimer?.invalidate()
-        backgroundRecordingTimer = nil
-        let sid = recordingSessionId
-        return (duration, sid)
-    }
-
-    func stopRecording(discard: Bool = false) {
-        let (recordingDuration, sid) = stopRecordingHardware()
-        guard sid != nil || discard else { return }
-
-        guard !discard, let sid else {
-            recordingSessionId = nil
-            return
-        }
-
-        // PTT preview mode: transcribe locally instead of sending to hub
-        if showPTTTextField {
-            recordingSessionId = nil
-            if recordingDuration < 0.5 {
-                print("[ptt-preview] Recording too short (\(recordingDuration)s), skipping transcription")
-                pttTranscriptionError = "Recording too short. Hold the mic to record, then swipe right."
-                return
-            }
-            if let audioData = try? Data(contentsOf: recordingURL), audioData.count > 1000 {
-                print("[ptt-preview] Recording stopped for preview, \(audioData.count) bytes (\(recordingDuration)s)")
-                pttTranscriptionError = nil
-                isTranscribing = true
-                statusText = "Transcribing..."
-                transcribeAudio(audioData)
-            } else {
-                print("[ptt-preview] No audio data at recording URL")
-                pttTranscriptionError = "No audio recorded. Hold the mic to record, then swipe right."
-            }
-            return
-        }
-
-        if (isAutoMode && hapticsRecordingAuto) || (pushToTalk && hapticsRecordingPTT) {
-            haptic(.light)
-        }
-        if globalSounds && soundProcessingAuto && isAutoMode { tonePlayer.cueProcessing() }
-        isProcessing = true
-        updateStatusText("Processing...", for: sid)
-        updateLiveActivity()
-
-        if let audioData = try? Data(contentsOf: recordingURL) {
-            let b64 = audioData.base64EncodedString()
-            // Check if agent is awaiting input or busy
-            let isAwaiting = sessionIndex(sid).flatMap { sessions[$0].awaitingInput } ?? false
-            let isInterjection = !isAwaiting
-            if !isConnected {
-                // WS disconnected — stash audio for replay on reconnect (matches web _pendingAudioSend)
-                pendingAudioSend = (sessionId: sid, data: audioData, isInterjection: isInterjection)
-                statusText = "Reconnecting — audio saved…"
-            } else if isInterjection {
-                sendJSON(["session_id": sid, "type": "interjection", "data": b64])
-            } else {
-                sendJSON(["session_id": sid, "type": "audio", "data": b64])
-            }
-            // Fire parallel transcription for user feedback (both auto and PTT swipe-up)
-            if audioData.count > 1000 {
-                transcriptPreviewText = ""
-                isTranscribingPreview = true
-                showTranscriptPreview = true
-                transcribeForPreview(audioData)
-            }
-        } else {
-            statusText = "Error reading audio"
-            isProcessing = false
-            // Send empty audio so hub doesn't hang
-            sendJSON(["session_id": sid, "type": "audio", "data": ""])
-        }
-        recordingSessionId = nil
-    }
-
-    func cancelRecording() {
-        guard isRecording, let sid = recordingSessionId else { return }
-        stopRecording(discard: true)
-        // Suppress next auto-record so cancel doesn't immediately re-trigger
-        suppressNextAutoRecord = true
-        // Send empty audio so hub doesn't hang
-        sendJSON(["session_id": sid, "type": "audio", "data": ""])
-        statusText = "Recording cancelled"
-    }
-
-    func sendText() {
-        let text = typingText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-        if hapticsSend && typingMode { haptic(.medium) }
-        typingText = ""
-        // Route to group chat if one is active
-        if let groupName = activeGroupName {
-            sendGroupMessage(text, groupName: groupName)
-            return
-        }
-        guard let sid = activeSessionId else { return }
-        // Check if agent is awaiting input or busy
-        let isAwaiting = sessionIndex(sid).flatMap { sessions[$0].awaitingInput } ?? false
-        if isAwaiting {
-            // Normal text input
-            if let idx = sessionIndex(sid) { sessions[idx].pendingListen = false }
-            sendJSON(["session_id": sid, "type": "text", "text": text])
-        } else {
-            // Agent is busy — send as interjection
-            sendJSON(["session_id": sid, "type": "interjection", "text": text])
-        }
-    }
-
-    // MARK: - PTT Preview (swipe right to type/transcribe)
-
-    private func transcribeAudio(_ audioData: Data) {
-        guard let baseURL = httpBaseURL() else {
-            print("[ptt-preview] No base URL, aborting transcription")
-            isTranscribing = false
-            pttTranscriptionError = "Cannot connect to server"
-            return
-        }
-
-        print("[ptt-preview] Sending \(audioData.count) bytes to transcribe")
-        let url = baseURL.appendingPathComponent("api/transcribe")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.httpBody = audioData
-        request.setValue("audio/wav", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 15
-
-        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
-            Task { @MainActor in
-                guard let self else { return }
-                self.isTranscribing = false
-                self.statusText = ""
-                if let error {
-                    print("[ptt-preview] Transcription error: \(error)")
-                    self.pttTranscriptionError = "Transcription failed. Type your message instead."
-                    return
-                }
-                let httpCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-                guard let data,
-                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-                else {
-                    print("[ptt-preview] Invalid response (\(httpCode))")
-                    self.pttTranscriptionError = "Transcription failed. Type your message instead."
-                    return
-                }
-                // Check for server error
-                if let serverError = json["error"] as? String {
-                    print("[ptt-preview] Server error (\(httpCode)): \(serverError)")
-                    self.pttTranscriptionError = "Transcription error: \(serverError)"
-                    return
-                }
-                if let text = json["text"] as? String, !text.isEmpty {
-                    print("[ptt-preview] Got transcription (\(httpCode)): \(text)")
-                    self.pttPreviewText = text
-                    self.pttTranscriptionError = nil
-                } else {
-                    print("[ptt-preview] Empty text (\(httpCode))")
-                    self.pttTranscriptionError = "No speech detected. Tap the mic to try again."
-                }
-            }
-        }.resume()
-    }
-
-    /// Parallel transcription for inline preview display (used by both PTT release and auto-mode send).
-    private func transcribeForPreview(_ audioData: Data) {
-        guard let baseURL = httpBaseURL() else {
-            isTranscribingPreview = false
-            pttTranscriptionError = "Cannot connect to server"
-            return
-        }
-
-        let url = baseURL.appendingPathComponent("api/transcribe")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.httpBody = audioData
-        request.setValue("audio/wav", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 15
-
-        URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
-            Task { @MainActor in
-                guard let self else { return }
-                self.isTranscribingPreview = false
-                if error != nil {
-                    self.pttTranscriptionError = "Transcription failed"
-                    return
-                }
-                guard let data,
-                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-                else {
-                    self.pttTranscriptionError = "No speech detected"
-                    return
-                }
-                // Check server error before text (matches transcribeAudio ordering)
-                if let serverError = json["error"] as? String {
-                    self.pttTranscriptionError = "Transcription error: \(serverError)"
-                    return
-                }
-                guard let text = json["text"] as? String, !text.isEmpty else {
-                    self.pttTranscriptionError = "No speech detected"
-                    return
-                }
-                self.transcriptPreviewText = text
-                self.pttTranscriptionError = nil
-            }
-        }.resume()
-    }
-
-    func sendPreviewText() {
-        let text = pttPreviewText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, let sid = activeSessionId else {
-            dismissPTTTextField()
-            return
-        }
-        if hapticsSend { haptic(.medium) }
-        let isAwaiting = sessionIndex(sid).flatMap { sessions[$0].awaitingInput } ?? false
-        if isAwaiting {
-            if let idx = sessionIndex(sid) { sessions[idx].pendingListen = false }
-            sendJSON(["session_id": sid, "type": "text", "text": text])
-        } else {
-            sendJSON(["session_id": sid, "type": "interjection", "text": text])
-        }
-        pttPreviewText = ""
-        pttTranscriptionError = nil
-        showPTTTextField = false
-    }
-
-    func dismissPTTTextField() {
-        if isRecording { stopRecording(discard: true) }
-        isTranscribing = false
-        showPTTTextField = false
-        // If there's text, return to transcript preview instead of fully dismissing
-        let text = pttPreviewText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !text.isEmpty {
-            transcriptPreviewText = text
-            showTranscriptPreview = true
-        }
-        pttPreviewText = ""
-        pttTranscriptionError = nil
-    }
-
-    // Mic button action: context-dependent (debounced to prevent double-taps)
-    func micAction() {
-        let now = Date()
-        if let last = lastMicActionTime, now.timeIntervalSince(last) < 0.4 { return }
-        lastMicActionTime = now
-
-        if isPlaying {
-            interruptPlayback()
-        } else if isRecording {
-            stopRecording()
-        } else if micMuted {
-            return
-        } else if let sid = activeSessionId {
-            // User manually tapped mic - clear cancel suppress and pending listen
-            suppressNextAutoRecord = false
-            if let idx = sessionIndex(sid), sessions[idx].pendingListen {
-                sessions[idx].pendingListen = false
-            }
-            startRecording(sessionId: sid)
-        }
-    }
-
-    // MARK: - Push to Talk
-
-    func pttPressed() {
-        if showTranscriptPreview { clearTranscriptPreview() }
-        if isPlaying {
-            interruptPlayback()
-            pttInterrupted = true
-            return
-        }
-        // Don't record on the same press that interrupted playback
-        if pttInterrupted { return }
-        // Don't re-trigger if already recording
-        if isRecording { return }
-        if isProcessing || micMuted { return }
-        if let sid = activeSessionId {
-            suppressNextAutoRecord = false
-            if let idx = sessionIndex(sid), sessions[idx].pendingListen {
-                sessions[idx].pendingListen = false
-            }
-            startRecording(sessionId: sid)
-        }
-    }
-
-    func pttReleased() {
-        pttInterrupted = false
-        if isRecording {
-            stopRecording()
-        }
-    }
-
-    /// Called on swipe-up: sends audio to hub immediately. Parallel transcription fires via stopRecording's normal path.
-    func pttSwipeUpSend() {
-        guard isRecording else { return }
-        pttInterrupted = false
-        stopRecording()  // normal path: sends audio to hub + fires parallel transcription
-    }
-
-    /// Called on normal release (no swipe): stops recording, transcribes for preview. Audio NOT sent to hub.
-    func pttReleasedForPreview() {
-        pttInterrupted = false
-        let (duration, _) = stopRecordingHardware()
-        guard duration > 0 else {
-            recordingSessionId = nil
-            return
-        }
-
-        if duration < 0.3 {
-            // Too short, just go back to idle
-            recordingSessionId = nil
-            return
-        }
-
-        if let audioData = try? Data(contentsOf: recordingURL), audioData.count > 1000 {
-            transcriptPreviewText = ""
-            isTranscribingPreview = true
-            showTranscriptPreview = true
-            pttTranscriptionError = nil
-            recordingSessionId = nil
-            transcribeForPreview(audioData)
-        } else {
-            recordingSessionId = nil
-        }
-    }
-
-    /// Called when user swipes right on mic button in PTT mode.
-    /// If recording is active, stops and transcribes. Otherwise shows empty text field for typing.
-    func enterPTTTextMode() {
-        pttTranscriptionError = nil
-        pttInterrupted = false
-        showPTTTextField = true
-        if isRecording {
-            stopRecording()  // triggers transcription via showPTTTextField branch
-        }
-    }
-
-    /// Taps inline transcript preview to open keyboard for editing.
-    func tapTranscriptToEdit() {
-        showTranscriptPreview = false
-        pttPreviewText = transcriptPreviewText
-        showPTTTextField = true
-    }
-
-    /// Sends the inline transcript preview text directly.
-    func sendTranscriptPreview() {
-        let text = transcriptPreviewText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, let sid = activeSessionId else {
-            clearTranscriptPreview()
-            return
-        }
-        if hapticsSend { haptic(.medium) }
-        if let idx = sessionIndex(sid) { sessions[idx].pendingListen = false }
-        sendJSON(["session_id": sid, "type": "text", "text": text])
-        clearTranscriptPreview()
-    }
-
-    func clearTranscriptPreview() {
-        showTranscriptPreview = false
-        transcriptPreviewText = ""
-        isTranscribingPreview = false
-        pttTranscriptionError = nil
-    }
-
-    // MARK: - VAD (Voice Activity Detection)
-
-    private var vadAudioEngine: AVAudioEngine?
-    private var vadProcessor: VADProcessor?
-
-    private func startVAD() {
-        stopVAD()
-
-        let engine = AVAudioEngine()
-        let input = engine.inputNode
-        let format = input.outputFormat(forBus: 0)
-
-        let threshold = Float(vadThreshold)
-        let duration = vadSilenceDuration
-        let processor = VADProcessor(
-            silenceThreshold: threshold,
-            silenceDuration: duration
-        ) { [weak self] in
-            Task { @MainActor in
-                self?.stopRecording()
-            }
-        }
-        vadProcessor = processor
-
-        installVADTap(on: input, format: format, processor: processor)
-
-        do {
-            try engine.start()
-            vadAudioEngine = engine
-        } catch {
-            print("[vad] Engine start failed: \(error)")
-        }
-    }
-
-    private func stopVAD() {
-        vadAudioEngine?.inputNode.removeTap(onBus: 0)
-        vadAudioEngine?.stop()
-        vadAudioEngine = nil
-        vadProcessor = nil
-    }
-
-    // MARK: - Playback VAD (Auto Interrupt)
-
-    private func startPlaybackVAD() {
-        guard effectiveAutoInterrupt, !micMuted else { return }
-        stopPlaybackVAD()
-
-        let engine = AVAudioEngine()
-        let input = engine.inputNode
-        let format = input.outputFormat(forBus: 0)
-
-        let processor = PlaybackVADProcessor { [weak self] in
-            Task { @MainActor in
-                guard let self, self.isPlaying else { return }
-                self.stopPlaybackVAD()
-                self.interruptPlayback()
-                if let sid = self.activeSessionId {
-                    self.startRecording(sessionId: sid)
-                }
-            }
-        }
-        playbackVADProcessor = processor
-
-        installPlaybackVADTap(on: input, format: format, processor: processor)
-
-        do {
-            try engine.start()
-            playbackVADEngine = engine
-        } catch {
-            print("[playback-vad] Engine start failed: \(error)")
-        }
-    }
-
-    private func stopPlaybackVAD() {
-        playbackVADEngine?.inputNode.removeTap(onBus: 0)
-        playbackVADEngine?.stop()
-        playbackVADEngine = nil
-        playbackVADProcessor = nil
-    }
-
-    // MARK: - Mic Mute
-
-    private func handleMuteActivated() {
-        // Capture sessionId before stopRecording clears it
-        if isRecording {
-            let sid = recordingSessionId ?? activeSessionId
-            stopRecording(discard: true)
-            if let sid {
-                sendJSON(["session_id": sid, "type": "audio", "data": ""])
-            }
-        }
-        // Send silent audio for any sessions with pending listen
-        for i in sessions.indices where sessions[i].pendingListen {
-            sendJSON(["session_id": sessions[i].id, "type": "audio", "data": ""])
-            sessions[i].pendingListen = false
-        }
-        updateStatusText("Muted", for: activeSessionId ?? "")
-        stopPlaybackVAD()
-    }
-
-    // MARK: - Audio Metering
-
-    private func startMetering() {
-        stopMetering()
-        meteringTimer = Timer.scheduledTimer(withTimeInterval: 0.04, repeats: true) {
-            [weak self] _ in
-            Task { @MainActor in
-                guard let self, let recorder = self.audioRecorder, recorder.isRecording else {
-                    return
-                }
-                recorder.updateMeters()
-                // averagePower is in dB (-160 to 0), normalize to 0...1
-                let db = recorder.averagePower(forChannel: 0)
-                let normalized = max(0, min(1, CGFloat((db + 50) / 50)))
-                self.audioLevels.append(normalized)
-                if self.audioLevels.count > self.maxLevelSamples {
-                    self.audioLevels.removeFirst(self.audioLevels.count - self.maxLevelSamples)
-                }
-            }
-        }
-    }
-
-    private func stopMetering() {
-        meteringTimer?.invalidate()
-        meteringTimer = nil
-    }
-
     // MARK: - Debug
 
     func startDebugRefresh() {
@@ -3311,7 +2457,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         }
     }
 
-    private func updateLiveActivity() {
+    func updateLiveActivity() {
         guard let activity = currentActivity,
             let sessionId = activeSessionId,
             let session = sessions.first(where: { $0.id == sessionId })
@@ -3358,12 +2504,12 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
 
     // MARK: - Haptics
 
-    private func haptic(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
+    func haptic(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
         guard globalHaptics else { return }
         UIImpactFeedbackGenerator(style: style).impactOccurred()
     }
 
-    private func haptic(_ type: UINotificationFeedbackGenerator.FeedbackType) {
+    func haptic(_ type: UINotificationFeedbackGenerator.FeedbackType) {
         guard globalHaptics else { return }
         UINotificationFeedbackGenerator().notificationOccurred(type)
     }
@@ -3412,109 +2558,6 @@ extension ClawMuxViewModel: URLSessionWebSocketDelegate {
     ) {
         if error != nil {
             Task { @MainActor in self.handleDisconnect() }
-        }
-    }
-}
-
-// MARK: - AVAudioPlayerDelegate
-
-extension ClawMuxViewModel: AVAudioPlayerDelegate {
-    nonisolated func audioPlayerDidFinishPlaying(
-        _ player: AVAudioPlayer, successfully flag: Bool
-    ) {
-        let playerID = ObjectIdentifier(player)
-        Task { @MainActor in
-            // Use identity comparison — not heuristic state — to identify which player finished
-            if let tts = self.ttsPlayer, ObjectIdentifier(tts) == playerID {
-                self.ttsPlayer = nil
-                self.ttsPlayingMessageId = nil
-                return
-            }
-
-            let sid = self.playingSessionId ?? ""
-
-            self.stopPlaybackVAD()
-            self.isPlaying = false  // clear isPlaying before playingSessionId — isSpeaking didSet depends on order
-
-            // Drain next chunk before sending playback_done (matches web _playNextQueued behavior:
-            // only send playback_done when the per-session queue is fully empty)
-            if !sid.isEmpty, let idx = self.sessionIndex(sid),
-                !self.sessions[idx].audioBuffer.isEmpty
-            {
-                self._drainAudioBuffer(sid)
-                return
-            }
-
-            self.playingSessionId = nil
-            if !sid.isEmpty {
-                self.sendJSON(["session_id": sid, "type": "playback_done"])
-            }
-            self.updateLiveActivity()
-
-            // Handle deferred listen: listening arrived while audio was playing
-            if !sid.isEmpty, let idx = self.sessionIndex(sid),
-                self.sessions[idx].pendingListen, sid == self.activeSessionId
-            {
-                let isBackground = UIApplication.shared.applicationState != .active
-                let bgAutoRecord = isBackground && self.backgroundMode && self.isAutoMode
-                if !self.micMuted && (self.effectiveAutoRecord || bgAutoRecord) {
-                    self.sessions[idx].pendingListen = false
-                    if self.globalSounds && self.soundListeningAuto { self.tonePlayer.cueListening() }
-                    self.startRecording(sessionId: sid)
-                }
-            }
-            // Background safety net: hub sends "listening" after playback_done,
-            // so pendingListen may not be set yet. Schedule a cancellable delayed re-check.
-            else if !sid.isEmpty, sid == self.activeSessionId,
-                UIApplication.shared.applicationState != .active,
-                self.backgroundMode, self.isAutoMode, !self.micMuted
-            {
-                let capturedSid = sid
-                self.backgroundListenWork?.cancel()
-                let work = DispatchWorkItem { [weak self] in
-                    Task { @MainActor in
-                        guard let self,
-                            let idx = self.sessionIndex(capturedSid),
-                            self.sessions[idx].pendingListen,
-                            !self.isRecording, !self.isPlaying,
-                            capturedSid == self.activeSessionId,
-                            UIApplication.shared.applicationState != .active
-                        else { return }
-                        self.sessions[idx].pendingListen = false
-                        self.suppressNextAutoRecord = false
-                        if self.globalSounds && self.soundListeningAuto { self.tonePlayer.cueListening() }
-                        self.startRecording(sessionId: capturedSid)
-                    }
-                }
-                self.backgroundListenWork = work
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0, execute: work)
-            }
-        }
-    }
-
-    nonisolated func audioPlayerDecodeErrorDidOccur(
-        _ player: AVAudioPlayer, error: (any Error)?
-    ) {
-        let playerID = ObjectIdentifier(player)
-        Task { @MainActor in
-            // TTS message decode error — just clear state
-            if let tts = self.ttsPlayer, ObjectIdentifier(tts) == playerID {
-                self.ttsPlayer = nil
-                self.ttsPlayingMessageId = nil
-                return
-            }
-            let sid = self.playingSessionId ?? ""
-            self.stopPlaybackVAD()
-            self.isPlaying = false
-            self.playingSessionId = nil
-            self.statusText = "Audio decode error"
-            // Drain stale buffer so it doesn't play on next session switch
-            if !sid.isEmpty, let idx = self.sessionIndex(sid) {
-                self.sessions[idx].audioBuffer.removeAll()
-            }
-            if !sid.isEmpty {
-                self.sendJSON(["session_id": sid, "type": "playback_done"])
-            }
         }
     }
 }

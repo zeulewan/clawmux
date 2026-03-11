@@ -28,6 +28,7 @@
 		D8A747936F0FDA5E95EA77BB /* ClawMuxApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFF810E4C0B9F68B1E4AA4AD /* ClawMuxApp.swift */; };
 		DCDC60E202EB951E0C20A61E /* ClawMuxWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC5EB4981879BDC3BE644216 /* ClawMuxWidgetBundle.swift */; };
 		DD0B6C41043DEB376B75D6BE /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8850FD7D2AA1753841CA57F /* ChatView.swift */; };
+		5F39E47895EC422A85A0894C /* AudioManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3A8A92DE9DA410CB8DF7AAD /* AudioManager.swift */; };
 		EF98BD8285F5FAF97C9985E9 /* InputBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4385E6F9723F86B5AFE1680 /* InputBarView.swift */; };
 		F138DA556E94E3230F50457B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4678CAE85F0CB0CD3AC78DD6 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
@@ -87,6 +88,7 @@
 		C75D80D8B5385DCFF85A8039 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		C8850FD7D2AA1753841CA57F /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		D4385E6F9723F86B5AFE1680 /* InputBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputBarView.swift; sourceTree = "<group>"; };
+		E3A8A92DE9DA410CB8DF7AAD /* AudioManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioManager.swift; sourceTree = "<group>"; };
 		D547095052AD2B437A196FA2 /* NotesPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesPanelView.swift; sourceTree = "<group>"; };
 		D7C804BA345F7AE206CF5AF7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		DFF810E4C0B9F68B1E4AA4AD /* ClawMuxApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMuxApp.swift; sourceTree = "<group>"; };
@@ -99,6 +101,7 @@
 				4678CAE85F0CB0CD3AC78DD6 /* Assets.xcassets */,
 				C8850FD7D2AA1753841CA57F /* ChatView.swift */,
 				DFF810E4C0B9F68B1E4AA4AD /* ClawMuxApp.swift */,
+				E3A8A92DE9DA410CB8DF7AAD /* AudioManager.swift */,
 				72290AAFED98C8436AD778EF /* ClawMuxViewModel.swift */,
 				472435D7BEC5E6A66C89A71A /* ContentView.swift */,
 				443ABC04B7A435B58F1FC6D4 /* GroupChatView.swift */,
@@ -345,6 +348,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5F39E47895EC422A85A0894C /* AudioManager.swift in Sources */,
 				DD0B6C41043DEB376B75D6BE /* ChatView.swift in Sources */,
 				CE452A75046106310CA1884D /* ClawMuxActivityAttributes.swift in Sources */,
 				D8A747936F0FDA5E95EA77BB /* ClawMuxApp.swift in Sources */,
