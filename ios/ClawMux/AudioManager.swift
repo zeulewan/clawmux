@@ -50,12 +50,6 @@ final class AudioManager: NSObject {
         super.init()
     }
 
-    deinit {
-        thinkingSoundTimer?.invalidate()
-        meteringTimer?.invalidate()
-        backgroundRecordingTimer?.invalidate()
-    }
-
     // MARK: - Accessors (used by ViewModel and AVAudioPlayerDelegate)
 
     var currentPlayingSessionId: String? { playingSessionId }
