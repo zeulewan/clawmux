@@ -420,23 +420,43 @@ struct DebugView: View {
                     Spacer()
                     Text(vm.debugLastUpdated).font(.system(size: 10)).foregroundStyle(Theme.textTertiary)
                 }
+                debugSection("Status") {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        Text(vm.debugStatus.isEmpty ? "Loading…" : vm.debugStatus)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(Theme.textSecondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxHeight: 200)
+                    .padding(8)
+                    .background(Theme.bg, in: RoundedRectangle(cornerRadius: 8))
+                }
                 debugSection("System") {
                     let sys = vm.debugSystem
                     if let cpu = sys.cpuPercent {
-                        debugKV("CPU", String(format: "%.0f%%", cpu))
+                        debugKV("CPU", String(format: "%.0f%%", cpu),
+                                color: cpu > 80 ? Theme.red : cpu > 50 ? Theme.yellow : Theme.green)
                     }
                     if sys.ramTotalGB > 0 {
                         debugKV("RAM", String(format: "%.1f / %.1f GB (%.0f%%)", sys.ramUsedGB, sys.ramTotalGB, sys.ramPercent))
                     }
                     if let gpu = sys.gpuPercent {
-                        debugKV("GPU", "\(gpu)%\(sys.gpuTempC.map { " · \($0)°C" } ?? "")")
-                        debugKV("VRAM", "\(sys.vramUsedMB) / \(sys.vramTotalMB) MB")
+                        debugKV("GPU", "\(gpu)%",
+                                color: gpu > 80 ? Theme.red : gpu > 50 ? Theme.yellow : Theme.green)
+                        if sys.vramTotalMB > 0 {
+                            debugKV("VRAM", String(format: "%.1f / %.1f GB",
+                                                   Double(sys.vramUsedMB) / 1024, Double(sys.vramTotalMB) / 1024))
+                        }
+                        if let temp = sys.gpuTempC {
+                            debugKV("GPU Temp", "\(temp)°C",
+                                    color: temp > 80 ? Theme.red : temp > 60 ? Theme.yellow : nil)
+                        }
                     }
                 }
                 debugSection("Hub") {
                     debugKV("Port",    "\(vm.debugHub.port)")
                     debugKV("Uptime",  formatDuration(vm.debugHub.uptimeSeconds))
-                    debugKV("Browser", vm.debugHub.browserConnected ? "connected" : "disconnected",
+                    debugKV("Clients", "\(vm.debugHub.clientCount) connected",
                             badge: vm.debugHub.browserConnected ? .up : .down)
                     debugKV("Sessions", "\(vm.debugHub.sessionCount)")
                 }
@@ -467,8 +487,18 @@ struct DebugView: View {
                                 }
                                 HStack(spacing: 12) {
                                     Text(s.voice).font(.system(size: 10)).foregroundStyle(Theme.textSecondary)
+                                    let proj = [s.project, s.projectRepo].filter { !$0.isEmpty }.joined(separator: " · ")
+                                    if !proj.isEmpty {
+                                        Text(proj).font(.system(size: 10)).foregroundStyle(Theme.textSecondary).lineLimit(1)
+                                    }
                                     Text("idle \(formatDuration(s.idleSeconds))").font(.system(size: 10)).foregroundStyle(Theme.textTertiary)
                                     Text("age \(formatDuration(s.ageSeconds))").font(.system(size: 10)).foregroundStyle(Theme.textTertiary)
+                                }
+                                if !s.workDir.isEmpty {
+                                    Text(s.workDir)
+                                        .font(.system(size: 9, design: .monospaced))
+                                        .foregroundStyle(Theme.textTertiary)
+                                        .lineLimit(1)
                                 }
                             }
                             .padding(.vertical, 2)
@@ -484,6 +514,7 @@ struct DebugView: View {
                                 Text(t.name).font(.system(size: 11, design: .monospaced)).lineLimit(1)
                                 debugBadge(t.isVoice ? "voice" : "other", style: t.isVoice ? .starting : .down)
                                 Text("\(t.windows)w").font(.system(size: 10)).foregroundStyle(Theme.textTertiary)
+                                debugBadge(t.attached ? "attached" : "detached", style: t.attached ? .up : .down)
                                 Text(t.created).font(.system(size: 10)).foregroundStyle(Theme.textTertiary)
                                 Spacer()
                             }
@@ -532,10 +563,14 @@ struct DebugView: View {
     }
 
     @ViewBuilder
-    private func debugKV(_ key: String, _ value: String, badge: BadgeStyle? = nil) -> some View {
+    private func debugKV(_ key: String, _ value: String, badge: BadgeStyle? = nil, color: Color? = nil) -> some View {
         HStack(spacing: 8) {
             Text(key).font(.system(size: 11)).foregroundStyle(Theme.textTertiary).frame(width: 80, alignment: .leading)
-            if let badge { debugBadge(value, style: badge) } else { Text(value).font(.system(size: 12)).foregroundStyle(Theme.textPrimary) }
+            if let badge {
+                debugBadge(value, style: badge)
+            } else {
+                Text(value).font(.system(size: 12)).foregroundStyle(color ?? Theme.textPrimary)
+            }
             Spacer()
         }
     }

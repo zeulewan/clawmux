@@ -135,6 +135,7 @@ struct DebugHubInfo {
     var port = 0
     var uptimeSeconds = 0
     var browserConnected = false
+    var clientCount = 0
     var sessionCount = 0
 }
 
@@ -150,6 +151,9 @@ struct DebugHubSession: Identifiable {
     var id: String { sessionId }
     let sessionId: String
     let voice: String
+    let project: String
+    let projectRepo: String
+    let workDir: String
     let state: String
     let mcpConnected: Bool
     let idleSeconds: Int
@@ -482,6 +486,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     @Published var debugTmux: [DebugTmuxSession] = []
     @Published var debugLog: [String] = []
     @Published var debugSystem = DebugSystemInfo()
+    @Published var debugStatus = ""
     @Published var debugLastUpdated = ""
 
     // Usage stats
@@ -2415,6 +2420,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                         port: hub["port"] as? Int ?? 0,
                         uptimeSeconds: hub["uptime_seconds"] as? Int ?? 0,
                         browserConnected: hub["browser_connected"] as? Bool ?? false,
+                        clientCount: hub["client_count"] as? Int ?? 0,
                         sessionCount: hub["session_count"] as? Int ?? 0
                     )
                 }
@@ -2439,6 +2445,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                         DebugHubSession(
                             sessionId: s["session_id"] as? String ?? "?",
                             voice: s["voice"] as? String ?? "?",
+                            project: s["project"] as? String ?? "",
+                            projectRepo: s["project_repo"] as? String ?? "",
+                            workDir: s["work_dir"] as? String ?? "",
                             state: s["state"] as? String ?? s["status"] as? String ?? "?",
                             mcpConnected: s["mcp_connected"] as? Bool ?? false,
                             idleSeconds: s["idle_seconds"] as? Int ?? 0,
@@ -2493,6 +2502,18 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             else { return }
             Task { @MainActor in
                 self?.debugLog = lines
+            }
+        }.resume()
+
+        // Fetch /api/debug/status
+        let statusURL = baseURL.appendingPathComponent("api/debug/status")
+        URLSession.shared.dataTask(with: statusURL) { [weak self] data, _, _ in
+            guard let data,
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                let output = json["output"] as? String
+            else { return }
+            Task { @MainActor in
+                self?.debugStatus = output
             }
         }.resume()
     }
