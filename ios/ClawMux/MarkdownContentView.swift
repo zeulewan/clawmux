@@ -18,7 +18,9 @@ struct ScrollTopDetector: ViewModifier {
                 // use this derived value instead of raw contentOffset.y.
                 geo.contentOffset.y + geo.contentSize.height - geo.containerSize.height
             } action: { _, distanceFromTop in
+                print("[ScrollTop] dt=\(Int(distanceFromTop)) loading=\(isLoadingOlder) hasMore=\(hasOlderMessages) sid=\(sessionId ?? "nil")")
                 guard distanceFromTop < 200, !isLoadingOlder, hasOlderMessages, let sid = sessionId else { return }
+                print("[ScrollTop] TRIGGERING LOAD for sid=\(sid)")
                 isLoadingOlder = true
                 load(sid) {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { isLoadingOlder = false }
