@@ -252,3 +252,110 @@ The CLI is a standalone Python script (~1600 lines) installed to `/usr/local/bin
 2. Hub resolves recipient session, writes to inbox + pushes to wait queue if IDLE
 3. For user messages: generates TTS, pushes audio to browser
 4. Returns message ID for threading/acks
+
+## iOS App Architecture (`ios/ClawMux/`)
+
+The iOS app is a native SwiftUI client that connects to the same hub WebSocket as the browser.
+
+### File Structure
+
+| File | Purpose |
+|------|---------|
+| `ClawMuxApp.swift` | App entry point, `@main` |
+| `ContentView.swift` | Root view — body, ZStack layout, `@State` vars, split routing |
+| `SidebarView.swift` | Collapsible sidebar (48px collapsed / 220px expanded), agent cards, folder grouping, group chat icons, tray |
+| `ChatView.swift` | Chat scroll area, message grouping, `chatBubble`, thinking bubble, scroll-to-bottom |
+| `GroupChatView.swift` | Group chat header, scroll, message bubbles |
+| `InputBarView.swift` | Bottom input area routing (voice / text / PTT modes) |
+| `WelcomeView.swift` | Empty state shown when no session is active |
+| `SettingsView.swift` | Settings sheet + sub-screens (AutoMode, PTT, TypingMode) |
+| `NotesPanelView.swift` | Notes sheet with auto-save |
+| `MarkdownContentView.swift` | Markdown renderer (AttributedString), `ScrollTopDetector`, `ScrollBottomDetector` |
+| `Theme.swift` | Adaptive dark/light `Color` extensions, `UIColor(hex:)` helper |
+| `ViewHelpers.swift` | `voiceColor()`, `voiceIcon()`, `shortTime()`, `cardStatus()`, `ringColor()` |
+| `ShapeHelpers.swift` | `TopOpenRect` (open-top glass shape), `SheetBackgroundModifier` |
+| `TonePlayer.swift` | Audio cue tones (start/stop/send sounds) |
+| `VADProcessor.swift` | Voice Activity Detection (recording VAD + playback VAD) |
+| `ClawMuxViewModel.swift` | All app state (`@Published`), WebSocket, session management, audio recording/playback, hub protocol |
+
+### Key Types
+
+**`ClawMuxViewModel`** (`@StateObject` owned by ContentView) — central state and logic:
+- `sessions: [VoiceSession]` — all connected agent sessions
+- `activeSession: VoiceSession?` — currently displayed session
+- `activeMessages: [ChatMessage]` — messages for active session
+- `groupMessages: [GroupChatMessage]` — group chat messages
+- `folders: [ProjectFolder]` — live folder list from `/api/projects`
+- `isRecording`, `isPlaying`, `audioLevels` — audio state
+- `isFocusMode`, `typingMode`, `pushToTalk` — UI mode flags
+
+**`VoiceSession`** — per-agent session state:
+- `id`, `voice`, `label`, `state: AgentState` — identity and state
+- `project`, `projectArea`, `projectRepo`, `role`, `task` — sidebar metadata
+- `isThinking`, `isSpeaking`, `unreadCount` — live status
+
+**`ChatMessage`** — single message:
+- `role` — `"user"` | `"assistant"` | `"system"` | `"agent"` | `"activity"`
+- `msgId`, `parentId` — for threading and bare-ack reactions
+- `isBareAck` — thumbs-up reaction (not displayed, renders 👍 chip on parent)
+
+**`MessageGroup`** — consecutive messages from same role, stable ID for SwiftUI animations:
+- `id = role + firstMsgId` (stable across re-renders to prevent animation cascades)
+
+### Connection Model
+
+1. App connects to `ws://{serverURL}/ws` (same endpoint as browser)
+2. Hub sends `session_list` → app populates `sessions`
+3. Hub sends `project_status` WS events → updates `VoiceSession` metadata live
+4. App fetches `/api/sessions` on reconnect for full state sync
+5. App fetches `/api/projects` for folder list; updates via `project_created/deleted/renamed` WS events
+6. Audio: STT posted to `/api/transcribe`, TTS audio received as `audio` WS events (PCM chunks)
+
+### Critical Layout Rules (DO NOT BREAK)
+
+- `sidebarStripView` MUST end with `.frame(width: sidebarExpanded ? 220 : 48)` — without this, UIKit gives the sidebar full screen width, consuming all touches
+- NO `.frame(maxWidth: .infinity)` inside the sidebar's `ScrollView` content `VStack`
+- NO `.ignoresSafeArea(edges: .bottom)` on the outer `ZStack`
+- NO `safeAreaInset(edge: .top)` on the header/topBar
+- `MessageGroup.id` must be stable (role + firstMsgId hash) — UUID() in a computed property causes animation cascades on every state change
+
+### Glass Effect Pattern (iOS 26)
+
+```swift
+// Inline glass (blurs content behind):
+Color.clear.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 26))
+
+// Open-top glass (no rim visible at top/sides — header bars):
+Color.clear.glassEffect(.regular, in: TopOpenRect()).ignoresSafeArea(edges: .top)
+
+// Sheet glass (system liquid glass tray):
+.presentationBackground(.regularMaterial)
+```
+
+`glassEffect` blurs what is spatially behind the view in the same render pass. For the sidebar glass to show actual frosted chat content, the chat `ScrollView` must extend behind the sidebar (use `.contentMargins(.leading, 48)` on scroll content, not `.padding(.leading, 48)` on the scroll view itself).
+
+### Build Workflow
+
+```bash
+# On workstation — edit Swift files, then:
+git push origin main
+
+# On zmac (100.117.222.41):
+ssh zeul@100.117.222.41 'cd /Users/zeul/GIT/clawmux && git pull && ~/.clawmux/build_deploy.sh'
+# Installs to device: 9C243483-C00D-5BED-AAD3-25FE73837C8F
+
+# Simulator build:
+xcodebuild -project ios/ClawMux.xcodeproj -scheme ClawMux \
+  -destination "platform=iOS Simulator,id=DC25B80F-4C70-4009-AF8C-5F35A50D6638" \
+  -derivedDataPath /tmp/ClawMux_sim_build build
+xcrun simctl install DC25B80F-4C70-4009-AF8C-5F35A50D6638 \
+  /tmp/ClawMux_sim_build/Build/Products/Debug-iphonesimulator/ClawMux.app
+xcrun simctl launch DC25B80F-4C70-4009-AF8C-5F35A50D6638 com.zeul.clawmux
+
+# xcodeproj regeneration (after adding/removing Swift files):
+cd ios && /opt/homebrew/bin/xcodegen generate
+```
+
+### Device Trust (iOS 26)
+
+After every phone restart, iOS must re-verify the developer certificate via `ppq.apple.com`. **Tailscale VPN blocks this.** Fix: turn Tailscale off → tap app → enter passcode → Tailscale back on. Device UUID for `devicectl`: `9C243483-C00D-5BED-AAD3-25FE73837C8F`.
