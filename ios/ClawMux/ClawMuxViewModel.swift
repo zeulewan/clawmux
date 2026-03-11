@@ -1162,6 +1162,25 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         if let idx = sessionIndex(sid) { sessions[idx].effort = effort }
     }
 
+    func sendText() {
+        let text = typingText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        if hapticsSend && typingMode { haptic(.medium) }
+        typingText = ""
+        if let groupName = activeGroupName {
+            sendGroupMessage(text, groupName: groupName)
+            return
+        }
+        guard let sid = activeSessionId else { return }
+        let isAwaiting = sessionIndex(sid).flatMap { sessions[$0].awaitingInput } ?? false
+        if isAwaiting {
+            if let idx = sessionIndex(sid) { sessions[idx].pendingListen = false }
+            sendJSON(["session_id": sid, "type": "text", "text": text])
+        } else {
+            sendJSON(["session_id": sid, "type": "interjection", "text": text])
+        }
+    }
+
     // MARK: - Hub Protocol
 
     private func handleMessage(_ message: URLSessionWebSocketTask.Message) {
