@@ -986,6 +986,11 @@ struct ContentView: View {
                             .fill(voiceColor(v.id))
                             .frame(width: 16, height: 16)
                             .overlay(Circle().strokeBorder(Color.canvas2, lineWidth: 1))
+                            .overlay(
+                                Image(systemName: voiceIcon(v.id))
+                                    .font(.system(size: 7, weight: .semibold))
+                                    .foregroundStyle(.white.opacity(0.9))
+                            )
                             .offset(x: CGFloat(i) * 11)
                     }
                 }
