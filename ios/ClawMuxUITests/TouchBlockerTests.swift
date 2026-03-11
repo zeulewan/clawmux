@@ -231,32 +231,33 @@ final class TouchBlockerTests: XCTestCase {
 
         let loadingSpinner = app.activityIndicators.firstMatch
 
-        // Helper: wait for spinner to appear and then clear (polls up to 15s)
-        func waitForLoad(timeout: TimeInterval = 15) -> Bool {
-            let seen = loadingSpinner.waitForExistence(timeout: timeout)
-            if seen {
-                for _ in 0..<15 { if !loadingSpinner.exists { break }; sleep(1) }
+        // Swipe one step at a time and check for spinner after EACH swipe.
+        // The trigger fires during deceleration; checking immediately after each swipe
+        // gives us the best chance to catch the ~350ms window.
+        func scrollAndCheckForSpinner(swipes: Int) -> Bool {
+            for i in 0..<swipes {
+                chatScroll.swipeDown(velocity: .fast)
+                // Check immediately after swipe settles — spinner may have just appeared
+                if loadingSpinner.waitForExistence(timeout: 1) {
+                    saveScreenshot("infinitescroll_spinner_found_swipe\(i)")
+                    // Wait for spinner to clear before next round
+                    for _ in 0..<15 { if !loadingSpinner.exists { break }; sleep(1) }
+                    return true
+                }
             }
-            return seen
+            return false
         }
 
-        // --- Round 1: watch for auto-trigger immediately (short visible content → distanceFromTop fires) ---
-        // Do NOT sleep — catch the very first spinner cycle triggered by history loading
-        let spinnerSeen1 = waitForLoad(timeout: 15)
+        // --- Round 1: swipe to top, checking after each swipe ---
+        let spinnerSeen1 = scrollAndCheckForSpinner(swipes: 15)
         saveScreenshot("infinitescroll_07_after_round1")
 
-        // --- Round 2: swipe to top and trigger again ---
-        for _ in 0..<12 { chatScroll.swipeDown(velocity: .fast) }
-        sleep(2)
-        saveScreenshot("infinitescroll_10_after_scroll2")
-        let spinnerSeen2 = waitForLoad(timeout: 5)
+        // --- Round 2: swipe to top again ---
+        let spinnerSeen2 = scrollAndCheckForSpinner(swipes: 15)
         saveScreenshot("infinitescroll_12_after_load2")
 
-        // --- Round 3: swipe to top again ---
-        for _ in 0..<12 { chatScroll.swipeDown(velocity: .fast) }
-        sleep(2)
-        saveScreenshot("infinitescroll_13_after_scroll3")
-        let spinnerSeen3 = waitForLoad(timeout: 5)
+        // --- Round 3: one more pass ---
+        let spinnerSeen3 = scrollAndCheckForSpinner(swipes: 15)
         saveScreenshot("infinitescroll_15_final")
 
         // At minimum, the app must still be alive and the scroll view must exist
