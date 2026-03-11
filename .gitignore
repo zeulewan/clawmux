@@ -14,3 +14,7 @@ ios/ClawMux.xcodeproj/xcuserdata/
 ios/ClawMux.xcodeproj/project.xcworkspace/xcuserdata/
 ios/*.xcworkspace/
 _garbage/
+
+# Stray audio files from whisper/kokoro servers
+*.wav
+*.mp3
