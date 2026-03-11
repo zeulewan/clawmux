@@ -262,7 +262,7 @@ struct ChatScrollAreaView: View {
                 : AnyShapeStyle(Color.clear)
 
         return AnyView(HStack(alignment: .bottom, spacing: 0) {
-            if role == "user"   { Spacer(minLength: 56) }
+            if role == "user"   { Spacer().frame(minWidth: 20, maxWidth: UIScreen.main.bounds.width * 0.22) }
             if role == "system" { Spacer() }
 
             VStack(alignment: role == "user" ? .trailing : .leading, spacing: 3) {
@@ -277,6 +277,7 @@ struct ChatScrollAreaView: View {
                             .tracking(CGFloat(vm.chatFontSize) * -0.01)
                             .foregroundStyle(Color.white)
                             .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         Text(msg.text)
                             .font(.caption)

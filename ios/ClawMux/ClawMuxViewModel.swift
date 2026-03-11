@@ -1151,6 +1151,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     }
 
     func sendInterrupt() {
+        // Always suppress auto-record after an interrupt — whether agent is thinking or speaking
+        audio.currentSuppressNextAutoRecord = true
         // If audio is playing, stop it immediately (matches web stop-agent-speaking)
         if isPlaying || isPlaybackPaused { interruptPlayback() }
         guard let sid = activeSessionId else { return }

@@ -9,7 +9,7 @@ func installSpectrumTap(
     format: AVAudioFormat,
     processor: SpectrumProcessor
 ) {
-    input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+    input.installTap(onBus: 0, bufferSize: 512, format: format) { buffer, _ in
         processor.processBuffer(buffer)
     }
 }
@@ -23,7 +23,7 @@ final class SpectrumProcessor: @unchecked Sendable {
 
     static let bandCount = 12
 
-    private let fftSize = 1024
+    private let fftSize = 512
     private let log2n: vDSP_Length
     private var fftSetup: FFTSetup?
 
@@ -42,7 +42,7 @@ final class SpectrumProcessor: @unchecked Sendable {
     private let onBandsUpdated: @Sendable ([CGFloat]) -> Void
 
     init(sampleRate: Double = 44100, onBandsUpdated: @escaping @Sendable ([CGFloat]) -> Void) {
-        let n = 1024
+        let n = 512
         let l2n = vDSP_Length(log2f(Float(n)))
         self.log2n = l2n
         self.fftSetup = vDSP_create_fftsetup(l2n, FFTRadix(kFFTRadix2))
