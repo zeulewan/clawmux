@@ -2210,7 +2210,7 @@ struct ContentView: View {
                     .animation(.easeOut(duration: 0.08), value: level)
             }
         }
-        .frame(height: 12).frame(maxWidth: .infinity).clipped()
+        .frame(height: 12).frame(maxWidth: 240).clipped()
         .padding(.horizontal, 20).padding(.vertical, 4)
     }
 
