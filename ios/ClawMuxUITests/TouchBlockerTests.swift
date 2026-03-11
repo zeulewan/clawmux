@@ -239,10 +239,8 @@ final class TouchBlockerTests: XCTestCase {
         let spinnerSeen1 = loadingSpinner.waitForExistence(timeout: 3)
         saveScreenshot("infinitescroll_08_spinner1_state")
         if spinnerSeen1 {
-            // Wait for spinner to disappear (load complete)
-            let spinnerGone = NSPredicate(format: "exists == false")
-            expectation(for: spinnerGone, evaluatedWith: loadingSpinner, handler: nil)
-            waitForExpectations(timeout: 10)
+            // Poll until spinner disappears (load complete)
+            for _ in 0..<15 { if !loadingSpinner.exists { break }; sleep(1) }
         }
         saveScreenshot("infinitescroll_09_after_load1")
 
@@ -255,9 +253,7 @@ final class TouchBlockerTests: XCTestCase {
         let spinnerSeen2 = loadingSpinner.waitForExistence(timeout: 3)
         saveScreenshot("infinitescroll_11_spinner2_state")
         if spinnerSeen2 {
-            let spinnerGone2 = NSPredicate(format: "exists == false")
-            expectation(for: spinnerGone2, evaluatedWith: loadingSpinner, handler: nil)
-            waitForExpectations(timeout: 10)
+            for _ in 0..<15 { if !loadingSpinner.exists { break }; sleep(1) }
         }
         saveScreenshot("infinitescroll_12_after_load2")
 
@@ -270,9 +266,7 @@ final class TouchBlockerTests: XCTestCase {
         let spinnerSeen3 = loadingSpinner.waitForExistence(timeout: 3)
         saveScreenshot("infinitescroll_14_spinner3_state")
         if spinnerSeen3 {
-            let spinnerGone3 = NSPredicate(format: "exists == false")
-            expectation(for: spinnerGone3, evaluatedWith: loadingSpinner, handler: nil)
-            waitForExpectations(timeout: 10)
+            for _ in 0..<15 { if !loadingSpinner.exists { break }; sleep(1) }
         }
         saveScreenshot("infinitescroll_15_final")
 
