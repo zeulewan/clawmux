@@ -381,8 +381,6 @@ struct ContentView: View {
                     .padding(.vertical, 8)
                     .background(shape.fill(isUser ? Color.cAccent.opacity(0.18) : Color.cCard))
                     .overlay(shape.fill(isUser ? Color.clear : color.opacity(0.20)))
-                    .overlay(shape.strokeBorder(
-                        isUser ? Color.clear : Color(hex: 0x2A3A52), lineWidth: 1))
                     .contextMenu {
                         Button {
                             UIPasteboard.general.string = msg.text
@@ -1698,7 +1696,7 @@ struct ContentView: View {
                             bottomTrailingRadius: br, topTrailingRadius: tr,
                             style: .continuous)
                         .strokeBorder(
-                            isPlaying ? color.opacity(isPulsing ? 0.7 : 0.2) : Color(hex: 0x2A3A52),
+                            isPlaying ? color.opacity(isPulsing ? 0.7 : 0.2) : Color.clear,
                             lineWidth: 1)
                         .animation(
                             isPlaying ? .easeInOut(duration: 1.0).repeatForever(autoreverses: true) : .default,
