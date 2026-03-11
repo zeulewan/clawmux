@@ -12,7 +12,6 @@ struct SidebarView: View {
     @Binding var resetVoiceId: String?
     @Binding var showCreateGroupChat: Bool
     @Binding var newGroupChatName: String
-    @Namespace private var sidebarNS
     @State private var contentExpanded = false
 
     var body: some View {
@@ -236,8 +235,7 @@ struct SidebarView: View {
                             .offset(x: 9, y: 9)
                     }
                 }
-                .matchedGeometryEffect(id: "icon_\(voice.id)", in: sidebarNS, properties: .position)
-                if isSelected {
+                                if isSelected {
                     HStack(spacing: 0) {
                         RoundedRectangle(cornerRadius: 2, style: .continuous)
                             .fill(Color.cAccent)
@@ -591,8 +589,7 @@ struct SidebarView: View {
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(alive ? color : color.opacity(0.30))
                 }
-                .matchedGeometryEffect(id: "icon_\(voice.id)", in: sidebarNS, properties: .position)
-                .frame(width: 34, height: 34)
+                                .frame(width: 34, height: 34)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(voice.name)
