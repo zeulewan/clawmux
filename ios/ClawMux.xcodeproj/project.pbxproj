@@ -8,7 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		1599B53E39A3CDEE562D5033 /* MarkdownContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84B700834F3EECA10468DC91 /* MarkdownContentView.swift */; };
+		31BD7BC304045245A8CD50E0 /* AudioManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBE370FB4A09E91CFDAB57F9 /* AudioManager.swift */; };
 		34708E5BA49DCFE09A2770E8 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 472435D7BEC5E6A66C89A71A /* ContentView.swift */; };
+		3BDA61563FEF791C08A9111B /* SpectrumProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E27E8D2876D7E37F89DAEACD /* SpectrumProcessor.swift */; };
 		3EFBF80FC3E456A6DD67B39B /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5C9B19E7C4B946A8C69830 /* WelcomeView.swift */; };
 		5A53815B6D61991600040435 /* ClawMuxLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B4CFDC5835A92120A013FE1 /* ClawMuxLiveActivity.swift */; };
 		7D32CC24BDDFA37E956A459A /* VADProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40068200828EAB10352BF7E0 /* VADProcessor.swift */; };
@@ -28,7 +30,6 @@
 		D8A747936F0FDA5E95EA77BB /* ClawMuxApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFF810E4C0B9F68B1E4AA4AD /* ClawMuxApp.swift */; };
 		DCDC60E202EB951E0C20A61E /* ClawMuxWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC5EB4981879BDC3BE644216 /* ClawMuxWidgetBundle.swift */; };
 		DD0B6C41043DEB376B75D6BE /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8850FD7D2AA1753841CA57F /* ChatView.swift */; };
-		5F39E47895EC422A85A0894C /* AudioManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3A8A92DE9DA410CB8DF7AAD /* AudioManager.swift */; };
 		EF98BD8285F5FAF97C9985E9 /* InputBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4385E6F9723F86B5AFE1680 /* InputBarView.swift */; };
 		F138DA556E94E3230F50457B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4678CAE85F0CB0CD3AC78DD6 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
@@ -88,10 +89,11 @@
 		C75D80D8B5385DCFF85A8039 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		C8850FD7D2AA1753841CA57F /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		D4385E6F9723F86B5AFE1680 /* InputBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputBarView.swift; sourceTree = "<group>"; };
-		E3A8A92DE9DA410CB8DF7AAD /* AudioManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioManager.swift; sourceTree = "<group>"; };
 		D547095052AD2B437A196FA2 /* NotesPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesPanelView.swift; sourceTree = "<group>"; };
 		D7C804BA345F7AE206CF5AF7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		DBE370FB4A09E91CFDAB57F9 /* AudioManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioManager.swift; sourceTree = "<group>"; };
 		DFF810E4C0B9F68B1E4AA4AD /* ClawMuxApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMuxApp.swift; sourceTree = "<group>"; };
+		E27E8D2876D7E37F89DAEACD /* SpectrumProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpectrumProcessor.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -99,9 +101,9 @@
 			isa = PBXGroup;
 			children = (
 				4678CAE85F0CB0CD3AC78DD6 /* Assets.xcassets */,
+				DBE370FB4A09E91CFDAB57F9 /* AudioManager.swift */,
 				C8850FD7D2AA1753841CA57F /* ChatView.swift */,
 				DFF810E4C0B9F68B1E4AA4AD /* ClawMuxApp.swift */,
-				E3A8A92DE9DA410CB8DF7AAD /* AudioManager.swift */,
 				72290AAFED98C8436AD778EF /* ClawMuxViewModel.swift */,
 				472435D7BEC5E6A66C89A71A /* ContentView.swift */,
 				443ABC04B7A435B58F1FC6D4 /* GroupChatView.swift */,
@@ -112,6 +114,7 @@
 				BB917084CE6B997C8AA16A44 /* SettingsView.swift */,
 				A3DE4F7720F3C77DAED314F6 /* ShapeHelpers.swift */,
 				5C696CC95AF520F9CD224CD2 /* SidebarView.swift */,
+				E27E8D2876D7E37F89DAEACD /* SpectrumProcessor.swift */,
 				C75D80D8B5385DCFF85A8039 /* Theme.swift */,
 				2EF7724BFBA3F18A21324642 /* TonePlayer.swift */,
 				40068200828EAB10352BF7E0 /* VADProcessor.swift */,
@@ -348,7 +351,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				5F39E47895EC422A85A0894C /* AudioManager.swift in Sources */,
+				31BD7BC304045245A8CD50E0 /* AudioManager.swift in Sources */,
 				DD0B6C41043DEB376B75D6BE /* ChatView.swift in Sources */,
 				CE452A75046106310CA1884D /* ClawMuxActivityAttributes.swift in Sources */,
 				D8A747936F0FDA5E95EA77BB /* ClawMuxApp.swift in Sources */,
@@ -361,6 +364,7 @@
 				90993452C4CA5B2F35471F21 /* SettingsView.swift in Sources */,
 				CC9ABF885DDD9CF628A35EA0 /* ShapeHelpers.swift in Sources */,
 				C42C4DC2063494E4AC786256 /* SidebarView.swift in Sources */,
+				3BDA61563FEF791C08A9111B /* SpectrumProcessor.swift in Sources */,
 				B3FAEAF903D2C5A57908A60C /* Theme.swift in Sources */,
 				C75B8D793DDF9C64C0EC9C31 /* TonePlayer.swift in Sources */,
 				7D32CC24BDDFA37E956A459A /* VADProcessor.swift in Sources */,
