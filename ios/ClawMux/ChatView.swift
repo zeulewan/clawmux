@@ -354,7 +354,8 @@ struct ChatScrollAreaView: View {
 
             if role == "assistant" { Spacer(minLength: 56) }
             if role == "system"   { Spacer() }
-        })
+        }
+        .frame(maxWidth: .infinity))
     }
 
     // MARK: - Thinking Bubble
