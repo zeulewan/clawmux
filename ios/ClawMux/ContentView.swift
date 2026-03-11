@@ -1489,6 +1489,11 @@ struct ContentView: View {
         // Triggered by role=="agent" OR role=="system" when text matches [Agent msg from/to X] pattern
         let agentMsgPattern = /^\[Agent msg (from|to) ([^\]]+)\] (.*)/
         let isExpanded = expandedAgentMsgIds.contains(msg.id)
+        // DEBUG — remove after confirming regex match on device
+        if role == "agent" || role == "system" {
+            let matched = msg.text.firstMatch(of: agentMsgPattern) != nil
+            print("[chatBubble] role=\(role) matched=\(matched) text=\(msg.text.prefix(80))")
+        }
         if (role == "agent" || role == "system"),
            let m = msg.text.firstMatch(of: agentMsgPattern) {
             // scoped block to avoid redeclaration of let m below
