@@ -1594,7 +1594,7 @@ struct ContentView: View {
                             .lineSpacing(4)
                             .tracking(CGFloat(vm.chatFontSize) * -0.01)
                             .foregroundStyle(Color.white)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
+                            .multilineTextAlignment(.trailing)
                     } else {
                         Text(msg.text)
                             .font(.caption)
