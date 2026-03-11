@@ -791,7 +791,12 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
 
     private func fetchHistory(voiceId: String, sessionId: String, initialState: AgentState? = nil) {
         guard let baseURL = httpBaseURL() else { return }
-        let url = baseURL.appendingPathComponent("api/history/\(voiceId)")
+        // Request last 30 messages from server — server slices correctly using before_ts pagination
+        var comps = URLComponents(
+            url: baseURL.appendingPathComponent("api/history/\(voiceId)"),
+            resolvingAgainstBaseURL: false)!
+        comps.queryItems = [URLQueryItem(name: "limit", value: "30")]
+        guard let url = comps.url else { return }
         URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
             guard let data,
                 let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -799,17 +804,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             else { return }
             Task { @MainActor in
                 guard let self, let idx = self.sessionIndex(sessionId) else { return }
-                // Find start index for last 30 user+assistant messages (system messages don't count toward limit)
-                var uaCount = 0
-                var sliceStart = messages.count
-                for i in stride(from: messages.count - 1, through: 0, by: -1) {
-                    let role = messages[i]["role"] as? String ?? ""
-                    if role == "user" || role == "assistant" { uaCount += 1 }
-                    sliceStart = i
-                    if uaCount >= 30 { break }
-                }
-                let slicedMessages = Array(messages[sliceStart...])
-                let chatMessages = slicedMessages.compactMap { msg -> ChatMessage? in
+                let chatMessages = messages.compactMap { msg -> ChatMessage? in
                     guard let role = msg["role"] as? String,
                         let text = msg["text"] as? String
                     else { return nil }
@@ -821,8 +816,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     return m
                 }
                 if !chatMessages.isEmpty {
-                    self.sessions[idx].messages = Array(chatMessages)
-                    self.sessions[idx].hasOlderMessages = sliceStart > 0
+                    self.sessions[idx].messages = chatMessages
+                    // If server returned a full page, assume there are older messages
+                    self.sessions[idx].hasOlderMessages = messages.count >= 30
                 } else if let state = initialState {
                     // No history yet — show appropriate placeholder (mirrors web addSession)
                     let isReady = state != .starting && state != .dead
@@ -905,22 +901,32 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         }
     }
 
-    // Paginate backwards: fetch messages older than the oldest known ID and prepend them.
-    // Mirrors web "Load older messages" button (GET /api/history/:voice?before=<id>&limit=50).
+    // Paginate backwards using server-side before_ts cursor (every message has ts).
+    // GET /api/history/:voice?limit=30&before_ts=<oldest_ts>
     func loadOlderMessages(sessionId: String, completion: (() -> Void)? = nil) {
         guard let idx = sessionIndex(sessionId),
               let baseURL = httpBaseURL() else { completion?(); return }
         let session = sessions[idx]
-        // Server has no before-cursor pagination — fetch full history and slice client-side
-        let url = baseURL.appendingPathComponent("api/history/\(session.voice)")
+        // Use timestamp of the oldest currently-loaded message as cursor
+        let oldestTs = sessions[idx].messages.compactMap(\.timestamp).map(\.timeIntervalSince1970).min()
+        var comps = URLComponents(
+            url: baseURL.appendingPathComponent("api/history/\(session.voice)"),
+            resolvingAgainstBaseURL: false)!
+        var items: [URLQueryItem] = [URLQueryItem(name: "limit", value: "30")]
+        if let ts = oldestTs {
+            items.append(URLQueryItem(name: "before_ts", value: String(ts)))
+        }
+        comps.queryItems = items
+        guard let url = comps.url else { completion?(); return }
+
         URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
             guard let data,
                 let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                 let messages = json["messages"] as? [[String: Any]]
-            else { return }
+            else { completion?(); return }
             Task { @MainActor in
                 guard let self, let i = self.sessionIndex(sessionId) else { return }
-                let all: [ChatMessage] = messages.compactMap { msg in
+                let older: [ChatMessage] = messages.compactMap { msg in
                     guard let role = msg["role"] as? String, let text = msg["text"] as? String else { return nil }
                     var m = ChatMessage(role: role, text: text)
                     if let ts = msg["ts"] as? Double { m.timestamp = Date(timeIntervalSince1970: ts) }
@@ -929,21 +935,20 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     if msg["bare_ack"] as? Bool == true { m.isBareAck = true }
                     return m
                 }
-                // Currently loaded messages are the last `currentCount` of the full history
-                let currentCount = self.sessions[i].messages.count
-                let totalCount = all.count
-                let olderEndIdx = max(0, totalCount - currentCount)
-                guard olderEndIdx > 0 else {
+                guard !older.isEmpty else {
                     self.sessions[i].hasOlderMessages = false
                     completion?()
                     return
                 }
-                let olderStartIdx = max(0, olderEndIdx - 50)
-                let older = Array(all[olderStartIdx..<olderEndIdx])
-                let existingIds = Set(self.sessions[i].messages.compactMap(\.msgId))
-                let newOlder = older.filter { $0.msgId == nil || !existingIds.contains($0.msgId!) }
+                // Deduplicate by timestamp to avoid overlap with existing messages
+                let existingTs = Set(self.sessions[i].messages.compactMap { $0.timestamp?.timeIntervalSince1970 })
+                let newOlder = older.filter { m in
+                    guard let ts = m.timestamp?.timeIntervalSince1970 else { return true }
+                    return !existingTs.contains(ts)
+                }
                 self.sessions[i].messages = newOlder + self.sessions[i].messages
-                self.sessions[i].hasOlderMessages = olderStartIdx > 0
+                // If server returned a full page, assume there may be more
+                self.sessions[i].hasOlderMessages = messages.count >= 30
                 completion?()
             }
         }.resume()
