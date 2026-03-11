@@ -867,6 +867,7 @@ function showSettingsPage() {
   const settingsPage = document.getElementById('settings-page');
   if (settingsPage.classList.contains('open')) {
     settingsPage.classList.remove('open');
+    if (typeof applyInputMode === 'function') applyInputMode();
     return;
   }
   settingsPage.classList.add('open');
@@ -1432,7 +1433,15 @@ async function toggleSetting(key) {
   if (key === 'thinking_sounds') { thinkingSoundsEnabled = isOn; if (!isOn) stopThinkingSound(); }
   if (key === 'audio_cues') { audioCuesEnabled = isOn; }
   if (key === 'tts_enabled') { ttsEnabled = isOn; applyTtsMode(!isOn); renderChat(); updateServiceUrlVisibility(); }
-  if (key === 'stt_enabled') { sttEnabled = isOn; applySttMode(!isOn); updateServiceUrlVisibility(); }
+  if (key === 'stt_enabled') {
+    sttEnabled = isOn;
+    applySttMode(!isOn);
+    updateServiceUrlVisibility();
+    // Notify hub to switch active session to text mode when STT is disabled
+    if (!isOn && ws && ws.readyState === WebSocket.OPEN && activeSessionId) {
+      ws.send(JSON.stringify({ session_id: activeSessionId, type: 'set_mode', mode: 'text' }));
+    }
+  }
   if (key === 'show_agent_messages') { showAgentMessages = isOn; renderChat(); }
   if (key === 'activity_verbose') { activityVerbose = isOn; renderChat(); }
   try {
@@ -1818,7 +1827,7 @@ async function refreshDebug() {
     document.getElementById('debug-no-sessions').style.display = data.sessions.length ? 'none' : 'block';
     for (const s of data.sessions) {
       const sc = s.status === 'ready' ? 'up' : s.status === 'starting' ? 'voice' : 'down';
-      const proj = [s.project, s.project_area].filter(Boolean).join(' · ') || '—';
+      const proj = [s.project, s.project_repo].filter(Boolean).join(' · ') || '—';
       stb2.innerHTML += `<tr><td>${s.session_id}</td><td>${s.voice}</td><td style="color:var(--text-secondary)">${proj}</td><td><span class="debug-badge ${sc}">${s.status}</span></td><td>${debugDuration(s.idle_seconds)}</td><td>${debugDuration(s.age_seconds)}</td><td style="color:#555">${s.work_dir}</td></tr>`;
     }
 
@@ -1923,9 +1932,9 @@ function showContextMenu(e, sessionId, voiceId) {
         div.className = 'ctx-sub-item';
         div.textContent = opt.textContent;
         if (sess && sess.project === opt.textContent) div.classList.add('active');
-        const projName = opt.textContent;
+        const projSlug = opt.value;
         div.addEventListener('click', () => {
-          _moveToProject(contextMenuSessionId, projName);
+          _moveAgentToProject(contextMenuVoiceId, projSlug);
           hideContextMenu();
         });
         subList.appendChild(div);
@@ -1985,7 +1994,7 @@ async function _moveToProject(sessionId, projectName) {
     await fetch(`/api/project-status/${sessionId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project: projectName, area: sess ? (sess.project_area || '') : '' }),
+      body: JSON.stringify({ project: projectName, repo: sess ? (sess.project_repo || '') : '' }),
     });
     // Also update agents.json via the centralized API
     if (sess && sess.voice) {

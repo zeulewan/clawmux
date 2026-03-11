@@ -23,6 +23,12 @@
 		AA000001000000000000009 /* ShapeHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000010 /* ShapeHelpers.swift */; };
 		AA000001000000000000011 /* TonePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000012 /* TonePlayer.swift */; };
 		AA000001000000000000013 /* VADProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000014 /* VADProcessor.swift */; };
+		AA000002000000000000001 /* ViewHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000002000000000000002 /* ViewHelpers.swift */; };
+		AA000002000000000000003 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000002000000000000004 /* SidebarView.swift */; };
+		AA000002000000000000005 /* GroupChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000002000000000000006 /* GroupChatView.swift */; };
+		AA000002000000000000007 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000002000000000000008 /* ChatView.swift */; };
+		AA000002000000000000009 /* InputBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000002000000000000010 /* InputBarView.swift */; };
+		AA000002000000000000011 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000002000000000000012 /* WelcomeView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -68,6 +74,12 @@
 		AA000001000000000000010 /* ShapeHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShapeHelpers.swift; sourceTree = "<group>"; };
 		AA000001000000000000012 /* TonePlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TonePlayer.swift; sourceTree = "<group>"; };
 		AA000001000000000000014 /* VADProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VADProcessor.swift; sourceTree = "<group>"; };
+		AA000002000000000000002 /* ViewHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewHelpers.swift; sourceTree = "<group>"; };
+		AA000002000000000000004 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		AA000002000000000000006 /* GroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupChatView.swift; sourceTree = "<group>"; };
+		AA000002000000000000008 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		AA000002000000000000010 /* InputBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputBarView.swift; sourceTree = "<group>"; };
+		AA000002000000000000012 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -85,6 +97,12 @@
 				AA000001000000000000010 /* ShapeHelpers.swift */,
 				AA000001000000000000012 /* TonePlayer.swift */,
 				AA000001000000000000014 /* VADProcessor.swift */,
+				AA000002000000000000002 /* ViewHelpers.swift */,
+				AA000002000000000000004 /* SidebarView.swift */,
+				AA000002000000000000006 /* GroupChatView.swift */,
+				AA000002000000000000008 /* ChatView.swift */,
+				AA000002000000000000010 /* InputBarView.swift */,
+				AA000002000000000000012 /* WelcomeView.swift */,
 				D7C804BA345F7AE206CF5AF7 /* Info.plist */,
 			);
 			path = ClawMux;
@@ -243,6 +261,12 @@
 				AA000001000000000000009 /* ShapeHelpers.swift in Sources */,
 				AA000001000000000000011 /* TonePlayer.swift in Sources */,
 				AA000001000000000000013 /* VADProcessor.swift in Sources */,
+				AA000002000000000000001 /* ViewHelpers.swift in Sources */,
+				AA000002000000000000003 /* SidebarView.swift in Sources */,
+				AA000002000000000000005 /* GroupChatView.swift in Sources */,
+				AA000002000000000000007 /* ChatView.swift in Sources */,
+				AA000002000000000000009 /* InputBarView.swift in Sources */,
+				AA000002000000000000011 /* WelcomeView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -425,14 +425,14 @@ def _print_status_table(file=None):
             print(f"  (no live agents)")
             print()
             continue
-        print(f"  {'Name':<10} {'Role':<14} {'Project':<14} {'Area':<16} {'Task':<32} {'State':<10} {'tool_name':<14} {'activity':<30} {'ctx':<5} {'model':<8} {'effort'}")
+        print(f"  {'Name':<10} {'Role':<14} {'Project':<14} {'Repo':<16} {'Task':<32} {'State':<10} {'tool_name':<14} {'activity':<30} {'ctx':<5} {'model':<8} {'effort'}")
         print(f"  {'-' * 165}")
         for s in sorted(by_project.get(slug, []), key=lambda s: s.get("label", "")):
             name = s.get("label", s.get("voice", "?"))
             project = s.get("project", "") or ""
             if len(project) > 12:
                 project = project[:12] + ".."
-            area = s.get("project_area", "")
+            area = s.get("project_repo", "")
             if len(area) > 14:
                 area = area[:12] + ".."
             role = s.get("role", "")
@@ -1611,7 +1611,7 @@ def _monitor_sessions_from_agents_json(project_slug):
             "label": name.capitalize(),
             "project_slug": entry.get("project", "default"),
             "project": entry.get("project", ""),
-            "project_area": entry.get("area", ""),
+            "project_repo": entry.get("repo", ""),
             "status_text": "",
         })
 
@@ -2116,15 +2116,15 @@ def cmd_project(args):
     session_id = require_session_id()
     payload = {
         "project": args.project,
-        "area": args.area or "",
+        "repo": getattr(args, "repo", None) or "",
     }
     if args.role:
         payload["role"] = args.role
     if args.task:
         payload["task"] = args.task
     http_post(f"/api/project-status/{session_id}", payload)
-    area = f" · {args.area}" if args.area else ""
-    print(f"Folder: {args.project}{area}")
+    repo = f" · {args.repo}" if getattr(args, "repo", None) else ""
+    print(f"Folder: {args.project}{repo}")
 
 
 def cmd_task(args):
@@ -2444,10 +2444,10 @@ examples:
                            description="Update the sidebar to show what project and area you're working on.",
                            formatter_class=argparse.RawDescriptionHelpFormatter,
                            epilog="""examples:
-    clawmux folder voice-hub
-    clawmux folder voice-hub --area frontend""")
+    clawmux folder default --repo clawmux
+    clawmux folder default --repo clawmux --role backend --task 'Hub maintenance'""")
         p.add_argument("project", help="Project or repo name")
-        p.add_argument("--area", help="Sub-area (e.g. frontend, backend, docs)")
+        p.add_argument("--repo", help="Git repository name the agent is working in")
         p.add_argument("--role", help="Agent role (e.g. Frontend, Backend)")
         p.add_argument("--task", help="Current task description")
         p.set_defaults(func=cmd_project)

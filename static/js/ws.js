@@ -266,6 +266,13 @@ function handleMessage(data) {
     }
     return;
   }
+  if (type === 'group_outbound') {
+    // Show outbound group message in the sender's chat
+    if ((showAgentMessages) && sessions.has(data.session_id)) {
+      addMessage(data.session_id, 'system', `[Group msg to ${data.group_name}] ${data.text}`, { id: data.msg_id });
+    }
+    return;
+  }
   if (type === 'groupchat_ack') {
     if (activeGroupId === data.group_id && typeof appendGroupChatMessage === 'function') {
       appendGroupChatMessage({ bare_ack: true, parent_id: data.msg_id, id: data.ack_id, sender: data.sender || 'You', sender_voice: data.sender_voice || '' });
@@ -353,7 +360,7 @@ function handleMessage(data) {
     const s = sessions.get(data.session_id);
     if (s) {
       s.project = data.project || '';
-      s.project_area = data.area || '';
+      s.project_repo = data.project_repo || data.area || '';
       if ('role' in data) s.role = data.role || '';
       if ('task' in data) s.task = data.task || '';
     }

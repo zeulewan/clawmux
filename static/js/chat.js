@@ -11,6 +11,7 @@
 
 // --- Agent message helpers ---
 const _AGENT_MSG_RE = /^\[Agent msg (from|to) (\w+)\] ([\s\S]*)$/;
+const _GROUP_MSG_RE = /^\[Group msg to ([^\]]+)\] ([\s\S]*)$/;
 
 /** Look up a voice color by display name (e.g. "Sky" → "#3A86FF"). */
 function _voiceColorByName(name) {
@@ -178,6 +179,45 @@ function createMsgEl(role, text, voiceColorHex, voiceId, msgObj = null) {
     return div;
   }
 
+  // --- Group chat outbound messages: same collapsed style ---
+  const groupMatch = (role === 'system') ? _GROUP_MSG_RE.exec(text) : null;
+  if (groupMatch) {
+    const [, groupName, content] = groupMatch;
+    div.className = 'msg agent-msg';
+    div.style.cssText = 'padding:3px 10px;margin:2px 0;font-size:0.82em;opacity:0.7;cursor:pointer;';
+
+    const header = document.createElement('span');
+    header.className = 'agent-msg-header';
+    const nameSpan = document.createElement('span');
+    nameSpan.style.cssText = 'color:#7c9ef0;font-weight:600';
+    nameSpan.textContent = `\u2295 ${groupName}`;
+    header.appendChild(nameSpan);
+
+    const body = document.createElement('div');
+    body.className = 'agent-msg-body';
+    const mdEl2 = (typeof marked !== 'undefined') ? _renderMarkdown(content) : null;
+    if (mdEl2) {
+      body.style.cssText = 'display:none;margin-top:4px;opacity:0.9;font-size:0.95em;';
+      body.appendChild(mdEl2);
+    } else {
+      body.style.cssText = 'display:none;margin-top:4px;opacity:0.9;font-size:0.95em;white-space:pre-wrap;';
+      body.textContent = content;
+    }
+
+    div.appendChild(header);
+    div.appendChild(body);
+    div.addEventListener('click', (e) => {
+      if (e.target.closest('.msg-actions')) return;
+      const showing = body.style.display !== 'none';
+      body.style.display = showing ? 'none' : 'block';
+      div.style.opacity = showing ? '0.7' : '1';
+    });
+
+    if (voiceId) div.dataset.voice = voiceId;
+    if (text) div.dataset.text = text;
+    return div;
+  }
+
   if (role === 'assistant') {
     // Try markdown rendering first, fall back to karaoke word wrapping
     const mdEl = (typeof marked !== 'undefined') ? _renderMarkdown(text) : null;
@@ -328,7 +368,7 @@ function _getDisplaySlice(messages, visibleLimit) {
     const m = messages[i];
     const isVisible = !m.parentId &&
       m.role !== 'activity' &&
-      (showAgentMessages || !(m.role === 'system' && /^\[Agent msg (from|to) /.test(m.text)));
+      (showAgentMessages || !(m.role === 'system' && /^\[(Agent msg (from|to)|Group msg to) /.test(m.text)));
     if (isVisible) {
       visibleCount++;
       if (visibleCount === visibleLimit && !limitReached) {
@@ -448,7 +488,7 @@ function renderChat(forceScroll = false) {
       // In minimal mode: skip activity from history entirely
       continue;
     }
-    if (!showAgentMessages && msg.role === 'system' && /^\[Agent msg (from|to) /.test(msg.text)) continue;
+    if (!showAgentMessages && msg.role === 'system' && /^\[(Agent msg (from|to)|Group msg to) /.test(msg.text)) continue;
     const hasReplies = msg.id && threadReplies.has(msg.id);
     const hasAcksOnly = msg.id && !hasReplies && bareAcks.has(msg.id);
     if (hasReplies) {
@@ -463,7 +503,7 @@ function renderChat(forceScroll = false) {
       const hidden = [];
       for (let i = 0; i < reps.length; i++) {
         const r = reps[i];
-        if (!showAgentMessages && r.role === 'system' && /^\[Agent msg (from|to) /.test(r.text)) continue;
+        if (!showAgentMessages && r.role === 'system' && /^\[(Agent msg (from|to)|Group msg to) /.test(r.text)) continue;
         const el = createMsgEl(r.role, r.text, vc, s.voice, r);
         el.classList.add('thread-reply');
         if (collapse && i > 0 && i < reps.length - 1) { el.style.display = 'none'; hidden.push(el); }

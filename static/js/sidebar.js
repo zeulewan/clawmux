@@ -124,7 +124,7 @@ function updateHeaderProjectStatus() {
     const s = sessions.get(activeSessionId);
     if (s && s.project) {
       el.innerHTML = '<div style="font-weight:600;color:var(--text-secondary);">' + s.project + '</div>' +
-        (s.project_area ? '<div style="opacity:0.7;">' + s.project_area + '</div>' : '');
+        (s.project_repo ? '<div style="opacity:0.7;">' + s.project_repo + '</div>' : '');
       return;
     }
   }
@@ -321,7 +321,7 @@ function _sidebarState(voiceId) {
   const projectText = session && session.project
     ? session.project
     : '';
-  const projectArea = session && session.project_area ? session.project_area : '';
+  const projectArea = session && session.project_repo ? session.project_repo : '';
   const roleText = session && session.role ? session.role : '';
   const taskText = session && session.task ? session.task : '';
   const isCompacting = session && session.compacting;
@@ -342,11 +342,11 @@ function _updateSidebarCard(card, voiceId, state) {
   const label = card.querySelector('.sb-status span:not(.sb-dot)');
   if (label && label.textContent !== statusLabel) label.textContent = statusLabel;
   // Update project area line
-  let areaEl = card.querySelector('.sb-area');
+  let areaEl = card.querySelector('.sb-repo');
   if (projectArea) {
     if (!areaEl) {
       areaEl = document.createElement('div');
-      areaEl.className = 'sb-area';
+      areaEl.className = 'sb-repo';
       const info = card.querySelector('.sb-info');
       const nameEl = card.querySelector('.sb-name');
       if (nameEl && nameEl.nextSibling) info.insertBefore(areaEl, nameEl.nextSibling);
@@ -724,7 +724,7 @@ async function _moveAgentToProject(voiceId, targetProjectSlug) {
       await fetch(`/api/project-status/${session.session_id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project: projectName, area: session.project_area || '' }),
+        body: JSON.stringify({ project: projectName, repo: session.project_repo || '' }),
       });
     }
     // Update agents.json

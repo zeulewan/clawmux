@@ -45,7 +45,7 @@ class Session:
     tool_name: str = ""  # raw tool name from last PreToolUse
     tool_input: dict = field(default_factory=dict)  # raw tool input from last PreToolUse
     project: str = ""  # current project/repo name (set by agent via set_project_status)
-    project_area: str = ""  # current sub-area (e.g. "frontend", "docs")
+    project_repo: str = ""  # current sub-area (e.g. "frontend", "docs")
     role: str = ""  # display role (e.g. "Manager", "Frontend", "Researcher")
     task: str = ""  # current task description (~5 words)
     text_mode: bool = False  # when True, skip TTS and just send text
@@ -104,7 +104,7 @@ class Session:
             "tool_name": self.tool_name,
             "tool_input": self.tool_input,
             "project": self.project,
-            "project_area": self.project_area,
+            "project_repo": self.project_repo,
             "role": self.role,
             "task": self.task,
             "model": self.model,
@@ -145,7 +145,7 @@ class SessionManager:
         entry = AgentEntry(
             session_id=session.session_id,
             project=session.project or None,
-            area=session.project_area or "",
+            repo=session.project_repo or "",
             role=session.role or "",
             task=session.task or "",
             last_active=session.last_activity,
@@ -249,12 +249,12 @@ class SessionManager:
                     session.claude_session_id = stored_id
             # Restore project status from agents.json
             session.project = entry.project or ""
-            session.project_area = entry.area or ""
+            session.project_repo = entry.repo or ""
             session.role = entry.role or ""
             session.task = entry.task or ""
             if session.project:
                 log.info("Restored project status for %s: %s / %s",
-                         voice_id, session.project, session.project_area)
+                         voice_id, session.project, session.project_repo)
             # Adopted sessions are assumed idle — hub.py will flush any saved interjections
             # to inbox after cleanup_stale_sessions returns, triggering immediate injection.
             session.set_state(AgentState.IDLE)
@@ -438,7 +438,7 @@ class SessionManager:
                 prev = await self.agents_store.get(voice_id)
                 if prev and prev.project:
                     session.project = prev.project
-                    session.project_area = prev.area or ""
+                    session.project_repo = prev.repo or ""
                 if prev:
                     session.role = prev.role or ""
                     session.task = prev.task or ""
