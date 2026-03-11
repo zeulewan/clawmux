@@ -1711,7 +1711,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         }
 
         if let session = activeSession {
-            statusText = session.statusText.isEmpty ? session.state.displayLabel : session.statusText
+            let fallback = session.state.isWorking ? "Ready" : session.state.displayLabel
+            statusText = session.statusText.isEmpty ? fallback : session.statusText
 
             // Derive processing state from session (don't carry over from previous session)
             isProcessing = session.state.isWorking
