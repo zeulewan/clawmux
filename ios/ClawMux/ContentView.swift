@@ -63,20 +63,8 @@ struct ContentView: View {
         .overlay(alignment: .top) {
             topBarView
         }
-        .background(Color.canvas1.ignoresSafeArea())
-        .onAppear {
-            isPulsing = true
-            // Set UIWindow background so the area revealed by keyboard slide-up matches canvas1
-            let windowBg = UIColor { tc in
-                tc.userInterfaceStyle == .dark
-                    ? UIColor(red: 0.024, green: 0.035, blue: 0.059, alpha: 1)  // #06090F
-                    : UIColor(red: 0.957, green: 0.965, blue: 0.984, alpha: 1)  // #F4F6FB
-            }
-            UIApplication.shared.connectedScenes
-                .compactMap { $0 as? UIWindowScene }
-                .flatMap { $0.windows }
-                .forEach { $0.backgroundColor = windowBg }
-        }
+        .background(Color.canvas1.ignoresSafeArea(.all))
+        .onAppear { isPulsing = true }
         .sheet(isPresented: $vm.showSettings) { SettingsView(vm: vm) }
         .sheet(isPresented: $vm.showNotes) { NotesPanelView(baseURL: vm.httpBaseURL()) { vm.showNotes = false } }
         .onOpenURL { vm.handleOpenURL($0) }

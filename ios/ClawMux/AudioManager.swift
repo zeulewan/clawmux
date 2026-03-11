@@ -338,6 +338,7 @@ final class AudioManager: NSObject {
     func interruptPlayback() {
         guard let vm else { return }
         guard vm.isPlaying || vm.isPlaybackPaused, let sid = playingSessionId else { return }
+        suppressNextAutoRecord = true  // prevent playback_done → listening → auto-record
         stopPlaybackVAD()
         audioPlayer?.stop()
         audioPlayer = nil
