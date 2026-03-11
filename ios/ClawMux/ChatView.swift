@@ -63,7 +63,10 @@ struct ChatScrollAreaView: View {
 
                 if !isAtBottom {
                     Button {
-                        withAnimation(.spring(response: 0.3)) { proxy.scrollTo("bottom", anchor: .bottom) }
+                        var t = Transaction()
+                        t.disablesAnimations = true
+                        withTransaction(t) { proxy.scrollTo("bottom", anchor: .bottom) }
+                        isAtBottom = true
                     } label: {
                         Image(systemName: "chevron.down")
                             .font(.system(size: 13, weight: .semibold))
@@ -80,7 +83,7 @@ struct ChatScrollAreaView: View {
                             .shadow(color: .black.opacity(0.4), radius: 8, x: 0, y: 2)
                     }
                     .padding(.trailing, 16)
-                    .padding(.bottom, 180)
+                    .padding(.bottom, 8)
                     .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .bottomTrailing)))
                     .animation(.spring(response: 0.25), value: isAtBottom)
                 }
@@ -286,11 +289,14 @@ struct ChatScrollAreaView: View {
                 }
                 .padding(.horizontal, role == "system" ? 0 : 15)
                 .padding(.vertical, role == "system" ? 4 : 10)
-                .background(bubbleBg,
-                    in: UnevenRoundedRectangle(
+                .background {
+                    UnevenRoundedRectangle(
                         topLeadingRadius: tl, bottomLeadingRadius: bl,
                         bottomTrailingRadius: br, topTrailingRadius: tr,
-                        style: .continuous))
+                        style: .continuous)
+                    .fill(bubbleBg)
+                    .shadow(color: role == "assistant" ? Color.black.opacity(0.3) : Color.clear, radius: 3, x: 0, y: 1)
+                }
                 .overlay {
                     if role == "assistant" {
                         UnevenRoundedRectangle(
@@ -305,7 +311,6 @@ struct ChatScrollAreaView: View {
                             value: isPulsing)
                     }
                 }
-                .shadow(color: role == "assistant" ? Color.black.opacity(0.3) : Color.clear, radius: 3, x: 0, y: 1)
                 .contextMenu {
                     if role == "assistant" {
                         Button {

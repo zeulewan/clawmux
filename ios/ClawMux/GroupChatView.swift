@@ -94,7 +94,10 @@ struct GroupChatScrollView: View {
 
                     if !isAtBottom {
                         Button {
-                            withAnimation(.spring(response: 0.3)) { proxy.scrollTo("gc-bottom", anchor: .bottom) }
+                            var t = Transaction()
+                            t.disablesAnimations = true
+                            withTransaction(t) { proxy.scrollTo("gc-bottom", anchor: .bottom) }
+                            isAtBottom = true
                         } label: {
                             Image(systemName: "chevron.down")
                                 .font(.system(size: 13, weight: .semibold))
@@ -111,7 +114,7 @@ struct GroupChatScrollView: View {
                                 .shadow(color: .black.opacity(0.4), radius: 8, x: 0, y: 2)
                         }
                         .padding(.trailing, 16)
-                        .padding(.bottom, 180)
+                        .padding(.bottom, 8)
                         .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .bottomTrailing)))
                         .animation(.spring(response: 0.25), value: isAtBottom)
                     }
