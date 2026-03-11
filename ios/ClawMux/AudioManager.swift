@@ -50,6 +50,12 @@ final class AudioManager: NSObject {
         super.init()
     }
 
+    deinit {
+        thinkingSoundTimer?.invalidate()
+        meteringTimer?.invalidate()
+        backgroundRecordingTimer?.invalidate()
+    }
+
     // MARK: - Accessors (used by ViewModel and AVAudioPlayerDelegate)
 
     var currentPlayingSessionId: String? { playingSessionId }
@@ -72,9 +78,21 @@ final class AudioManager: NSObject {
                 options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .allowBluetoothHFP])
             try session.setPreferredSampleRate(48000)
             try session.setPreferredIOBufferDuration(0.02)
-            try session.setActive(true)
+            // Do NOT activate here — activate on demand before recording/playback to allow idle deactivation
         } catch {
             print("[audio] Session setup failed: \(error)")
+        }
+    }
+
+    /// Deactivates the audio session when neither recording nor playing, freeing the mic hardware.
+    /// Called after recording/playback ends. Reactivation happens automatically before the next use.
+    private func deactivateIfIdle() {
+        guard vm?.isRecording != true, vm?.isPlaying != true,
+              keepaliveEngine == nil, silencePlayer == nil else { return }
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        } catch {
+            // Non-fatal — session may already be inactive
         }
     }
 
@@ -499,6 +517,7 @@ final class AudioManager: NSObject {
         backgroundRecordingTimer?.invalidate()
         backgroundRecordingTimer = nil
         let sid = recordingSessionId
+        deactivateIfIdle()
         return (duration, sid)
     }
 
@@ -951,6 +970,7 @@ final class AudioManager: NSObject {
             Task { @MainActor in
                 guard let self, let vm = self.vm,
                       let recorder = self.audioRecorder, recorder.isRecording else {
+                    self?.stopMetering()  // self-cancel if recording stopped unexpectedly
                     return
                 }
                 recorder.updateMeters()
@@ -1002,6 +1022,7 @@ extension AudioManager: AVAudioPlayerDelegate {
             }
 
             self.playingSessionId = nil
+            self.deactivateIfIdle()
             if !sid.isEmpty {
                 vm.sendJSON(["session_id": sid, "type": "playback_done"])
             }
