@@ -519,7 +519,13 @@ struct ContentView: View {
                 }
                 .frame(height: 52)
             }
-            .background(Color.canvas1.opacity(0.96).ignoresSafeArea(edges: .bottom))
+            .background {
+                if #available(iOS 26, *) {
+                    Color.clear.glassEffect(.regular, in: .rect).ignoresSafeArea(edges: .bottom)
+                } else {
+                    Color.canvas1.opacity(0.96).ignoresSafeArea(edges: .bottom)
+                }
+            }
         }
         .frame(width: sidebarExpanded ? 220 : 48)
         .frame(maxHeight: .infinity)
