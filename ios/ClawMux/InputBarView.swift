@@ -249,19 +249,18 @@ struct InputBarView: View {
                 .padding(.horizontal, 4).padding(.vertical, 8)
                 .submitLabel(.send)
                 .onSubmit { vm.sendText() }
-                .toolbar {
-                    ToolbarItemGroup(placement: .keyboard) {
-                        Spacer()
-                        Button {
-                            UIApplication.shared.sendAction(
-                                #selector(UIResponder.resignFirstResponder),
-                                to: nil, from: nil, for: nil)
-                        } label: {
-                            Image(systemName: "keyboard.chevron.compact.down")
-                                .foregroundStyle(Color.primary)
-                        }
-                    }
-                }
+
+            // Keyboard dismiss button — inline beside send so it doesn't overlap
+            Button {
+                UIApplication.shared.sendAction(
+                    #selector(UIResponder.resignFirstResponder),
+                    to: nil, from: nil, for: nil)
+            } label: {
+                Image(systemName: "keyboard.chevron.compact.down")
+                    .font(.system(size: 16))
+                    .foregroundStyle(Color.cTextSec)
+                    .frame(width: 32, height: 32)
+            }
 
             // Send button — mirrors web #text-send (38x38, blue circle)
             Button { vm.sendText() } label: {
