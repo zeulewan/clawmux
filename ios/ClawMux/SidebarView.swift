@@ -13,6 +13,7 @@ struct SidebarView: View {
     @Binding var showCreateGroupChat: Bool
     @Binding var newGroupChatName: String
     @Namespace private var sidebarNS
+    @State private var contentExpanded = false
 
     var body: some View {
         sidebarStripView
@@ -25,43 +26,10 @@ struct SidebarView: View {
         ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 1) {
                     Color.clear.frame(height: 60).id("sidebar-top")
-                    // Both branches always in hierarchy so matchedGeometryEffect positions
-                    // are resolved before animation starts (no pop/jerk). Opacity controls visibility.
-                    ZStack(alignment: .topLeading) {
-                        // COLLAPSED — always rendered
-                        let groups = projectGroups
-                        let chatGroups = activeGroups
-                        VStack(spacing: 0) {
-                            ForEach(groups.namedProjects, id: \.self) { project in
-                                let voices = groups.byProject[project] ?? []
-                                let collapsed = collapsedProjects.contains(project)
-                                Button {
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                                        if collapsed { collapsedProjects.remove(project) }
-                                        else         { collapsedProjects.insert(project) }
-                                    }
-                                } label: {
-                                    Image(systemName: "chevron.right")
-                                        .font(.system(size: 6, weight: .bold))
-                                        .foregroundStyle(Color.cTextSec)
-                                        .rotationEffect(.degrees(collapsed ? 0 : 90))
-                                        .animation(.spring(response: 0.3), value: collapsed)
-                                        .frame(width: 48, height: 14)
-                                }
-                                if !collapsed {
-                                    ForEach(voices) { voice in
-                                        sidebarIcon(for: voice)
-                                    }
-                                }
-                            }
-                            ForEach(chatGroups, id: \.groupId) { g in
-                                groupIcon(g.groupId, voices: g.voices)
-                            }
-                        }
-                        .opacity(sidebarExpanded ? 0 : 1)
-                        .allowsHitTesting(!sidebarExpanded)
-
-                        // EXPANDED — always rendered
+                    let groups = projectGroups
+                    let chatGroups = activeGroups
+                    if contentExpanded {
+                        // EXPANDED
                         VStack(spacing: 0) {
                             ForEach(groups.namedProjects, id: \.self) { project in
                                 let voices = groups.byProject[project] ?? []
@@ -90,10 +58,40 @@ struct SidebarView: View {
                                 }
                             }
                         }
-                        .opacity(sidebarExpanded ? 1 : 0)
-                        .allowsHitTesting(sidebarExpanded)
+                        .frame(maxWidth: .infinity)
+                        .transition(.opacity)
+                    } else {
+                        // COLLAPSED
+                        VStack(spacing: 0) {
+                            ForEach(groups.namedProjects, id: \.self) { project in
+                                let voices = groups.byProject[project] ?? []
+                                let collapsed = collapsedProjects.contains(project)
+                                Button {
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                                        if collapsed { collapsedProjects.remove(project) }
+                                        else         { collapsedProjects.insert(project) }
+                                    }
+                                } label: {
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 6, weight: .bold))
+                                        .foregroundStyle(Color.cTextSec)
+                                        .rotationEffect(.degrees(collapsed ? 0 : 90))
+                                        .animation(.spring(response: 0.3), value: collapsed)
+                                        .frame(width: 48, height: 14)
+                                }
+                                if !collapsed {
+                                    ForEach(voices) { voice in
+                                        sidebarIcon(for: voice)
+                                    }
+                                }
+                            }
+                            ForEach(chatGroups, id: \.groupId) { g in
+                                groupIcon(g.groupId, voices: g.voices)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .transition(.opacity)
                     }
-                    .frame(maxWidth: .infinity)
                 }
                 .padding(.vertical, 4)
         }
@@ -168,7 +166,17 @@ struct SidebarView: View {
             Color.cBorder.opacity(0.6).frame(width: 0.5)
         }
         .onChange(of: sidebarExpanded) { expanded in
-            if !expanded { withAnimation { sidebarProxy.scrollTo("sidebar-top", anchor: .top) } }
+            if expanded {
+                // One-frame delay: let SwiftUI measure collapsed icon positions before switching
+                // content — matchedGeometryEffect then animates from correct origin, not (0,0)
+                DispatchQueue.main.async {
+                    guard sidebarExpanded else { return } // aborted if already collapsed
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { contentExpanded = true }
+                }
+            } else {
+                withAnimation(.easeIn(duration: 0.15)) { contentExpanded = false }
+                withAnimation { sidebarProxy.scrollTo("sidebar-top", anchor: .top) }
+            }
         }
         .animation(.spring(response: 0.22, dampingFraction: 0.9), value: sidebarExpanded)
         } // ScrollViewReader
@@ -747,7 +755,9 @@ struct SidebarView: View {
         if spawning { return "Starting…" }
         guard let s = session else { return "Tap to start" }
         if s.state == .starting { return "Starting…" }
-        if s.isThinking { return s.activity.isEmpty ? "Thinking…" : s.activity }
+        if s.state == .compacting { return s.activity.isEmpty ? "Compacting…" : s.activity }
+        if s.state == .processing { return s.activity.isEmpty ? (s.toolName.isEmpty ? "Processing…" : s.toolName) : s.activity }
+        if s.state == .thinking   { return s.activity.isEmpty ? "Thinking…" : s.activity }
         if s.unreadCount > 1 { return "\(s.unreadCount) new messages" }
         if s.unreadCount == 1 { return "1 new message" }
         let st = s.statusText
