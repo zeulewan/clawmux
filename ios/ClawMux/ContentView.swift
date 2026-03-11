@@ -144,6 +144,7 @@ struct ContentView: View {
     @State private var collapsedProjects:       Set<String> = []
     @State private var expandedAgentMsgIds:    Set<UUID> = []
     @State private var isAtBottom:             Bool = true
+    @State private var isLoadingOlder:         Bool = false
     @State private var sidebarExpanded:        Bool = false
     @State private var showFilePicker:         Bool = false
     @State private var showCreateGroupChat     = false
@@ -1371,20 +1372,11 @@ struct ContentView: View {
                 ZStack(alignment: .bottomTrailing) {
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: 20) {
-                            // Load older messages button (mirrors web ▲ Load older messages)
-                            if vm.activeSession?.hasOlderMessages == true {
-                                Button {
-                                    if let sid = vm.activeSessionId { vm.loadOlderMessages(sessionId: sid) }
-                                } label: {
-                                    Label("Load older messages", systemImage: "chevron.up")
-                                        .font(.system(size: 12, weight: .medium))
-                                        .foregroundStyle(Color.cTextTer)
-                                        .padding(.vertical, 6).padding(.horizontal, 12)
-                                        .background(Color.cCard.opacity(0.6), in: Capsule())
-                                        .overlay(Capsule().strokeBorder(Color.cBorder.opacity(0.5), lineWidth: 0.5))
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.top, 4)
+                            // Infinite scroll top indicator
+                            if isLoadingOlder {
+                                ProgressView()
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 8)
                             }
                             ForEach(messageGroups) { group in
                                 messageGroupView(group)
@@ -1403,7 +1395,19 @@ struct ContentView: View {
                     }
                     .defaultScrollAnchor(.bottom)
                     .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
-                    .onChange(of: vm.activeMessages.count)        { _, _ in scrollBottom(proxy) }
+                    .onScrollGeometryChange(for: Bool.self) { geo in
+                        geo.contentOffset.y < 80 && geo.contentSize.height > geo.containerSize.height
+                    } action: { _, nearTop in
+                        guard nearTop,
+                              !isLoadingOlder,
+                              vm.activeSession?.hasOlderMessages == true,
+                              let sid = vm.activeSessionId else { return }
+                        isLoadingOlder = true
+                        vm.loadOlderMessages(sessionId: sid) {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { isLoadingOlder = false }
+                        }
+                    }
+                    .onChange(of: vm.activeMessages.count)        { _, _ in guard !isLoadingOlder else { return }; scrollBottom(proxy) }
                     .onChange(of: vm.activeSession?.isThinking)   { _, thinking in
                         if thinking != true { thinkingExpanded = false }
                         scrollBottom(proxy)

@@ -649,8 +649,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     }
 
     var activeMessages: [ChatMessage] {
-        let msgs = activeSession?.messages ?? []
-        return msgs.count > 150 ? Array(msgs.suffix(150)) : msgs
+        return activeSession?.messages ?? []
     }
 
     var activeVoice: String {
@@ -1060,7 +1059,17 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             else { return }
             Task { @MainActor in
                 guard let self, let idx = self.sessionIndex(sessionId) else { return }
-                let chatMessages = messages.suffix(50).compactMap { msg -> ChatMessage? in
+                // Find start index for last 30 user+assistant messages (system messages don't count toward limit)
+                var uaCount = 0
+                var sliceStart = messages.count
+                for i in stride(from: messages.count - 1, through: 0, by: -1) {
+                    let role = messages[i]["role"] as? String ?? ""
+                    if role == "user" || role == "assistant" { uaCount += 1 }
+                    sliceStart = i
+                    if uaCount >= 30 { break }
+                }
+                let slicedMessages = Array(messages[sliceStart...])
+                let chatMessages = slicedMessages.compactMap { msg -> ChatMessage? in
                     guard let role = msg["role"] as? String,
                         let text = msg["text"] as? String
                     else { return nil }
@@ -1073,7 +1082,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 }
                 if !chatMessages.isEmpty {
                     self.sessions[idx].messages = Array(chatMessages)
-                    self.sessions[idx].hasOlderMessages = chatMessages.count >= 50
+                    self.sessions[idx].hasOlderMessages = sliceStart > 0
                 } else if let state = initialState {
                     // No history yet — show appropriate placeholder (mirrors web addSession)
                     let isReady = state != .starting && state != .dead
@@ -1158,9 +1167,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
 
     // Paginate backwards: fetch messages older than the oldest known ID and prepend them.
     // Mirrors web "Load older messages" button (GET /api/history/:voice?before=<id>&limit=50).
-    func loadOlderMessages(sessionId: String) {
+    func loadOlderMessages(sessionId: String, completion: (() -> Void)? = nil) {
         guard let idx = sessionIndex(sessionId),
-              let baseURL = httpBaseURL() else { return }
+              let baseURL = httpBaseURL() else { completion?(); return }
         let session = sessions[idx]
         // Server has no before-cursor pagination — fetch full history and slice client-side
         let url = baseURL.appendingPathComponent("api/history/\(session.voice)")
@@ -1186,6 +1195,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 let olderEndIdx = max(0, totalCount - currentCount)
                 guard olderEndIdx > 0 else {
                     self.sessions[i].hasOlderMessages = false
+                    completion?()
                     return
                 }
                 let olderStartIdx = max(0, olderEndIdx - 50)
@@ -1194,6 +1204,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 let newOlder = older.filter { $0.msgId == nil || !existingIds.contains($0.msgId!) }
                 self.sessions[i].messages = newOlder + self.sessions[i].messages
                 self.sessions[i].hasOlderMessages = olderStartIdx > 0
+                completion?()
             }
         }.resume()
     }
