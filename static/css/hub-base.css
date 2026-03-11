@@ -1178,7 +1178,6 @@ body {
   cursor: pointer;
   background: var(--bg-card);
   color: var(--text);
-  border: 1px solid var(--border-light);
   border-bottom-left-radius: 4px;
   box-shadow: var(--shadow-sm);
   /* Voice color background applied via JS */
