@@ -415,21 +415,7 @@ struct ContentView: View {
                             projectSection(project, voices: voices)
                         }
                         if !groups.ungrouped.isEmpty {
-                            if !groups.namedProjects.isEmpty {
-                                HStack {
-                                    Text("AGENTS")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundStyle(Color.cTextTer)
-                                        .tracking(0.8)
-                                    Spacer()
-                                }
-                                .padding(.horizontal, 16)
-                                .padding(.top, 8).padding(.bottom, 2)
-                            }
-                            VStack(spacing: 2) {
-                                ForEach(groups.ungrouped) { voice in agentCard(voice) }
-                            }
-                            .padding(.horizontal, 8)
+                            projectSection("agents", voices: groups.ungrouped)
                         }
 
                         // Group chats section below agents — matches web sidebar-gc-section placement
