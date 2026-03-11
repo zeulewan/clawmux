@@ -154,9 +154,8 @@ struct ContentView: View {
     var body: some View {
         // Body + Sidebar ZStack — header floats above as safeAreaInset so content scrolls behind it
         ZStack(alignment: .leading) {
-            // Content offset 48px right so messages/input bars never go under collapsed sidebar
+            // mainAreaView full width — scroll content extends behind sidebar glass for proper blur
             mainAreaView
-                .padding(.leading, 48)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             // Dim overlay behind expanded sidebar (starts at sidebar edge)
@@ -168,17 +167,7 @@ struct ContentView: View {
                     .transition(.opacity)
             }
 
-            // Sidebar canvas1 fill — ensures home indicator zone behind sidebar matches sidebar bg
-            // (sidebar glass stops at safe area boundary; this fill closes the seam below it)
-            Color.canvas1
-                .frame(width: sidebarExpanded ? 220 : 48)
-                .frame(maxHeight: .infinity)
-                .ignoresSafeArea(edges: .bottom)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .allowsHitTesting(false)
-                .animation(.spring(response: 0.3, dampingFraction: 0.85), value: sidebarExpanded)
-
-            // Sidebar glass overlay — floats over content edge for proper blur
+            // Sidebar glass overlay — blurs scroll content behind it
             sidebarStripView
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -274,6 +263,7 @@ struct ContentView: View {
                 .foregroundStyle(Color.cTextTer)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.leading, 48)
     }
 
     // MARK: - Group Chat View
@@ -281,7 +271,7 @@ struct ContentView: View {
     private var groupChatMainView: some View {
         groupChatScrollArea
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .safeAreaInset(edge: .bottom, spacing: 0) { textInputBar }
+            .safeAreaInset(edge: .bottom, spacing: 0) { textInputBar.padding(.leading, 48) }
     }
 
     private var groupChatHeader: some View {
@@ -324,6 +314,7 @@ struct ContentView: View {
                     }
                     .padding(.horizontal, 12).padding(.top, 64).padding(.bottom, 8)
                 }
+                .contentMargins(.leading, 48, for: .scrollContent)
                 .onChange(of: vm.groupMessages.count) { _, _ in
                     withAnimation(.easeOut(duration: 0.18)) {
                         proxy.scrollTo("gc-bottom", anchor: .bottom)
@@ -798,6 +789,7 @@ struct ContentView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .padding(.leading, 48)
     }
 
     // MARK: - Project Grouping
@@ -1393,6 +1385,7 @@ struct ContentView: View {
                         .padding(.horizontal, 24)
                         .padding(.top, 64).padding(.bottom, 16)
                     }
+                    .contentMargins(.leading, 48, for: .scrollContent)
                     .defaultScrollAnchor(.bottom)
                     .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
                     .modifier(ScrollTopDetector(
@@ -1784,13 +1777,16 @@ struct ContentView: View {
 
     @ViewBuilder
     private var bottomInputArea: some View {
-        if vm.typingMode {
-            textInputBar.transition(.opacity)
-        } else if vm.pushToTalk && vm.showPTTTextField {
-            pttTextInputBar.transition(.move(edge: .bottom).combined(with: .opacity))
-        } else {
-            voiceControlBar.transition(.opacity)
+        Group {
+            if vm.typingMode {
+                textInputBar.transition(.opacity)
+            } else if vm.pushToTalk && vm.showPTTTextField {
+                pttTextInputBar.transition(.move(edge: .bottom).combined(with: .opacity))
+            } else {
+                voiceControlBar.transition(.opacity)
+            }
         }
+        .padding(.leading, 48)
     }
 
     // MARK: - Voice Controls
