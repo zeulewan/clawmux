@@ -38,6 +38,7 @@ struct ChatScrollAreaView: View {
                     .padding(.top, 64).padding(.bottom, 16)
                 }
                 .defaultScrollAnchor(.bottom)
+                .scrollDismissesKeyboard(.interactively)
                 .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
                 .modifier(ScrollTopDetector(
                     isLoadingOlder: $isLoadingOlder,
