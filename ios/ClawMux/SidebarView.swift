@@ -57,11 +57,7 @@ struct SidebarView: View {
                                 }
                             }
                         }
-                        // Delay fade-in until sidebar width is mostly open; collapse immediately
-                        .transition(.asymmetric(
-                            insertion: .opacity.animation(.easeIn(duration: 0.1).delay(0.18)),
-                            removal:   .opacity.animation(.easeOut(duration: 0.08))
-                        ))
+                        .transition(.opacity)
                     } else {
                         VStack(spacing: 0) {
                             let groups = projectGroups
@@ -92,11 +88,7 @@ struct SidebarView: View {
                                 groupIcon(g.groupId, voices: g.voices)
                             }
                         }
-                        // Icons fade out immediately on expand; reappear after width mostly closes
-                        .transition(.asymmetric(
-                            insertion: .opacity.animation(.easeIn(duration: 0.1).delay(0.15)),
-                            removal:   .opacity.animation(.easeOut(duration: 0.08))
-                        ))
+                        .transition(.opacity)
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -175,7 +167,7 @@ struct SidebarView: View {
         .onChange(of: sidebarExpanded) { expanded in
             if !expanded { withAnimation { sidebarProxy.scrollTo("sidebar-top", anchor: .top) } }
         }
-        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: sidebarExpanded)
+        .animation(.spring(response: 0.22, dampingFraction: 0.9), value: sidebarExpanded)
         } // ScrollViewReader
     }
 
