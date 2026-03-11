@@ -34,7 +34,7 @@ struct ChatScrollAreaView: View {
                         }
                         Color.clear.frame(height: 1).id("bottom")
                     }
-                    .padding(.horizontal, 12)
+                    .padding(.leading, 60).padding(.trailing, 12)
                     .padding(.top, 64).padding(.bottom, 16)
                 }
                 .defaultScrollAnchor(.bottom)
