@@ -94,10 +94,7 @@ struct GroupChatScrollView: View {
 
                     if !isAtBottom {
                         Button {
-                            var t = Transaction()
-                            t.disablesAnimations = true
-                            withTransaction(t) { proxy.scrollTo("gc-bottom", anchor: .bottom) }
-                            isAtBottom = true
+                            withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo("gc-bottom", anchor: .bottom) }
                         } label: {
                             Image(systemName: "chevron.down")
                                 .font(.system(size: 13, weight: .semibold))

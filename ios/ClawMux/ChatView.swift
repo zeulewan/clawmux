@@ -63,10 +63,7 @@ struct ChatScrollAreaView: View {
 
                 if !isAtBottom {
                     Button {
-                        var t = Transaction()
-                        t.disablesAnimations = true
-                        withTransaction(t) { proxy.scrollTo("bottom", anchor: .bottom) }
-                        isAtBottom = true
+                        withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo("bottom", anchor: .bottom) }
                     } label: {
                         Image(systemName: "chevron.down")
                             .font(.system(size: 13, weight: .semibold))
@@ -274,7 +271,7 @@ struct ChatScrollAreaView: View {
                         MarkdownContentView(text: msg.text, foreground: Color.cText, fontSize: CGFloat(vm.chatFontSize))
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } else if role == "user" {
-                        Text(msg.text.trimmingCharacters(in: .whitespacesAndNewlines))
+                        Text(msg.text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\n", with: " "))
                             .font(.system(size: CGFloat(vm.chatFontSize)))
                             .lineSpacing(4)
                             .tracking(CGFloat(vm.chatFontSize) * -0.01)
