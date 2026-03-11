@@ -2578,6 +2578,18 @@ async def _inject_inbox(session, session_id: str) -> None:
         try:
             await session_mgr.backend.deliver_message(session.tmux_session, text)
             log.info("[%s] Injected %d message(s) via tmux", session_id, len(messages))
+            # Transition to THINKING immediately — agent has the message and is reasoning.
+            # This covers the gap between injection and first PreToolUse hook.
+            if session.state == AgentState.IDLE:
+                session.set_state(AgentState.THINKING)
+                await send_to_browser({
+                    "type": "session_status",
+                    "session_id": session_id,
+                    "state": session.state.value,
+                    "activity": "",
+                    "tool_name": "",
+                    "tool_input": {},
+                })
             await send_to_browser({
                 "type": "inbox_update",
                 "session_id": session_id,
