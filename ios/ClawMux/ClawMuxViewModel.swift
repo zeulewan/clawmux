@@ -802,23 +802,23 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                 let messages = json["messages"] as? [[String: Any]]
             else { return }
+            // Extract Sendable values before entering the actor context
+            let hasMore = json["has_more"] as? Bool ?? false
+            let chatMessages: [ChatMessage] = messages.compactMap { msg in
+                guard let role = msg["role"] as? String, let text = msg["text"] as? String else { return nil }
+                var m = ChatMessage(role: role, text: text)
+                if let ts = msg["ts"] as? Double { m.timestamp = Date(timeIntervalSince1970: ts) }
+                if let mid = msg["id"] as? String { m.msgId = mid }
+                if let pid = msg["parent_id"] as? String { m.parentId = pid }
+                if msg["bare_ack"] as? Bool == true { m.isBareAck = true }
+                return m
+            }
             Task { @MainActor in
                 guard let self, let idx = self.sessionIndex(sessionId) else { return }
-                let chatMessages = messages.compactMap { msg -> ChatMessage? in
-                    guard let role = msg["role"] as? String,
-                        let text = msg["text"] as? String
-                    else { return nil }
-                    var m = ChatMessage(role: role, text: text)
-                    if let ts = msg["ts"] as? Double { m.timestamp = Date(timeIntervalSince1970: ts) }
-                    if let mid = msg["id"] as? String { m.msgId = mid }
-                    if let pid = msg["parent_id"] as? String { m.parentId = pid }
-                    if msg["bare_ack"] as? Bool == true { m.isBareAck = true }
-                    return m
-                }
                 if !chatMessages.isEmpty {
                     self.sessions[idx].messages = chatMessages
                     // Use server's has_more — counts all stored messages, not just visible ones
-                    self.sessions[idx].hasOlderMessages = json["has_more"] as? Bool ?? false
+                    self.sessions[idx].hasOlderMessages = hasMore
                 } else if let state = initialState {
                     // No history yet — show appropriate placeholder (mirrors web addSession)
                     let isReady = state != .starting && state != .dead
@@ -924,17 +924,19 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                 let messages = json["messages"] as? [[String: Any]]
             else { completion?(); return }
+            // Extract Sendable values before entering the actor context
+            let hasMore = json["has_more"] as? Bool ?? (messages.count >= 100)
+            let older: [ChatMessage] = messages.compactMap { msg in
+                guard let role = msg["role"] as? String, let text = msg["text"] as? String else { return nil }
+                var m = ChatMessage(role: role, text: text)
+                if let ts = msg["ts"] as? Double { m.timestamp = Date(timeIntervalSince1970: ts) }
+                if let mid = msg["id"] as? String { m.msgId = mid }
+                if let pid = msg["parent_id"] as? String { m.parentId = pid }
+                if msg["bare_ack"] as? Bool == true { m.isBareAck = true }
+                return m
+            }
             Task { @MainActor in
                 guard let self, let i = self.sessionIndex(sessionId) else { return }
-                let older: [ChatMessage] = messages.compactMap { msg in
-                    guard let role = msg["role"] as? String, let text = msg["text"] as? String else { return nil }
-                    var m = ChatMessage(role: role, text: text)
-                    if let ts = msg["ts"] as? Double { m.timestamp = Date(timeIntervalSince1970: ts) }
-                    if let mid = msg["id"] as? String { m.msgId = mid }
-                    if let pid = msg["parent_id"] as? String { m.parentId = pid }
-                    if msg["bare_ack"] as? Bool == true { m.isBareAck = true }
-                    return m
-                }
                 guard !older.isEmpty else {
                     self.sessions[i].hasOlderMessages = false
                     completion?()
@@ -949,7 +951,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 }
                 self.sessions[i].messages = newOlder + self.sessions[i].messages
                 // Use server's has_more — accurate count regardless of message types
-                self.sessions[i].hasOlderMessages = json["has_more"] as? Bool ?? (messages.count >= 100)
+                self.sessions[i].hasOlderMessages = hasMore
                 completion?()
             }
         }.resume()
