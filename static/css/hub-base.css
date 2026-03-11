@@ -599,14 +599,14 @@ body {
   -webkit-backdrop-filter: blur(20px) saturate(160%);
   will-change: backdrop-filter;
   transform: translateZ(0);
-  border-left: 1px solid var(--border);
+  border-left: 1px solid rgba(255,255,255,0.05);
   box-shadow: -4px 0 24px rgba(0,0,0,0.4);
 }
 #notes-panel-header {
   display: flex;
   align-items: center;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
   gap: 8px;
   flex-shrink: 0;
   min-width: var(--notes-width, 320px); /* prevent reflow during collapse animation */
