@@ -1395,18 +1395,12 @@ struct ContentView: View {
                     }
                     .defaultScrollAnchor(.bottom)
                     .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
-                    .onScrollGeometryChange(for: Bool.self) { geo in
-                        geo.contentOffset.y < 80 && geo.contentSize.height > geo.containerSize.height
-                    } action: { _, nearTop in
-                        guard nearTop,
-                              !isLoadingOlder,
-                              vm.activeSession?.hasOlderMessages == true,
-                              let sid = vm.activeSessionId else { return }
-                        isLoadingOlder = true
-                        vm.loadOlderMessages(sessionId: sid) {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { isLoadingOlder = false }
-                        }
-                    }
+                    .modifier(ScrollTopDetector(
+                        isLoadingOlder: $isLoadingOlder,
+                        hasOlderMessages: vm.activeSession?.hasOlderMessages == true,
+                        sessionId: vm.activeSessionId,
+                        load: { sid, completion in vm.loadOlderMessages(sessionId: sid, completion: completion) }
+                    ))
                     .onChange(of: vm.activeMessages.count)        { _, _ in guard !isLoadingOlder else { return }; scrollBottom(proxy) }
                     .onChange(of: vm.activeSession?.isThinking)   { _, thinking in
                         if thinking != true { thinkingExpanded = false }
@@ -2193,6 +2187,30 @@ struct ContentView: View {
 
     private func effortIcon(_ e: String) -> String {
         switch e { case "low": "battery.25"; case "high": "bolt.fill"; default: "gauge.medium" }
+    }
+}
+
+// MARK: - Scroll Top Detector (auto-load older messages)
+
+private struct ScrollTopDetector: ViewModifier {
+    @Binding var isLoadingOlder: Bool
+    var hasOlderMessages: Bool
+    var sessionId: String?
+    var load: (String, @escaping () -> Void) -> Void
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.onScrollGeometryChange(for: Bool.self) { geo in
+                geo.contentOffset.y < 80 && geo.contentSize.height > geo.containerSize.height
+            } action: { _, nearTop in
+                guard nearTop, !isLoadingOlder, hasOlderMessages, let sid = sessionId else { return }
+                isLoadingOlder = true
+                load(sid) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { isLoadingOlder = false }
+                }
+            }
+        } else {
+            content
+        }
     }
 }
 
