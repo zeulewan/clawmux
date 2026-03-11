@@ -136,7 +136,7 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // Voice color background tint — uses @State so animation only fires on explicit onChange,
         // not on every ViewModel re-render (fixes random color flicker on iOS 26)
-        .background(voiceTintColor.opacity(0.10).ignoresSafeArea(.keyboard))
+        .background(voiceTintColor.opacity(0.10).ignoresSafeArea())
         .onChange(of: vm.activeSessionId) { _, _ in
             withAnimation(.easeInOut(duration: 0.4)) {
                 voiceTintColor = vm.activeSession.map { voiceColor($0.voice) } ?? .clear
