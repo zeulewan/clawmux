@@ -1848,11 +1848,15 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             if let msgDict = json["message"] as? [String: Any],
                let msgId = msgDict["id"] as? String,
                let text = msgDict["text"] as? String {
+                let senderLabel = msgDict["sender"] as? String ?? ""
+                let senderVoice = msgDict["sender_voice"] as? String ?? ""
+                let resolvedSender = !senderVoice.isEmpty ? senderVoice :
+                    (ALL_VOICES.first { $0.name.lowercased() == senderLabel.lowercased() }?.id ?? senderLabel)
                 let msg = GroupChatMessage(
                     id: msgId,
                     role: msgDict["role"] as? String ?? "assistant",
                     text: text,
-                    sender: msgDict["sender"] as? String ?? "",
+                    sender: resolvedSender,
                     ts: msgDict["ts"] as? Double ?? 0
                 )
                 // Only append if viewing this group and not already present
@@ -2162,11 +2166,15 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 guard let text = m["text"] as? String, !text.isEmpty
                 else { return nil }
                 let id = m["id"] as? String ?? UUID().uuidString
+                let senderLabel = m["sender"] as? String ?? ""
+                let senderVoice = m["sender_voice"] as? String ?? ""
+                let resolvedSender = !senderVoice.isEmpty ? senderVoice :
+                    (ALL_VOICES.first { $0.name.lowercased() == senderLabel.lowercased() }?.id ?? senderLabel)
                 return GroupChatMessage(
                     id: id,
                     role: m["role"] as? String ?? "assistant",
                     text: text,
-                    sender: m["sender"] as? String ?? "",
+                    sender: resolvedSender,
                     ts: m["ts"] as? Double ?? 0
                 )
             }
