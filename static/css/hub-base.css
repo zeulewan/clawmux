@@ -1173,6 +1173,7 @@ body {
   background: #2563eb;
   color: #fff;
   border-bottom-right-radius: 6px;
+  box-shadow: var(--shadow-sm);
 }
 /* interjection styling removed — all user messages look the same */
 .msg.assistant {
