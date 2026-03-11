@@ -129,10 +129,17 @@ struct ChatScrollAreaView: View {
         return VStack(alignment: group.role == "user" ? .trailing : .leading, spacing: 3) {
             ForEach(Array(group.messages.enumerated()), id: \.element.id) { idx, msg in
                 VStack(alignment: group.role == "user" ? .trailing : .leading, spacing: 2) {
-                    chatBubble(msg,
+                    let bubble = chatBubble(msg,
                         isFirst: idx == 0,
                         isLast:  idx == group.messages.count - 1,
                         role:    group.role)
+                    if group.role == "user" {
+                        bubble
+                            .frame(maxWidth: UIScreen.main.bounds.width * 0.82)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    } else {
+                        bubble
+                    }
                     if let mid = msg.msgId, ackedIds.contains(mid) {
                         Text("👍").font(.system(size: 14)).padding(.horizontal, 4)
                     }
@@ -262,7 +269,6 @@ struct ChatScrollAreaView: View {
                 : AnyShapeStyle(Color.clear)
 
         return AnyView(HStack(alignment: .bottom, spacing: 0) {
-            if role == "user"   { Spacer().frame(minWidth: 20, maxWidth: UIScreen.main.bounds.width * 0.22) }
             if role == "system" { Spacer() }
 
             VStack(alignment: role == "user" ? .trailing : .leading, spacing: 3) {
@@ -351,12 +357,10 @@ struct ChatScrollAreaView: View {
                         .frame(maxWidth: .infinity, alignment: role == "user" ? .trailing : .leading)
                 }
             }
-            .frame(maxWidth: .infinity)
 
             if role == "assistant" { Spacer(minLength: 56) }
             if role == "system"   { Spacer() }
-        }
-        .frame(maxWidth: .infinity))
+        })
     }
 
     // MARK: - Thinking Bubble
