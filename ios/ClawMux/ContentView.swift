@@ -295,13 +295,7 @@ struct ContentView: View {
         .padding(.horizontal, 12).padding(.vertical, 5)
         .background {
             if #available(iOS 26, *) {
-                GeometryReader { geo in
-                    Color.clear
-                        .glassEffect(.regular, in: .rect)
-                        .frame(height: geo.size.height + geo.safeAreaInsets.top + 200)
-                        .offset(y: -(geo.safeAreaInsets.top + 200))
-                }
-                .ignoresSafeArea(edges: .top)
+                Color.clear.glassEffect(.regular, in: TopOpenRect()).ignoresSafeArea(edges: .top)
             } else {
                 Color.clear.background(.ultraThinMaterial).ignoresSafeArea(edges: .top)
             }
@@ -1390,13 +1384,7 @@ struct ContentView: View {
         .padding(.horizontal, 12).padding(.vertical, 5)  // mobile web: padding 3px 12px
         .background {
             if #available(iOS 26, *) {
-                GeometryReader { geo in
-                    Color.clear
-                        .glassEffect(.regular, in: .rect)
-                        .frame(height: geo.size.height + geo.safeAreaInsets.top + 200)
-                        .offset(y: -(geo.safeAreaInsets.top + 200))
-                }
-                .ignoresSafeArea(edges: .top)
+                Color.clear.glassEffect(.regular, in: TopOpenRect()).ignoresSafeArea(edges: .top)
             } else {
                 Color.canvas1.opacity(0.85).background(.ultraThinMaterial).ignoresSafeArea(edges: .top)
             }
@@ -2327,6 +2315,13 @@ private struct ScrollBottomDetector: ViewModifier {
         } else {
             content
         }
+    }
+}
+
+/// Rect shape extended 1000pt above its bounds so glassEffect's top rim is off-screen.
+private struct TopOpenRect: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path(CGRect(x: rect.minX, y: rect.minY - 1000, width: rect.width, height: rect.height + 1000))
     }
 }
 
