@@ -355,30 +355,9 @@ struct InputBarView: View {
 
     private var waveformView: some View {
         let waveColor = vm.activeSession.map { voiceColor($0.voice) } ?? Color.cAccent
-        return TimelineView(.animation) { _ in
-            let bands = vm.spectrumBands
-            Canvas { context, size in
-                let count = bands.count
-                guard count > 0 else { return }
-                let barW: CGFloat = 8
-                let gap: CGFloat = 4
-                let totalW = CGFloat(count) * barW + CGFloat(count - 1) * gap
-                let startX = (size.width - totalW) / 2
-                for i in 0..<count {
-                    let level = bands[i]
-                    let h = max(3, level * (size.height - 4))
-                    let x = startX + CGFloat(i) * (barW + gap)
-                    let y = size.height - h
-                    let rect = CGRect(x: x, y: y, width: barW, height: h)
-                    context.fill(
-                        Path(roundedRect: rect, cornerRadius: 2),
-                        with: .color(waveColor.opacity(0.35 + level * 0.65))
-                    )
-                }
-            }
-        }
-        .frame(height: 48)
-        .padding(.horizontal, 16).padding(.vertical, 4)
+        return SpectrumWaveformView(bands: vm.spectrumBands, color: waveColor)
+            .frame(height: 48)
+            .padding(.horizontal, 16).padding(.vertical, 4)
     }
 
     // MARK: - Mic Button
@@ -423,5 +402,53 @@ struct InputBarView: View {
         if vm.isRecording { return .cSuccess }   // green: recording (web: var(--green))
         if vm.isPlaying   { return .cWarning }   // orange: interruptable (web: var(--orange))
         return .cTextSec                          // default: processing/thinking (web: text-tertiary default)
+    }
+}
+
+// MARK: - Spectrum Waveform View
+
+/// Renders 12 equalizer bars at display refresh rate with exponential smoothing.
+/// Uses a reference-type smoother so state updates don't trigger SwiftUI redraws.
+private final class BandSmoother {
+    var smooth: [CGFloat] = Array(repeating: 0, count: SpectrumProcessor.bandCount)
+
+    func update(toward target: [CGFloat]) {
+        guard target.count == smooth.count else { return }
+        for i in 0..<smooth.count {
+            let t = target[i]
+            // Instant attack, smooth decay — matches the feel of a physical VU meter
+            smooth[i] = t > smooth[i] ? t : smooth[i] + (t - smooth[i]) * 0.25
+        }
+    }
+}
+
+private struct SpectrumWaveformView: View {
+    let bands: [CGFloat]
+    let color: Color
+    @State private var smoother = BandSmoother()
+
+    var body: some View {
+        TimelineView(.animation) { _ in
+            Canvas { context, size in
+                smoother.update(toward: bands)
+                let smoothed = smoother.smooth
+                let count = smoothed.count
+                guard count > 0 else { return }
+                let barW: CGFloat = 8
+                let gap: CGFloat = 4
+                let totalW = CGFloat(count) * barW + CGFloat(count - 1) * gap
+                let startX = (size.width - totalW) / 2
+                for i in 0..<count {
+                    let level = smoothed[i]
+                    let h = max(3, level * (size.height - 4))
+                    let x = startX + CGFloat(i) * (barW + gap)
+                    let y = size.height - h
+                    context.fill(
+                        Path(roundedRect: CGRect(x: x, y: y, width: barW, height: h), cornerRadius: 2),
+                        with: .color(color.opacity(0.35 + level * 0.65))
+                    )
+                }
+            }
+        }
     }
 }
