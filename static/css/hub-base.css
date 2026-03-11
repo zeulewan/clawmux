@@ -22,7 +22,7 @@ body {
   background: var(--bg-glass);
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.4), 0 1px 0 rgba(255,255,255,0.05);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
   will-change: backdrop-filter;
   transform: translateZ(0);
 }
@@ -707,7 +707,6 @@ body {
   align-items: center;
   gap: 12px;
   background: var(--bg-glass);
-  border-bottom: 1px solid var(--border);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   flex-shrink: 0;
