@@ -295,7 +295,13 @@ struct ContentView: View {
         .padding(.horizontal, 12).padding(.vertical, 5)
         .background {
             if #available(iOS 26, *) {
-                Color.clear.padding(.top, -200).glassEffect(.regular, in: .rect).ignoresSafeArea(edges: .top)
+                GeometryReader { geo in
+                    Color.clear
+                        .glassEffect(.regular, in: .rect)
+                        .frame(height: geo.size.height + geo.safeAreaInsets.top + 200)
+                        .offset(y: -(geo.safeAreaInsets.top + 200))
+                }
+                .ignoresSafeArea(edges: .top)
             } else {
                 Color.clear.background(.ultraThinMaterial).ignoresSafeArea(edges: .top)
             }
@@ -1384,7 +1390,13 @@ struct ContentView: View {
         .padding(.horizontal, 12).padding(.vertical, 5)  // mobile web: padding 3px 12px
         .background {
             if #available(iOS 26, *) {
-                Color.clear.padding(.top, -200).glassEffect(.regular, in: .rect).ignoresSafeArea(edges: .top)
+                GeometryReader { geo in
+                    Color.clear
+                        .glassEffect(.regular, in: .rect)
+                        .frame(height: geo.size.height + geo.safeAreaInsets.top + 200)
+                        .offset(y: -(geo.safeAreaInsets.top + 200))
+                }
+                .ignoresSafeArea(edges: .top)
             } else {
                 Color.canvas1.opacity(0.85).background(.ultraThinMaterial).ignoresSafeArea(edges: .top)
             }
