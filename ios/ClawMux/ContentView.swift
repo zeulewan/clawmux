@@ -1941,6 +1941,7 @@ struct ContentView: View {
                                 .background(Color.cDanger.opacity(0.10), in: Circle())
                                 .overlay(Circle().strokeBorder(Color.cDanger.opacity(0.30), lineWidth: 1))
                         }
+                        .frame(width: 60, height: 46)  // match idle placeholder width
                         .transition(.scale.combined(with: .opacity))
                     } else if vm.isRecording && vm.pushToTalk {
                         HStack(spacing: 4) {
