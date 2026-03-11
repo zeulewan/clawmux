@@ -13,9 +13,12 @@ struct ScrollTopDetector: ViewModifier {
             // Use CGFloat so action fires on every scroll event — avoids Bool toggle dead zone
             // where nearTop stays true after a load and action never re-fires.
             content.onScrollGeometryChange(for: CGFloat.self) { geo in
-                geo.contentOffset.y
-            } action: { _, offsetY in
-                guard offsetY < 200, !isLoadingOlder, hasOlderMessages, let sid = sessionId else { return }
+                // Distance from top: 0 = at top, large positive = at bottom.
+                // defaultScrollAnchor(.bottom) makes contentOffset.y negative near top, so
+                // use this derived value instead of raw contentOffset.y.
+                geo.contentOffset.y + geo.contentSize.height - geo.containerSize.height
+            } action: { _, distanceFromTop in
+                guard distanceFromTop < 200, !isLoadingOlder, hasOlderMessages, let sid = sessionId else { return }
                 isLoadingOlder = true
                 load(sid) {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { isLoadingOlder = false }
