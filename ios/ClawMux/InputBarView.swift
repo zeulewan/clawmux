@@ -357,15 +357,14 @@ struct InputBarView: View {
         // Show only the newest 40 bars (40 × 6pt = 240pt) to keep newest samples visible
         let waveColor = vm.activeSession.map { voiceColor($0.voice) } ?? Color.cAccent
         let levels = vm.audioLevels.suffix(40)
-        return HStack(alignment: .center, spacing: 2) {
+        return HStack(alignment: .center, spacing: 3) {
             ForEach(Array(levels.enumerated()), id: \.offset) { _, level in
-                RoundedRectangle(cornerRadius: 2)
+                RoundedRectangle(cornerRadius: 1)
                     .fill(waveColor.opacity(0.35 + Double(level) * 0.65))
-                    .frame(width: 4, height: max(3, level * 24))
-                    .animation(.easeOut(duration: 0.08), value: level)
+                    .frame(width: 3, height: max(3, level * 40))
             }
         }
-        .frame(height: 24).clipped()
+        .frame(height: 40).clipped()
         .padding(.horizontal, 20).padding(.vertical, 4)
     }
 

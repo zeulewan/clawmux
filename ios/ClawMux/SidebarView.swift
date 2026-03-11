@@ -25,66 +25,74 @@ struct SidebarView: View {
                 VStack(spacing: sidebarExpanded ? 2 : 1) {
                     Color.clear.frame(height: 60).id("sidebar-top")
                     if sidebarExpanded {
-                        let groups = projectGroups
-                        ForEach(groups.namedProjects, id: \.self) { project in
-                            let voices = groups.byProject[project] ?? []
-                            projectSection(project, voices: voices)
-                        }
-                        let chatGroups = activeGroups
-                        if !chatGroups.isEmpty {
-                            HStack {
-                                Text("GROUP CHATS")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(Color.cTextTer)
-                                    .tracking(0.8)
-                                Spacer()
-                                Button {
-                                    newGroupChatName = ""
-                                    showCreateGroupChat = true
-                                } label: {
-                                    Image(systemName: "plus")
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(Color.cTextSec)
+                        VStack(spacing: 0) {
+                            let groups = projectGroups
+                            ForEach(groups.namedProjects, id: \.self) { project in
+                                let voices = groups.byProject[project] ?? []
+                                projectSection(project, voices: voices)
+                            }
+                            let chatGroups = activeGroups
+                            if !chatGroups.isEmpty {
+                                HStack {
+                                    Text("GROUP CHATS")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundStyle(Color.cTextTer)
+                                        .tracking(0.8)
+                                    Spacer()
+                                    Button {
+                                        newGroupChatName = ""
+                                        showCreateGroupChat = true
+                                    } label: {
+                                        Image(systemName: "plus")
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(Color.cTextSec)
+                                    }
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.top, 8).padding(.bottom, 2)
+                                ForEach(chatGroups, id: \.groupId) { g in
+                                    groupCard(g.groupId, name: g.name, voices: g.voices)
                                 }
                             }
-                            .padding(.horizontal, 16)
-                            .padding(.top, 8).padding(.bottom, 2)
-                            ForEach(chatGroups, id: \.groupId) { g in
-                                groupCard(g.groupId, name: g.name, voices: g.voices)
-                            }
                         }
+                        .transition(.move(edge: .leading).combined(with: .opacity))
                     } else {
-                        let groups = projectGroups
-                        ForEach(groups.namedProjects, id: \.self) { project in
-                            let voices = groups.byProject[project] ?? []
-                            let collapsed = collapsedProjects.contains(project)
-                            Button {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                                    if collapsed { collapsedProjects.remove(project) }
-                                    else         { collapsedProjects.insert(project) }
+                        VStack(spacing: 0) {
+                            let groups = projectGroups
+                            ForEach(groups.namedProjects, id: \.self) { project in
+                                let voices = groups.byProject[project] ?? []
+                                let collapsed = collapsedProjects.contains(project)
+                                Button {
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                                        if collapsed { collapsedProjects.remove(project) }
+                                        else         { collapsedProjects.insert(project) }
+                                    }
+                                } label: {
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 6, weight: .bold))
+                                        .foregroundStyle(Color.cTextSec)
+                                        .rotationEffect(.degrees(collapsed ? 0 : 90))
+                                        .animation(.spring(response: 0.3), value: collapsed)
+                                        .frame(width: 48, height: 14)
                                 }
-                            } label: {
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 6, weight: .bold))
-                                    .foregroundStyle(Color.cTextSec)
-                                    .rotationEffect(.degrees(collapsed ? 0 : 90))
-                                    .animation(.spring(response: 0.3), value: collapsed)
-                                    .frame(width: 48, height: 14)
+                                if !collapsed {
+                                    ForEach(voices) { voice in
+                                        sidebarIcon(for: voice)
+                                    }
+                                }
                             }
-                            if !collapsed {
-                                ForEach(voices) { voice in
-                                    sidebarIcon(for: voice)
-                                }
+                            let chatGroups = activeGroups
+                            ForEach(chatGroups, id: \.groupId) { g in
+                                groupIcon(g.groupId, voices: g.voices)
                             }
                         }
-                        let chatGroups = activeGroups
-                        ForEach(chatGroups, id: \.groupId) { g in
-                            groupIcon(g.groupId, voices: g.voices)
-                        }
+                        .transition(.move(edge: .leading).combined(with: .opacity))
                     }
                 }
+                .frame(maxWidth: .infinity)
                 .padding(.vertical, 4)
         }
+        .clipped()
         .accessibilityIdentifier("SidebarScrollView")
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {

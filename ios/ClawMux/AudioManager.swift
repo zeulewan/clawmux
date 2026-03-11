@@ -25,6 +25,7 @@ final class AudioManager: NSObject {
     private lazy var tonePlayer = TonePlayer()
     private var thinkingSoundTimer: Timer?
     private var meteringTimer: Timer?
+    private var prevMeterLevel: CGFloat = 0
     private var backgroundRecordingTimer: Timer?
     private let maxLevelSamples = 50
     private var pausedAudioSessionId: String?
@@ -979,9 +980,11 @@ final class AudioManager: NSObject {
                     return
                 }
                 recorder.updateMeters()
-                // averagePower is in dB (-160 to 0), normalize to 0...1
-                let db = recorder.averagePower(forChannel: 0)
-                let normalized = max(0, min(1, CGFloat((db + 50) / 50)))
+                // peakPower is in dB (-160 to 0), normalize to 0...1, apply decay
+                let db = recorder.peakPower(forChannel: 0)
+                let peak = max(0, min(1, CGFloat((db + 50) / 50)))
+                let normalized = max(peak, self.prevMeterLevel * 0.55)
+                self.prevMeterLevel = normalized
                 vm.audioLevels.append(normalized)
                 if vm.audioLevels.count > self.maxLevelSamples {
                     vm.audioLevels.removeFirst(vm.audioLevels.count - self.maxLevelSamples)
