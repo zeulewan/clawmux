@@ -2766,13 +2766,13 @@ async def services_status():
     stt_ok = False
     async with httpx.AsyncClient(timeout=3) as client:
         try:
-            await client.get(f"{hub_config.KOKORO_URL}/v1/audio/speech")
-            tts_ok = True
+            resp = await client.get(f"{hub_config.KOKORO_URL}/v1/models")
+            tts_ok = resp.status_code == 200
         except Exception:
             pass
         try:
-            await client.get(f"{hub_config.WHISPER_URL}/v1/audio/transcriptions")
-            stt_ok = True
+            resp = await client.get(f"{hub_config.WHISPER_URL}/")
+            stt_ok = resp.status_code == 200
         except Exception:
             pass
     return JSONResponse({"tts": tts_ok, "stt": stt_ok})
@@ -2902,9 +2902,12 @@ async def debug_info():
     # Check service connectivity
     services = {}
     async with httpx.AsyncClient(timeout=3) as client:
-        for name, url in [("whisper", hub_config.WHISPER_URL), ("kokoro", hub_config.KOKORO_URL)]:
+        for name, url, path in [
+            ("whisper", hub_config.WHISPER_URL, "/"),
+            ("kokoro", hub_config.KOKORO_URL, "/v1/models"),
+        ]:
             try:
-                resp = await client.get(url)
+                resp = await client.get(f"{url}{path}")
                 services[name] = {"status": "up", "code": resp.status_code, "url": url}
             except Exception as e:
                 services[name] = {"status": "down", "error": str(e), "url": url}
