@@ -1516,6 +1516,7 @@ struct ContentView: View {
                     agentColor.opacity(0.6).frame(width: 2)
                 }
                 .padding(.leading, 2)
+                .opacity(isExpanded ? 1.0 : 0.7)
                 .contentShape(Rectangle())
                 .onTapGesture {
                     withAnimation(.easeOut(duration: 0.15)) {
