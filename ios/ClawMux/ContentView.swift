@@ -2522,13 +2522,23 @@ struct NotesPanelView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.canvas1.ignoresSafeArea())
             .preferredColorScheme(.dark)
             .navigationTitle("Notes")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { onDismiss() } } }
             .onAppear { loadNotes() }
             .onDisappear { saveNotes() }
+        }
+        .background {
+            if #available(iOS 26, *) {
+                Color.clear.glassEffect(.regular, in: .rect).ignoresSafeArea()
+            } else {
+                Color.canvas1.opacity(0.95).background(.ultraThinMaterial).ignoresSafeArea()
+            }
+        }
+        .presentationBackground {
+            if #available(iOS 26, *) { Color.clear }
+            else { Color.canvas1.opacity(0.92).background(.ultraThinMaterial) }
         }
     }
 
@@ -2887,6 +2897,7 @@ struct SettingsView: View {
                     .frame(maxWidth: .infinity, alignment: .center).padding(.top, 4)
                 }
             }
+            .scrollContentBackground(.hidden)
             .navigationTitle("Settings").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .onAppear {
@@ -2894,6 +2905,17 @@ struct SettingsView: View {
                 draftTTSURL = vm.ttsURL
                 draftSTTURL = vm.sttURL
             }
+        }
+        .background {
+            if #available(iOS 26, *) {
+                Color.clear.glassEffect(.regular, in: .rect).ignoresSafeArea()
+            } else {
+                Color.canvas1.opacity(0.95).background(.ultraThinMaterial).ignoresSafeArea()
+            }
+        }
+        .presentationBackground {
+            if #available(iOS 26, *) { Color.clear }
+            else { Color.canvas1.opacity(0.92).background(.ultraThinMaterial) }
         }
     }
 }
