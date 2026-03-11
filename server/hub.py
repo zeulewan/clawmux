@@ -2597,13 +2597,22 @@ async def _inject_inbox(session, session_id: str) -> None:
                 lines.append(f"[SYSTEM] {content}")
 
         text = "\n".join(lines)
+        delivered = False
         try:
             await session_mgr.backend.deliver_message(session.tmux_session, text)
+            delivered = True
             log.info("[%s] Injected %d message(s) via tmux", session_id, len(messages))
-            # Transition to THINKING immediately — agent has the message and is reasoning.
+        except Exception as exc:
+            log.error("[%s] tmux injection FAILED: %s — %d message(s) returned to inbox",
+                      session_id, exc, len(messages))
+            for msg in messages:
+                await asyncio.to_thread(inbox.write, session.work_dir, msg)
+
+        if delivered:
+            # Transition to PROCESSING immediately — agent has the message and is reasoning.
             # This covers the gap between injection and first PreToolUse hook.
             if session.state == AgentState.IDLE:
-                session.set_state(AgentState.THINKING)
+                session.set_state(AgentState.PROCESSING)
                 await send_to_browser({
                     "type": "session_status",
                     "session_id": session_id,
@@ -2617,11 +2626,6 @@ async def _inject_inbox(session, session_id: str) -> None:
                 "session_id": session_id,
                 "count": 0,
             })
-        except Exception as exc:
-            log.error("[%s] tmux injection FAILED: %s — %d message(s) returned to inbox",
-                      session_id, exc, len(messages))
-            for msg in messages:
-                await asyncio.to_thread(inbox.write, session.work_dir, msg)
 
 
 async def _inbox_write_and_notify(session, msg_dict: dict) -> dict:
