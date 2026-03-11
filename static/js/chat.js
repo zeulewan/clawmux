@@ -120,6 +120,32 @@ function _renderMarkdown(text) {
       });
     }
 
+    // Lazy-load images — replace <img> with click-to-reveal placeholder
+    container.querySelectorAll('img').forEach(img => {
+      const src = img.getAttribute('src') || '';
+      const alt = img.alt || 'image';
+      const wrap = document.createElement('div');
+      wrap.className = 'chat-img-placeholder';
+      const icon = document.createElement('span');
+      icon.className = 'chat-img-icon';
+      icon.textContent = '🖼';
+      const label = document.createElement('span');
+      label.className = 'chat-img-label';
+      label.textContent = alt;
+      const hint = document.createElement('span');
+      hint.className = 'chat-img-hint';
+      hint.textContent = 'click to load';
+      wrap.append(icon, label, hint);
+      wrap.onclick = () => {
+        const actualImg = document.createElement('img');
+        actualImg.src = src;
+        actualImg.alt = alt;
+        actualImg.className = 'chat-img-revealed';
+        wrap.replaceWith(actualImg);
+      };
+      img.replaceWith(wrap);
+    });
+
     // Wrap text nodes in karaoke-word spans for TTS highlighting compatibility
     _wrapTextNodesInKaraokeSpans(container);
 
@@ -541,24 +567,98 @@ function _loadMoreMessages() {
   const s = sessions.get(activeSessionId);
   if (!s) return;
   const limit = _getChatLimit(activeSessionId);
-  // Check if there are more visible messages before the current slice
-  if (!_getDisplaySlice(s.messages, limit).hasMore) return;
   // Cancel any in-progress eased scroll — its scroll events would re-trigger load-more
   if (typeof _scrollRaf !== 'undefined' && _scrollRaf) {
     cancelAnimationFrame(_scrollRaf);
     _scrollRaf = null;
   }
-  const oldHeight = chatArea.scrollHeight;
-  // Increment the visible-message limit — _getDisplaySlice finds the right slice automatically
-  _chatRenderLimit.set(activeSessionId, limit + _CHAT_BATCH);
-  _scrollLoadPending = true;
-  renderChat(); // single render, no forceScroll
-  requestAnimationFrame(() => {
+  // If there are more locally buffered visible messages, expand the render window first
+  if (_getDisplaySlice(s.messages, limit).hasMore) {
+    const oldHeight = chatArea.scrollHeight;
+    _chatRenderLimit.set(activeSessionId, limit + _CHAT_BATCH);
+    _scrollLoadPending = true;
+    renderChat(); // single render, no forceScroll
     requestAnimationFrame(() => {
-      chatArea.scrollTop = chatArea.scrollHeight - oldHeight;
-      requestAnimationFrame(() => { _scrollLoadPending = false; });
+      requestAnimationFrame(() => {
+        chatArea.scrollTop = chatArea.scrollHeight - oldHeight;
+        requestAnimationFrame(() => { _scrollLoadPending = false; });
+      });
     });
-  });
+    return;
+  }
+  // Local messages exhausted — fetch older page from server if available
+  if (s.hasMoreHistory && !s.loadingOlderHistory) {
+    _fetchOlderHistory(activeSessionId);
+  }
+}
+
+async function _fetchOlderHistory(sessionId) {
+  const s = sessions.get(sessionId);
+  if (!s || s.loadingOlderHistory || !s.hasMoreHistory) return;
+  s.loadingOlderHistory = true;
+
+  // Show subtle loading indicator at top of chat
+  let loadingEl = chatArea.querySelector('#history-loading-indicator');
+  if (!loadingEl) {
+    loadingEl = document.createElement('div');
+    loadingEl.id = 'history-loading-indicator';
+    loadingEl.style.cssText = 'text-align:center;padding:6px;font-size:0.78em;color:var(--text-tertiary,#666);opacity:0.7;';
+    loadingEl.textContent = 'Loading older messages\u2026';
+    chatArea.insertBefore(loadingEl, chatArea.firstChild);
+  }
+
+  // Find the oldest message ID in s.messages to use as the before= cursor
+  let oldestId = null;
+  for (let i = 0; i < s.messages.length; i++) {
+    if (s.messages[i].id) { oldestId = s.messages[i].id; break; }
+  }
+
+  try {
+    const project = typeof currentProject !== 'undefined' ? currentProject : '';
+    const url = `/api/history/${s.voice}?limit=150${oldestId ? '&before=' + encodeURIComponent(oldestId) : ''}${project ? '&project=' + encodeURIComponent(project) : ''}`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('fetch failed: ' + resp.status);
+    const hist = await resp.json();
+    s.hasMoreHistory = hist.has_more === true;
+    const olderMsgs = (hist.messages || []).map(m => {
+      const obj = { role: m.role, text: m.text };
+      if (m.id) obj.id = m.id;
+      if (m.ts) obj.ts = m.ts;
+      if (m.parent_id) obj.parentId = m.parent_id;
+      if (m.bare_ack) obj.isBareAck = true;
+      return obj;
+    });
+    if (olderMsgs.length > 0) {
+      // Deduplicate: skip any IDs already in s.messages
+      const existingIds = new Set(s.messages.filter(m => m.id).map(m => m.id));
+      const newMsgs = olderMsgs.filter(m => !m.id || !existingIds.has(m.id));
+      if (newMsgs.length > 0) {
+        // Prepend to s.messages and expand render limit to include them
+        s.messages.unshift(...newMsgs);
+        const newLimit = (_getChatLimit(sessionId) || _CHAT_BATCH) + newMsgs.length;
+        _chatRenderLimit.set(sessionId, newLimit);
+        if (sessionId === activeSessionId) {
+          const oldHeight = chatArea.scrollHeight;
+          // Remove loading indicator before re-render
+          if (loadingEl && loadingEl.parentNode) loadingEl.remove();
+          _scrollLoadPending = true;
+          renderChat();
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              chatArea.scrollTop = chatArea.scrollHeight - oldHeight;
+              requestAnimationFrame(() => { _scrollLoadPending = false; });
+            });
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[history pagination] fetch older failed:', e);
+  } finally {
+    s.loadingOlderHistory = false;
+    const indicator = chatArea.querySelector('#history-loading-indicator');
+    if (indicator) indicator.remove();
+  }
 }
 
 // Fill the viewport on tab switch. With visible-limit semantics, _CHAT_BATCH (50) visible
@@ -590,16 +690,23 @@ function _initChatScroll() {
   chatArea.addEventListener('scroll', () => {
     _updateScrollBottomBtn();
     if (_scrollLoadPending) return;
-    // Load more when scrolling near top
+    // Load more when scrolling near top (local buffer or server pagination)
     if (chatArea.scrollTop < 100 && activeSessionId) {
       const s = sessions.get(activeSessionId);
       const limit = _getChatLimit(activeSessionId);
-      if (s && _getDisplaySlice(s.messages, limit).hasMore) {
-        _scrollLoadPending = true;
-        requestAnimationFrame(() => {
-          _loadMoreMessages();
-          _scrollLoadPending = false;
-        });
+      if (s) {
+        const { hasMore: localHasMore } = _getDisplaySlice(s.messages, limit);
+        if (localHasMore) {
+          // Expand render window from local buffer
+          _scrollLoadPending = true;
+          requestAnimationFrame(() => {
+            _loadMoreMessages();
+            _scrollLoadPending = false;
+          });
+        } else if (s.hasMoreHistory && !s.loadingOlderHistory) {
+          // Local buffer exhausted — fetch older page from server
+          _fetchOlderHistory(activeSessionId);
+        }
       }
     }
     // (Unload removed — resetting DOM on scroll-to-bottom caused messages to disappear

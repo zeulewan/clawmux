@@ -1913,3 +1913,38 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   from { opacity: 0; transform: translateX(-8px); }
   to { opacity: 1; transform: translateX(0); }
 }
+
+/* Lazy-load image placeholders */
+.chat-img-placeholder {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--bg-secondary, #1e1e2e);
+  border: 1px solid var(--border, #333);
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.8rem;
+  color: var(--text-secondary, #aaa);
+  transition: background 0.15s, border-color 0.15s;
+  margin: 4px 0;
+}
+.chat-img-placeholder:hover {
+  background: var(--bg-hover, #2a2a3e);
+  border-color: var(--blue, #3a86ff);
+  color: var(--text, #eee);
+}
+.chat-img-icon { font-size: 1rem; }
+.chat-img-hint { opacity: 0.55; font-size: 0.72rem; }
+.chat-img-revealed {
+  max-width: 100%;
+  border-radius: 6px;
+  display: block;
+  margin: 4px 0;
+  animation: imgFadeIn 0.2s ease;
+}
+@keyframes imgFadeIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}

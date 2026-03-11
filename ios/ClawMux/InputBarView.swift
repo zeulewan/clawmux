@@ -353,16 +353,18 @@ struct InputBarView: View {
 
     private var waveformView: some View {
         // Mirrors web drawWaveform: voice color, opacity 0.35+level*0.65, bars 4px w / 2px gap
+        // Show only the newest 40 bars (40 × 6pt = 240pt) to keep newest samples visible
         let waveColor = vm.activeSession.map { voiceColor($0.voice) } ?? Color.cAccent
+        let levels = vm.audioLevels.suffix(40)
         return HStack(alignment: .center, spacing: 2) {
-            ForEach(Array(vm.audioLevels.enumerated()), id: \.offset) { _, level in
-                RoundedRectangle(cornerRadius: 1.5)
+            ForEach(Array(levels.enumerated()), id: \.offset) { _, level in
+                RoundedRectangle(cornerRadius: 2)
                     .fill(waveColor.opacity(0.35 + Double(level) * 0.65))
-                    .frame(width: 4, height: max(2, level * 8))
+                    .frame(width: 4, height: max(3, level * 24))
                     .animation(.easeOut(duration: 0.08), value: level)
             }
         }
-        .frame(height: 12).frame(maxWidth: 240).clipped()
+        .frame(height: 24).clipped()
         .padding(.horizontal, 20).padding(.vertical, 4)
     }
 

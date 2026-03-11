@@ -81,10 +81,11 @@ def _install_hooks(repo_dir: str) -> None:
         data = {}
 
     hook_entry = {"hooks": [{
-        "type": "command",
-        "command": os.path.join(repo_dir, "hooks", "tool-status.sh"),
+        "type": "http",
+        "url": f"http://localhost:{HUB_PORT}/api/hooks/tool-status",
         "timeout": 5,
-        "allowedEnvVars": ["CLAWMUX_SESSION_ID", "CLAWMUX_PORT"],
+        "headers": {"ClawMux-Session": "$CLAWMUX_SESSION_ID"},
+        "allowedEnvVars": ["CLAWMUX_SESSION_ID"],
     }]}
     stop_entry = {"hooks": [{
         "type": "command",
@@ -220,8 +221,8 @@ def cmd_status(args):
             print(f"  Activity: {activity}")
         print(f"  Session ID: {found.get('session_id', '?')}")
         if found.get("project"):
-            area = f" · {found['project_repo']}" if found.get("project_repo") else ""
-            print(f"  Folder: {found['project']}{area}")
+            repo = f" · {found['project_repo']}" if found.get("project_repo") else ""
+            print(f"  Folder: {found['project']}{repo}")
         if found.get("work_dir"):
             print(f"  Work dir: {found['work_dir']}")
         if found.get("model"):
@@ -387,6 +388,8 @@ def _print_status_table(file=None):
     sessions = http_get("/api/sessions")
     debug = http_get("/api/debug")
     context = http_get("/api/context")
+    settings = http_get("/api/settings")
+    global_effort = settings.get("effort", "high")
 
     hub_info = debug.get("hub", debug)
     uptime_s = hub_info.get("uptime_seconds", 0)
@@ -411,8 +414,37 @@ def _print_status_table(file=None):
         slug = s.get("project_slug", "default")
         by_project.setdefault(slug, []).append(s)
 
+    # Section divider helpers — full terminal width
+    import shutil as _shutil
+    def divider(title=""):
+        w = _shutil.get_terminal_size((100, 24)).columns
+        if title:
+            inner = f" {title} "
+            bar = "─" * 3 + inner + "─" * max(0, w - 3 - len(inner))
+        else:
+            bar = "─" * w
+        return bar
+
+    # Build label → group names mapping
+    agent_groups: dict[str, list[str]] = {}
+    try:
+        gc_data = http_get("/api/groupchats")
+        groups = gc_data.get("groups", [])
+        for g in groups:
+            for m in g.get("members", []):
+                lbl = m.get("label", "")
+                if lbl:
+                    agent_groups.setdefault(lbl, []).append(g["name"])
+    except Exception:
+        gc_data = {}
+        groups = []
+
     # Show all known folders, even empty ones
     all_slugs = sorted(set(list(by_project.keys()) + list(proj_info.keys())), key=lambda s: (s != "default", s))
+
+    print(divider("ClawMux Folders"))
+    print()
+
     for i, slug in enumerate(all_slugs):
         if i > 0:
             print()
@@ -423,18 +455,19 @@ def _print_status_table(file=None):
         print(f"  {proj_name}{active_marker} ({agent_count} agents)")
         if not by_project.get(slug):
             print(f"  (no live agents)")
-            print()
             continue
-        print(f"  {'Name':<10} {'Role':<14} {'Project':<14} {'Repo':<16} {'Task':<32} {'State':<10} {'tool_name':<14} {'activity':<30} {'ctx':<5} {'model':<8} {'effort'}")
-        print(f"  {'-' * 165}")
+        print(f"  {'Name':<10} {'Role':<14} {'Folder':<14} {'Repo':<16} {'Task':<32} {'State':<10} {'tool_name':<14} {'activity':<30} {'ctx':<5} {'model':<8} {'effort':<10} {'Groups'}")
+        print(f"  {'-' * 178}")
         for s in sorted(by_project.get(slug, []), key=lambda s: s.get("label", "")):
             name = s.get("label", s.get("voice", "?"))
-            project = s.get("project", "") or ""
-            if len(project) > 12:
-                project = project[:12] + ".."
-            area = s.get("project_repo", "")
-            if len(area) > 14:
-                area = area[:12] + ".."
+            # Folder = actual organizational folder name from project_slug
+            agent_slug = s.get("project_slug", "default")
+            folder = proj_info.get(agent_slug, {}).get("name", agent_slug)
+            if len(folder) > 12:
+                folder = folder[:12] + ".."
+            repo = s.get("project_repo", "")
+            if len(repo) > 14:
+                repo = repo[:12] + ".."
             role = s.get("role", "")
             if len(role) > 12:
                 role = role[:10] + ".."
@@ -471,26 +504,24 @@ def _print_status_table(file=None):
             ansi_color = _voice_ansi_color(voice)
             use_color = file is not None or sys.stdout.isatty()
             model = s.get("model", "") or ""
-            effort = s.get("effort", "") or "default"
-            row = f"  {name:<10} {role:<14} {project:<14} {area:<16} {task:<32} {state:<10} {tool_name:<14} {activity:<30} {ctx_str:<5} {model:<8} {effort}"
+            effort = s.get("effort", "") or global_effort
+            gc_names = ", ".join(agent_groups.get(name, []))
+            row = f"  {name:<10} {role:<14} {folder:<14} {repo:<16} {task:<32} {state:<10} {tool_name:<14} {activity:<30} {ctx_str:<5} {model:<8} {effort:<10} {gc_names}"
             if ansi_color and use_color:
                 print(f"\033[38;5;{ansi_color}m{row}\033[0m")
             else:
                 print(row)
-        print()
 
     # Group chats section
     try:
-        gc_data = http_get("/api/groupchats")
         groups = gc_data.get("groups", [])
         if groups:
             print()
-            print("  Group Chats")
-            print(f"  {'-' * 40}")
+            print(divider("Group Chats"))
+            print()
             for g in groups:
                 members = [m["label"] for m in g.get("members", [])]
                 print(f"  {g['name']:<20} {', '.join(members)}")
-            print()
     except Exception:
         pass
 
@@ -1582,11 +1613,24 @@ def _monitor_sessions_from_agents_json(project_slug):
     if not agents:
         return None
 
+    # Build voice→folder mapping from projects.json
+    voice_to_folder: dict[str, str] = {}
+    try:
+        proj_file = os.path.join(repo_dir, "data", "projects.json")
+        with open(proj_file) as pf:
+            pdata = json.load(pf)
+        for slug, proj in pdata.get("projects", {}).items():
+            for vid in proj.get("voices", []):
+                voice_to_folder[vid] = slug
+    except (OSError, json.JSONDecodeError):
+        pass
+
     # Build session list in the same format cmd_monitor expects
     # Also verify tmux sessions actually exist
     result = []
     for voice_id, entry in agents.items():
-        if entry.get("project") != project_slug and project_slug != "default":
+        agent_folder = voice_to_folder.get(voice_id, "default")
+        if project_slug != "default" and agent_folder != project_slug:
             continue
         session_id = entry.get("session_id")
         if not session_id:
@@ -1611,7 +1655,7 @@ def _monitor_sessions_from_agents_json(project_slug):
             "label": name.capitalize(),
             "project_slug": entry.get("project", "default"),
             "project": entry.get("project", ""),
-            "project_repo": entry.get("repo", ""),
+            "project_area": entry.get("area", ""),
             "status_text": "",
         })
 
@@ -2116,15 +2160,21 @@ def cmd_project(args):
     session_id = require_session_id()
     payload = {
         "project": args.project,
-        "repo": getattr(args, "repo", None) or "",
+        "repo": args.repo or "",
     }
     if args.role:
         payload["role"] = args.role
     if args.task:
         payload["task"] = args.task
     http_post(f"/api/project-status/{session_id}", payload)
-    repo = f" · {args.repo}" if getattr(args, "repo", None) else ""
-    print(f"Folder: {args.project}{repo}")
+    parts = [f"Folder: {args.project}"]
+    if args.repo:
+        parts.append(f"Repo: {args.repo}")
+    if args.role:
+        parts.append(f"Role: {args.role}")
+    if args.task:
+        parts.append(f"Task: {args.task}")
+    print("  |  ".join(parts))
 
 
 def cmd_task(args):
@@ -2439,15 +2489,15 @@ examples:
 
     # folder (canonical) + project (alias for backward compat)
     for _cmd_name in ("folder", "project"):
-        _help = "Set project/area status in sidebar" if _cmd_name == "folder" else argparse.SUPPRESS
+        _help = "Set folder/repo status in sidebar" if _cmd_name == "folder" else argparse.SUPPRESS
         p = sub.add_parser(_cmd_name, help=_help,
-                           description="Update the sidebar to show what project and area you're working on.",
+                           description="Update the sidebar to show what folder and repo you're working on.",
                            formatter_class=argparse.RawDescriptionHelpFormatter,
                            epilog="""examples:
-    clawmux folder default --repo clawmux
-    clawmux folder default --repo clawmux --role backend --task 'Hub maintenance'""")
-        p.add_argument("project", help="Project or repo name")
-        p.add_argument("--repo", help="Git repository name the agent is working in")
+    clawmux folder clawmux
+    clawmux folder clawmux --repo clawmux --role backend --task 'Fixing auth bug'""")
+        p.add_argument("project", help="Folder name")
+        p.add_argument("--repo", help="Repository the agent is working on")
         p.add_argument("--role", help="Agent role (e.g. Frontend, Backend)")
         p.add_argument("--task", help="Current task description")
         p.set_defaults(func=cmd_project)

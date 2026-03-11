@@ -633,7 +633,7 @@ function switchTab(sessionId, manual = false) {
 
     // Resume thinking sound and typing indicator if this session is already active
     const ss = s.sidebarState || 'idle';
-    if (['thinking', 'processing', 'compacting', 'starting'].includes(ss)) {
+    if (['processing', 'compacting', 'starting'].includes(ss)) {
       startThinkingSound(sessionId);
       if (typeof showTypingIndicator === 'function') showTypingIndicator(sessionId);
     }
@@ -723,12 +723,14 @@ async function spawnSession(voiceId = '') {
 async function addSession(data, autoSwitch = false) {
   const isReady = data.status === 'ready';
 
-  // Fetch persistent history from server
+  // Fetch persistent history from server (paginated: last 150 messages)
   let serverMessages = [];
+  let hasMoreHistory = false;
   try {
-    const resp = await fetch(`/api/history/${data.voice}`);
+    const resp = await fetch(`/api/history/${data.voice}?limit=150`);
     if (resp.ok) {
       const hist = await resp.json();
+      hasMoreHistory = hist.has_more === true;
       serverMessages = (hist.messages || []).map(m => {
         const obj = { role: m.role, text: m.text };
         if (m.id) obj.id = m.id;
@@ -737,7 +739,7 @@ async function addSession(data, autoSwitch = false) {
         if (m.bare_ack) obj.isBareAck = true;
         return obj;
       });
-      console.log(`[addSession] ${data.voice}: loaded ${serverMessages.length} messages`);
+      console.log(`[addSession] ${data.voice}: loaded ${serverMessages.length} messages, has_more=${hasMoreHistory}`);
     } else {
       console.warn(`[addSession] ${data.voice}: fetch failed with status ${resp.status}`);
     }
@@ -754,10 +756,12 @@ async function addSession(data, autoSwitch = false) {
     voice: data.voice || 'af_sky',
     speed: _initSpeed,
     messages: serverMessages,
+    hasMoreHistory,
+    loadingOlderHistory: false,
     statusText: data.status_text || (isReady ? 'Ready' : 'Starting...'),
     toolStatusText: data.status_text || '',
     serverState: data.state || (data.in_wait ? 'idle' : (isReady ? 'idle' : 'starting')),
-    sidebarState: (data.state === 'idle' || data.in_wait ? 'idle' : (data.state === 'thinking' ? 'thinking' : (data.state === 'processing' ? 'processing' : (data.state === 'compacting' ? 'compacting' : (isReady ? 'idle' : 'starting'))))),
+    sidebarState: (data.state === 'idle' || data.in_wait ? 'idle' : (data.state === 'processing' ? 'processing' : (data.state === 'compacting' ? 'compacting' : (isReady ? 'idle' : 'starting')))),
     unreadCount: data.unread_count || 0,
     compacting: (data.state === 'compacting') || (data.compacting ?? false),
   });
@@ -785,7 +789,7 @@ async function addSession(data, autoSwitch = false) {
   if (serverState === 'idle') {
     const sess = sessions.get(data.session_id);
     if (sess) { sess.sessionState = 'idle'; sess.sidebarState = 'idle'; }
-  } else if (serverState === 'processing' || serverState === 'compacting' || serverState === 'thinking') {
+  } else if (serverState === 'processing' || serverState === 'compacting') {
     const sess = sessions.get(data.session_id);
     if (sess) { sess.sessionState = 'processing'; sess.sidebarState = serverState; }
     showThinking(data.session_id);
@@ -2394,11 +2398,6 @@ async function syncProcessingState() {
       const st = s.sessionState || 'idle';
       const sbSt = s.sidebarState || 'idle';
       const serverState = srv.state || (srv.in_wait ? 'idle' : (srv.processing ? 'processing' : 'idle'));
-      // Fix drift: server says thinking but sidebar doesn't reflect it
-      if (serverState === 'thinking' && sbSt !== 'thinking') {
-        setSessionSidebarState(srv.session_id, 'thinking');
-        if (srv.session_id === activeSessionId && typeof showTypingIndicator === 'function') showTypingIndicator(srv.session_id);
-      }
       // Fix drift: server says processing/compacting but browser doesn't show it
       if ((serverState === 'processing' || serverState === 'compacting') && st !== 'processing' && st !== 'listening' && st !== 'speaking') {
         setSessionState(srv.session_id, 'processing');

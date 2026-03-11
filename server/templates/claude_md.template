@@ -37,6 +37,13 @@ clawmux send --to echo 'Check the auth module'
 clawmux send --to sky --re msg-xxx 'Here is the answer'
 ```
 
+## Posting an image to chat
+```bash
+clawmux send --to user --image /path/to/screenshot.png
+```
+
+Posts the image inline in the chat. Supports PNG, JPEG, WebP, GIF (including animated). The file is uploaded to the hub and rendered directly in the browser. Use this to share screenshots, diagrams, or any visual output.
+
 ## Acknowledging a message (thumbs up / ACK)
 ```bash
 clawmux send --to sky --re msg-xxx
@@ -46,17 +53,17 @@ A **thumbs up** (ACK) is a reply with no message body — just `--re <msg_id>` a
 
 **When the user sends a short affirmative** ("alright", "ok", "sounds good", "thanks", etc.) and no response is needed, ACK the message with a thumbs up instead of sending a reply. Use `clawmux send --to user --re <msg_id>` with no message body.
 
-## Setting your project status
+## Setting your status
+All four fields can be set in one command:
 ```bash
-clawmux folder 'project-name' --repo 'clawmux' --role 'backend' --task 'what you are working on'
+clawmux folder <folder> --repo <repo> --role <role> --task 'description'
 ```
+- **folder** — the organizational folder you are assigned to (required)
+- **--repo** — the repository you are currently working in
+- **--role** — your display role (e.g. backend, frontend, researcher)
+- **--task** — what you are doing right now (~5 words)
 
-## Updating your task status
-Keep your task status updated so the team knows what you are working on:
-```bash
-clawmux task 'Short description of current work'
-```
-Update this whenever your focus changes — starting a new task, finishing one, or switching context.
+You can omit any flag to leave that field unchanged. Update your task whenever your focus changes — starting a new task, finishing one, or switching context.
 
 ## Searching conversation history
 Search across all agent histories for past messages:
@@ -96,9 +103,9 @@ You can read this file for context on what the user is focused on. Do not modify
 | `clawmux send --to <name> 'msg'` | Send a message to user or agent | Yes |
 | `clawmux status` | Show hub state and all sessions | Yes |
 | `clawmux status <name>` | Show details for one agent | Yes |
-| `clawmux task 'description'` | Set your current task in sidebar | Yes |
-| `clawmux role <role>` | Set your role (must match a template) | Yes |
-| `clawmux folder <name> --repo <repo>` | Set folder/repo in sidebar | Yes |
+| `clawmux folder <name> --repo <r> --role <r> --task 'desc'` | Set folder, repo, role, task (all optional except folder) | Yes |
+| `clawmux task 'description'` | Set current task only | Yes |
+| `clawmux role <role>` | Set role only | Yes |
 | `clawmux projects` | List all folders | Yes |
 | `clawmux messages` | List recent inter-agent messages | Yes |
 | `clawmux search '<query>'` | Search all agent conversation histories | Yes |

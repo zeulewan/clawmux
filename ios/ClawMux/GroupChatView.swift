@@ -40,52 +40,81 @@ struct GroupChatHeaderView: View {
 struct GroupChatScrollView: View {
     @ObservedObject var vm: ClawMuxViewModel
     @Binding var showCopiedToast: Bool
+    @State private var isAtBottom: Bool = true
 
     var body: some View {
         ZStack {
             ScrollViewReader { proxy in
-                ScrollView(showsIndicators: false) {
-                    LazyVStack(spacing: 8) {
-                        let displayMsgs = vm.groupMessages.filter { !$0.isBareAck }
-                        let ackedBySenders: [String: [String]] = vm.groupMessages
-                            .filter { $0.isBareAck }
-                            .reduce(into: [:]) { dict, ack in
-                                if let pid = ack.parentId { dict[pid, default: []].append(ack.sender) }
-                            }
-                        ForEach(Array(displayMsgs.enumerated()), id: \.element.id) { idx, msg in
-                            VStack(alignment: msg.role == "user" ? .trailing : .leading, spacing: 2) {
-                                groupMessageBubble(msg, isLast: idx == displayMsgs.count - 1)
-                                if let senders = ackedBySenders[msg.id], !senders.isEmpty {
-                                    HStack(spacing: 4) {
-                                        Text("👍").font(.system(size: 12)).foregroundStyle(Color.cTextTer)
-                                        ForEach(senders, id: \.self) { voiceId in
-                                            ZStack {
-                                                Circle().fill(voiceColor(voiceId).opacity(0.15))
-                                                Image(systemName: voiceIcon(voiceId))
-                                                    .font(.system(size: 7, weight: .semibold))
-                                                    .foregroundStyle(voiceColor(voiceId))
+                ZStack(alignment: .bottomTrailing) {
+                    ScrollView(showsIndicators: false) {
+                        LazyVStack(spacing: 8) {
+                            let displayMsgs = vm.groupMessages.filter { !$0.isBareAck }
+                            let ackedBySenders: [String: [String]] = vm.groupMessages
+                                .filter { $0.isBareAck }
+                                .reduce(into: [:]) { dict, ack in
+                                    if let pid = ack.parentId { dict[pid, default: []].append(ack.sender) }
+                                }
+                            ForEach(Array(displayMsgs.enumerated()), id: \.element.id) { idx, msg in
+                                VStack(alignment: msg.role == "user" ? .trailing : .leading, spacing: 2) {
+                                    groupMessageBubble(msg, isLast: idx == displayMsgs.count - 1)
+                                    if let senders = ackedBySenders[msg.id], !senders.isEmpty {
+                                        HStack(spacing: 4) {
+                                            Text("👍").font(.system(size: 12)).foregroundStyle(Color.cTextTer)
+                                            ForEach(senders, id: \.self) { voiceId in
+                                                ZStack {
+                                                    Circle().fill(voiceColor(voiceId).opacity(0.15))
+                                                    Image(systemName: voiceIcon(voiceId))
+                                                        .font(.system(size: 7, weight: .semibold))
+                                                        .foregroundStyle(voiceColor(voiceId))
+                                                }
+                                                .frame(width: 18, height: 18)
                                             }
-                                            .frame(width: 18, height: 18)
                                         }
+                                        .padding(.horizontal, 6).padding(.vertical, 2)
+                                        .background(Color.cCard.opacity(0.6), in: Capsule())
                                     }
-                                    .padding(.horizontal, 6).padding(.vertical, 2)
-                                    .background(Color.cCard.opacity(0.6), in: Capsule())
                                 }
                             }
+                            Color.clear.frame(height: 16).id("gc-bottom")
                         }
-                        Color.clear.frame(height: 16).id("gc-bottom")
+                        .padding(.horizontal, 12).padding(.top, 64).padding(.bottom, 8)
                     }
-                    .padding(.horizontal, 12).padding(.top, 64).padding(.bottom, 8)
-                }
-                .contentMargins(.leading, 48, for: .scrollContent)
-                .onChange(of: vm.groupMessages.count) { _, _ in
-                    withAnimation(.easeOut(duration: 0.18)) {
+                    .contentMargins(.leading, 48, for: .scrollContent)
+                    .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
+                    .onChange(of: vm.groupMessages.count) { _, _ in
+                        guard isAtBottom else { return }
+                        withAnimation(.easeOut(duration: 0.18)) {
+                            proxy.scrollTo("gc-bottom", anchor: .bottom)
+                        }
+                    }
+                    .onAppear {
+                        if let name = vm.activeGroupName { vm.fetchGroupHistory(groupName: name) }
                         proxy.scrollTo("gc-bottom", anchor: .bottom)
                     }
-                }
-                .onAppear {
-                    if let name = vm.activeGroupName { vm.fetchGroupHistory(groupName: name) }
-                    proxy.scrollTo("gc-bottom", anchor: .bottom)
+
+                    if !isAtBottom {
+                        Button {
+                            withAnimation(.spring(response: 0.3)) { proxy.scrollTo("gc-bottom", anchor: .bottom) }
+                        } label: {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Color.cText)
+                                .frame(width: 32, height: 32)
+                                .background {
+                                    if #available(iOS 26, *) {
+                                        Color.clear.glassEffect(.regular, in: .circle)
+                                    } else {
+                                        Color.canvas2.opacity(0.90).background(.ultraThinMaterial, in: Circle())
+                                    }
+                                }
+                                .overlay(Circle().strokeBorder(Color.glassBorder, lineWidth: 0.5))
+                                .shadow(color: .black.opacity(0.4), radius: 8, x: 0, y: 2)
+                        }
+                        .padding(.trailing, 16)
+                        .padding(.bottom, 180)
+                        .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .bottomTrailing)))
+                        .animation(.spring(response: 0.25), value: isAtBottom)
+                    }
                 }
             }
             // Empty state

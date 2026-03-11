@@ -222,7 +222,11 @@ class ClaudeCodeBackend(AgentBackend):
         await asyncio.sleep(1)
 
     async def _tmux_type(self, session_name: str, text: str) -> None:
-        """Type text literally into a tmux pane and press Enter."""
+        """Type text literally into a tmux pane and press Enter.
+
+        Callers should shield this coroutine if they need atomicity (text + Enter
+        must both land even if the outer task is cancelled).
+        """
         proc = await asyncio.create_subprocess_exec(
             "tmux", "send-keys", "-t", session_name, "-l", text,
             stdout=asyncio.subprocess.PIPE,
@@ -230,15 +234,13 @@ class ClaudeCodeBackend(AgentBackend):
             env=_SUBPROCESS_ENV,
         )
         await proc.communicate()
-        # Shield the Enter send — if this coroutine is cancelled after the paste,
-        # we must still submit it or the text will sit unsubmitted in the tmux buffer.
         proc = await asyncio.create_subprocess_exec(
             "tmux", "send-keys", "-t", session_name, "Enter",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=_SUBPROCESS_ENV,
         )
-        await asyncio.shield(proc.communicate())
+        await proc.communicate()
 
     async def _run(self, cmd: str) -> str:
         proc = await asyncio.create_subprocess_shell(

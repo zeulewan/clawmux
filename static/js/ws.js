@@ -157,14 +157,14 @@ function handleMessage(data) {
             existing.compacting = (serverState === 'compacting');
             setSessionSidebarState(s.session_id, serverState);
             // Keep sessionState in sync so getSessionState() / switchTab indicator check is correct
-            if (['thinking', 'processing', 'compacting'].includes(serverState)) {
+            if (['processing', 'compacting'].includes(serverState)) {
               existing.sessionState = 'processing';
             } else if (serverState === 'idle') {
               existing.sessionState = 'idle';
             }
             // Restore typing indicator immediately for the active session (reconnect — switchTab won't be called)
             if (s.session_id === activeSessionId) {
-              const indicatorActive = ['thinking', 'processing', 'compacting', 'starting'].includes(serverState);
+              const indicatorActive = ['processing', 'compacting', 'starting'].includes(serverState);
               if (indicatorActive) {
                 if (typeof showTypingIndicator === 'function') showTypingIndicator(s.session_id);
               } else {
@@ -327,7 +327,7 @@ function handleMessage(data) {
         s.compacting = (serverState === 'compacting');
         setSessionSidebarState(data.session_id, serverState);
         // Typing indicator
-        const isActive = ['thinking', 'processing', 'compacting', 'starting'].includes(serverState);
+        const isActive = ['processing', 'compacting', 'starting'].includes(serverState);
         if (isActive) {
           if (typeof showTypingIndicator === 'function') showTypingIndicator(data.session_id);
         } else {

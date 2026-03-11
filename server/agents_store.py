@@ -37,8 +37,9 @@ class AgentEntry:
     session_id: str | None = None
     project: str | None = None
     role: str = ""                # display role (e.g. "Manager", "Frontend", "Researcher")
-    repo: str = ""                # e.g. git repo name the agent is working in
+    repo: str = ""                # repository the agent is working on
     task: str = ""                # current task description (~5 words)
+    area: str = ""                # sub-area within the project (e.g. "frontend", "auth")
     backend: str = "claude-code"  # backend type
     last_active: float = 0.0
     model: str = "opus"

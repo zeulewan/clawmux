@@ -29,11 +29,18 @@ function startWaveform(stream) {
   if (topRow) topRow.classList.add('wave-visible');
   // Scroll chat to bottom since waveform takes space
   requestAnimationFrame(() => { chatScrollToBottom(true); });
-  const dpr = window.devicePixelRatio || 1;
-  const rect = waveCanvas.getBoundingClientRect();
-  waveCanvas.width = rect.width * dpr;
-  waveCanvas.height = rect.height * dpr;
-  waveCtx.scale(dpr, dpr);
+  // Defer canvas sizing to after layout settles — getBoundingClientRect() returns 0
+  // immediately after display:block on mobile before the browser has laid out the element.
+  const _sizeCanvas = () => {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = waveCanvas.getBoundingClientRect();
+    const w = rect.width || waveCanvas.offsetWidth || 300;
+    const h = rect.height || waveCanvas.offsetHeight || 22;
+    waveCanvas.width = w * dpr;
+    waveCanvas.height = h * dpr;
+    waveCtx.scale(dpr, dpr);
+  };
+  requestAnimationFrame(_sizeCanvas);
   // Reset history for fresh recording
   waveHistory = [];
   waveLastSample = 0;

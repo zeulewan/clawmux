@@ -43,15 +43,8 @@ from agents_store import AgentsStore
 from template_renderer import TemplateRenderer
 
 # Logging
-class _NoiseFilter(logging.Filter):
-    """Drop high-frequency polling endpoints from the access log."""
-    _SKIP = {"/api/agents/poll", "/api/tts/status", "/api/stt/status"}
-    def filter(self, record: logging.LogRecord) -> bool:
-        msg = record.getMessage()
-        return not any(ep in msg for ep in self._SKIP)
-
 _log_file_handler = logging.handlers.RotatingFileHandler(
-    "/tmp/clawmux.log", maxBytes=10 * 1024 * 1024, backupCount=3
+    "/tmp/clawmux.log", mode="a", maxBytes=10 * 1024 * 1024, backupCount=3
 )
 logging.basicConfig(
     level=logging.INFO,
@@ -62,8 +55,20 @@ logging.basicConfig(
         _log_file_handler,
     ],
 )
-logging.getLogger("uvicorn.access").addFilter(_NoiseFilter())
 log = logging.getLogger("hub")
+
+# Filter noisy polling endpoints from uvicorn access log
+_NOISY_PATHS = frozenset([
+    "/api/sessions", "/api/context", "/api/settings",
+    "/api/projects", "/api/groupchats", "/api/debug",
+])
+
+class _NoiseFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        return not any(f'"{p}' in msg or f' {p} ' in msg for p in _NOISY_PATHS)
+
+logging.getLogger("uvicorn.access").addFilter(_NoiseFilter())
 
 history = HistoryStore()
 project_mgr = ProjectManager()
@@ -93,7 +98,7 @@ _group_chats: dict[str, dict] = {}  # keyed by group name (lowercase)
 
 # Per-session pending tmux injection tasks (keyed by session_id)
 _pending_injections: dict[str, asyncio.Task] = {}
-# Per-session locks serializing inbox delivery — prevents concurrent paste+Enter races
+# Per-session delivery locks — serializes concurrent injections so Enter never fires mid-paste
 _injection_locks: dict[str, asyncio.Lock] = {}
 
 
@@ -138,7 +143,10 @@ _shutdown_mode: str = "full"
 # Message queue for when browser is disconnected (bounded, with timestamps for TTL)
 _QUEUE_MAX = 100
 _QUEUE_TTL = 30  # seconds — discard queued messages older than this
-_QUEUEABLE_TYPES = {"assistant_text", "user_text", "audio", "done", "session_status", "session_ended", "agent_message", "user_ack"}
+_QUEUEABLE_TYPES = {"done", "session_status", "session_ended"}
+# assistant_text, user_text, agent_message, user_ack are NOT queued — they are persisted
+# in history and recovered via cursor-based sync (_reconnectSyncSession) on reconnect.
+# Queuing them caused duplication: queue replay + history sync both added the same message.
 _browser_msg_queue: collections.deque[tuple[float, dict]] = collections.deque(maxlen=_QUEUE_MAX)
 
 
@@ -192,61 +200,6 @@ async def send_to_browser(data: dict) -> bool:
     return delivered
 
 
-async def stuck_buffer_monitor_loop() -> None:
-    """Every 10s, scan all agent panes for stuck input buffers and clear them.
-
-    [Pasted text] in the prompt means text was injected but Enter never fired.
-    We act immediately on the first sighting — it's unambiguous. The ❯+content
-    pattern waits for a second consecutive cycle to avoid false positives.
-    """
-    _stuck_seen: dict[str, int] = {}
-    while True:
-        await asyncio.sleep(10)
-        for session_id in list(session_mgr.sessions):
-            session = session_mgr.sessions.get(session_id)
-            if not session or session.state == AgentState.DEAD or not session.tmux_session:
-                _stuck_seen.pop(session_id, None)
-                continue
-            try:
-                pane = await session_mgr.backend.capture_pane(session.tmux_session)
-            except Exception:
-                continue
-            last_lines = pane.strip().splitlines()[-10:]
-            snippet = "\n".join(last_lines)
-
-            pasted_stuck = "[Pasted text" in snippet or "[Typed text" in snippet
-            prompt_stuck = any(
-                line.startswith("❯") and len(line.rstrip()) > 1 for line in last_lines
-            )
-
-            if pasted_stuck:
-                # Unambiguous — act on first sighting
-                log.warning("[%s] STUCK BUFFER (Pasted text) — sending Enter to unblock", session_id)
-                try:
-                    import subprocess as _sp
-                    _sp.run(["tmux", "send-keys", "-t", session.tmux_session, "Enter"],
-                            capture_output=True, timeout=3)
-                    log.info("[%s] Stuck buffer cleared", session_id)
-                except Exception as e:
-                    log.error("[%s] Failed to send Enter: %s", session_id, e)
-                _stuck_seen.pop(session_id, None)
-            elif prompt_stuck:
-                count = _stuck_seen.get(session_id, 0) + 1
-                _stuck_seen[session_id] = count
-                if count >= 2:
-                    log.warning("[%s] STUCK BUFFER (prompt content, seen %dx) — sending Enter", session_id, count)
-                    try:
-                        import subprocess as _sp
-                        _sp.run(["tmux", "send-keys", "-t", session.tmux_session, "Enter"],
-                                capture_output=True, timeout=3)
-                        log.info("[%s] Stuck buffer cleared", session_id)
-                    except Exception as e:
-                        log.error("[%s] Failed to send Enter: %s", session_id, e)
-                    _stuck_seen.pop(session_id, None)
-            else:
-                _stuck_seen.pop(session_id, None)
-
-
 async def heartbeat_loop() -> None:
     """Ping all browser clients every 30s, remove dead connections."""
     while True:
@@ -260,6 +213,64 @@ async def heartbeat_loop() -> None:
         for ws in dead:
             log.info("Heartbeat: removing dead client (%d remain)", len(browser_clients) - 1)
             browser_clients.discard(ws)
+
+
+
+async def stuck_buffer_monitor_loop() -> None:
+    """Detect and auto-fix agents with text stuck in their tmux input buffer.
+
+    '[Pasted text' appears in the pane when send-keys -l delivered text but
+    Enter was never sent. Poll every 10s; if the pattern persists for two
+    consecutive checks (confirming it's not mid-injection), send Enter and log.
+    """
+    _stuck_seen: dict[str, int] = {}  # session_id -> consecutive-stuck-count
+    while True:
+        await asyncio.sleep(10)
+        for session_id in list(session_mgr.sessions):
+            session = session_mgr.sessions.get(session_id)
+            if not session or session.state == AgentState.DEAD or not session.work_dir:
+                _stuck_seen.pop(session_id, None)
+                continue
+            try:
+                result = await asyncio.create_subprocess_exec(
+                    "tmux", "capture-pane", "-t", session.tmux_session, "-p",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                stdout, _ = await result.communicate()
+                pane = stdout.decode(errors="replace") if stdout else ""
+            except Exception:
+                continue
+            # Check last 10 lines for stuck input — two patterns:
+            # 1. Long messages: Claude Code compresses as "[Pasted text #N +M lines]"
+            # 2. Short/medium messages: shows as "❯ <content>" with content after the prompt
+            #    Multi-line pastes can span several lines above the status bar.
+            last_lines = pane.strip().splitlines()[-10:]
+            snippet = "\n".join(last_lines)
+            is_stuck = (
+                "[Pasted text" in snippet
+                or "[Typed text" in snippet
+                or any(line.startswith('❯') and len(line.rstrip()) > 1 for line in last_lines)
+            )
+            if is_stuck:
+                count = _stuck_seen.get(session_id, 0) + 1
+                _stuck_seen[session_id] = count
+                if count >= 2:
+                    # Confirmed stuck (not mid-injection) — auto-fix and log
+                    log.warning("[%s] STUCK BUFFER detected (seen %dx) — sending Enter to unblock", session_id, count)
+                    try:
+                        proc = await asyncio.create_subprocess_exec(
+                            "tmux", "send-keys", "-t", session.tmux_session, "Enter",
+                            stdout=asyncio.subprocess.DEVNULL,
+                            stderr=asyncio.subprocess.DEVNULL,
+                        )
+                        await proc.communicate()
+                        _stuck_seen[session_id] = 0
+                        log.info("[%s] Stuck buffer cleared", session_id)
+                    except Exception as exc:
+                        log.error("[%s] Failed to clear stuck buffer: %s", session_id, exc)
+            else:
+                _stuck_seen.pop(session_id, None)
 
 
 async def compaction_monitor_loop() -> None:
@@ -456,9 +467,9 @@ async def lifespan(app: FastAPI):
     timeout_task = asyncio.create_task(session_mgr.run_timeout_loop())
     hb_task = asyncio.create_task(heartbeat_loop())
     compaction_task = asyncio.create_task(compaction_monitor_loop())
+    stuck_task = asyncio.create_task(stuck_buffer_monitor_loop())
     context_task = asyncio.create_task(context_poll_loop())
     usage_task = asyncio.create_task(usage_poll_loop())
-    stuck_task = asyncio.create_task(stuck_buffer_monitor_loop())
     # Load saved Whisper model quality on startup
     startup_model = hub_config.QUALITY_MODEL_MAP.get(hub_config.QUALITY_MODE)
     if startup_model:
@@ -472,17 +483,6 @@ async def lifespan(app: FastAPI):
         compaction_task.cancel()
         context_task.cancel()
         usage_task.cancel()
-        stuck_task.cancel()
-        # Synchronously clear any in-flight paste buffers before event loop dies.
-        # If an inject task had text pasted but Enter not yet sent, this catches it.
-        import subprocess as _sp
-        for _sid, _sess in list(session_mgr.sessions.items()):
-            if _sess.tmux_session:
-                try:
-                    _sp.run(["tmux", "send-keys", "-t", _sess.tmux_session, "Enter"],
-                            capture_output=True, timeout=2)
-                except Exception:
-                    pass
         if _shutdown_mode == "reload":
             log.info("Hub reloading — keeping tmux sessions alive for re-adoption")
             # Save any pending interjections before shutdown
@@ -823,8 +823,8 @@ async def wait_websocket(ws: WebSocket, session_id: str):
         session.activity = ""
         session.tool_name = ""
         session.tool_input = {}
-        session.set_state(AgentState.THINKING)
-        await _save_activity(session, "Thinking")
+        session.set_state(AgentState.PROCESSING)
+        await _save_activity(session, "Processing")
         await send_to_browser({
             "type": "session_status",
             "session_id": session_id,
@@ -848,7 +848,9 @@ async def set_project_status(session_id: str, request: Request):
     data = await request.json()
     if "project" in data:
         session.project = data["project"]
-        session.project_slug = _resolve_slug(data["project"])
+        # Note: project_slug (organizational folder) is NOT updated here.
+        # Agents set their working repo via this endpoint; folder assignment
+        # is managed separately by the user via the UI / folder API.
     session.project_repo = data.get("repo", data.get("area", session.project_repo))
     if "role" in data:
         role_val = data["role"].lower()
@@ -868,7 +870,7 @@ async def set_project_status(session_id: str, request: Request):
         "type": "project_status",
         "session_id": session_id,
         "project": session.project,
-        "project_repo": session.project_repo,
+        "repo": session.project_repo,
         "role": session.role,
         "task": session.task,
     })
@@ -992,6 +994,9 @@ async def hook_tool_status(request: Request):
     # Prefer ClawMux-Session header, fall back to legacy X-ClawMux-Session, then cwd
     clawmux_sid = request.headers.get("clawmux-session", "") or request.headers.get("x-clawmux-session", "")
     session = session_mgr.sessions.get(clawmux_sid) if clawmux_sid else None
+    if not session and clawmux_sid:
+        # Legacy: CLAWMUX_SESSION_ID may be voice_id (e.g. "bf_alice") not label ("alice")
+        session = next((s for s in session_mgr.sessions.values() if s.voice == clawmux_sid), None)
     if not session:
         cwd = data.get("cwd", "")
         session = _session_from_cwd(cwd)
@@ -1007,9 +1012,9 @@ async def hook_tool_status(request: Request):
         session.activity = ""
         session.tool_name = ""
         session.tool_input = {}
-        # Transition back to THINKING after each tool call — Claude is deciding next action
+        # Stay in PROCESSING after each tool call — Claude is deciding next action
         if session.state in (AgentState.PROCESSING, AgentState.IDLE):
-            session.set_state(AgentState.THINKING)
+            session.set_state(AgentState.PROCESSING)
             await send_to_browser({
                 "type": "session_status",
                 "session_id": session.session_id,
@@ -1018,10 +1023,12 @@ async def hook_tool_status(request: Request):
                 "tool_name": session.tool_name,
                 "tool_input": session.tool_input,
             })
-            await _save_activity(session, "Thinking")
+            await _save_activity(session, "Processing")
     elif event == "Stop":
         pass  # HTTP Stop hooks cannot block Claude; stop-check-inbox.sh handles idle signaling
     elif event == "PreToolUse":
+        # PreToolUse means the agent is actively making a tool call.
+        # Don't cancel pending injections — tmux buffers input so delivery is safe at any time.
         if session.state == AgentState.IDLE:
             session.set_state(AgentState.PROCESSING)
         tool_name = data.get("tool_name", "")
@@ -1172,23 +1179,8 @@ async def interrupt_session(session_id: str):
         return JSONResponse({"error": str(e)}, status_code=500)
     log.info("Interrupted session %s (tmux: %s)", session_id, tmux_name)
 
-    # After Escape, Claude Code may not fire its Stop hook — force idle after a delay.
-    async def _delayed_idle():
-        await asyncio.sleep(3)
-        session.set_state(AgentState.IDLE)
-        session.activity = ""
-        session.tool_name = ""
-        session.tool_input = {}
-        await send_to_browser({"session_id": session_id, "type": "listening", "state": "idle"})
-        await send_to_browser({
-            "type": "session_status",
-            "session_id": session_id,
-            "state": session.state.value,
-            "activity": "",
-            "tool_name": "",
-            "tool_input": {},
-        })
-    asyncio.create_task(_delayed_idle())
+    # Signal idle so hub re-delivers any pending inbox messages after interrupt
+    asyncio.create_task(asyncio.sleep(3))  # Let Claude Code settle before hub can inject
 
     return JSONResponse({"status": "interrupted"})
 
@@ -1384,7 +1376,7 @@ async def agent_idle(session_id: str):
     """
     session = session_mgr.sessions.get(session_id)
     if not session:
-        # Legacy sessions may use voice_id (e.g. af_sarah) instead of label (sarah)
+        # Legacy: CLAWMUX_SESSION_ID may be set to voice_id (e.g. "bf_alice") not label ("alice")
         session = next((s for s in session_mgr.sessions.values() if s.voice == session_id), None)
     if not session or not session.work_dir:
         return JSONResponse({"ok": False, "reason": "session not found"})
@@ -1404,20 +1396,25 @@ async def agent_idle(session_id: str):
         "tool_input": {},
     })
 
-    # Schedule injection if inbox has messages (lock in _inject_inbox serializes)
+    # Schedule injection if inbox has messages (lock in _inject_inbox serializes delivery)
     count = await asyncio.to_thread(inbox.peek, session.work_dir)
     if count > 0:
-        asyncio.create_task(_inject_inbox(session, session_id))
+        task = asyncio.create_task(_inject_inbox(session, session_id))
+        _pending_injections[session_id] = task
 
     return JSONResponse({"ok": True, "pending": count})
 
 
 @app.post("/api/agents/{session_id}/active")
 async def agent_active(session_id: str):
-    """No-op — kept for backward compat with old hook configs.
+    """Cancel any pending tmux injection for a session.
 
-    Injection is now serialized via per-session locks; no cancellation needed.
+    Called by PreToolUse hook when the agent starts a tool call — injection is
+    no longer needed since the agent is already working.
     """
+    prev = _pending_injections.pop(session_id, None)
+    if prev and not prev.done():
+        prev.cancel()
     return JSONResponse({"ok": True})
 
 
@@ -1501,14 +1498,11 @@ def _sync_projects_from_sessions():
     if not voice_to_slug:
         return
 
-    # Ensure all referenced projects exist
-    for slug in set(voice_to_slug.values()):
+    # Only sync voices for folders that actually exist — never auto-create folders
+    # Remap any session pointing at an unknown slug back to default
+    for voice, slug in list(voice_to_slug.items()):
         if slug not in project_mgr.projects:
-            name = slug.replace("-", " ").title()
-            try:
-                project_mgr.create_project(slug, name, voices=[])
-            except ValueError:
-                pass  # already exists
+            voice_to_slug[voice] = "default"
 
     # Rebuild each project's voices list from session truth
     new_voices: dict[str, list[str]] = {slug: [] for slug in project_mgr.projects}
@@ -1904,23 +1898,6 @@ async def groupchat_send_message(name: str, request: Request):
         "group_name": g["name"],
         "message": {"id": msg_id, "role": role, "text": text, "sender": sender, "ts": time.time()},
     })
-    # Show outbound group message in sender's chat (same pattern as inter-agent messages)
-    if sender:
-        sender_session = _resolve_session(sender)
-        if sender_session:
-            await asyncio.to_thread(
-                history.append, sender_session.voice, sender_session.label, "system",
-                f"[Group msg to {g['name']}] {text}",
-                _hist_prefix(sender_session),
-                msg_id=msg_id,
-            )
-            await send_to_browser({
-                "type": "group_outbound",
-                "session_id": sender_session.session_id,
-                "group_name": g["name"],
-                "msg_id": msg_id,
-                "text": text,
-            })
     return JSONResponse({"status": "sent", "msg_id": msg_id, "delivered_to": delivered, "group": g["name"]})
 
 
@@ -1989,7 +1966,7 @@ async def get_history(voice_id: str, request: Request):
     project = request.query_params.get("project", project_mgr.active_project)
     prefix = project_mgr.get_history_prefix(project)
     messages = await asyncio.to_thread(history.load, voice_id, prefix)
-    # Cursor-based filtering: return only messages after the given ID
+    # Cursor-based filtering: return only messages after the given ID (reconnect sync)
     after_id = request.query_params.get("after")
     if after_id:
         idx = None
@@ -1998,6 +1975,34 @@ async def get_history(voice_id: str, request: Request):
                 idx = i
                 break
         messages = messages[idx + 1:] if idx is not None else []
+        # after= is used by reconnect sync; no limit/before pagination applied in this branch
+        pending_count = 0
+        for s in session_mgr.sessions.values():
+            if s.voice == voice_id and s.interjections:
+                pending_count = len(s.interjections)
+                break
+        return JSONResponse(
+            {"voice_id": voice_id, "messages": messages, "pending_interjections": pending_count},
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
+    # Pagination: before= cursor returns messages before that ID (for loading older pages)
+    before_id = request.query_params.get("before")
+    if before_id:
+        idx = None
+        for i, m in enumerate(messages):
+            if m.get("id") == before_id:
+                idx = i
+                break
+        # Return only entries before the cursor message
+        messages = messages[:idx] if idx is not None else messages
+    # limit= caps the number of returned messages (default 150, max 500)
+    try:
+        limit = min(int(request.query_params.get("limit", 150)), 500)
+    except (ValueError, TypeError):
+        limit = 150
+    has_more = len(messages) > limit
+    # Always return the last N (most recent end of the slice)
+    messages = messages[-limit:] if has_more else messages
     # Include count of pending interjections so browser can style unseen messages
     pending_count = 0
     for s in session_mgr.sessions.values():
@@ -2005,7 +2010,7 @@ async def get_history(voice_id: str, request: Request):
             pending_count = len(s.interjections)
             break
     return JSONResponse(
-        {"voice_id": voice_id, "messages": messages, "pending_interjections": pending_count},
+        {"voice_id": voice_id, "messages": messages, "has_more": has_more, "pending_interjections": pending_count},
         headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
     )
 
@@ -2407,21 +2412,17 @@ async def speak_to_user(request: Request):
     if not skip_tts:
         tts_message = strip_non_speakable(content)
         if tts_message.strip():
-            audio_b64, word_timestamps = None, []
             try:
                 audio_b64, word_timestamps = await tts_captioned(tts_message, sender.voice, sender.speed)
             except Exception as e:
                 log.warning("[%s] Captioned TTS failed (%s), falling back", sender_id, e)
-                try:
-                    mp3 = await tts(tts_message, sender.voice, sender.speed)
-                    audio_b64 = base64.b64encode(mp3).decode()
-                except Exception as e2:
-                    log.warning("[%s] TTS also failed (%s) — text delivered, no audio", sender_id, e2)
-            if audio_b64:
-                audio_msg = {"session_id": sender_id, "type": "audio", "data": audio_b64, "msg_id": msg_id}
-                if word_timestamps:
-                    audio_msg["words"] = word_timestamps
-                await send_to_browser(audio_msg)
+                mp3 = await tts(tts_message, sender.voice, sender.speed)
+                audio_b64 = base64.b64encode(mp3).decode()
+                word_timestamps = []
+            audio_msg = {"session_id": sender_id, "type": "audio", "data": audio_b64, "msg_id": msg_id}
+            if word_timestamps:
+                audio_msg["words"] = word_timestamps
+            await send_to_browser(audio_msg)
 
     log.info("[%s] Spoke to user: %s", sender_id, content[:80])
     return JSONResponse({"id": msg_id, "state": "delivered"})
@@ -2522,12 +2523,10 @@ async def peek_inbox(session_id: str):
 async def _inject_inbox(session, session_id: str) -> None:
     """Deliver pending inbox messages to an agent via tmux injection.
 
-    Uses a per-session lock so concurrent triggers (e.g. simultaneous group
-    messages) queue up instead of racing. The second task will read an empty
-    inbox and return immediately.
-
-    Messages are cleared from inbox before delivery; on exception they are
-    returned so the next idle signal retries.
+    Uses a per-session lock to serialize concurrent deliveries. When two messages
+    arrive simultaneously (e.g. from concurrent group sends), the second task waits
+    for the first to complete before acquiring the lock — preventing Enter from one
+    injection firing mid-paste of another.
     """
     lock = _injection_locks.setdefault(session_id, asyncio.Lock())
     async with lock:
@@ -2587,9 +2586,11 @@ async def _inbox_write_and_notify(session, msg_dict: dict) -> dict:
             "preview": msg_dict.get("content", "")[:100],
         },
     })
-    # Inject immediately — lock in _inject_inbox serializes concurrent deliveries.
+    # Inject immediately. The per-session lock in _inject_inbox serializes concurrent
+    # deliveries — no cancel needed; a queued task will pick up the latest inbox contents.
     if session.work_dir:
-        asyncio.create_task(_inject_inbox(session, session.session_id))
+        task = asyncio.create_task(_inject_inbox(session, session.session_id))
+        _pending_injections[session.session_id] = task
     return written
 
 

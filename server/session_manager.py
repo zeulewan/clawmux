@@ -41,11 +41,11 @@ class Session:
     voice: str = "af_sky"
     speed: float = 1.0
     activity: str = ""  # composed tool description (orthogonal to state)
-    activity_log: list = field(default_factory=list)  # recent activity strings (capped at 50)
+    activity_log: list = field(default_factory=list)  # recent activity strings for UI restore on reconnect
     tool_name: str = ""  # raw tool name from last PreToolUse
     tool_input: dict = field(default_factory=dict)  # raw tool input from last PreToolUse
     project: str = ""  # current project/repo name (set by agent via set_project_status)
-    project_repo: str = ""  # current sub-area (e.g. "frontend", "docs")
+    project_repo: str = ""  # repository the agent is working on
     role: str = ""  # display role (e.g. "Manager", "Frontend", "Researcher")
     task: str = ""  # current task description (~5 words)
     text_mode: bool = False  # when True, skip TTS and just send text
@@ -101,6 +101,7 @@ class Session:
             "voice": self.voice,
             "speed": self.speed,
             "activity": self.activity,
+            "activity_log": self.activity_log,
             "tool_name": self.tool_name,
             "tool_input": self.tool_input,
             "project": self.project,
@@ -220,16 +221,13 @@ class SessionManager:
                 continue
 
             # Adopt: create a Session object with the canonical session_id
-            raw_project = entry.project or "default"
-            # Resolve display name → slug (guards against stale agents.json entries)
-            known = self.project_mgr.projects
-            if raw_project in known or raw_project == "default":
-                adopt_project = raw_project
-            else:
-                adopt_project = next(
-                    (slug for slug, p in known.items() if p.get("name") == raw_project),
-                    raw_project,
-                )
+            # Derive folder assignment from projects.json voice lists (authoritative source),
+            # not from entry.project which is the agent's self-reported working repo.
+            adopt_project = "default"
+            for slug, proj in self.project_mgr.projects.items():
+                if voice_id in proj.get("voices", []):
+                    adopt_project = slug
+                    break
             work_dir = self.project_mgr.get_session_dir(voice_id, adopt_project)
             session = Session(
                 session_id=adopt_id,
@@ -438,7 +436,7 @@ class SessionManager:
                 prev = await self.agents_store.get(voice_id)
                 if prev and prev.project:
                     session.project = prev.project
-                    session.project_repo = prev.repo or ""
+                    session.project_repo = prev.area or ""
                 if prev:
                     session.role = prev.role or ""
                     session.task = prev.task or ""

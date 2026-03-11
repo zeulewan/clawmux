@@ -235,7 +235,7 @@ function collapseSidebar() {
 }
 
 // --- Centralized session state machine ---
-// Valid states: 'idle', 'thinking', 'processing', 'starting', 'offline' (server state only — no speaking/listening)
+// Valid states: 'idle', 'processing', 'compacting', 'starting', 'offline' (server state only — no speaking/listening)
 function setSessionSidebarState(sessionId, newState) {
   const s = sessions.get(sessionId);
   if (!s) return;
@@ -249,7 +249,7 @@ function setSessionSidebarState(sessionId, newState) {
 
 function updateChatStopButton() {
   const s = activeSessionId ? sessions.get(activeSessionId) : null;
-  const isWorking = s && (s.sidebarState === 'processing' || s.sidebarState === 'thinking' || s.sidebarState === 'starting');
+  const isWorking = s && (s.sidebarState === 'processing' || s.sidebarState === 'compacting' || s.sidebarState === 'starting');
   const textBtn = document.getElementById('text-stop');
   const voiceBtn = document.getElementById('voice-stop');
   if (textBtn) isWorking ? textBtn.classList.add('btn-visible') : textBtn.classList.remove('btn-visible');
@@ -304,8 +304,6 @@ function _sidebarState(voiceId) {
       stateClass = 'starting'; statusLabel = 'Starting...';
     } else if (session.compacting) {
       stateClass = 'working'; statusLabel = session.toolStatusText || 'Compacting';
-    } else if (st === 'thinking') {
-      stateClass = 'working'; statusLabel = 'Thinking';
     } else if (st === 'processing') {
       stateClass = 'working';
       statusLabel = session.toolStatusText || session.toolName || 'Processing';
@@ -341,7 +339,8 @@ function _updateSidebarCard(card, voiceId, state) {
   // Update status label
   const label = card.querySelector('.sb-status span:not(.sb-dot)');
   if (label && label.textContent !== statusLabel) label.textContent = statusLabel;
-  // Update project area line
+  // Update project area line (also purge legacy .sb-area elements)
+  card.querySelector('.sb-area')?.remove();
   let areaEl = card.querySelector('.sb-repo');
   if (projectArea) {
     if (!areaEl) {
@@ -608,6 +607,12 @@ function _createAgentCard(voiceId, name, state) {
   statusEl2.appendChild(dot2);
   statusEl2.appendChild(labelEl);
   info.appendChild(nameEl);
+  if (state.projectArea) {
+    const repoEl = document.createElement('div');
+    repoEl.className = 'sb-repo';
+    repoEl.textContent = state.projectArea;
+    info.appendChild(repoEl);
+  }
   if (state.roleText) {
     const roleEl = document.createElement('div');
     roleEl.className = 'sb-role';
