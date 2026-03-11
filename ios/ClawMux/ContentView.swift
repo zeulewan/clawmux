@@ -146,6 +146,16 @@ struct ContentView: View {
                     .transition(.opacity)
             }
 
+            // Sidebar canvas1 fill — ensures home indicator zone behind sidebar matches sidebar bg
+            // (sidebar glass stops at safe area boundary; this fill closes the seam below it)
+            Color.canvas1
+                .frame(width: sidebarExpanded ? 220 : 48)
+                .frame(maxHeight: .infinity)
+                .ignoresSafeArea(edges: .bottom)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .allowsHitTesting(false)
+                .animation(.spring(response: 0.3, dampingFraction: 0.85), value: sidebarExpanded)
+
             // Sidebar glass overlay — floats over content edge for proper blur
             sidebarStripView
         }
@@ -527,7 +537,6 @@ struct ContentView: View {
             if !expanded { withAnimation { sidebarProxy.scrollTo("sidebar-top", anchor: .top) } }
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.85), value: sidebarExpanded)
-        .clipped()
         } // ScrollViewReader
     }
 
