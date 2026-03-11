@@ -731,14 +731,20 @@ async function addSession(data, autoSwitch = false) {
     if (resp.ok) {
       const hist = await resp.json();
       hasMoreHistory = hist.has_more === true;
-      serverMessages = (hist.messages || []).map(m => {
+      const _seenIds = new Set();
+      serverMessages = (hist.messages || []).reduce((acc, m) => {
+        if (m.id) {
+          if (_seenIds.has(m.id)) return acc;
+          _seenIds.add(m.id);
+        }
         const obj = { role: m.role, text: m.text };
         if (m.id) obj.id = m.id;
         if (m.ts) obj.ts = m.ts;
         if (m.parent_id) obj.parentId = m.parent_id;
         if (m.bare_ack) obj.isBareAck = true;
-        return obj;
-      });
+        acc.push(obj);
+        return acc;
+      }, []);
       console.log(`[addSession] ${data.voice}: loaded ${serverMessages.length} messages, has_more=${hasMoreHistory}`);
     } else {
       console.warn(`[addSession] ${data.voice}: fetch failed with status ${resp.status}`);

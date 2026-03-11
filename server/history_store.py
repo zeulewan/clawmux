@@ -69,6 +69,9 @@ class HistoryStore:
                 raw = f.read()
                 data = json.loads(raw) if raw.strip() else {}
                 messages = data.get("messages", [])
+                # Dedup: skip if a message with the same id already exists
+                if msg_id and any(m.get("id") == msg_id for m in messages):
+                    return
                 messages.append(entry)
                 if len(messages) > MAX_MESSAGES:
                     messages = messages[-MAX_MESSAGES:]
