@@ -779,7 +779,7 @@ final class AudioManager: NSObject {
         if pttInterrupted { return }
         // Don't re-trigger if already recording
         if vm.isRecording { return }
-        if vm.isProcessing || vm.micMuted { return }
+        if vm.micMuted { return }
         if let sid = vm.activeSessionId {
             suppressNextAutoRecord = false
             if let idx = vm.sessionIndex(sid), vm.sessions[idx].pendingListen {

@@ -149,8 +149,8 @@ struct InputBarView: View {
                             Button(action: vm.micAction) { micButtonVisual }
                         }
                     }
-                    .disabled(vm.isProcessing || (vm.micMuted && !vm.isPlaying && !vm.isRecording))
-                    .opacity(vm.isProcessing || (vm.micMuted && !vm.isPlaying) ? 0.45 : 1)
+                    .disabled(vm.micMuted && !vm.isPlaying && !vm.isRecording)
+                    .opacity(vm.micMuted && !vm.isPlaying ? 0.45 : 1)
 
                     Spacer()
 
@@ -208,7 +208,7 @@ struct InputBarView: View {
         }
         // Fully transparent outside the pill — body ZStack canvas1 covers the safe area zone.
         // Pill has its own glassEffect background; no outer background needed.
-        .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 16)
+        .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 4)
     }
 
     // MARK: - Text Input Bar
@@ -400,7 +400,6 @@ struct InputBarView: View {
     private var micColor: Color {
         if vm.isPlaying   { return .cWarning }
         if vm.isRecording { return .cSuccess }
-        if vm.isProcessing{ return Color(hex: 0x8E8E93) }
         if vm.micMuted    { return .cDanger }
         return Color(hex: 0x2563EB)  // blue matching user bubble
     }
