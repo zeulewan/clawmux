@@ -41,6 +41,8 @@ final class AudioManager: NSObject {
     private var backgroundListenWork: DispatchWorkItem?
     private var vadAudioEngine: AVAudioEngine?
     private var vadProcessor: VADProcessor?
+    private var spectrumEngine: AVAudioEngine?
+    private var spectrumProcessor: SpectrumProcessor?
 
     // MARK: - Init
 
@@ -966,10 +968,45 @@ final class AudioManager: NSObject {
         stopPlaybackVAD()
     }
 
+    // MARK: - Spectrum Analysis
+
+    private func startSpectrumAnalysis() {
+        stopSpectrumAnalysis()
+        let engine = AVAudioEngine()
+        let input = engine.inputNode
+        let format = input.outputFormat(forBus: 0)
+        let sampleRate = format.sampleRate > 0 ? format.sampleRate : 44100
+
+        let processor = SpectrumProcessor(sampleRate: sampleRate) { [weak self] bands in
+            Task { @MainActor in
+                self?.vm?.spectrumBands = bands
+            }
+        }
+        spectrumProcessor = processor
+        installSpectrumTap(on: input, format: format, processor: processor)
+
+        do {
+            try engine.start()
+            spectrumEngine = engine
+        } catch {
+            print("[spectrum] Engine start failed: \(error)")
+            input.removeTap(onBus: 0)
+        }
+    }
+
+    private func stopSpectrumAnalysis() {
+        spectrumEngine?.inputNode.removeTap(onBus: 0)
+        spectrumEngine?.stop()
+        spectrumEngine = nil
+        spectrumProcessor = nil
+        vm?.spectrumBands = Array(repeating: 0, count: SpectrumProcessor.bandCount)
+    }
+
     // MARK: - Audio Metering
 
     private func startMetering() {
         stopMetering()
+        startSpectrumAnalysis()
         // Use .common RunLoop mode so the timer fires during scroll gestures (.UITrackingRunLoopMode)
         let timer = Timer(timeInterval: 0.016, repeats: true) {
             [weak self] _ in
@@ -998,6 +1035,7 @@ final class AudioManager: NSObject {
     private func stopMetering() {
         meteringTimer?.invalidate()
         meteringTimer = nil
+        stopSpectrumAnalysis()
     }
 }
 
