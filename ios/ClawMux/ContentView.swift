@@ -414,7 +414,7 @@ struct ContentView: View {
         ScrollViewReader { sidebarProxy in
         ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: sidebarExpanded ? 2 : 1) {
-                    Color.clear.frame(height: 0).id("sidebar-top")
+                    Color.clear.frame(height: 60).id("sidebar-top") // top-bar clearance
                     if sidebarExpanded {
                         // Agents first (matches mobile web — group chats section is below agents)
                         let groups = projectGroups
