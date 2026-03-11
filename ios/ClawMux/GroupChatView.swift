@@ -47,12 +47,29 @@ struct GroupChatScrollView: View {
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: 8) {
                         let displayMsgs = vm.groupMessages.filter { !$0.isBareAck }
-                        let ackedGroupIds = Set(vm.groupMessages.filter { $0.isBareAck }.compactMap { $0.parentId })
+                        let ackedBySenders: [String: [String]] = vm.groupMessages
+                            .filter { $0.isBareAck }
+                            .reduce(into: [:]) { dict, ack in
+                                if let pid = ack.parentId { dict[pid, default: []].append(ack.sender) }
+                            }
                         ForEach(Array(displayMsgs.enumerated()), id: \.element.id) { idx, msg in
                             VStack(alignment: msg.role == "user" ? .trailing : .leading, spacing: 2) {
                                 groupMessageBubble(msg, isLast: idx == displayMsgs.count - 1)
-                                if ackedGroupIds.contains(msg.id) {
-                                    Text("👍").font(.system(size: 14)).padding(.horizontal, 4)
+                                if let senders = ackedBySenders[msg.id], !senders.isEmpty {
+                                    HStack(spacing: 4) {
+                                        Text("👍").font(.system(size: 12)).foregroundStyle(Color.cTextTer)
+                                        ForEach(senders, id: \.self) { voiceId in
+                                            ZStack {
+                                                Circle().fill(voiceColor(voiceId).opacity(0.15))
+                                                Image(systemName: voiceIcon(voiceId))
+                                                    .font(.system(size: 7, weight: .semibold))
+                                                    .foregroundStyle(voiceColor(voiceId))
+                                            }
+                                            .frame(width: 18, height: 18)
+                                        }
+                                    }
+                                    .padding(.horizontal, 6).padding(.vertical, 2)
+                                    .background(Color.cCard.opacity(0.6), in: Capsule())
                                 }
                             }
                         }
