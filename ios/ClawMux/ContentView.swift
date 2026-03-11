@@ -64,7 +64,22 @@ struct ContentView: View {
             topBarView
         }
         .background(Color.canvas1.ignoresSafeArea(.all))
-        .onAppear { isPulsing = true }
+        .onAppear {
+            isPulsing = true
+            // Set UIWindow background so keyboard tray matches app color.
+            // SceneDelegate.willConnectTo fires before SwiftUI creates the window — do it here instead.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                for scene in UIApplication.shared.connectedScenes {
+                    guard let ws = scene as? UIWindowScene else { continue }
+                    let bg = UIColor { tc in
+                        tc.userInterfaceStyle == .dark
+                            ? UIColor(red: 6/255, green: 9/255, blue: 15/255, alpha: 1)
+                            : UIColor(red: 244/255, green: 246/255, blue: 251/255, alpha: 1)
+                    }
+                    ws.windows.forEach { $0.backgroundColor = bg }
+                }
+            }
+        }
         .sheet(isPresented: $vm.showSettings) { SettingsView(vm: vm) }
         .sheet(isPresented: $vm.showNotes) { NotesPanelView(baseURL: vm.httpBaseURL()) { vm.showNotes = false } }
         .onOpenURL { vm.handleOpenURL($0) }

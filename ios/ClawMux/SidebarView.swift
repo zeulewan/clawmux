@@ -12,6 +12,7 @@ struct SidebarView: View {
     @Binding var resetVoiceId: String?
     @Binding var showCreateGroupChat: Bool
     @Binding var newGroupChatName: String
+    @Namespace private var sidebarNS
 
     var body: some View {
         sidebarStripView
@@ -55,7 +56,7 @@ struct SidebarView: View {
                                 }
                             }
                         }
-                        .transition(.move(edge: .leading).combined(with: .opacity))
+                        .transition(.opacity)
                     } else {
                         VStack(spacing: 0) {
                             let groups = projectGroups
@@ -86,13 +87,12 @@ struct SidebarView: View {
                                 groupIcon(g.groupId, voices: g.voices)
                             }
                         }
-                        .transition(.move(edge: .leading).combined(with: .opacity))
+                        .transition(.opacity)
                     }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 4)
         }
-        .clipped()
         .accessibilityIdentifier("SidebarScrollView")
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
@@ -150,6 +150,7 @@ struct SidebarView: View {
             }
         }
         .frame(width: sidebarExpanded ? 220 : 48)
+        .clipped()
         .frame(maxHeight: .infinity)
         .ignoresSafeArea(edges: .bottom)
         .background {
@@ -223,6 +224,7 @@ struct SidebarView: View {
                             .offset(x: 9, y: 9)
                     }
                 }
+                .matchedGeometryEffect(id: "sidebar_icon_\(voice.id)", in: sidebarNS)
                 if isSelected {
                     HStack(spacing: 0) {
                         RoundedRectangle(cornerRadius: 2, style: .continuous)
@@ -577,6 +579,7 @@ struct SidebarView: View {
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(alive ? color : color.opacity(0.30))
                 }
+                .matchedGeometryEffect(id: "sidebar_icon_\(voice.id)", in: sidebarNS)
                 .frame(width: 34, height: 34)
 
                 VStack(alignment: .leading, spacing: 1) {
