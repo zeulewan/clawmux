@@ -405,6 +405,19 @@ struct DebugView: View {
                     Spacer()
                     Text(vm.debugLastUpdated).font(.system(size: 10)).foregroundStyle(Theme.textTertiary)
                 }
+                debugSection("System") {
+                    let sys = vm.debugSystem
+                    if let cpu = sys.cpuPercent {
+                        debugKV("CPU", String(format: "%.0f%%", cpu))
+                    }
+                    if sys.ramTotalGB > 0 {
+                        debugKV("RAM", String(format: "%.1f / %.1f GB (%.0f%%)", sys.ramUsedGB, sys.ramTotalGB, sys.ramPercent))
+                    }
+                    if let gpu = sys.gpuPercent {
+                        debugKV("GPU", "\(gpu)%\(sys.gpuTempC.map { " · \($0)°C" } ?? "")")
+                        debugKV("VRAM", "\(sys.vramUsedMB) / \(sys.vramTotalMB) MB")
+                    }
+                }
                 debugSection("Hub") {
                     debugKV("Port",    "\(vm.debugHub.port)")
                     debugKV("Uptime",  formatDuration(vm.debugHub.uptimeSeconds))
@@ -460,6 +473,16 @@ struct DebugView: View {
                                 Spacer()
                             }
                         }
+                    }
+                }
+                debugSection("Actions") {
+                    Button {
+                        vm.reloadHub()
+                    } label: {
+                        Text("Reload Hub")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color.cCaution)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 debugSection("Hub Log") {

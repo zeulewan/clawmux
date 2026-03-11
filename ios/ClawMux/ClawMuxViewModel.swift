@@ -165,6 +165,17 @@ struct DebugTmuxSession: Identifiable {
     let created: String
 }
 
+struct DebugSystemInfo {
+    var cpuPercent: Double? = nil
+    var ramUsedGB: Double = 0
+    var ramTotalGB: Double = 0
+    var ramPercent: Double = 0
+    var gpuPercent: Int? = nil
+    var vramUsedMB: Int = 0
+    var vramTotalMB: Int = 0
+    var gpuTempC: Int? = nil
+}
+
 // MARK: - ViewModel
 
 @MainActor
@@ -470,6 +481,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     @Published var debugSessions: [DebugHubSession] = []
     @Published var debugTmux: [DebugTmuxSession] = []
     @Published var debugLog: [String] = []
+    @Published var debugSystem = DebugSystemInfo()
     @Published var debugLastUpdated = ""
 
     // Usage stats
@@ -2366,6 +2378,15 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         debugRefreshTimer = nil
     }
 
+    func reloadHub() {
+        guard let baseURL = httpBaseURL() else { return }
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/shutdown"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["mode": "reload"])
+        URLSession.shared.dataTask(with: req).resume()
+    }
+
     func fetchDebugInfo() {
         guard let baseURL = httpBaseURL() else { return }
 
@@ -2431,6 +2452,20 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                             created: fmt.string(from: date)
                         )
                     }
+                }
+
+                // System
+                if let sys = json["system"] as? [String: Any] {
+                    self.debugSystem = DebugSystemInfo(
+                        cpuPercent: sys["cpu_percent"] as? Double,
+                        ramUsedGB: sys["ram_used_gb"] as? Double ?? 0,
+                        ramTotalGB: sys["ram_total_gb"] as? Double ?? 0,
+                        ramPercent: sys["ram_percent"] as? Double ?? 0,
+                        gpuPercent: sys["gpu_percent"] as? Int,
+                        vramUsedMB: sys["vram_used_mb"] as? Int ?? 0,
+                        vramTotalMB: sys["vram_total_mb"] as? Int ?? 0,
+                        gpuTempC: sys["gpu_temp_c"] as? Int
+                    )
                 }
 
                 let fmt = DateFormatter()
