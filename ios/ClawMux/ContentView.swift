@@ -1941,12 +1941,9 @@ struct ContentView: View {
         // bottom, not the safe area boundary — pill sits 16pt from screen edge on all sides
         .ignoresSafeArea(edges: .bottom)
         .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 16)
-        .background {
-            ZStack {
-                Color.canvas1
-                voiceTintColor.opacity(0.10)
-            }.ignoresSafeArea(edges: .bottom)
-        }
+        // Transparent except for the subtle voice tint — canvas1 base comes from
+        // the body ZStack background so the pill glass blurs through to chat content
+        .background { voiceTintColor.opacity(0.10).ignoresSafeArea(edges: .bottom) }
     }
 
     // MARK: - Text Input Bar
