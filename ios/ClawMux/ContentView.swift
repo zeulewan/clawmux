@@ -1399,8 +1399,11 @@ struct ContentView: View {
                     }
                     .onChange(of: vm.activeSession?.activity)     { _, _ in scrollBottom(proxy) }
                     .onChange(of: vm.activeSessionId)             { _, _ in
-                        isAtBottom = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { scrollBottom(proxy) }
+                        // Unconditional scroll — bypass isAtBottom guard to avoid race with ScrollBottomDetector
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            proxy.scrollTo("bottom", anchor: .bottom)
+                            isAtBottom = true
+                        }
                     }
 
                     // Scroll-to-bottom FAB (mirrors web #scroll-bottom-btn)

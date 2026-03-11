@@ -650,7 +650,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
 
     var activeMessages: [ChatMessage] {
         let msgs = activeSession?.messages ?? []
-        return msgs.count > 50 ? Array(msgs.suffix(50)) : msgs
+        return msgs.count > 150 ? Array(msgs.suffix(150)) : msgs
     }
 
     var activeVoice: String {
