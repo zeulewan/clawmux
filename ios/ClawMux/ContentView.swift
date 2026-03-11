@@ -2535,16 +2535,12 @@ struct NotesPanelView: View {
             .onAppear { loadNotes() }
             .onDisappear { saveNotes() }
         }
-        .background {
-            if #available(iOS 26, *) {
-                Color.clear.glassEffect(.regular, in: .rect).ignoresSafeArea()
-            } else {
-                Color.canvas1.opacity(0.95).background(.ultraThinMaterial).ignoresSafeArea()
-            }
-        }
         .presentationBackground {
-            if #available(iOS 26, *) { Color.clear }
-            else { Color.canvas1.opacity(0.92).background(.ultraThinMaterial) }
+            if #available(iOS 26, *) {
+                Color.clear.glassEffect(.regular, in: .rect)
+            } else {
+                Color.canvas1.opacity(0.92).background(.ultraThinMaterial)
+            }
         }
     }
 
@@ -2912,16 +2908,12 @@ struct SettingsView: View {
                 draftSTTURL = vm.sttURL
             }
         }
-        .background {
-            if #available(iOS 26, *) {
-                Color.clear.glassEffect(.regular, in: .rect).ignoresSafeArea()
-            } else {
-                Color.canvas1.opacity(0.95).background(.ultraThinMaterial).ignoresSafeArea()
-            }
-        }
         .presentationBackground {
-            if #available(iOS 26, *) { Color.clear }
-            else { Color.canvas1.opacity(0.92).background(.ultraThinMaterial) }
+            if #available(iOS 26, *) {
+                Color.clear.glassEffect(.regular, in: .rect)
+            } else {
+                Color.canvas1.opacity(0.92).background(.ultraThinMaterial)
+            }
         }
     }
 }
