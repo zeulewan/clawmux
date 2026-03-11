@@ -61,8 +61,8 @@ struct SidebarView: View {
                         .frame(maxWidth: .infinity)
                         .transition(.opacity)
                     } else {
-                        // COLLAPSED
-                        VStack(spacing: 0) {
+                        // COLLAPSED — leading alignment keeps icons at x=0 even while sidebar width animates
+                        VStack(alignment: .leading, spacing: 0) {
                             ForEach(groups.namedProjects, id: \.self) { project in
                                 let voices = groups.byProject[project] ?? []
                                 let collapsed = collapsedProjects.contains(project)
@@ -89,7 +89,7 @@ struct SidebarView: View {
                                 groupIcon(g.groupId, voices: g.voices)
                             }
                         }
-                        .frame(maxWidth: .infinity)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .transition(.opacity)
                     }
                 }
@@ -236,7 +236,7 @@ struct SidebarView: View {
                             .offset(x: 9, y: 9)
                     }
                 }
-                .matchedGeometryEffect(id: "icon_\(voice.id)", in: sidebarNS)
+                .matchedGeometryEffect(id: "icon_\(voice.id)", in: sidebarNS, properties: .position)
                 if isSelected {
                     HStack(spacing: 0) {
                         RoundedRectangle(cornerRadius: 2, style: .continuous)
@@ -591,7 +591,7 @@ struct SidebarView: View {
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(alive ? color : color.opacity(0.30))
                 }
-                .matchedGeometryEffect(id: "icon_\(voice.id)", in: sidebarNS)
+                .matchedGeometryEffect(id: "icon_\(voice.id)", in: sidebarNS, properties: .position)
                 .frame(width: 34, height: 34)
 
                 VStack(alignment: .leading, spacing: 1) {
