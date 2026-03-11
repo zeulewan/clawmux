@@ -7,31 +7,39 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1599B53E39A3CDEE562D5033 /* MarkdownContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84B700834F3EECA10468DC91 /* MarkdownContentView.swift */; };
 		34708E5BA49DCFE09A2770E8 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 472435D7BEC5E6A66C89A71A /* ContentView.swift */; };
+		3EFBF80FC3E456A6DD67B39B /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5C9B19E7C4B946A8C69830 /* WelcomeView.swift */; };
 		5A53815B6D61991600040435 /* ClawMuxLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B4CFDC5835A92120A013FE1 /* ClawMuxLiveActivity.swift */; };
+		7D32CC24BDDFA37E956A459A /* VADProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40068200828EAB10352BF7E0 /* VADProcessor.swift */; };
 		819F94636A67C9D060539C09 /* ClawMuxActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ECE0D61F0C08405ECE874C8 /* ClawMuxActivityAttributes.swift */; };
 		8EBD594CEA424C07342CD79A /* ClawMuxViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72290AAFED98C8436AD778EF /* ClawMuxViewModel.swift */; };
+		90993452C4CA5B2F35471F21 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB917084CE6B997C8AA16A44 /* SettingsView.swift */; };
+		B3FAEAF903D2C5A57908A60C /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = C75D80D8B5385DCFF85A8039 /* Theme.swift */; };
+		B9B8149250E7E844CE7BECE7 /* NotesPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D547095052AD2B437A196FA2 /* NotesPanelView.swift */; };
+		C42C4DC2063494E4AC786256 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C696CC95AF520F9CD224CD2 /* SidebarView.swift */; };
+		C75B8D793DDF9C64C0EC9C31 /* TonePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EF7724BFBA3F18A21324642 /* TonePlayer.swift */; };
+		CBA4E6BE8BA5D2F2DA3D0192 /* GroupChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 443ABC04B7A435B58F1FC6D4 /* GroupChatView.swift */; };
+		CC9ABF885DDD9CF628A35EA0 /* ShapeHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3DE4F7720F3C77DAED314F6 /* ShapeHelpers.swift */; };
 		CE452A75046106310CA1884D /* ClawMuxActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ECE0D61F0C08405ECE874C8 /* ClawMuxActivityAttributes.swift */; };
 		CF4F0E703E3527B992A03CDD /* ClawMuxWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 00A4C7BB4CA3E05A29B0F976 /* ClawMuxWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		D123D0FD38CA70DCC2923F69 /* ViewHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25C554BD1E23697D898B05CE /* ViewHelpers.swift */; };
+		D7EC580B303F31471732F946 /* TouchBlockerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 999F598E79709CAC7E4BA9DE /* TouchBlockerTests.swift */; };
 		D8A747936F0FDA5E95EA77BB /* ClawMuxApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFF810E4C0B9F68B1E4AA4AD /* ClawMuxApp.swift */; };
 		DCDC60E202EB951E0C20A61E /* ClawMuxWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC5EB4981879BDC3BE644216 /* ClawMuxWidgetBundle.swift */; };
+		DD0B6C41043DEB376B75D6BE /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8850FD7D2AA1753841CA57F /* ChatView.swift */; };
+		EF98BD8285F5FAF97C9985E9 /* InputBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4385E6F9723F86B5AFE1680 /* InputBarView.swift */; };
 		F138DA556E94E3230F50457B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4678CAE85F0CB0CD3AC78DD6 /* Assets.xcassets */; };
-		AA000001000000000000001 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000002 /* Theme.swift */; };
-		AA000001000000000000003 /* MarkdownContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000004 /* MarkdownContentView.swift */; };
-		AA000001000000000000005 /* NotesPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000006 /* NotesPanelView.swift */; };
-		AA000001000000000000007 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000008 /* SettingsView.swift */; };
-		AA000001000000000000009 /* ShapeHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000010 /* ShapeHelpers.swift */; };
-		AA000001000000000000011 /* TonePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000012 /* TonePlayer.swift */; };
-		AA000001000000000000013 /* VADProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000001000000000000014 /* VADProcessor.swift */; };
-		AA000002000000000000001 /* ViewHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000002000000000000002 /* ViewHelpers.swift */; };
-		AA000002000000000000003 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000002000000000000004 /* SidebarView.swift */; };
-		AA000002000000000000005 /* GroupChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000002000000000000006 /* GroupChatView.swift */; };
-		AA000002000000000000007 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000002000000000000008 /* ChatView.swift */; };
-		AA000002000000000000009 /* InputBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000002000000000000010 /* InputBarView.swift */; };
-		AA000002000000000000011 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000002000000000000012 /* WelcomeView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		18F726E37233CDBD9DA9F8DD /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E0B23EC30C301FA1C780E9AC /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A4CB1E317D272DAE57533487;
+			remoteInfo = ClawMux;
+		};
 		3951751B91CF08FA4D088BBC /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = E0B23EC30C301FA1C780E9AC /* Project object */;
@@ -57,29 +65,31 @@
 
 /* Begin PBXFileReference section */
 		00A4C7BB4CA3E05A29B0F976 /* ClawMuxWidgetExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = ClawMuxWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		25C554BD1E23697D898B05CE /* ViewHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewHelpers.swift; sourceTree = "<group>"; };
 		2A65E8C4E54083EB652BA8A9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		2EF7724BFBA3F18A21324642 /* TonePlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TonePlayer.swift; sourceTree = "<group>"; };
+		3A5C9B19E7C4B946A8C69830 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
+		40068200828EAB10352BF7E0 /* VADProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VADProcessor.swift; sourceTree = "<group>"; };
+		443ABC04B7A435B58F1FC6D4 /* GroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupChatView.swift; sourceTree = "<group>"; };
 		4678CAE85F0CB0CD3AC78DD6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		472435D7BEC5E6A66C89A71A /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		5C696CC95AF520F9CD224CD2 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		72290AAFED98C8436AD778EF /* ClawMuxViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMuxViewModel.swift; sourceTree = "<group>"; };
 		7B4CFDC5835A92120A013FE1 /* ClawMuxLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMuxLiveActivity.swift; sourceTree = "<group>"; };
 		7ECE0D61F0C08405ECE874C8 /* ClawMuxActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMuxActivityAttributes.swift; sourceTree = "<group>"; };
+		82E2D679C152E4238145F02E /* ClawMuxUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ClawMuxUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		84B700834F3EECA10468DC91 /* MarkdownContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownContentView.swift; sourceTree = "<group>"; };
+		999F598E79709CAC7E4BA9DE /* TouchBlockerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TouchBlockerTests.swift; sourceTree = "<group>"; };
+		A3DE4F7720F3C77DAED314F6 /* ShapeHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShapeHelpers.swift; sourceTree = "<group>"; };
 		A98C93E4123AFD12DB5663DE /* ClawMux.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ClawMux.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB917084CE6B997C8AA16A44 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		BC5EB4981879BDC3BE644216 /* ClawMuxWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMuxWidgetBundle.swift; sourceTree = "<group>"; };
+		C75D80D8B5385DCFF85A8039 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		C8850FD7D2AA1753841CA57F /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		D4385E6F9723F86B5AFE1680 /* InputBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputBarView.swift; sourceTree = "<group>"; };
+		D547095052AD2B437A196FA2 /* NotesPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesPanelView.swift; sourceTree = "<group>"; };
 		D7C804BA345F7AE206CF5AF7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		DFF810E4C0B9F68B1E4AA4AD /* ClawMuxApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMuxApp.swift; sourceTree = "<group>"; };
-		AA000001000000000000002 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
-		AA000001000000000000004 /* MarkdownContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownContentView.swift; sourceTree = "<group>"; };
-		AA000001000000000000006 /* NotesPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesPanelView.swift; sourceTree = "<group>"; };
-		AA000001000000000000008 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		AA000001000000000000010 /* ShapeHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShapeHelpers.swift; sourceTree = "<group>"; };
-		AA000001000000000000012 /* TonePlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TonePlayer.swift; sourceTree = "<group>"; };
-		AA000001000000000000014 /* VADProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VADProcessor.swift; sourceTree = "<group>"; };
-		AA000002000000000000002 /* ViewHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewHelpers.swift; sourceTree = "<group>"; };
-		AA000002000000000000004 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
-		AA000002000000000000006 /* GroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupChatView.swift; sourceTree = "<group>"; };
-		AA000002000000000000008 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
-		AA000002000000000000010 /* InputBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputBarView.swift; sourceTree = "<group>"; };
-		AA000002000000000000012 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -87,23 +97,23 @@
 			isa = PBXGroup;
 			children = (
 				4678CAE85F0CB0CD3AC78DD6 /* Assets.xcassets */,
+				C8850FD7D2AA1753841CA57F /* ChatView.swift */,
 				DFF810E4C0B9F68B1E4AA4AD /* ClawMuxApp.swift */,
 				72290AAFED98C8436AD778EF /* ClawMuxViewModel.swift */,
 				472435D7BEC5E6A66C89A71A /* ContentView.swift */,
-				AA000001000000000000002 /* Theme.swift */,
-				AA000001000000000000004 /* MarkdownContentView.swift */,
-				AA000001000000000000006 /* NotesPanelView.swift */,
-				AA000001000000000000008 /* SettingsView.swift */,
-				AA000001000000000000010 /* ShapeHelpers.swift */,
-				AA000001000000000000012 /* TonePlayer.swift */,
-				AA000001000000000000014 /* VADProcessor.swift */,
-				AA000002000000000000002 /* ViewHelpers.swift */,
-				AA000002000000000000004 /* SidebarView.swift */,
-				AA000002000000000000006 /* GroupChatView.swift */,
-				AA000002000000000000008 /* ChatView.swift */,
-				AA000002000000000000010 /* InputBarView.swift */,
-				AA000002000000000000012 /* WelcomeView.swift */,
+				443ABC04B7A435B58F1FC6D4 /* GroupChatView.swift */,
 				D7C804BA345F7AE206CF5AF7 /* Info.plist */,
+				D4385E6F9723F86B5AFE1680 /* InputBarView.swift */,
+				84B700834F3EECA10468DC91 /* MarkdownContentView.swift */,
+				D547095052AD2B437A196FA2 /* NotesPanelView.swift */,
+				BB917084CE6B997C8AA16A44 /* SettingsView.swift */,
+				A3DE4F7720F3C77DAED314F6 /* ShapeHelpers.swift */,
+				5C696CC95AF520F9CD224CD2 /* SidebarView.swift */,
+				C75D80D8B5385DCFF85A8039 /* Theme.swift */,
+				2EF7724BFBA3F18A21324642 /* TonePlayer.swift */,
+				40068200828EAB10352BF7E0 /* VADProcessor.swift */,
+				25C554BD1E23697D898B05CE /* ViewHelpers.swift */,
+				3A5C9B19E7C4B946A8C69830 /* WelcomeView.swift */,
 			);
 			path = ClawMux;
 			sourceTree = "<group>";
@@ -121,6 +131,7 @@
 			children = (
 				08FC952502613A3B738FA293 /* ClawMux */,
 				567539E909D84E327B42B1AB /* ClawMuxShared */,
+				A3DDF799B40600027DD7BCBC /* ClawMuxUITests */,
 				68E4BB661F09CF90F977DE30 /* ClawMuxWidget */,
 				E4CEA8DE9DC00C53FB1E0E5D /* Products */,
 			);
@@ -136,10 +147,19 @@
 			path = ClawMuxWidget;
 			sourceTree = "<group>";
 		};
+		A3DDF799B40600027DD7BCBC /* ClawMuxUITests */ = {
+			isa = PBXGroup;
+			children = (
+				999F598E79709CAC7E4BA9DE /* TouchBlockerTests.swift */,
+			);
+			path = ClawMuxUITests;
+			sourceTree = "<group>";
+		};
 		E4CEA8DE9DC00C53FB1E0E5D /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				A98C93E4123AFD12DB5663DE /* ClawMux.app */,
+				82E2D679C152E4238145F02E /* ClawMuxUITests.xctest */,
 				00A4C7BB4CA3E05A29B0F976 /* ClawMuxWidgetExtension.appex */,
 			);
 			name = Products;
@@ -169,6 +189,8 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 5BCF160C98FB4CBDE4AC451B /* Build configuration list for PBXNativeTarget "ClawMux" */;
 			buildPhases = (
+				E3429F5B042E50AAA4C4242E /* Set Build Number from Git */,
+				B2D10572D96A269F4010FD26 /* Set Git Commit Hash */,
 				8216CD92EC86B17D67C3CBCE /* Sources */,
 				70777560356440824A9DAAE3 /* Resources */,
 				6B116D902C5AE7661A35DD62 /* Embed Foundation Extensions */,
@@ -184,6 +206,24 @@
 			productName = ClawMux;
 			productReference = A98C93E4123AFD12DB5663DE /* ClawMux.app */;
 			productType = "com.apple.product-type.application";
+		};
+		CCFBEBD1F9AC3BA294A3AB86 /* ClawMuxUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F67839EFE031703325E88BEA /* Build configuration list for PBXNativeTarget "ClawMuxUITests" */;
+			buildPhases = (
+				38CEAEE20AF11E81DAAFA4C9 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				F48E0FCA2E6A577092C70A25 /* PBXTargetDependency */,
+			);
+			name = ClawMuxUITests;
+			packageProductDependencies = (
+			);
+			productName = ClawMuxUITests;
+			productReference = 82E2D679C152E4238145F02E /* ClawMuxUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
 
@@ -202,6 +242,11 @@
 						DevelopmentTeam = 25QMAKVCBN;
 						ProvisioningStyle = Automatic;
 					};
+					CCFBEBD1F9AC3BA294A3AB86 = {
+						DevelopmentTeam = 25QMAKVCBN;
+						ProvisioningStyle = Automatic;
+						TestTargetID = A4CB1E317D272DAE57533487;
+					};
 				};
 			};
 			buildConfigurationList = F040AAA68B25E3F5F0637A53 /* Build configuration list for PBXProject "ClawMux" */;
@@ -219,6 +264,7 @@
 			projectRoot = "";
 			targets = (
 				A4CB1E317D272DAE57533487 /* ClawMux */,
+				CCFBEBD1F9AC3BA294A3AB86 /* ClawMuxUITests */,
 				4069D4417606EAB0783EA23F /* ClawMuxWidgetExtension */,
 			);
 		};
@@ -235,7 +281,56 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		B2D10572D96A269F4010FD26 /* Set Git Commit Hash */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Set Git Commit Hash";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "HASH=$(git -C \"$SRCROOT\" rev-parse --short HEAD 2>/dev/null || echo \"unknown\")\n/usr/libexec/PlistBuddy -c \"Set :GIT_COMMIT_HASH $HASH\" \"$INFOPLIST_FILE\" 2>/dev/null || \\\n/usr/libexec/PlistBuddy -c \"Add :GIT_COMMIT_HASH string $HASH\" \"$INFOPLIST_FILE\"\n";
+		};
+		E3429F5B042E50AAA4C4242E /* Set Build Number from Git */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Set Build Number from Git";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "BUILD=$(git -C \"$SRCROOT\" rev-list HEAD --count 2>/dev/null || echo \"1\")\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $BUILD\" \"$INFOPLIST_FILE\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
+		38CEAEE20AF11E81DAAFA4C9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D7EC580B303F31471732F946 /* TouchBlockerTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		56FBAD0E73F7C0166DD19AE0 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -250,23 +345,23 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DD0B6C41043DEB376B75D6BE /* ChatView.swift in Sources */,
 				CE452A75046106310CA1884D /* ClawMuxActivityAttributes.swift in Sources */,
 				D8A747936F0FDA5E95EA77BB /* ClawMuxApp.swift in Sources */,
 				8EBD594CEA424C07342CD79A /* ClawMuxViewModel.swift in Sources */,
 				34708E5BA49DCFE09A2770E8 /* ContentView.swift in Sources */,
-				AA000001000000000000001 /* Theme.swift in Sources */,
-				AA000001000000000000003 /* MarkdownContentView.swift in Sources */,
-				AA000001000000000000005 /* NotesPanelView.swift in Sources */,
-				AA000001000000000000007 /* SettingsView.swift in Sources */,
-				AA000001000000000000009 /* ShapeHelpers.swift in Sources */,
-				AA000001000000000000011 /* TonePlayer.swift in Sources */,
-				AA000001000000000000013 /* VADProcessor.swift in Sources */,
-				AA000002000000000000001 /* ViewHelpers.swift in Sources */,
-				AA000002000000000000003 /* SidebarView.swift in Sources */,
-				AA000002000000000000005 /* GroupChatView.swift in Sources */,
-				AA000002000000000000007 /* ChatView.swift in Sources */,
-				AA000002000000000000009 /* InputBarView.swift in Sources */,
-				AA000002000000000000011 /* WelcomeView.swift in Sources */,
+				CBA4E6BE8BA5D2F2DA3D0192 /* GroupChatView.swift in Sources */,
+				EF98BD8285F5FAF97C9985E9 /* InputBarView.swift in Sources */,
+				1599B53E39A3CDEE562D5033 /* MarkdownContentView.swift in Sources */,
+				B9B8149250E7E844CE7BECE7 /* NotesPanelView.swift in Sources */,
+				90993452C4CA5B2F35471F21 /* SettingsView.swift in Sources */,
+				CC9ABF885DDD9CF628A35EA0 /* ShapeHelpers.swift in Sources */,
+				C42C4DC2063494E4AC786256 /* SidebarView.swift in Sources */,
+				B3FAEAF903D2C5A57908A60C /* Theme.swift in Sources */,
+				C75B8D793DDF9C64C0EC9C31 /* TonePlayer.swift in Sources */,
+				7D32CC24BDDFA37E956A459A /* VADProcessor.swift in Sources */,
+				D123D0FD38CA70DCC2923F69 /* ViewHelpers.swift in Sources */,
+				3EFBF80FC3E456A6DD67B39B /* WelcomeView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -277,6 +372,11 @@
 			isa = PBXTargetDependency;
 			target = 4069D4417606EAB0783EA23F /* ClawMuxWidgetExtension */;
 			targetProxy = 3951751B91CF08FA4D088BBC /* PBXContainerItemProxy */;
+		};
+		F48E0FCA2E6A577092C70A25 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A4CB1E317D272DAE57533487 /* ClawMux */;
+			targetProxy = 18F726E37233CDBD9DA9F8DD /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -299,6 +399,46 @@
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
+		};
+		615628342CFCAC3FDB1DD6A9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 25QMAKVCBN;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.zeul.clawmux.uitests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = ClawMux;
+			};
+			name = Debug;
+		};
+		7F30BAC1C53F815610B562DD /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 25QMAKVCBN;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.zeul.clawmux.uitests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = ClawMux;
+			};
+			name = Release;
 		};
 		9EA97E092C664A254A8910F4 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -500,6 +640,15 @@
 			buildConfigurations = (
 				CEC7B1EF51A92F2682C996C0 /* Debug */,
 				A456053C70B868A77151AE89 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		F67839EFE031703325E88BEA /* Build configuration list for PBXNativeTarget "ClawMuxUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				615628342CFCAC3FDB1DD6A9 /* Debug */,
+				7F30BAC1C53F815610B562DD /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
