@@ -1080,12 +1080,18 @@ extension AudioManager: AVAudioPlayerDelegate {
             if !sid.isEmpty, let idx = vm.sessionIndex(sid),
                 vm.sessions[idx].pendingListen, sid == vm.activeSessionId
             {
-                let isBackground = UIApplication.shared.applicationState != .active
-                let bgAutoRecord = isBackground && vm.backgroundMode && vm.isAutoMode
-                if !vm.micMuted && (vm.effectiveAutoRecord || bgAutoRecord) {
+                // If suppress is set (e.g. user tapped interrupt), consume suppress and do NOT record
+                if suppressNextAutoRecord {
+                    suppressNextAutoRecord = false
                     vm.sessions[idx].pendingListen = false
-                    if vm.globalSounds && vm.soundListeningAuto { self.tonePlayer.cueListening() }
-                    self.startRecording(sessionId: sid)
+                } else {
+                    let isBackground = UIApplication.shared.applicationState != .active
+                    let bgAutoRecord = isBackground && vm.backgroundMode && vm.isAutoMode
+                    if !vm.micMuted && (vm.effectiveAutoRecord || bgAutoRecord) {
+                        vm.sessions[idx].pendingListen = false
+                        if vm.globalSounds && vm.soundListeningAuto { self.tonePlayer.cueListening() }
+                        self.startRecording(sessionId: sid)
+                    }
                 }
             }
             // Background safety net: hub sends "listening" after playback_done,
