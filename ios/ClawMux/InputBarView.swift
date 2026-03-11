@@ -12,6 +12,7 @@ struct InputBarView: View {
     @Binding var pttGestureCommitted: Bool
     @FocusState.Binding var pttTextFieldFocused: Bool
     @Binding var showFilePicker: Bool
+    @FocusState private var typingFieldFocused: Bool
     /// When true, always renders the text input bar regardless of vm.inputMode (used for group chat).
     var forceTypingMode: Bool = false
 
@@ -249,17 +250,17 @@ struct InputBarView: View {
                 .padding(.horizontal, 4).padding(.vertical, 8)
                 .submitLabel(.send)
                 .onSubmit { vm.sendText() }
+                .focused($typingFieldFocused)
 
-            // Keyboard dismiss button — inline beside send so it doesn't overlap
-            Button {
-                UIApplication.shared.sendAction(
-                    #selector(UIResponder.resignFirstResponder),
-                    to: nil, from: nil, for: nil)
-            } label: {
-                Image(systemName: "keyboard.chevron.compact.down")
-                    .font(.system(size: 16))
-                    .foregroundStyle(Color.cTextSec)
-                    .frame(width: 32, height: 32)
+            // Keyboard dismiss button — only visible when keyboard is up, moves with pill
+            if typingFieldFocused {
+                Button { typingFieldFocused = false } label: {
+                    Image(systemName: "keyboard.chevron.compact.down")
+                        .font(.system(size: 16))
+                        .foregroundStyle(Color.cTextSec)
+                        .frame(width: 32, height: 32)
+                }
+                .transition(.opacity)
             }
 
             // Send button — mirrors web #text-send (38x38, blue circle)
