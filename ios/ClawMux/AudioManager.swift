@@ -706,6 +706,65 @@ final class AudioManager: NSObject {
         }.resume()
     }
 
+    // MARK: - PTT Preview Supporting Methods
+
+    /// Taps inline transcript preview to open keyboard for editing.
+    func tapTranscriptToEdit() {
+        guard let vm else { return }
+        vm.showTranscriptPreview = false
+        vm.pttPreviewText = vm.transcriptPreviewText
+        vm.showPTTTextField = true
+    }
+
+    /// Sends the inline transcript preview text directly.
+    func sendTranscriptPreview() {
+        guard let vm else { return }
+        let text = vm.transcriptPreviewText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, let sid = vm.activeSessionId else {
+            vm.clearTranscriptPreview()
+            return
+        }
+        if vm.hapticsSend { vm.haptic(.medium) }
+        if let idx = vm.sessionIndex(sid) { vm.sessions[idx].pendingListen = false }
+        vm.sendJSON(["session_id": sid, "type": "text", "text": text])
+        vm.clearTranscriptPreview()
+    }
+
+    func sendPreviewText() {
+        guard let vm else { return }
+        let text = vm.pttPreviewText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, let sid = vm.activeSessionId else {
+            dismissPTTTextField()
+            return
+        }
+        if vm.hapticsSend { vm.haptic(.medium) }
+        let isAwaiting = vm.sessionIndex(sid).flatMap { vm.sessions[$0].awaitingInput } ?? false
+        if isAwaiting {
+            if let idx = vm.sessionIndex(sid) { vm.sessions[idx].pendingListen = false }
+            vm.sendJSON(["session_id": sid, "type": "text", "text": text])
+        } else {
+            vm.sendJSON(["session_id": sid, "type": "interjection", "text": text])
+        }
+        vm.pttPreviewText = ""
+        vm.pttTranscriptionError = nil
+        vm.showPTTTextField = false
+    }
+
+    func dismissPTTTextField() {
+        guard let vm else { return }
+        if vm.isRecording { stopRecording(discard: true) }
+        vm.isTranscribing = false
+        vm.showPTTTextField = false
+        // If there's text, return to transcript preview instead of fully dismissing
+        let text = vm.pttPreviewText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty {
+            vm.transcriptPreviewText = text
+            vm.showTranscriptPreview = true
+        }
+        vm.pttPreviewText = ""
+        vm.pttTranscriptionError = nil
+    }
+
     // MARK: - Push to Talk
 
     func pttPressed() {

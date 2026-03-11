@@ -2528,7 +2528,7 @@ extension ClawMuxViewModel: URLSessionWebSocketDelegate {
             self.isConnecting = false
             self.reconnectAttempt = 0   // reset backoff on successful connection
             self.statusText = "Connected"
-            self.setupAudioSession()
+            self.audio.setupAudioSession()
             self.startPingWatchdog()
             self.receiveMessage()
             self.fetchSettings()
