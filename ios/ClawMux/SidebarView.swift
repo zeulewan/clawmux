@@ -23,44 +23,15 @@ struct SidebarView: View {
     private var sidebarStripView: some View {
         ScrollViewReader { sidebarProxy in
         ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: sidebarExpanded ? 2 : 1) {
+                VStack(spacing: 1) {
                     Color.clear.frame(height: 60).id("sidebar-top")
-                    if sidebarExpanded {
+                    // Both branches always in hierarchy so matchedGeometryEffect positions
+                    // are resolved before animation starts (no pop/jerk). Opacity controls visibility.
+                    ZStack(alignment: .topLeading) {
+                        // COLLAPSED — always rendered
+                        let groups = projectGroups
+                        let chatGroups = activeGroups
                         VStack(spacing: 0) {
-                            let groups = projectGroups
-                            ForEach(groups.namedProjects, id: \.self) { project in
-                                let voices = groups.byProject[project] ?? []
-                                projectSection(project, voices: voices)
-                            }
-                            let chatGroups = activeGroups
-                            if !chatGroups.isEmpty {
-                                HStack {
-                                    Text("GROUP CHATS")
-
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundStyle(Color.cTextTer)
-                                        .tracking(0.8)
-                                    Spacer()
-                                    Button {
-                                        newGroupChatName = ""
-                                        showCreateGroupChat = true
-                                    } label: {
-                                        Image(systemName: "plus")
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundStyle(Color.cTextSec)
-                                    }
-                                }
-                                .padding(.horizontal, 16)
-                                .padding(.top, 8).padding(.bottom, 2)
-                                ForEach(chatGroups, id: \.groupId) { g in
-                                    groupCard(g.groupId, name: g.name, voices: g.voices)
-                                }
-                            }
-                        }
-                        .transition(.opacity)
-                    } else {
-                        VStack(spacing: 0) {
-                            let groups = projectGroups
                             ForEach(groups.namedProjects, id: \.self) { project in
                                 let voices = groups.byProject[project] ?? []
                                 let collapsed = collapsedProjects.contains(project)
@@ -83,15 +54,47 @@ struct SidebarView: View {
                                     }
                                 }
                             }
-                            let chatGroups = activeGroups
                             ForEach(chatGroups, id: \.groupId) { g in
                                 groupIcon(g.groupId, voices: g.voices)
                             }
                         }
-                        .transition(.opacity)
+                        .opacity(sidebarExpanded ? 0 : 1)
+                        .allowsHitTesting(!sidebarExpanded)
+
+                        // EXPANDED — always rendered
+                        VStack(spacing: 0) {
+                            ForEach(groups.namedProjects, id: \.self) { project in
+                                let voices = groups.byProject[project] ?? []
+                                projectSection(project, voices: voices)
+                            }
+                            if !chatGroups.isEmpty {
+                                HStack {
+                                    Text("GROUP CHATS")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundStyle(Color.cTextTer)
+                                        .tracking(0.8)
+                                    Spacer()
+                                    Button {
+                                        newGroupChatName = ""
+                                        showCreateGroupChat = true
+                                    } label: {
+                                        Image(systemName: "plus")
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(Color.cTextSec)
+                                    }
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.top, 8).padding(.bottom, 2)
+                                ForEach(chatGroups, id: \.groupId) { g in
+                                    groupCard(g.groupId, name: g.name, voices: g.voices)
+                                }
+                            }
+                        }
+                        .opacity(sidebarExpanded ? 1 : 0)
+                        .allowsHitTesting(sidebarExpanded)
                     }
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: .infinity)
                 .padding(.vertical, 4)
         }
         .accessibilityIdentifier("SidebarScrollView")
@@ -225,6 +228,7 @@ struct SidebarView: View {
                             .offset(x: 9, y: 9)
                     }
                 }
+                .matchedGeometryEffect(id: "icon_\(voice.id)", in: sidebarNS)
                 if isSelected {
                     HStack(spacing: 0) {
                         RoundedRectangle(cornerRadius: 2, style: .continuous)
@@ -579,6 +583,7 @@ struct SidebarView: View {
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(alive ? color : color.opacity(0.30))
                 }
+                .matchedGeometryEffect(id: "icon_\(voice.id)", in: sidebarNS)
                 .frame(width: 34, height: 34)
 
                 VStack(alignment: .leading, spacing: 1) {
