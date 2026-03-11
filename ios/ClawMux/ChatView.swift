@@ -254,7 +254,7 @@ struct ChatScrollAreaView: View {
         let tr: CGFloat = (role == "user"      && !isFirst)  ? 8 : 16
         let br: CGFloat = role == "user"      ? (isLast ? 5 : single ? 16 : 8) : 16
 
-        let userBubbleColor = Color(hex: 0x16A34A)
+        let userBubbleColor = Color(hex: 0x2563EB)
         let bubbleBg: AnyShapeStyle = role == "user"
             ? AnyShapeStyle(userBubbleColor)
             : role == "assistant"
