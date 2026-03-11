@@ -476,6 +476,7 @@ struct DebugView: View {
             }
             .padding()
         }
+        .contentMargins(.leading, 48, for: .scrollContent)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onDisappear { vm.stopDebugRefresh() }
     }
