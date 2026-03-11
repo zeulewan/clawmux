@@ -135,7 +135,7 @@ struct ChatScrollAreaView: View {
                         role:    group.role)
                     if group.role == "user" {
                         bubble
-                            .frame(maxWidth: UIScreen.main.bounds.width * 0.82)
+                            .padding(.leading, 48)
                             .frame(maxWidth: .infinity, alignment: .trailing)
                     } else {
                         bubble
