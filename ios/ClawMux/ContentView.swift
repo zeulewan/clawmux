@@ -1530,6 +1530,52 @@ struct ContentView: View {
             )
         }
 
+        // Group chat messages: match web [Group msg to X] — ⊕ groupName header, always blue, collapsible
+        let groupMsgPattern = /^\[Group msg to ([^\]]+)\] ([\s\S]*)/
+        if (role == "agent" || role == "system"),
+           let gm = msg.text.firstMatch(of: groupMsgPattern) {
+            let groupName  = String(gm.output.1)
+            let content    = String(gm.output.2)
+            let groupColor = Color(hex: 0x7c9ef0)
+            return AnyView(
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("⊕ \(groupName)")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(groupColor)
+                    if isExpanded {
+                        Text(content)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.cTextSec)
+                            .padding(.top, 3)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 10).padding(.vertical, 4)
+                .overlay(alignment: .leading) {
+                    groupColor.opacity(0.6).frame(width: 2)
+                }
+                .padding(.leading, 2)
+                .opacity(isExpanded ? 1.0 : 0.7)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        if isExpanded { expandedAgentMsgIds.remove(msg.id) }
+                        else          { expandedAgentMsgIds.insert(msg.id) }
+                    }
+                }
+                .contextMenu {
+                    Button {
+                        UIPasteboard.general.string = msg.text
+                        withAnimation { showCopiedToast = true }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                            withAnimation { showCopiedToast = false }
+                        }
+                    } label: { Label("Copy", systemImage: "doc.on.doc") }
+                }
+            )
+        }
+
         // Fallback for role=="agent" messages that don't match the [Agent msg] pattern
         if role == "agent" {
             return AnyView(
