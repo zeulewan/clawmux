@@ -2005,16 +2005,33 @@ async def get_history(voice_id: str, request: Request):
             {"voice_id": voice_id, "messages": messages, "pending_interjections": pending_count},
             headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
         )
-    # Pagination: before= cursor returns messages before that ID (for loading older pages)
+    # Pagination: before= cursor returns messages before that ID (for loading older pages).
+    # Falls back to before_ts= (timestamp) when the target message has no id — most
+    # activity/assistant messages don't carry ids, so ts-based cursor is more reliable.
     before_id = request.query_params.get("before")
+    before_ts_str = request.query_params.get("before_ts")
     if before_id:
         idx = None
         for i, m in enumerate(messages):
             if m.get("id") == before_id:
                 idx = i
                 break
-        # Return only entries before the cursor message
-        messages = messages[:idx] if idx is not None else messages
+        if idx is not None:
+            messages = messages[:idx]
+        elif before_ts_str:
+            # ID not found — fall back to timestamp cursor
+            try:
+                before_ts = float(before_ts_str)
+                messages = [m for m in messages if m.get("ts", 0) < before_ts]
+            except (ValueError, TypeError):
+                pass
+    elif before_ts_str:
+        # Timestamp-only cursor (no ID given) — used by iOS infinite scroll
+        try:
+            before_ts = float(before_ts_str)
+            messages = [m for m in messages if m.get("ts", 0) < before_ts]
+        except (ValueError, TypeError):
+            pass
     # limit= caps the number of returned messages (default 150, max 500)
     try:
         limit = min(int(request.query_params.get("limit", 150)), 500)
