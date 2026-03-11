@@ -355,7 +355,7 @@ struct InputBarView: View {
 
     private var waveformView: some View {
         let waveColor = vm.activeSession.map { voiceColor($0.voice) } ?? Color.cAccent
-        return SpectrumWaveformView(bands: vm.spectrumBands, color: waveColor)
+        return SpectrumWaveformView(spectrum: vm.spectrumSource, color: waveColor)
             .frame(height: 48)
             .padding(.horizontal, 16).padding(.vertical, 4)
     }
@@ -426,14 +426,14 @@ private final class BandSmoother {
 }
 
 private struct SpectrumWaveformView: View {
-    let bands: [CGFloat]
+    @ObservedObject var spectrum: SpectrumBandSource
     let color: Color
     @State private var smoother = BandSmoother()
 
     var body: some View {
         TimelineView(.animation) { _ in
             Canvas { context, size in
-                smoother.update(toward: bands)
+                smoother.update(toward: spectrum.bands)
                 let smoothed = smoother.smooth
                 let count = smoothed.count
                 guard count > 0 else { return }

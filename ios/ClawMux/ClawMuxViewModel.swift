@@ -228,7 +228,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     @Published var isPlaybackPaused = false  // user-triggered transport pause
     @Published var isProcessing = false
     @Published var audioLevels: [CGFloat] = []
-    @Published var spectrumBands: [CGFloat] = Array(repeating: 0, count: 12)
+    let spectrumSource = SpectrumBandSource()   // isolated — updates don't trigger full VM re-renders
 
     // Controls
     // Input mode: "auto", "ptt", "typing"

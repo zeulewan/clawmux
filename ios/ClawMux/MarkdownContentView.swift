@@ -15,8 +15,7 @@ struct ScrollTopDetector: ViewModifier {
             content.onScrollGeometryChange(for: CGFloat.self) { geo in
                 geo.contentOffset.y
             } action: { _, offsetY in
-                print("[ScrollTop] offsetY=\(offsetY) loading=\(isLoadingOlder) hasOlder=\(hasOlderMessages) sid=\(sessionId ?? "nil")")
-                guard offsetY < 100, !isLoadingOlder, hasOlderMessages, let sid = sessionId else { return }
+                guard offsetY < 200, !isLoadingOlder, hasOlderMessages, let sid = sessionId else { return }
                 isLoadingOlder = true
                 load(sid) {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { isLoadingOlder = false }

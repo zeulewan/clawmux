@@ -11,6 +11,7 @@ struct ChatScrollAreaView: View {
     @Binding var expandedAgentMsgIds: Set<UUID>
     @Binding var isPulsing: Bool
     @Binding var showCopiedToast: Bool
+    @State private var topAnchorId: String? = nil   // first message ID captured before older-message load
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -36,7 +37,6 @@ struct ChatScrollAreaView: View {
                     .padding(.horizontal, 12)
                     .padding(.top, 64).padding(.bottom, 16)
                 }
-                .contentMargins(.leading, 48, for: .scrollContent)
                 .defaultScrollAnchor(.bottom)
                 .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
                 .modifier(ScrollTopDetector(
@@ -45,7 +45,22 @@ struct ChatScrollAreaView: View {
                     sessionId: vm.activeSessionId,
                     load: { sid, completion in vm.loadOlderMessages(sessionId: sid, completion: completion) }
                 ))
+                .onChange(of: isLoadingOlder) { _, loading in
+                    if loading {
+                        // Capture the first visible message before older messages are prepended
+                        topAnchorId = messageGroups.first?.id
+                    } else {
+                        topAnchorId = nil
+                    }
+                }
                 .onChange(of: vm.activeMessages.count) { _, _ in
+                    if isLoadingOlder, let aid = topAnchorId {
+                        // Older messages were prepended — scroll to what was the top message
+                        var t = Transaction()
+                        t.disablesAnimations = true
+                        withTransaction(t) { proxy.scrollTo(aid, anchor: .top) }
+                        return
+                    }
                     guard !isLoadingOlder else { return }
                     scrollBottom(proxy)
                 }

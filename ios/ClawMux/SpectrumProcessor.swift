@@ -2,6 +2,15 @@ import AVFoundation
 import Accelerate
 import Foundation
 
+// MARK: - Spectrum Band Source
+// Isolated ObservableObject so only SpectrumWaveformView re-renders on band updates,
+// not the entire view tree that observes ClawMuxViewModel.
+
+@MainActor
+final class SpectrumBandSource: ObservableObject {
+    @Published var bands: [CGFloat] = Array(repeating: 0, count: SpectrumProcessor.bandCount)
+}
+
 // MARK: - Spectrum Tap Helper (must be outside @MainActor to avoid isolation inheritance)
 
 func installSpectrumTap(

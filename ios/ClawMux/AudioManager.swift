@@ -979,7 +979,7 @@ final class AudioManager: NSObject {
 
         let processor = SpectrumProcessor(sampleRate: sampleRate) { [weak self] bands in
             Task { @MainActor in
-                self?.vm?.spectrumBands = bands
+                self?.vm?.spectrumSource.bands = bands
             }
         }
         spectrumProcessor = processor
@@ -999,7 +999,7 @@ final class AudioManager: NSObject {
         spectrumEngine?.stop()
         spectrumEngine = nil
         spectrumProcessor = nil
-        vm?.spectrumBands = Array(repeating: 0, count: SpectrumProcessor.bandCount)
+        vm?.spectrumSource.bands = Array(repeating: 0, count: SpectrumProcessor.bandCount)
     }
 
     // MARK: - Audio Metering
