@@ -849,7 +849,7 @@ async def set_project_status(session_id: str, request: Request):
     if "project" in data:
         session.project = data["project"]
         session.project_slug = _resolve_slug(data["project"])
-    session.project_area = data.get("area", session.project_area)
+    session.project_repo = data.get("repo", data.get("area", session.project_repo))
     if "role" in data:
         role_val = data["role"].lower()
         rules_dir = Path(__file__).parent / "templates" / "rules"
@@ -863,12 +863,12 @@ async def set_project_status(session_id: str, request: Request):
     if "task" in data:
         session.task = data["task"]
     log.info("[%s] Project status: %s / %s (role=%s, task=%s)",
-             session_id, session.project, session.project_area, session.role, session.task)
+             session_id, session.project, session.project_repo, session.role, session.task)
     await send_to_browser({
         "type": "project_status",
         "session_id": session_id,
         "project": session.project,
-        "area": session.project_area,
+        "project_repo": session.project_repo,
         "role": session.role,
         "task": session.task,
     })
@@ -1322,14 +1322,14 @@ async def update_agent(voice_id: str, request: Request):
 async def assign_agent(voice_id: str, request: Request):
     """Change an agent's project and/or role assignment."""
     body = await request.json()
-    fields = {k: body[k] for k in ("project", "role", "area") if k in body}
+    fields = {k: body[k] for k in ("project", "role", "repo") if k in body}
     if not fields:
         return JSONResponse({"error": "No assignment fields provided"}, status_code=400)
     updated = await agents_store.update(voice_id, **fields)
     if updated is None:
         return JSONResponse({"error": "Agent not found"}, status_code=404)
-    log.info("[agents] Assigned %s → project=%s role=%s area=%s",
-             voice_id, updated.project, updated.role, updated.area)
+    log.info("[agents] Assigned %s → project=%s role=%s repo=%s",
+             voice_id, updated.project, updated.role, updated.repo)
     # Auto-regenerate CLAUDE.md for the reassigned agent
     session = next((s for s in session_mgr.sessions.values() if s.voice == voice_id), None)
     if session and session.work_dir:
@@ -1886,6 +1886,23 @@ async def groupchat_send_message(name: str, request: Request):
         "group_name": g["name"],
         "message": {"id": msg_id, "role": role, "text": text, "sender": sender, "ts": time.time()},
     })
+    # Show outbound group message in sender's chat (same pattern as inter-agent messages)
+    if sender:
+        sender_session = _resolve_session(sender)
+        if sender_session:
+            await asyncio.to_thread(
+                history.append, sender_session.voice, sender_session.label, "system",
+                f"[Group msg to {g['name']}] {text}",
+                _hist_prefix(sender_session),
+                msg_id=msg_id,
+            )
+            await send_to_browser({
+                "type": "group_outbound",
+                "session_id": sender_session.session_id,
+                "group_name": g["name"],
+                "msg_id": msg_id,
+                "text": text,
+            })
     return JSONResponse({"status": "sent", "msg_id": msg_id, "delivered_to": delivered, "group": g["name"]})
 
 
@@ -2372,17 +2389,21 @@ async def speak_to_user(request: Request):
     if not skip_tts:
         tts_message = strip_non_speakable(content)
         if tts_message.strip():
+            audio_b64, word_timestamps = None, []
             try:
                 audio_b64, word_timestamps = await tts_captioned(tts_message, sender.voice, sender.speed)
             except Exception as e:
                 log.warning("[%s] Captioned TTS failed (%s), falling back", sender_id, e)
-                mp3 = await tts(tts_message, sender.voice, sender.speed)
-                audio_b64 = base64.b64encode(mp3).decode()
-                word_timestamps = []
-            audio_msg = {"session_id": sender_id, "type": "audio", "data": audio_b64, "msg_id": msg_id}
-            if word_timestamps:
-                audio_msg["words"] = word_timestamps
-            await send_to_browser(audio_msg)
+                try:
+                    mp3 = await tts(tts_message, sender.voice, sender.speed)
+                    audio_b64 = base64.b64encode(mp3).decode()
+                except Exception as e2:
+                    log.warning("[%s] TTS also failed (%s) — text delivered, no audio", sender_id, e2)
+            if audio_b64:
+                audio_msg = {"session_id": sender_id, "type": "audio", "data": audio_b64, "msg_id": msg_id}
+                if word_timestamps:
+                    audio_msg["words"] = word_timestamps
+                await send_to_browser(audio_msg)
 
     log.info("[%s] Spoke to user: %s", sender_id, content[:80])
     return JSONResponse({"id": msg_id, "state": "delivered"})
