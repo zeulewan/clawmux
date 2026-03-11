@@ -77,6 +77,12 @@ struct VoiceSession: Identifiable {
     var isDead: Bool { state == .dead }
 }
 
+struct ProjectFolder: Identifiable {
+    var id: String      // slug
+    var name: String
+    var voices: [String] // voice IDs
+}
+
 struct VoiceInfo: Identifiable {
     let id: String
     let name: String
@@ -355,7 +361,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     @Published var knownGroupChats: [(name: String, voices: [String])] = []
     @Published var activeGroupName: String? = nil  // non-nil when viewing a group chat
     @Published var groupMessages: [GroupChatMessage] = []
-    @Published var allProjects: [String] = []  // fetched from GET /api/projects on connect
+    @Published var folders: [ProjectFolder] = []  // fetched from GET /api/projects on connect
     private var groupIdToName: [String: String] = [:]  // "gc-xxx" → "group name" for disband API
 
     func groupName(for groupId: String) -> String? { groupIdToName[groupId] }
@@ -1516,20 +1522,14 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 removeSession(sid)
             }
 
-        case "project_created":
-            if let slug = json["slug"] as? String, !allProjects.contains(slug) {
-                allProjects.append(slug)
-                allProjects.sort()
-            }
+        case "project_created", "project_renamed":
+            // Re-fetch to get full folder data (name + voices)
+            fetchProjects()
 
         case "project_deleted":
             if let slug = json["slug"] as? String {
-                allProjects.removeAll { $0 == slug }
+                folders.removeAll { $0.id == slug }
             }
-
-        case "project_renamed":
-            // Slug is unchanged on rename; re-fetch to pick up any metadata changes.
-            fetchProjects()
 
         case "project_switched":
             let newProject = json["project"] as? String ?? "default"
@@ -2281,10 +2281,11 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         URLSession.shared.dataTask(with: req2) { _, _, _ in }.resume()
     }
 
-    // All projects: server-fetched list merged with live session projects
+    // All projects: server-fetched folders merged with live session projects
     var knownProjects: [String] {
+        let fromFolders = folders.map(\.id)
         let fromSessions = sessions.map(\.project).filter { !$0.isEmpty }
-        return Array(Set(allProjects + fromSessions)).sorted()
+        return Array(Set(fromFolders + fromSessions)).sorted()
     }
 
     private func markSessionViewing(_ id: String) {
@@ -2560,8 +2561,13 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let projects = json["projects"] as? [String: Any]
             else { return }
-            let slugs = Array(projects.keys).sorted()
-            Task { @MainActor in self?.allProjects = slugs }
+            let parsed = projects.compactMap { slug, val -> ProjectFolder? in
+                guard let dict = val as? [String: Any],
+                      let name = dict["name"] as? String else { return nil }
+                let voices = dict["voices"] as? [String] ?? []
+                return ProjectFolder(id: slug, name: name, voices: voices)
+            }.sorted { $0.name < $1.name }
+            Task { @MainActor in self?.folders = parsed }
         }.resume()
     }
 

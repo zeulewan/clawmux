@@ -783,17 +783,27 @@ struct ContentView: View {
     }
 
     private var projectGroups: ProjectGroups {
+        // Build a lookup of voiceId → VoiceInfo
+        let voiceLookup = Dictionary(uniqueKeysWithValues: ALL_VOICES.map { ($0.id, $0) })
+        // Folder order comes from the API
         var byProject: [String: [VoiceInfo]] = [:]
-        for voice in ALL_VOICES {
-            // Active session project takes precedence; fall back to static VoiceInfo.project
-            let sessionProject = vm.sessions.first(where: { $0.voice == voice.id })?.project ?? ""
-            let project = sessionProject.isEmpty ? voice.project : sessionProject
-            byProject[project, default: []].append(voice)
+        var assignedIds = Set<String>()
+        for folder in vm.folders {
+            let voices = folder.voices.compactMap { voiceLookup[$0] }
+            if !voices.isEmpty {
+                byProject[folder.name] = voices
+                voices.forEach { assignedIds.insert($0.id) }
+            }
         }
-        let ordered = ["Default", "Personal", "Extended"] + byProject.keys.filter {
-            !["Default", "Personal", "Extended"].contains($0)
-        }.sorted()
-        let namedProjects = ordered.filter { byProject[$0] != nil }
+        // Voices not in any folder → "Other"
+        let other = ALL_VOICES.filter { !assignedIds.contains($0.id) }
+        if !other.isEmpty {
+            byProject["Other"] = other
+        }
+        let folderOrder = vm.folders.compactMap { f -> String? in
+            byProject[f.name] != nil ? f.name : nil
+        }
+        let namedProjects = byProject["Other"] != nil ? folderOrder + ["Other"] : folderOrder
         return ProjectGroups(namedProjects: namedProjects, byProject: byProject, ungrouped: [])
     }
 
