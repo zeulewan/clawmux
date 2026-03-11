@@ -44,14 +44,35 @@ private extension Color {
 
 private func voiceColor(_ id: String) -> Color {
     switch id {
-    case "af_sky":   return Color(hex: 0x3A86FF)
-    case "af_alloy": return Color(hex: 0xE67E22)
-    case "af_sarah": return Color(hex: 0xE63946)
-    case "am_adam":  return Color(hex: 0x2ECC71)
-    case "am_echo":  return Color(hex: 0x9B59B6)
-    case "am_onyx":  return Color(hex: 0x7F8C8D)
-    case "bm_fable": return Color(hex: 0xF1C40F)
-    default:         return Color(hex: 0x8E8E93)
+    case "af_sky":      return Color(hex: 0x3A86FF)
+    case "af_alloy":    return Color(hex: 0xE67E22)
+    case "af_sarah":    return Color(hex: 0xE63946)
+    case "am_adam":     return Color(hex: 0x2ECC71)
+    case "am_echo":     return Color(hex: 0x9B59B6)
+    case "am_onyx":     return Color(hex: 0x7F8C8D)
+    case "bm_fable":    return Color(hex: 0xF1C40F)
+    // Extended voice palette
+    case "af_nova":     return Color(hex: 0xFF6B9D)
+    case "am_eric":     return Color(hex: 0x00B4D8)
+    case "af_bella":    return Color(hex: 0xFF7043)
+    case "af_jessica":  return Color(hex: 0xAB47BC)
+    case "af_heart":    return Color(hex: 0xEC407A)
+    case "am_michael":  return Color(hex: 0x26A69A)
+    case "am_liam":     return Color(hex: 0x5C6BC0)
+    case "am_fenrir":   return Color(hex: 0x78909C)
+    case "bf_emma":     return Color(hex: 0xFFA726)
+    case "bm_george":   return Color(hex: 0x66BB6A)
+    case "bm_daniel":   return Color(hex: 0x42A5F5)
+    case "af_aoede":    return Color(hex: 0xCE93D8)
+    case "af_jadzia":   return Color(hex: 0x4DD0E1)
+    case "af_kore":     return Color(hex: 0xA1887F)
+    case "af_nicole":   return Color(hex: 0xF48FB1)
+    case "af_river":    return Color(hex: 0x80CBC4)
+    case "am_puck":     return Color(hex: 0xFFD54F)
+    case "bf_alice":    return Color(hex: 0x90CAF9)
+    case "bf_lily":     return Color(hex: 0xC5E1A5)
+    case "bm_lewis":    return Color(hex: 0xBCAAA4)
+    default:            return Color(hex: 0x8E8E93)
     }
 }
 
@@ -163,16 +184,6 @@ struct ContentView: View {
         // Header as overlay: floats above content so messages scroll behind the glass bar
         .overlay(alignment: .top) {
             topBarView
-        }
-        .overlay(alignment: .bottomTrailing) {
-            // Hide when voice pill is visible — label overlaps pill's right gap
-            if vm.typingMode || vm.activeSessionId == nil {
-                Text("build-\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?")")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.4))
-                    .padding(6)
-                    .allowsHitTesting(false)
-            }
         }
         .background(Color.canvas1.ignoresSafeArea())
         .preferredColorScheme(.dark)
@@ -1442,9 +1453,10 @@ struct ContentView: View {
     // MARK: - Message Grouping
 
     private struct MessageGroup: Identifiable {
-        let id = UUID()
         let role: String
         let messages: [ChatMessage]
+        // Stable ID: role + first message's stable identifier — prevents UUID() churn on re-renders
+        var id: String { role + (messages.first?.msgId ?? messages.first?.id.uuidString ?? "") }
     }
 
     private var messageGroups: [MessageGroup] {
@@ -2113,7 +2125,7 @@ struct ContentView: View {
                     .animation(.easeOut(duration: 0.08), value: level)
             }
         }
-        .frame(height: 12).frame(maxWidth: .infinity)
+        .frame(height: 12).frame(maxWidth: .infinity).clipped()
         .padding(.horizontal, 20).padding(.vertical, 4)
     }
 
@@ -2782,8 +2794,13 @@ struct SettingsView: View {
                     HStack { Text("Version"); Spacer(); Text(appVersion).foregroundStyle(.secondary).font(.system(.subheadline, design: .monospaced)) }
                     HStack { Text("Build");   Spacer(); Text(appBuild).foregroundStyle(.secondary).font(.system(.subheadline, design: .monospaced)) }
                 } footer: {
-                    Text("ClawMux").frame(maxWidth: .infinity, alignment: .center)
-                        .font(.caption2).foregroundStyle(.tertiary).padding(.top, 4)
+                    VStack(spacing: 2) {
+                        Text("ClawMux")
+                            .font(.caption2).foregroundStyle(.tertiary)
+                        Text("© Zeul Mordasiewicz")
+                            .font(.caption2).foregroundStyle(.tertiary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .center).padding(.top, 4)
                 }
             }
             .navigationTitle("Settings").navigationBarTitleDisplayMode(.inline)
