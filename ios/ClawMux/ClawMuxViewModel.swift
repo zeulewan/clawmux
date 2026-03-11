@@ -908,7 +908,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
               let baseURL = httpBaseURL() else { completion?(); return }
         let session = sessions[idx]
         // Use timestamp of the oldest currently-loaded message as cursor
-        let oldestTs = sessions[idx].messages.compactMap(\.timestamp).map(\.timeIntervalSince1970).min()
+        let oldestTs = sessions[idx].messages.map(\.timestamp.timeIntervalSince1970).min()
         var comps = URLComponents(
             url: baseURL.appendingPathComponent("api/history/\(session.voice)"),
             resolvingAgainstBaseURL: false)!
@@ -941,11 +941,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     return
                 }
                 // Deduplicate by timestamp to avoid overlap with existing messages
-                let existingTs = Set(self.sessions[i].messages.compactMap { $0.timestamp?.timeIntervalSince1970 })
-                let newOlder = older.filter { m in
-                    guard let ts = m.timestamp?.timeIntervalSince1970 else { return true }
-                    return !existingTs.contains(ts)
-                }
+                let existingTs = Set(self.sessions[i].messages.map { $0.timestamp.timeIntervalSince1970 })
+                let newOlder = older.filter { !existingTs.contains($0.timestamp.timeIntervalSince1970) }
                 self.sessions[i].messages = newOlder + self.sessions[i].messages
                 // If server returned a full page, assume there may be more
                 self.sessions[i].hasOlderMessages = messages.count >= 30
