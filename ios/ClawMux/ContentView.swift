@@ -2569,6 +2569,7 @@ struct NotesPanelView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.clear)
             .preferredColorScheme(.dark)
             .navigationTitle("Notes")
             .navigationBarTitleDisplayMode(.inline)
@@ -2938,6 +2939,8 @@ struct SettingsView: View {
                 }
             }
             .scrollContentBackground(.hidden)
+            .listRowBackground(Color.clear)
+            .background(Color.clear)
             .navigationTitle("Settings").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .onAppear {
