@@ -80,39 +80,40 @@ struct VoiceSession: Identifiable {
 struct VoiceInfo: Identifiable {
     let id: String
     let name: String
+    let project: String  // static group — overridden at runtime by active session project
 }
 
 let ALL_VOICES: [VoiceInfo] = [
-    // Project 1 — primary agents
-    VoiceInfo(id: "af_sky",     name: "Sky"),
-    VoiceInfo(id: "af_alloy",   name: "Alloy"),
-    VoiceInfo(id: "af_nova",    name: "Nova"),
-    VoiceInfo(id: "af_sarah",   name: "Sarah"),
-    VoiceInfo(id: "am_adam",    name: "Adam"),
-    VoiceInfo(id: "am_echo",    name: "Echo"),
-    VoiceInfo(id: "am_eric",    name: "Eric"),
-    VoiceInfo(id: "am_onyx",    name: "Onyx"),
-    VoiceInfo(id: "bm_fable",   name: "Fable"),
-    // Project 2
-    VoiceInfo(id: "af_bella",   name: "Bella"),
-    VoiceInfo(id: "af_jessica", name: "Jessica"),
-    VoiceInfo(id: "af_heart",   name: "Heart"),
-    VoiceInfo(id: "am_michael", name: "Michael"),
-    VoiceInfo(id: "am_liam",    name: "Liam"),
-    VoiceInfo(id: "am_fenrir",  name: "Fenrir"),
-    VoiceInfo(id: "bf_emma",    name: "Emma"),
-    VoiceInfo(id: "bm_george",  name: "George"),
-    VoiceInfo(id: "bm_daniel",  name: "Daniel"),
-    // Project 3
-    VoiceInfo(id: "af_aoede",   name: "Aoede"),
-    VoiceInfo(id: "af_jadzia",  name: "Jadzia"),
-    VoiceInfo(id: "af_kore",    name: "Kore"),
-    VoiceInfo(id: "af_nicole",  name: "Nicole"),
-    VoiceInfo(id: "af_river",   name: "River"),
-    VoiceInfo(id: "am_puck",    name: "Puck"),
-    VoiceInfo(id: "bf_alice",   name: "Alice"),
-    VoiceInfo(id: "bf_lily",    name: "Lily"),
-    VoiceInfo(id: "bm_lewis",   name: "Lewis"),
+    // Default group
+    VoiceInfo(id: "af_sky",     name: "Sky",     project: "Default"),
+    VoiceInfo(id: "af_alloy",   name: "Alloy",   project: "Default"),
+    VoiceInfo(id: "af_nova",    name: "Nova",     project: "Default"),
+    VoiceInfo(id: "af_sarah",   name: "Sarah",   project: "Default"),
+    VoiceInfo(id: "am_adam",    name: "Adam",    project: "Default"),
+    VoiceInfo(id: "am_echo",    name: "Echo",    project: "Default"),
+    VoiceInfo(id: "am_eric",    name: "Eric",    project: "Default"),
+    VoiceInfo(id: "am_onyx",    name: "Onyx",    project: "Default"),
+    VoiceInfo(id: "bm_fable",   name: "Fable",   project: "Default"),
+    // Personal group
+    VoiceInfo(id: "af_bella",   name: "Bella",   project: "Personal"),
+    VoiceInfo(id: "af_jessica", name: "Jessica", project: "Personal"),
+    VoiceInfo(id: "af_heart",   name: "Heart",   project: "Personal"),
+    VoiceInfo(id: "am_michael", name: "Michael", project: "Personal"),
+    VoiceInfo(id: "am_liam",    name: "Liam",    project: "Personal"),
+    VoiceInfo(id: "am_fenrir",  name: "Fenrir",  project: "Personal"),
+    VoiceInfo(id: "bf_emma",    name: "Emma",    project: "Personal"),
+    VoiceInfo(id: "bm_george",  name: "George",  project: "Personal"),
+    VoiceInfo(id: "bm_daniel",  name: "Daniel",  project: "Personal"),
+    // Extended group
+    VoiceInfo(id: "af_aoede",   name: "Aoede",   project: "Extended"),
+    VoiceInfo(id: "af_jadzia",  name: "Jadzia",  project: "Extended"),
+    VoiceInfo(id: "af_kore",    name: "Kore",    project: "Extended"),
+    VoiceInfo(id: "af_nicole",  name: "Nicole",  project: "Extended"),
+    VoiceInfo(id: "af_river",   name: "River",   project: "Extended"),
+    VoiceInfo(id: "am_puck",    name: "Puck",    project: "Extended"),
+    VoiceInfo(id: "bf_alice",   name: "Alice",   project: "Extended"),
+    VoiceInfo(id: "bf_lily",    name: "Lily",    project: "Extended"),
+    VoiceInfo(id: "bm_lewis",   name: "Lewis",   project: "Extended"),
 ]
 
 let SPEED_OPTIONS: [(label: String, value: Double)] = [

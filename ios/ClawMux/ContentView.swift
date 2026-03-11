@@ -414,10 +414,6 @@ struct ContentView: View {
                             let voices = groups.byProject[project] ?? []
                             projectSection(project, voices: voices)
                         }
-                        if !groups.ungrouped.isEmpty {
-                            projectSection("agents", voices: groups.ungrouped)
-                        }
-
                         // Group chats section below agents — matches web sidebar-gc-section placement
                         let chatGroups = activeGroups
                         if !chatGroups.isEmpty {
@@ -788,13 +784,17 @@ struct ContentView: View {
 
     private var projectGroups: ProjectGroups {
         var byProject: [String: [VoiceInfo]] = [:]
-        var ungrouped: [VoiceInfo] = []
         for voice in ALL_VOICES {
-            let project = vm.sessions.first { $0.voice == voice.id }?.project ?? ""
-            if project.isEmpty { ungrouped.append(voice) }
-            else { byProject[project, default: []].append(voice) }
+            // Active session project takes precedence; fall back to static VoiceInfo.project
+            let project = vm.sessions.first { $0.voice == voice.id }?.project
+                           .flatMap { $0.isEmpty ? nil : $0 } ?? voice.project
+            byProject[project, default: []].append(voice)
         }
-        return ProjectGroups(namedProjects: byProject.keys.sorted(), byProject: byProject, ungrouped: ungrouped)
+        let ordered = ["Default", "Personal", "Extended"] + byProject.keys.filter {
+            !["Default", "Personal", "Extended"].contains($0)
+        }.sorted()
+        let namedProjects = ordered.filter { byProject[$0] != nil }
+        return ProjectGroups(namedProjects: namedProjects, byProject: byProject, ungrouped: [])
     }
 
     @ViewBuilder
