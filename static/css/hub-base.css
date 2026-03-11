@@ -72,7 +72,7 @@ body {
   width: var(--sidebar-w, 220px);
   min-width: 140px;
   background: var(--bg-glass);
-  border-right: 1px solid rgba(255,255,255,0.06);
+  border-right: 1px solid rgba(255,255,255,0.05);
   box-shadow: 2px 0 24px rgba(0,0,0,0.7), 1px 0 0 rgba(255,255,255,0.05);
   backdrop-filter: blur(24px) saturate(160%);
   -webkit-backdrop-filter: blur(24px) saturate(160%);
@@ -708,7 +708,7 @@ body {
   align-items: center;
   gap: 12px;
   background: var(--bg-glass);
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   flex-shrink: 0;
@@ -1028,7 +1028,7 @@ body {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  border: 1px solid var(--border-light);
+  border: 1px solid rgba(255,255,255,0.05);
   background: var(--bg-glass);
   backdrop-filter: blur(16px) saturate(140%);
   -webkit-backdrop-filter: blur(16px) saturate(140%);
@@ -1284,7 +1284,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   z-index: var(--z-sticky);
   padding: 8px 12px;
   background: var(--bg-glass);
-  border: 1px solid var(--border-light);
+  border: 1px solid rgba(255,255,255,0.05);
   border-radius: 20px;
   gap: 8px;
   align-items: flex-end;
@@ -1394,7 +1394,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   max-width: 380px;
   z-index: var(--z-sticky);
   background: var(--bg-glass);
-  border: 1px solid var(--border-light);
+  border: 1px solid rgba(255,255,255,0.05);
   border-radius: 22px;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -1653,7 +1653,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   background: var(--bg-glass);
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
-  border: 1px solid var(--border-light);
+  border: 1px solid rgba(255,255,255,0.05);
   color: var(--text);
   padding: 8px 18px;
   border-radius: var(--radius);
@@ -1676,7 +1676,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   background: var(--bg-glass);
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
-  border: 1px solid var(--border-light);
+  border: 1px solid rgba(255,255,255,0.05);
   color: var(--text);
   padding: 10px 20px;
   border-radius: var(--radius);
