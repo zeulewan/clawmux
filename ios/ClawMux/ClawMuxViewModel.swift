@@ -22,6 +22,8 @@ struct GroupChatMessage: Identifiable, Equatable {
     let text: String
     let sender: String  // voice id of sender
     let ts: Double      // unix timestamp
+    var parentId: String? = nil
+    var isBareAck: Bool = false
 }
 
 /// Canonical agent state matching the backend AgentState enum.
@@ -1872,7 +1874,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     role: msgDict["role"] as? String ?? "assistant",
                     text: text,
                     sender: resolvedSender,
-                    ts: msgDict["ts"] as? Double ?? 0
+                    ts: msgDict["ts"] as? Double ?? 0,
+                    parentId: msgDict["parent_id"] as? String,
+                    isBareAck: msgDict["bare_ack"] as? Bool ?? false
                 )
                 // Only append if viewing this group and not already present
                 let groupName = json["group_name"] as? String ?? ""
@@ -2179,7 +2183,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             }
             print("[group-history] got \(msgs.count) messages")
             let parsed = msgs.compactMap { m -> GroupChatMessage? in
-                guard let text = m["text"] as? String, !text.isEmpty
+                let isBareAck = m["bare_ack"] as? Bool ?? false
+                guard let text = m["text"] as? String, (!text.isEmpty || isBareAck)
                 else { return nil }
                 let id = m["id"] as? String ?? UUID().uuidString
                 let senderLabel = m["sender"] as? String ?? ""
@@ -2191,7 +2196,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     role: m["role"] as? String ?? "assistant",
                     text: text,
                     sender: resolvedSender,
-                    ts: m["ts"] as? Double ?? 0
+                    ts: m["ts"] as? Double ?? 0,
+                    parentId: m["parent_id"] as? String,
+                    isBareAck: isBareAck
                 )
             }
             print("[group-history] parsed \(parsed.count) messages")

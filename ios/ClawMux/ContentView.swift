@@ -307,8 +307,15 @@ struct ContentView: View {
             ScrollViewReader { proxy in
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: 8) {
-                        ForEach(Array(vm.groupMessages.enumerated()), id: \.element.id) { idx, msg in
-                            groupMessageBubble(msg, isLast: idx == vm.groupMessages.count - 1)
+                        let displayMsgs = vm.groupMessages.filter { !$0.isBareAck }
+                        let ackedGroupIds = Set(vm.groupMessages.filter { $0.isBareAck }.compactMap { $0.parentId })
+                        ForEach(Array(displayMsgs.enumerated()), id: \.element.id) { idx, msg in
+                            VStack(alignment: msg.role == "user" ? .trailing : .leading, spacing: 2) {
+                                groupMessageBubble(msg, isLast: idx == displayMsgs.count - 1)
+                                if ackedGroupIds.contains(msg.id) {
+                                    Text("👍").font(.system(size: 14)).padding(.horizontal, 4)
+                                }
+                            }
                         }
                         Color.clear.frame(height: 16).id("gc-bottom")
                     }
@@ -385,6 +392,10 @@ struct ContentView: View {
                                 withAnimation { showCopiedToast = false }
                             }
                         } label: { Label("Copy", systemImage: "doc.on.doc") }
+                        if !isUser {
+                            Button { vm.sendUserAck(msgId: msg.id) }
+                                label: { Label("Acknowledge", systemImage: "hand.thumbsup") }
+                        }
                     }
                 // Timestamp on last message
                 if isLast {
@@ -1502,12 +1513,18 @@ struct ContentView: View {
 
     private func messageGroupView(_ group: MessageGroup) -> some View {
         let color = vm.activeSession.map { voiceColor($0.voice) } ?? Color.cTextSec
+        let ackedIds = Set(vm.activeMessages.filter { $0.isBareAck }.compactMap { $0.parentId })
         return VStack(alignment: group.role == "user" ? .trailing : .leading, spacing: 3) {
             ForEach(Array(group.messages.enumerated()), id: \.element.id) { idx, msg in
-                chatBubble(msg,
-                    isFirst: idx == 0,
-                    isLast:  idx == group.messages.count - 1,
-                    role:    group.role)
+                VStack(alignment: group.role == "user" ? .trailing : .leading, spacing: 2) {
+                    chatBubble(msg,
+                        isFirst: idx == 0,
+                        isLast:  idx == group.messages.count - 1,
+                        role:    group.role)
+                    if let mid = msg.msgId, ackedIds.contains(mid) {
+                        Text("👍").font(.system(size: 14)).padding(.horizontal, 4)
+                    }
+                }
             }
         }
     }
