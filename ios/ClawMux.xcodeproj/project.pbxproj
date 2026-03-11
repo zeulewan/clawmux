@@ -14,7 +14,6 @@
 		CE452A75046106310CA1884D /* ClawMuxActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ECE0D61F0C08405ECE874C8 /* ClawMuxActivityAttributes.swift */; };
 		CF4F0E703E3527B992A03CDD /* ClawMuxWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 00A4C7BB4CA3E05A29B0F976 /* ClawMuxWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D8A747936F0FDA5E95EA77BB /* ClawMuxApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFF810E4C0B9F68B1E4AA4AD /* ClawMuxApp.swift */; };
-		F1A2B3C4D5E6F7A8B9C0D1E2 /* DebugHitWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0E1F2 /* DebugHitWindow.swift */; };
 		DCDC60E202EB951E0C20A61E /* ClawMuxWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC5EB4981879BDC3BE644216 /* ClawMuxWidgetBundle.swift */; };
 		F138DA556E94E3230F50457B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4678CAE85F0CB0CD3AC78DD6 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
@@ -55,7 +54,6 @@
 		BC5EB4981879BDC3BE644216 /* ClawMuxWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMuxWidgetBundle.swift; sourceTree = "<group>"; };
 		D7C804BA345F7AE206CF5AF7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		DFF810E4C0B9F68B1E4AA4AD /* ClawMuxApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMuxApp.swift; sourceTree = "<group>"; };
-		A1B2C3D4E5F6A7B8C9D0E1F2 /* DebugHitWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugHitWindow.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -64,8 +62,7 @@
 			children = (
 				4678CAE85F0CB0CD3AC78DD6 /* Assets.xcassets */,
 				DFF810E4C0B9F68B1E4AA4AD /* ClawMuxApp.swift */,
-				A1B2C3D4E5F6A7B8C9D0E1F2 /* DebugHitWindow.swift */,
-				72290AAFED98C8436AD778EF /* ClawMuxViewModel.swift */,
+					72290AAFED98C8436AD778EF /* ClawMuxViewModel.swift */,
 				472435D7BEC5E6A66C89A71A /* ContentView.swift */,
 				D7C804BA345F7AE206CF5AF7 /* Info.plist */,
 			);
@@ -216,8 +213,7 @@
 			files = (
 				CE452A75046106310CA1884D /* ClawMuxActivityAttributes.swift in Sources */,
 				D8A747936F0FDA5E95EA77BB /* ClawMuxApp.swift in Sources */,
-				F1A2B3C4D5E6F7A8B9C0D1E2 /* DebugHitWindow.swift in Sources */,
-				8EBD594CEA424C07342CD79A /* ClawMuxViewModel.swift in Sources */,
+					8EBD594CEA424C07342CD79A /* ClawMuxViewModel.swift in Sources */,
 				34708E5BA49DCFE09A2770E8 /* ContentView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
