@@ -356,7 +356,7 @@ struct InputBarView: View {
         // Mirrors web drawWaveform: voice color, opacity 0.35+level*0.65, bars 4px w / 2px gap
         // Show only the newest 40 bars (40 × 6pt = 240pt) to keep newest samples visible
         let waveColor = vm.activeSession.map { voiceColor($0.voice) } ?? Color.cAccent
-        let levels = vm.audioLevels.suffix(40)
+        let levels = vm.audioLevels.suffix(60)
         return HStack(alignment: .center, spacing: 3) {
             ForEach(Array(levels.enumerated()), id: \.offset) { _, level in
                 RoundedRectangle(cornerRadius: 1)
