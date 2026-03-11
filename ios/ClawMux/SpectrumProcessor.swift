@@ -103,7 +103,10 @@ final class SpectrumProcessor: @unchecked Sendable {
 
         // Normalize: vDSP_fft_zrip scales by 2; divide by N^2 for proper amplitude
         var scale = Float(2.0) / Float(fftSize * fftSize)
-        vDSP_vsmul(&magnitudes, 1, &scale, &magnitudes, 1, vDSP_Length(fftSize / 2))
+        magnitudes.withUnsafeMutableBufferPointer { magBuf in
+            let ptr = magBuf.baseAddress!
+            vDSP_vsmul(ptr, 1, &scale, ptr, 1, vDSP_Length(fftSize / 2))
+        }
 
         // Group bins into bands, apply attack/decay smoothing
         var result = [CGFloat](repeating: 0, count: Self.bandCount)
