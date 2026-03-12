@@ -2065,11 +2065,11 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         URLSession.shared.dataTask(with: req2) { _, _, _ in }.resume()
     }
 
-    // All projects: server-fetched folders merged with live session projects
+    // All projects: use server-fetched folders as the authoritative list.
+    // session.project is a freeform agent-set display string (may be mixed case),
+    // so merging it causes duplicates like "clawmux" + "Clawmux" in the menu.
     var knownProjects: [String] {
-        let fromFolders = folders.map(\.id)
-        let fromSessions = sessions.map(\.project).filter { !$0.isEmpty }
-        return Array(Set(fromFolders + fromSessions)).sorted()
+        folders.map(\.id)
     }
 
     private func markSessionViewing(_ id: String) {
