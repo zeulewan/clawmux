@@ -1094,9 +1094,11 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     }
 
     private func receiveMessage() {
-        webSocketTask?.receive { [weak self] result in
+        let task = webSocketTask
+        task?.receive { [weak self] result in
             Task { @MainActor in
-                guard let self else { return }
+                // Ignore callbacks from stale tasks (old session cancelled during reconnect)
+                guard let self, self.webSocketTask === task else { return }
                 switch result {
                 case .success(let message):
                     self.handleMessage(message)
@@ -1134,12 +1136,16 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         guard let data = try? JSONSerialization.data(withJSONObject: dict),
             let string = String(data: data, encoding: .utf8)
         else { return }
-        webSocketTask?.send(.string(string)) { [weak self] error in
+        let task = webSocketTask
+        task?.send(.string(string)) { [weak self] error in
             if let error {
                 #if DEBUG
                 print("[ws] Send error: \(error)")
                 #endif
-                Task { @MainActor in self?.handleDisconnect() }
+                Task { @MainActor in
+                    guard let self, self.webSocketTask === task else { return }
+                    self.handleDisconnect()
+                }
             }
         }
     }
@@ -2679,6 +2685,7 @@ extension ClawMuxViewModel: URLSessionWebSocketDelegate {
         didOpenWithProtocol protocol: String?
     ) {
         Task { @MainActor in
+            guard session === self.urlSession else { return }
             self.isConnected = true
             self.isConnecting = false
             self.reconnectAttempt = 0   // reset backoff on successful connection
@@ -2704,7 +2711,10 @@ extension ClawMuxViewModel: URLSessionWebSocketDelegate {
         didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
         reason: Data?
     ) {
-        Task { @MainActor in self.handleDisconnect() }
+        Task { @MainActor in
+            guard session === self.urlSession else { return }
+            self.handleDisconnect()
+        }
     }
 
     nonisolated func urlSession(
@@ -2712,7 +2722,10 @@ extension ClawMuxViewModel: URLSessionWebSocketDelegate {
         didCompleteWithError error: (any Error)?
     ) {
         if error != nil {
-            Task { @MainActor in self.handleDisconnect() }
+            Task { @MainActor in
+                guard session === self.urlSession else { return }
+                self.handleDisconnect()
+            }
         }
     }
 }
