@@ -1424,21 +1424,34 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
 
         case "agent_message":
             // Inter-agent message — payload is nested under json["message"]
-            if let sid = sessionId, let msg = json["message"] as? [String: Any] {
+            // NOTE: agent_message events have NO top-level session_id.
+            // Use msg["sender"]/msg["recipient"] (session UUIDs) to route to both sessions,
+            // mirroring web: addMessage(msg.recipient, "from X") + addMessage(msg.sender, "to Y")
+            if let msg = json["message"] as? [String: Any] {
                 let content = msg["content"] as? String ?? ""
-                let senderName = (msg["sender_name"] as? String ?? msg["sender"] as? String ?? "?")
-                let recipName = (msg["recipient_name"] as? String ?? msg["recipient"] as? String ?? "?")
+                let senderName = msg["sender_name"] as? String ?? "?"
+                let recipName = msg["recipient_name"] as? String ?? "?"
                 let sName = senderName.prefix(1).uppercased() + senderName.dropFirst()
                 let rName = recipName.prefix(1).uppercased() + recipName.dropFirst()
                 let isBareAck = (msg["bare_ack"] as? Bool ?? false) || ((msg["parent_id"] != nil) && content.isEmpty)
-                if isBareAck { break }  // bare acks have no text to display without threading UI
-                // Determine direction: if this session is the sender, show "to"; otherwise "from"
-                let senderSession = msg["sender"] as? String
-                let direction = senderSession == sid ? "to \(rName)" : "from \(sName)"
-                let text = "[Agent msg \(direction)] \(content)"
-                addMessage(sid, role: "agent", text: text, ts: json["ts"] as? Double, msgId: msg["id"] as? String)
-                if sid != activeSessionId, let idx = sessionIndex(sid) {
-                    sessions[idx].unreadCount += 1
+                if isBareAck { break }
+                let senderKey = msg["sender"] as? String ?? ""
+                let recipKey = msg["recipient"] as? String ?? ""
+                let ts = json["ts"] as? Double
+                let msgId = msg["id"] as? String
+                // Find sessions by UUID, falling back to label match (some server paths use name as key)
+                let senderSid = sessions.first(where: { $0.id == senderKey || $0.label == senderKey || $0.label.lowercased() == senderName.lowercased() })?.id
+                let recipSid  = sessions.first(where: { $0.id == recipKey  || $0.label == recipKey  || $0.label.lowercased() == recipName.lowercased() })?.id
+                // Add "from X" to recipient's session
+                if let sid = recipSid {
+                    addMessage(sid, role: "agent", text: "[Agent msg from \(sName)] \(content)", ts: ts, msgId: msgId)
+                    if sid != activeSessionId, let idx = sessionIndex(sid) {
+                        sessions[idx].unreadCount += 1
+                    }
+                }
+                // Add "to Y" to sender's session (skip if same session as recipient)
+                if let sid = senderSid, sid != recipSid {
+                    addMessage(sid, role: "agent", text: "[Agent msg to \(rName)] \(content)", ts: ts, msgId: msgId)
                 }
             }
 
