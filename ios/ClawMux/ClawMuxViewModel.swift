@@ -1454,14 +1454,14 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 print("[agent_msg] resolved senderSid=\(senderSid ?? "nil") recipSid=\(recipSid ?? "nil")")
                 // Add "from X" to recipient's session
                 if let sid = recipSid {
-                    addMessage(sid, role: "agent", text: "[Agent msg from \(sName)] \(content)", ts: ts, msgId: msgId)
+                    addMessage(sid, role: "system", text: "[Agent msg from \(sName)] \(content)", ts: ts, msgId: msgId)
                     if sid != activeSessionId, let idx = sessionIndex(sid) {
                         sessions[idx].unreadCount += 1
                     }
                 }
                 // Add "to Y" to sender's session (skip if same session as recipient)
                 if let sid = senderSid, sid != recipSid {
-                    addMessage(sid, role: "agent", text: "[Agent msg to \(rName)] \(content)", ts: ts, msgId: msgId)
+                    addMessage(sid, role: "system", text: "[Agent msg to \(rName)] \(content)", ts: ts, msgId: msgId)
                 }
             }
 
