@@ -12,19 +12,20 @@ struct ChatScrollAreaView: View {
     @Binding var isPulsing: Bool
     @Binding var showCopiedToast: Bool
     @State private var topAnchorId: String? = nil   // first message ID captured before older-message load
+    @State private var cachedMessageGroups: [MessageGroup] = []
 
     var body: some View {
         ScrollViewReader { proxy in
             ZStack(alignment: .bottomTrailing) {
                 ScrollView(showsIndicators: false) {
-                    VStack(spacing: 20) {
+                    LazyVStack(spacing: 20) {
                         if isLoadingOlder {
                             ProgressView()
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 8)
                                 .accessibilityIdentifier("ChatLoadingOlder")
                         }
-                        ForEach(messageGroups) { group in
+                        ForEach(cachedMessageGroups) { group in
                             messageGroupView(group)
                                 .id(group.id)
                                 .transition(.opacity.animation(.easeIn(duration: 0.15)))
@@ -51,12 +52,13 @@ struct ChatScrollAreaView: View {
                 .onChange(of: isLoadingOlder) { _, loading in
                     if loading {
                         // Capture the first visible message before older messages are prepended
-                        topAnchorId = messageGroups.first?.id
+                        topAnchorId = cachedMessageGroups.first?.id
                     } else {
                         topAnchorId = nil
                     }
                 }
                 .onChange(of: vm.activeMessages.count) { _, _ in
+                    rebuildMessageGroups()
                     if isLoadingOlder, let aid = topAnchorId {
                         // Older messages were prepended — scroll to what was the top message
                         var t = Transaction()
@@ -73,11 +75,16 @@ struct ChatScrollAreaView: View {
                 }
                 .onChange(of: vm.activeSession?.activity) { _, _ in scrollBottom(proxy) }
                 .onChange(of: vm.activeSessionId) { _, _ in
+                    rebuildMessageGroups()
                     var t = Transaction()
                     t.disablesAnimations = true
                     withTransaction(t) { proxy.scrollTo("bottom", anchor: .bottom) }
                     isAtBottom = true
                 }
+                .onAppear { rebuildMessageGroups() }
+                .onChange(of: vm.activeMessages.last?.id) { _, _ in rebuildMessageGroups() }
+                .onChange(of: vm.showAgentMessages) { _, _ in rebuildMessageGroups() }
+                .onChange(of: vm.verboseMode) { _, _ in rebuildMessageGroups() }
 
                 if !isAtBottom {
                     Button {
@@ -119,7 +126,7 @@ struct ChatScrollAreaView: View {
         var id: String { role + (messages.first?.msgId ?? messages.first?.id.uuidString ?? "") }
     }
 
-    private var messageGroups: [MessageGroup] {
+    private func rebuildMessageGroups() {
         let filtered = vm.activeMessages.filter { msg in
             if msg.isBareAck { return false }
             if msg.role == "agent" { return vm.showAgentMessages }
@@ -138,7 +145,7 @@ struct ChatScrollAreaView: View {
             }
         }
         if !batch.isEmpty { groups.append(MessageGroup(role: cur!, messages: batch)) }
-        return groups
+        cachedMessageGroups = groups
     }
 
     private func messageGroupView(_ group: MessageGroup) -> some View {
