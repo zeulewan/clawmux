@@ -58,6 +58,7 @@ struct MarkdownContentView: View {
     let text: String
     let foreground: Color
     var fontSize: CGFloat = 15
+    var baseURL: String = ""
 
     /// Parses inline markdown (bold, italic, `code`) using AttributedString so
     /// backtick code spans render as monospaced — LocalizedStringKey does not handle `code`.
@@ -76,6 +77,7 @@ struct MarkdownContentView: View {
         case rule
         case spacing
         case math(String, Bool)     // (expression incl. delimiters, isBlock/display)
+        case image(String, String)  // (alt text, url path)
     }
 
     private func parse(_ raw: String) -> [Block] {
@@ -120,6 +122,11 @@ struct MarkdownContentView: View {
                     result.append(.math("$" + inner + "$", false))
                     i += 1; continue
                 }
+            }
+            // Image: ![alt](url) on its own line
+            if let m = trimmedLine.firstMatch(of: /^!\[([^\]]*)\]\(([^)]+)\)$/) {
+                result.append(.image(String(m.output.1), String(m.output.2)))
+                i += 1; continue
             }
             // Code fence
             if line.hasPrefix("```") {
@@ -273,6 +280,44 @@ struct MarkdownContentView: View {
                 .foregroundStyle(foreground.opacity(0.85))
                 .frame(maxWidth: isBlock ? .infinity : nil, alignment: .center)
                 .padding(isBlock ? 8 : 0)
+
+        case .image(let alt, let path):
+            let resolved: URL? = {
+                if path.hasPrefix("http://") || path.hasPrefix("https://") {
+                    return URL(string: path)
+                }
+                let base = baseURL.hasSuffix("/") ? String(baseURL.dropLast()) : baseURL
+                return URL(string: base + path)
+            }()
+            if let url = resolved {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable()
+                            .scaledToFit()
+                            .frame(maxWidth: .infinity)
+                            .cornerRadius(8)
+                    case .failure:
+                        HStack(spacing: 6) {
+                            Image(systemName: "photo")
+                                .foregroundStyle(Color.cTextTer)
+                            Text(alt.isEmpty ? path : alt)
+                                .font(.system(size: fontSize - 1))
+                                .foregroundStyle(Color.cTextTer)
+                        }
+                    case .empty:
+                        HStack(spacing: 6) {
+                            ProgressView().scaleEffect(0.7)
+                            Text(alt.isEmpty ? "Loading image…" : alt)
+                                .font(.system(size: fontSize - 1))
+                                .foregroundStyle(Color.cTextTer)
+                        }
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
         }
     }
 }

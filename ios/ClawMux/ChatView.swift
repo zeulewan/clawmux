@@ -292,7 +292,8 @@ struct ChatScrollAreaView: View {
             VStack(alignment: role == "user" ? .trailing : .leading, spacing: 3) {
                 Group {
                     if role == "assistant" {
-                        MarkdownContentView(text: msg.text, foreground: Color.cText, fontSize: CGFloat(vm.chatFontSize))
+                        MarkdownContentView(text: msg.text, foreground: Color.cText, fontSize: CGFloat(vm.chatFontSize),
+                                            baseURL: vm.httpBaseURL()?.absoluteString ?? "")
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } else if role == "user" {
                         Text(msg.text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\n", with: " "))

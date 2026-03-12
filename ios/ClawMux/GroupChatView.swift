@@ -159,7 +159,8 @@ struct GroupChatScrollView: View {
                         .padding(.horizontal, 4)
                 }
                 MarkdownContentView(text: msg.text, foreground: Color.cText,
-                                    fontSize: CGFloat(vm.chatFontSize))
+                                    fontSize: CGFloat(vm.chatFontSize),
+                                    baseURL: vm.httpBaseURL()?.absoluteString ?? "")
                     .padding(.horizontal, isUser ? 12 : 14)
                     .padding(.vertical, 8)
                     .background(shape.fill(isUser ? Color.cAccent.opacity(0.18) : Color.cCard))
