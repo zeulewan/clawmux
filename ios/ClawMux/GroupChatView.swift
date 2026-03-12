@@ -80,6 +80,7 @@ struct GroupChatScrollView: View {
                         .padding(.horizontal, 12).padding(.top, 64).padding(.bottom, 8)
                     }
                     .contentMargins(.leading, 48, for: .scrollContent)
+                    .scrollDismissesKeyboard(.interactively)
                     .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
                     .onChange(of: vm.groupMessages.count) { _, _ in
                         guard isAtBottom else { return }
