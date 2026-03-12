@@ -1173,8 +1173,11 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         audio.currentSuppressNextAutoRecord = true
         // If audio is playing, stop it immediately (matches web stop-agent-speaking)
         if isPlaying || isPlaybackPaused { interruptPlayback() }
-        guard let sid = activeSessionId else { return }
-        sendJSON(["session_id": sid, "type": "interrupt"])
+        guard let sid = activeSessionId, let baseURL = httpBaseURL() else { return }
+        // Match web: POST /api/sessions/{id}/interrupt (not a WS message — server has no WS handler for "interrupt")
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/sessions/\(sid)/interrupt"))
+        req.httpMethod = "POST"
+        URLSession.shared.dataTask(with: req) { _, _, _ in }.resume()
     }
 
     // Matches web transportPause() — pause/resume in-progress audio without discarding
@@ -1444,9 +1447,11 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 let recipKey = msg["recipient"] as? String ?? ""
                 let ts = json["ts"] as? Double
                 let msgId = msg["id"] as? String
+                print("[agent_msg] sender=\(senderKey) senderName=\(senderName) recip=\(recipKey) recipName=\(recipName) sessions=\(sessions.map { "\($0.id.prefix(8)):\($0.label)" })")
                 // Find sessions by UUID, falling back to label match (some server paths use name as key)
                 let senderSid = sessions.first(where: { $0.id == senderKey || $0.label == senderKey || $0.label.lowercased() == senderName.lowercased() })?.id
                 let recipSid  = sessions.first(where: { $0.id == recipKey  || $0.label == recipKey  || $0.label.lowercased() == recipName.lowercased() })?.id
+                print("[agent_msg] resolved senderSid=\(senderSid ?? "nil") recipSid=\(recipSid ?? "nil")")
                 // Add "from X" to recipient's session
                 if let sid = recipSid {
                     addMessage(sid, role: "agent", text: "[Agent msg from \(sName)] \(content)", ts: ts, msgId: msgId)
