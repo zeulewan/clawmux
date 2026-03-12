@@ -244,8 +244,8 @@ struct ContentView: View {
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(color)  // agent voice color
                     .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                    .layoutPriority(1)  // protect name from being squeezed by fixed-size pills
+                    .truncationMode(.tail)
+                    .layoutPriority(2)  // protect name from being squeezed by fixed-size pills
 
                 // Model label — confirmationDialog avoids iOS 26 Menu portal blocker
                 Button { showModelPicker = true } label: {
