@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		1599B53E39A3CDEE562D5033 /* MarkdownContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84B700834F3EECA10468DC91 /* MarkdownContentView.swift */; };
+		A1B2C3D4E5F60718293A4B5C /* MathView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6E5D4C3B2A109876543210F /* MathView.swift */; };
 		31BD7BC304045245A8CD50E0 /* AudioManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBE370FB4A09E91CFDAB57F9 /* AudioManager.swift */; };
 		34708E5BA49DCFE09A2770E8 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 472435D7BEC5E6A66C89A71A /* ContentView.swift */; };
 		3BDA61563FEF791C08A9111B /* SpectrumProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E27E8D2876D7E37F89DAEACD /* SpectrumProcessor.swift */; };
@@ -82,6 +83,7 @@
 		7ECE0D61F0C08405ECE874C8 /* ClawMuxActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMuxActivityAttributes.swift; sourceTree = "<group>"; };
 		82E2D679C152E4238145F02E /* ClawMuxUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ClawMuxUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		84B700834F3EECA10468DC91 /* MarkdownContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownContentView.swift; sourceTree = "<group>"; };
+		F6E5D4C3B2A109876543210F /* MathView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MathView.swift; sourceTree = "<group>"; };
 		999F598E79709CAC7E4BA9DE /* TouchBlockerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TouchBlockerTests.swift; sourceTree = "<group>"; };
 		A3DE4F7720F3C77DAED314F6 /* ShapeHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShapeHelpers.swift; sourceTree = "<group>"; };
 		A98C93E4123AFD12DB5663DE /* ClawMux.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ClawMux.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -111,6 +113,7 @@
 				D7C804BA345F7AE206CF5AF7 /* Info.plist */,
 				D4385E6F9723F86B5AFE1680 /* InputBarView.swift */,
 				84B700834F3EECA10468DC91 /* MarkdownContentView.swift */,
+				F6E5D4C3B2A109876543210F /* MathView.swift */,
 				D547095052AD2B437A196FA2 /* NotesPanelView.swift */,
 				BB917084CE6B997C8AA16A44 /* SettingsView.swift */,
 				A3DE4F7720F3C77DAED314F6 /* ShapeHelpers.swift */,
@@ -363,6 +366,7 @@
 				CBA4E6BE8BA5D2F2DA3D0192 /* GroupChatView.swift in Sources */,
 				EF98BD8285F5FAF97C9985E9 /* InputBarView.swift in Sources */,
 				1599B53E39A3CDEE562D5033 /* MarkdownContentView.swift in Sources */,
+				A1B2C3D4E5F60718293A4B5C /* MathView.swift in Sources */,
 				B9B8149250E7E844CE7BECE7 /* NotesPanelView.swift in Sources */,
 				90993452C4CA5B2F35471F21 /* SettingsView.swift in Sources */,
 				CC9ABF885DDD9CF628A35EA0 /* ShapeHelpers.swift in Sources */,
