@@ -13,6 +13,8 @@ struct SidebarView: View {
     @Binding var showCreateGroupChat: Bool
     @Binding var newGroupChatName: String
 
+    @State private var dropTargetVoiceId: String? = nil
+
     var body: some View {
         sidebarStripView
     }
@@ -379,11 +381,52 @@ struct SidebarView: View {
 
             if !collapsed {
                 VStack(spacing: 2) {
-                    ForEach(voices) { voice in agentCard(voice) }
+                    ForEach(voices) { voice in
+                        agentCard(voice)
+                            .draggable(voice.id)
+                            .overlay {
+                                if dropTargetVoiceId == voice.id {
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .strokeBorder(Color.cAccent.opacity(0.6), lineWidth: 1.5)
+                                }
+                            }
+                            .dropDestination(for: String.self) { items, _ in
+                                guard let dropped = items.first else { return false }
+                                handleAgentDrop(dropped, onto: voice.id, inFolderNamed: project)
+                                return true
+                            } isTargeted: { targeted in
+                                dropTargetVoiceId = targeted ? voice.id : (dropTargetVoiceId == voice.id ? nil : dropTargetVoiceId)
+                            }
+                    }
                 }
                 .padding(.horizontal, 8)
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
+        }
+        .dropDestination(for: String.self) { items, _ in
+            guard let dropped = items.first,
+                  let slug = vm.folders.first(where: { $0.name == project })?.id,
+                  vm.folders.first(where: { $0.voices.contains(dropped) })?.id != slug
+            else { return false }
+            vm.moveVoiceToFolder(dropped, targetSlug: slug)
+            return true
+        }
+    }
+
+    private func handleAgentDrop(_ voiceId: String, onto targetVoiceId: String, inFolderNamed folderName: String) {
+        guard let slug = vm.folders.first(where: { $0.name == folderName })?.id else { return }
+        let sourceSlug = vm.folders.first(where: { $0.voices.contains(voiceId) })?.id
+        if sourceSlug == slug {
+            var voices = vm.folders.first(where: { $0.id == slug })?.voices ?? []
+            voices.removeAll { $0 == voiceId }
+            if let insertIdx = voices.firstIndex(of: targetVoiceId) {
+                voices.insert(voiceId, at: insertIdx)
+            } else {
+                voices.append(voiceId)
+            }
+            vm.reorderVoicesInFolder(slug, voices: voices)
+        } else {
+            vm.moveVoiceToFolder(voiceId, targetSlug: slug)
         }
     }
 

@@ -2070,6 +2070,31 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         URLSession.shared.dataTask(with: req2) { _, _, _ in }.resume()
     }
 
+    func reorderVoicesInFolder(_ slug: String, voices: [String]) {
+        guard let baseURL = httpBaseURL() else { return }
+        if let fi = folders.firstIndex(where: { $0.id == slug }) {
+            folders[fi].voices = voices
+        }
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/projects/\(slug)/voices"))
+        req.httpMethod = "PUT"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["voices": voices])
+        URLSession.shared.dataTask(with: req) { _, _, _ in }.resume()
+    }
+
+    func moveVoiceToFolder(_ voiceId: String, targetSlug: String) {
+        guard let baseURL = httpBaseURL() else { return }
+        for i in folders.indices { folders[i].voices.removeAll { $0 == voiceId } }
+        if let fi = folders.firstIndex(where: { $0.id == targetSlug }) {
+            if !folders[fi].voices.contains(voiceId) { folders[fi].voices.append(voiceId) }
+        }
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/agents/\(voiceId)/assign"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["project": targetSlug])
+        URLSession.shared.dataTask(with: req) { _, _, _ in }.resume()
+    }
+
     // All projects: use server-fetched folders as the authoritative list.
     // session.project is a freeform agent-set display string (may be mixed case),
     // so merging it causes duplicates like "clawmux" + "Clawmux" in the menu.
