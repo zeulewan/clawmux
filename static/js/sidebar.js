@@ -155,6 +155,7 @@ function updateLayout() {
     controls.style.display = 'none';
     textInputBar.classList.remove('active');
   }
+  if (typeof window._updateScrollBtnPos === 'function') window._updateScrollBtnPos();
 }
 
 // --- Welcome view (no chat selected) ---

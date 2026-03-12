@@ -2437,17 +2437,22 @@ restoreInputMode();
 initDragDrop();
 _initChatScroll();
 
-// Keep scroll-to-bottom button above the controls pill
+// Keep scroll-to-bottom button above the controls pill or text input bar (whichever is taller)
 (function() {
   const controlsEl = document.getElementById('controls');
+  const textBar = document.getElementById('text-input-bar');
   const scrollBtn = document.getElementById('scroll-bottom-btn');
-  if (!controlsEl || !scrollBtn) return;
-  function _updateScrollBtnPos() {
-    const h = controlsEl.offsetHeight;
+  if (!scrollBtn) return;
+  window._updateScrollBtnPos = function() {
+    const h = Math.max(
+      controlsEl ? controlsEl.offsetHeight : 0,
+      textBar ? textBar.offsetHeight : 0
+    );
     scrollBtn.style.bottom = (h + 16) + 'px';
-  }
-  _updateScrollBtnPos();
-  new ResizeObserver(_updateScrollBtnPos).observe(controlsEl);
+  };
+  window._updateScrollBtnPos();
+  if (controlsEl) new ResizeObserver(window._updateScrollBtnPos).observe(controlsEl);
+  if (textBar) new ResizeObserver(window._updateScrollBtnPos).observe(textBar);
 })();
 // Loading progress bar — advances through stages, completes when sidebar ready
 window._loadingBar = (function() {
