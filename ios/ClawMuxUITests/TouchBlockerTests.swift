@@ -202,14 +202,14 @@ final class TouchBlockerTests: XCTestCase {
         let sidebarScroll = app.scrollViews["SidebarScrollView"].firstMatch
         XCTAssertTrue(sidebarScroll.waitForExistence(timeout: 5), "SidebarScrollView must exist")
 
-        // Collect visible agent buttons — they have staticText labels inside
-        // Agent names are things like "Sky", "Alloy", "Nova", "Onyx", etc.
-        let agentNames = ["Sky", "Alloy", "Nova", "Onyx", "Echo", "Sarah"]
+        // Find agent cards by accessibilityIdentifier "AgentCard-{voiceId}"
+        // Known voice IDs in order: af_sky, af_alloy, af_nova, af_echo, af_sarah, am_onyx, am_echo
+        let voiceIds = ["af_sky", "af_alloy", "af_nova", "af_echo", "af_sarah", "am_onyx", "am_adam"]
         var firstCard: XCUIElement? = nil
         var secondCard: XCUIElement? = nil
 
-        for name in agentNames {
-            let el = app.staticTexts[name].firstMatch
+        for vid in voiceIds {
+            let el = app.buttons["AgentCard-\(vid)"].firstMatch
             if el.waitForExistence(timeout: 2) {
                 if firstCard == nil { firstCard = el }
                 else if secondCard == nil { secondCard = el; break }
@@ -217,11 +217,11 @@ final class TouchBlockerTests: XCTestCase {
         }
 
         guard let src = secondCard, let dst = firstCard else {
-            XCTFail("Could not find two agent cards in sidebar — need at least 2 visible agents")
+            XCTFail("Could not find two agent cards — AgentCard-{voiceId} identifiers not found")
             return
         }
 
-        print("[DnDTest] Dragging '\(src.label)' onto '\(dst.label)'")
+        print("[DnDTest] Dragging '\(src.identifier)' onto '\(dst.identifier)'")
         saveScreenshot("dnd_03_before_drag")
 
         // Perform drag: long-press src, drag to dst
@@ -238,21 +238,25 @@ final class TouchBlockerTests: XCTestCase {
         sleep(1)
         saveScreenshot("dnd_05_scrolled_for_second_folder")
 
-        // Try to drag first agent to any folder section header (they are plain buttons with uppercase text)
-        // Folder headers show as "CLAWMUX", "DEFAULT", etc. — find one different from the first agent's folder
-        let folderHeaders = app.buttons.allElementsBoundByIndex.filter {
-            let lbl = $0.label.uppercased()
-            return lbl == $0.label && lbl.count > 2 && lbl != "SETTINGS" && lbl != "NOTES"
+        // Cross-folder drag: drag firstCard to a different folder section header
+        // Folder headers have labels like "CLAWMUX  9" or "DEFAULT  3"
+        // Collect all buttons whose labels contain only uppercase + spaces + digits
+        let allButtons = app.buttons.allElementsBoundByIndex
+        let folderButtons = allButtons.filter { btn in
+            let lbl = btn.label
+            return lbl.count > 2 && lbl == lbl.uppercased() && !["SETTINGS", "NOTES"].contains(lbl)
+                && !lbl.hasPrefix("AgentCard")
         }
-        if folderHeaders.count >= 2, let srcAgent = firstCard {
-            let targetFolder = folderHeaders[1]
-            print("[DnDTest] Cross-folder drag: '\(srcAgent.label)' to folder '\(targetFolder.label)'")
+        if folderButtons.count >= 2, let srcAgent = firstCard {
+            // Pick a folder header that is NOT the one the src agent is in
+            let targetFolder = folderButtons.first { $0.label != folderButtons[0].label } ?? folderButtons[1]
+            print("[DnDTest] Cross-folder drag: '\(srcAgent.identifier)' to folder '\(targetFolder.label)'")
             srcAgent.press(forDuration: 1.0, thenDragTo: targetFolder)
             sleep(2)
             saveScreenshot("dnd_06_after_cross_folder_drag")
         } else {
             saveScreenshot("dnd_06_no_second_folder_found")
-            print("[DnDTest] Only one folder visible — skipping cross-folder drag")
+            print("[DnDTest] Only one folder visible — skipping cross-folder drag (folderButtons count: \(folderButtons.count))")
         }
 
         XCTAssertTrue(app.exists, "App should survive drag-and-drop sequence")

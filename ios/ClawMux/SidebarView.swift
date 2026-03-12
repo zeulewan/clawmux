@@ -700,6 +700,7 @@ struct SidebarView: View {
                 }
             )
         }
+        .accessibilityIdentifier("AgentCard-\(voice.id)")
         .buttonStyle(.plain)
         .contextMenu {
             if session == nil {
