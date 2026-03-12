@@ -67,6 +67,15 @@ struct MarkdownContentView: View {
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(str)
     }
 
+    /// Strips `$` / `$$` delimiters from a math expression before passing to KaTeX.
+    private static func stripMathDelimiters(_ expr: String, isBlock: Bool) -> String {
+        var s = expr
+        let delim = isBlock ? "$$" : "$"
+        if s.hasPrefix(delim) { s = String(s.dropFirst(delim.count)) }
+        if s.hasSuffix(delim) { s = String(s.dropLast(delim.count)) }
+        return s.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private enum Block {
         case text(String)
         case header(Int, String)
@@ -273,13 +282,8 @@ struct MarkdownContentView: View {
                     .strokeBorder(Color.cBorder, lineWidth: 0.5))
 
         case .math(let expr, let isBlock):
-            // LaTeX rendering placeholder — renders raw expression in monospaced block
-            // until a working native LaTeX library is integrated
-            Text(expr)
-                .font(.system(size: isBlock ? fontSize - 1 : fontSize, design: .monospaced))
-                .foregroundStyle(foreground.opacity(0.85))
-                .frame(maxWidth: isBlock ? .infinity : nil, alignment: .center)
-                .padding(isBlock ? 8 : 0)
+            MathBlockView(expression: Self.stripMathDelimiters(expr, isBlock: isBlock),
+                          isBlock: isBlock)
 
         case .image(let alt, let path):
             let resolved: URL? = {
