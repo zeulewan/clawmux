@@ -356,6 +356,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         didSet {
             UserDefaults.standard.set(sttEnabled, forKey: "sttEnabled")
             updateSetting("stt_enabled", value: sttEnabled)
+            // STT off → force text-only mode (no voice input without transcription)
+            if !sttEnabled { inputMode = "typing" }
         }
     }
     @Published var sttURL: String {
@@ -609,6 +611,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         self.defaultEffort    = UserDefaults.standard.string(forKey: "defaultEffort")    ?? "medium"
         self.chatFontSize     = UserDefaults.standard.object(forKey: "chatFontSize")     as? Int  ?? 14
         super.init()
+
+        // Enforce: STT off at launch → stay in typing mode regardless of stored inputMode
+        if !sttEnabled { inputMode = "typing" }
 
         // One-time migration: remove stale UserDefaults chat cache (server API is source of truth)
         UserDefaults.standard.removeObject(forKey: "voice-hub-chats")

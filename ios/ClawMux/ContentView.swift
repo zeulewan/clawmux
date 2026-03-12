@@ -292,23 +292,25 @@ struct ContentView: View {
                     }
                 }
 
-                // Mode toggle — mirrors web #mode-toggle (two-line: value + "MODE" label)
-                Button { cycleInputMode() } label: {
-                    VStack(spacing: 0) {
-                        Text(vm.typingMode ? "TEXT" : "VOICE")
-                            .font(.system(size: 8, weight: .semibold))
-                            .tracking(0.5)
-                        Text("MODE")
-                            .font(.system(size: 7, weight: .medium))
-                            .tracking(0.5)
-                            .opacity(0.7)
+                // Mode toggle — hidden when STT is off (text-only mode forced)
+                if vm.sttEnabled {
+                    Button { cycleInputMode() } label: {
+                        VStack(spacing: 0) {
+                            Text(vm.typingMode ? "TEXT" : "VOICE")
+                                .font(.system(size: 8, weight: .semibold))
+                                .tracking(0.5)
+                            Text("MODE")
+                                .font(.system(size: 7, weight: .medium))
+                                .tracking(0.5)
+                                .opacity(0.7)
+                        }
+                        .foregroundStyle(Color.cTextSec)
+                        .lineLimit(1)
+                        .padding(.horizontal, 8).padding(.vertical, 2)
+                        .background(Color.glass, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
+                        .fixedSize()
                     }
-                    .foregroundStyle(Color.cTextSec)
-                    .lineLimit(1)
-                    .padding(.horizontal, 8).padding(.vertical, 2)
-                    .background(Color.glass, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
-                    .fixedSize()
                 }
             }
 
