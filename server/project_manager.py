@@ -219,6 +219,25 @@ class ProjectManager:
         self._save()
         log.info("Reordered voices for project %s: %s", slug, voices)
 
+    def move_voice(self, voice_id: str, new_project: str) -> None:
+        """Move a voice from its current project to a new one.
+
+        Removes the voice from all other projects' voices lists and adds it
+        to new_project's list (if not already present).
+        """
+        if new_project not in self.projects:
+            raise ValueError(f"Project '{new_project}' not found")
+        for slug, proj in self._data["projects"].items():
+            voices = proj.get("voices", [])
+            if voice_id in voices and slug != new_project:
+                voices.remove(voice_id)
+                proj["voices"] = voices
+        dest = self._data["projects"][new_project].setdefault("voices", [])
+        if voice_id not in dest:
+            dest.append(voice_id)
+        self._save()
+        log.info("Moved voice %s → project %s", voice_id, new_project)
+
     def get_session_dir(self, voice_id: str, project_slug: str | None = None) -> Path:
         """Get the work directory for a voice.
 

@@ -230,9 +230,10 @@ async def stuck_buffer_monitor_loop() -> None:
         await asyncio.sleep(10)
         for session_id in list(session_mgr.sessions):
             session = session_mgr.sessions.get(session_id)
-            if not session or session.state in (AgentState.DEAD, AgentState.PROCESSING, AgentState.COMPACTING) or not session.work_dir:
+            if not session or session.state in (AgentState.DEAD, AgentState.COMPACTING) or not session.work_dir:
                 _stuck_seen.pop(session_id, None)
                 continue
+            is_processing = session.state == AgentState.PROCESSING
             try:
                 result = await asyncio.create_subprocess_exec(
                     "tmux", "capture-pane", "-t", session.tmux_session, "-p",
@@ -247,13 +248,19 @@ async def stuck_buffer_monitor_loop() -> None:
             # 1. Long messages: Claude Code compresses as "[Pasted text #N +M lines]"
             # 2. Short/medium messages: shows as "❯ <content>" with content after the prompt
             #    Multi-line pastes can span several lines above the status bar.
+            # For PROCESSING sessions, only check patterns 1 (definitive stuck text) —
+            # pattern 2 (❯ with content) can appear mid-injection and must be skipped to
+            # avoid pressing Enter on actively-running-tool sessions.
             last_lines = pane.strip().splitlines()[-10:]
             snippet = "\n".join(last_lines)
-            is_stuck = (
-                "[Pasted text" in snippet
-                or "[Typed text" in snippet
-                or any(line.startswith('❯') and len(line.rstrip()) > 1 for line in last_lines)
-            )
+            if is_processing:
+                is_stuck = "[Pasted text" in snippet or "[Typed text" in snippet
+            else:
+                is_stuck = (
+                    "[Pasted text" in snippet
+                    or "[Typed text" in snippet
+                    or any(line.startswith('❯') and len(line.rstrip()) > 1 for line in last_lines)
+                )
             if is_stuck:
                 count = _stuck_seen.get(session_id, 0) + 1
                 _stuck_seen[session_id] = count
@@ -311,17 +318,26 @@ async def compaction_monitor_loop() -> None:
                     # Most recent compaction-related line says "compacted" (done)
                     break
             was_compacting = session.state == AgentState.COMPACTING
-            if is_compacting != was_compacting:
-                if is_compacting:
-                    session.set_state(AgentState.COMPACTING)
-                else:
-                    session.set_state(AgentState.PROCESSING)
+            if is_compacting and not was_compacting:
+                # Compaction just started — transition to COMPACTING
+                session.set_state(AgentState.COMPACTING)
                 await send_to_browser({
                     "type": "compaction_status",
                     "session_id": session_id,
-                    "compacting": is_compacting,
+                    "compacting": True,
                 })
-                log.info("[%s] Compaction %s", session_id, "started" if is_compacting else "finished")
+                log.info("[%s] Compaction started", session_id)
+            elif not is_compacting and was_compacting:
+                # Compaction just ended — do NOT change state here.
+                # The stop hook will fire and call agent_idle → IDLE.
+                # Setting PROCESSING here races with the stop hook and creates a
+                # spurious PROCESSING state between COMPACTING and IDLE.
+                await send_to_browser({
+                    "type": "compaction_status",
+                    "session_id": session_id,
+                    "compacting": False,
+                })
+                log.info("[%s] Compaction finished (awaiting stop hook → IDLE)", session_id)
 
 
 # --- TTS / STT (extracted to voice.py) ---
@@ -1357,6 +1373,12 @@ async def assign_agent(voice_id: str, request: Request):
         return JSONResponse({"error": "Agent not found"}, status_code=404)
     log.info("[agents] Assigned %s → project=%s role=%s repo=%s",
              voice_id, updated.project, updated.role, updated.repo)
+    # Sync projects.json voices list when project changes
+    if "project" in fields:
+        try:
+            project_mgr.move_voice(voice_id, fields["project"])
+        except ValueError as e:
+            log.warning("[agents] move_voice failed: %s", e)
     # Auto-regenerate CLAUDE.md for the reassigned agent
     session = next((s for s in session_mgr.sessions.values() if s.voice == voice_id), None)
     if session and session.work_dir:
@@ -1677,7 +1699,7 @@ async def delete_project(slug: str):
 # ── Group Chat API ────────────────────────────────────────────────────────────
 
 _GROUPS_DIR = hub_config.CLAWMUX_HOME / "groups"
-_GROUPS_META = hub_config.CLAWMUX_HOME / "groups.json"
+_GROUPS_META = hub_config.DATA_DIR / "groups.json"
 
 
 def _label_for_voice(voice_id: str) -> str:
