@@ -283,7 +283,7 @@ struct SidebarView: View {
                         }
                     }
                 } label: {
-                    Label("Move to Project", systemImage: "folder")
+                    Label("Move to Folder", systemImage: "folder")
                 }
             }
             if session != nil && !vm.knownGroupChats.isEmpty {
@@ -690,7 +690,7 @@ struct SidebarView: View {
                                 else { Text(proj) }
                             }
                         }
-                    } label: { Label("Move to Project", systemImage: "folder") }
+                    } label: { Label("Move to Folder", systemImage: "folder") }
                 }
                 if !vm.knownGroupChats.isEmpty {
                     Menu {
