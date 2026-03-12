@@ -1655,19 +1655,19 @@ function sendAudio(sessionId) {
     const b64 = reader.result.split(',')[1];
     const msgType = isInterjection ? 'interjection' : 'audio';
     ws.send(JSON.stringify({ session_id: sessionId, type: msgType, data: b64 }));
-    if (isInterjection) {
-      // Re-enable mic after sending interjection (agent is still busy)
-      setTimeout(() => {
-        micBtn.classList.remove('processing');
-        micBtn.disabled = false;
-        updateMicUI();
+    // Re-enable mic after sending — agent may take a while to respond
+    setTimeout(() => {
+      micBtn.classList.remove('processing');
+      micBtn.disabled = false;
+      updateMicUI();
+      if (isInterjection) {
         // Restart thinking VAD to listen for more interjections
         const s = sessions.get(sessionId);
         if (s && s.sessionState === 'processing' && sessionId === activeSessionId) {
           startThinkingVAD(sessionId);
         }
-      }, 500);
-    }
+      }
+    }, 500);
   };
   reader.onerror = () => {
     clearTimeout(_processingTimeout);
