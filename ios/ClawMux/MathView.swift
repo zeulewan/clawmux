@@ -18,6 +18,9 @@ struct MathView: UIViewRepresentable {
     let isBlock: Bool
     @Binding var height: CGFloat
 
+    // Cache rendered heights by expression so repeated renders skip WKWebView reload.
+    static var heightCache: [String: CGFloat] = [:]
+
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeUIView(context: Context) -> WKWebView {
@@ -96,17 +99,19 @@ struct MathView: UIViewRepresentable {
 
         func userContentController(_ c: WKUserContentController, didReceive m: WKScriptMessage) {
             guard m.name == "height", let raw = m.body as? NSNumber else { return }
-            let h = CGFloat(raw.intValue)
-            DispatchQueue.main.async { self.parent.height = max(h, 20) }
+            let h = max(CGFloat(raw.intValue), 20)
+            MathView.heightCache[parent.expression] = h
+            DispatchQueue.main.async { self.parent.height = h }
         }
 
         // Fallback: if JS message handler doesn't fire, measure after navigation finishes
         func webView(_ wv: WKWebView, didFinish _: WKNavigation!) {
             wv.evaluateJavaScript("Math.ceil(document.body.scrollHeight)") { r, _ in
                 guard let raw = r as? Int else { return }
-                let h = CGFloat(raw)
+                let h = max(CGFloat(raw), 20)
+                MathView.heightCache[self.parent.expression] = h
                 DispatchQueue.main.async {
-                    if self.parent.height < 20 { self.parent.height = max(h, 20) }
+                    if self.parent.height < 20 { self.parent.height = h }
                 }
             }
         }
@@ -123,5 +128,8 @@ struct MathBlockView: View {
     var body: some View {
         MathView(expression: expression, isBlock: isBlock, height: $height)
             .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
+            .onAppear {
+                if let cached = MathView.heightCache[expression] { height = cached }
+            }
     }
 }

@@ -62,9 +62,18 @@ struct MarkdownContentView: View {
 
     /// Parses inline markdown (bold, italic, `code`) using AttributedString so
     /// backtick code spans render as monospaced — LocalizedStringKey does not handle `code`.
+    private static let attrCache = NSCache<NSString, NSAttributedString>()
+
     private static func inlineMarkdown(_ str: String) -> AttributedString {
-        (try? AttributedString(markdown: str,
+        if let cached = attrCache.object(forKey: str as NSString) {
+            return (try? AttributedString(cached, including: \.foundation)) ?? AttributedString(str)
+        }
+        let result = (try? AttributedString(markdown: str,
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(str)
+        if let ns = try? NSAttributedString(result, including: \.foundation) {
+            attrCache.setObject(ns, forKey: str as NSString)
+        }
+        return result
     }
 
     /// Strips `$` / `$$` delimiters from a math expression before passing to KaTeX.
@@ -87,6 +96,7 @@ struct MarkdownContentView: View {
         case spacing
         case math(String, Bool)     // (expression incl. delimiters, isBlock/display)
         case image(String, String)  // (alt text, url path)
+        case table(headers: [String], rows: [[String]])
     }
 
     private func parse(_ raw: String) -> [Block] {
@@ -130,6 +140,37 @@ struct MarkdownContentView: View {
                 if !inner.contains("$") {
                     result.append(.math("$" + inner + "$", false))
                     i += 1; continue
+                }
+            }
+            // Markdown table: header row starts/ends with | and next line is separator
+            if trimmedLine.hasPrefix("|") && trimmedLine.hasSuffix("|"),
+               i + 1 < lines.count {
+                let nextTrimmed = lines[i + 1].trimmingCharacters(in: .whitespaces)
+                let isSeparator = nextTrimmed.hasPrefix("|") && nextTrimmed.hasSuffix("|")
+                    && nextTrimmed.replacingOccurrences(of: "|", with: "")
+                        .replacingOccurrences(of: "-", with: "")
+                        .replacingOccurrences(of: ":", with: "")
+                        .trimmingCharacters(in: .whitespaces).isEmpty
+                if isSeparator {
+                    let parseRow: (String) -> [String] = { row in
+                        row.split(separator: "|", omittingEmptySubsequences: false)
+                            .map { $0.trimmingCharacters(in: .whitespaces) }
+                            .filter { !$0.isEmpty || row.hasPrefix("|") }
+                            .dropFirst(row.hasPrefix("|") ? 1 : 0)
+                            .dropLast(row.hasSuffix("|") ? 1 : 0)
+                            .map { $0.trimmingCharacters(in: .whitespaces) }
+                    }
+                    let headers = parseRow(trimmedLine)
+                    i += 2 // skip header + separator
+                    var rows: [[String]] = []
+                    while i < lines.count {
+                        let r = lines[i].trimmingCharacters(in: .whitespaces)
+                        guard r.hasPrefix("|") && r.hasSuffix("|") else { break }
+                        rows.append(parseRow(r))
+                        i += 1
+                    }
+                    result.append(.table(headers: headers, rows: rows))
+                    continue
                 }
             }
             // Image: ![alt](url) on its own line
@@ -285,6 +326,39 @@ struct MarkdownContentView: View {
             MathBlockView(expression: Self.stripMathDelimiters(expr, isBlock: isBlock),
                           isBlock: isBlock)
 
+        case .table(let headers, let rows):
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 0) {
+                    ForEach(headers.indices, id: \.self) { i in
+                        Text(headers[i])
+                            .font(.system(size: fontSize - 1, weight: .semibold))
+                            .foregroundStyle(foreground)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 8).padding(.vertical, 6)
+                        if i < headers.count - 1 { Divider() }
+                    }
+                }
+                .background(Color.canvas2)
+                Divider()
+                ForEach(rows.indices, id: \.self) { r in
+                    HStack(spacing: 0) {
+                        ForEach(rows[r].indices, id: \.self) { c in
+                            Text(rows[r][c])
+                                .font(.system(size: fontSize - 1))
+                                .foregroundStyle(foreground)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 8).padding(.vertical, 5)
+                            if c < rows[r].count - 1 { Divider() }
+                        }
+                    }
+                    if r < rows.count - 1 { Divider() }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(Color.cBorder, lineWidth: 0.5))
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
         case .image(let alt, let path):
             let resolved: URL? = {
                 if path.hasPrefix("http://") || path.hasPrefix("https://") {
@@ -323,5 +397,12 @@ struct MarkdownContentView: View {
                 .frame(maxWidth: .infinity)
             }
         }
+    }
+}
+
+extension MarkdownContentView: Equatable {
+    static func == (lhs: MarkdownContentView, rhs: MarkdownContentView) -> Bool {
+        lhs.text == rhs.text && lhs.foreground == rhs.foreground &&
+        lhs.fontSize == rhs.fontSize && lhs.baseURL == rhs.baseURL
     }
 }

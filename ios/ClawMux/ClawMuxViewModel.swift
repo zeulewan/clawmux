@@ -977,7 +977,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             Task { @MainActor in
                 guard let self, self.isConnected, let last = self.lastPingTime else { return }
                 if Date().timeIntervalSince(last) > 60 {
+                    #if DEBUG
                     print("[ws] No ping for 60s, reconnecting")
+                    #endif
                     self.handleDisconnect()
                 }
             }
@@ -1133,7 +1135,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         else { return }
         webSocketTask?.send(.string(string)) { [weak self] error in
             if let error {
+                #if DEBUG
                 print("[ws] Send error: \(error)")
+                #endif
                 Task { @MainActor in self?.handleDisconnect() }
             }
         }
@@ -1146,7 +1150,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         pendingAudioSend = nil
         let b64 = pending.data.base64EncodedString()
         let type = pending.isInterjection ? "interjection" : "audio"
+        #if DEBUG
         print("[audio] Flushing stashed audio as \(type) for session \(pending.sessionId)")
+        #endif
         sendJSON(["session_id": pending.sessionId, "type": "interjection", "data": b64])
         updateStatusText("Transcribing…", for: pending.sessionId)
     }
@@ -1447,11 +1453,15 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 let recipKey = msg["recipient"] as? String ?? ""
                 let ts = json["ts"] as? Double
                 let msgId = msg["id"] as? String
+                #if DEBUG
                 print("[agent_msg] sender=\(senderKey) senderName=\(senderName) recip=\(recipKey) recipName=\(recipName) sessions=\(sessions.map { "\($0.id.prefix(8)):\($0.label)" })")
+                #endif
                 // Find sessions by UUID, falling back to label match (some server paths use name as key)
                 let senderSid = sessions.first(where: { $0.id == senderKey || $0.label == senderKey || $0.label.lowercased() == senderName.lowercased() })?.id
                 let recipSid  = sessions.first(where: { $0.id == recipKey  || $0.label == recipKey  || $0.label.lowercased() == recipName.lowercased() })?.id
+                #if DEBUG
                 print("[agent_msg] resolved senderSid=\(senderSid ?? "nil") recipSid=\(recipSid ?? "nil")")
+                #endif
                 // Add "from X" to recipient's session
                 if let sid = recipSid {
                     addMessage(sid, role: "system", text: "[Agent msg from \(sName)] \(content)", ts: ts, msgId: msgId)
