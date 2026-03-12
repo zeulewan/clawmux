@@ -33,7 +33,9 @@ struct MathView: UIViewRepresentable {
     }
 
     func updateUIView(_ wv: WKWebView, context: Context) {
-        wv.loadHTMLString(buildHTML(), baseURL: nil)
+        // baseURL = app bundle root so relative paths katex/katex.min.{css,js} and
+        // katex/fonts/* (referenced by the CSS) all resolve to bundled resources.
+        wv.loadHTMLString(buildHTML(), baseURL: Bundle.main.resourceURL)
     }
 
     private func buildHTML() -> String {
@@ -50,16 +52,14 @@ struct MathView: UIViewRepresentable {
             .replacingOccurrences(of: "`", with: "\\`")
             .replacingOccurrences(of: "$", with: "\\$")
 
-        // KaTeX loaded synchronously (no defer/async) so the inline script below
-        // runs after katex is fully available. Fonts load async but don't block render.
+        // KaTeX loaded synchronously from bundled local files (no network).
+        // Font URLs in katex.min.css are relative to katex/ so they resolve to
+        // katex/fonts/* within the bundle — no CDN needed.
         return """
         <!DOCTYPE html><html><head>
         <meta name="viewport" content="width=device-width,initial-scale=1,shrink-to-fit=no">
-        <link rel="stylesheet"
-              href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
-              crossorigin="anonymous">
-        <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
-                crossorigin="anonymous"></script>
+        <link rel="stylesheet" href="katex/katex.min.css">
+        <script src="katex/katex.min.js"></script>
         <style>
         *{box-sizing:border-box;margin:0;padding:0}
         html,body{background:transparent;width:100%}
