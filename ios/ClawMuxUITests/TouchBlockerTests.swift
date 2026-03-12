@@ -183,6 +183,81 @@ final class TouchBlockerTests: XCTestCase {
         XCTAssertTrue(app.exists, "App should respond after center tap + sidebar tap sequence")
     }
 
+    // MARK: - Drag-and-drop reorder test
+
+    /// Expands the sidebar, finds two agent cards, drags the second onto the first to reorder,
+    /// then drags an agent from one folder to another folder header.
+    func testDragAndDropAgentReorder() throws {
+        saveScreenshot("dnd_01_launch")
+
+        // Expand sidebar
+        let hamburger = app.buttons["HamburgerButton"].firstMatch
+        XCTAssertTrue(hamburger.waitForExistence(timeout: 8), "HamburgerButton must exist")
+        hamburger.tap()
+        sleep(2)
+        saveScreenshot("dnd_02_sidebar_expanded")
+
+        // Find at least two agent cards by looking for staticTexts with known agent names
+        // Cards are in the expanded sidebar — look for any two agent name labels
+        let sidebarScroll = app.scrollViews["SidebarScrollView"].firstMatch
+        XCTAssertTrue(sidebarScroll.waitForExistence(timeout: 5), "SidebarScrollView must exist")
+
+        // Collect visible agent buttons — they have staticText labels inside
+        // Agent names are things like "Sky", "Alloy", "Nova", "Onyx", etc.
+        let agentNames = ["Sky", "Alloy", "Nova", "Onyx", "Echo", "Sarah"]
+        var firstCard: XCUIElement? = nil
+        var secondCard: XCUIElement? = nil
+
+        for name in agentNames {
+            let el = app.staticTexts[name].firstMatch
+            if el.waitForExistence(timeout: 2) {
+                if firstCard == nil { firstCard = el }
+                else if secondCard == nil { secondCard = el; break }
+            }
+        }
+
+        guard let src = secondCard, let dst = firstCard else {
+            XCTFail("Could not find two agent cards in sidebar — need at least 2 visible agents")
+            return
+        }
+
+        print("[DnDTest] Dragging '\(src.label)' onto '\(dst.label)'")
+        saveScreenshot("dnd_03_before_drag")
+
+        // Perform drag: long-press src, drag to dst
+        src.press(forDuration: 1.0, thenDragTo: dst)
+        sleep(2)
+        saveScreenshot("dnd_04_after_within_folder_drag")
+
+        // App should still be alive and sidebar visible
+        XCTAssertTrue(app.exists, "App should be alive after drag")
+        XCTAssertTrue(sidebarScroll.exists, "SidebarScrollView should still exist after drag")
+
+        // Now try dragging to a different folder header — scroll down to find second folder
+        sidebarScroll.swipeUp()
+        sleep(1)
+        saveScreenshot("dnd_05_scrolled_for_second_folder")
+
+        // Try to drag first agent to any folder section header (they are plain buttons with uppercase text)
+        // Folder headers show as "CLAWMUX", "DEFAULT", etc. — find one different from the first agent's folder
+        let folderHeaders = app.buttons.allElementsBoundByIndex.filter {
+            let lbl = $0.label.uppercased()
+            return lbl == $0.label && lbl.count > 2 && lbl != "SETTINGS" && lbl != "NOTES"
+        }
+        if folderHeaders.count >= 2, let srcAgent = firstCard {
+            let targetFolder = folderHeaders[1]
+            print("[DnDTest] Cross-folder drag: '\(srcAgent.label)' to folder '\(targetFolder.label)'")
+            srcAgent.press(forDuration: 1.0, thenDragTo: targetFolder)
+            sleep(2)
+            saveScreenshot("dnd_06_after_cross_folder_drag")
+        } else {
+            saveScreenshot("dnd_06_no_second_folder_found")
+            print("[DnDTest] Only one folder visible — skipping cross-folder drag")
+        }
+
+        XCTAssertTrue(app.exists, "App should survive drag-and-drop sequence")
+    }
+
     // MARK: - Infinite scroll test
 
     /// Opens the Onyx agent chat and scrolls up three times, verifying older messages load
