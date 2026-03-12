@@ -328,16 +328,17 @@ async def compaction_monitor_loop() -> None:
                 })
                 log.info("[%s] Compaction started", session_id)
             elif not is_compacting and was_compacting:
-                # Compaction just ended — do NOT change state here.
-                # The stop hook will fire and call agent_idle → IDLE.
-                # Setting PROCESSING here races with the stop hook and creates a
-                # spurious PROCESSING state between COMPACTING and IDLE.
+                # Compaction just ended — transition to PROCESSING so this monitor
+                # doesn't keep re-detecting was_compacting=True every 3s and spamming
+                # compaction_status:false events (which cause sidebar flashing).
+                # The stop hook will arrive shortly and transition to IDLE.
+                session.set_state(AgentState.PROCESSING)
                 await send_to_browser({
                     "type": "compaction_status",
                     "session_id": session_id,
                     "compacting": False,
                 })
-                log.info("[%s] Compaction finished (awaiting stop hook → IDLE)", session_id)
+                log.info("[%s] Compaction finished → PROCESSING (stop hook will set IDLE)", session_id)
 
 
 # --- TTS / STT (extracted to voice.py) ---
@@ -1198,10 +1199,17 @@ async def interrupt_session(session_id: str):
     log.info("Interrupted session %s (tmux: %s)", session_id, tmux_name)
 
     # After Escape, Claude Code may not fire its Stop hook — force idle after a delay.
-    # Only acts if agent is still stuck in THINKING/STARTING (not if already IDLE or PROCESSING).
+    # Capture interrupt time so we can detect if state changed AFTER the interrupt
+    # (e.g. a new inbox injection set PROCESSING) — that case should not be overridden.
+    import time as _itime
+    interrupt_at = _itime.monotonic()
+
     async def _delayed_idle():
         await asyncio.sleep(3)
-        if session.state in (AgentState.IDLE, AgentState.PROCESSING, AgentState.DEAD):
+        if session.state in (AgentState.IDLE, AgentState.DEAD):
+            return
+        # If state changed after the interrupt (new injection, new tool use), don't override.
+        if session.last_state_change > interrupt_at:
             return
         session.set_state(AgentState.IDLE)
         session.activity = ""
