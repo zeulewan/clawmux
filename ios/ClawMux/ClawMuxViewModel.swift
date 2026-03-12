@@ -53,11 +53,9 @@ struct VoiceSession: Identifiable {
     var voice: String
     var speed: Double
     var state: AgentState = .starting
-    var messages: [ChatMessage] = []
     var tmuxSession: String = ""
     var pendingListen: Bool = false
     var statusText: String = ""
-    var audioBuffer: [Data] = []
     var project: String = ""
     var projectArea: String = ""
     var role: String = ""
@@ -233,6 +231,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     @Published var isProcessing = false
     @Published var audioLevels: [CGFloat] = []
     let spectrumSource = SpectrumBandSource()   // isolated — updates don't trigger full VM re-renders
+    @Published var messagesBySession: [String: [ChatMessage]] = [:]
+    @Published var audioBufferBySession: [String: [Data]] = [:]
 
     // Controls
     // Input mode: "auto", "ptt", "typing"
@@ -505,7 +505,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     }
 
     var activeMessages: [ChatMessage] {
-        return activeSession?.messages ?? []
+        return messagesBySession[activeSessionId ?? ""] ?? []
     }
 
     var activeVoice: String {
@@ -788,13 +788,13 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     }
 
     private func addMessage(_ sessionId: String, role: String, text: String, ts: Double? = nil, msgId: String? = nil) {
-        guard let idx = sessionIndex(sessionId) else { return }
+        guard sessionIndex(sessionId) != nil else { return }
         // Deduplicate by server message ID
-        if let msgId, sessions[idx].messages.contains(where: { $0.msgId == msgId }) { return }
+        if let msgId, messagesBySession[sessionId]?.contains(where: { $0.msgId == msgId }) == true { return }
         var msg = ChatMessage(role: role, text: text)
         if let ts { msg.timestamp = Date(timeIntervalSince1970: ts) }
         msg.msgId = msgId
-        sessions[idx].messages.append(msg)
+        messagesBySession[sessionId, default: []].append(msg)
     }
 
     // MARK: - Server-Side History
@@ -826,14 +826,14 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             Task { @MainActor in
                 guard let self, let idx = self.sessionIndex(sessionId) else { return }
                 if !chatMessages.isEmpty {
-                    self.sessions[idx].messages = chatMessages
+                    self.messagesBySession[sessionId] = chatMessages
                     // Use server's has_more — counts all stored messages, not just visible ones
                     self.sessions[idx].hasOlderMessages = hasMore
                 } else if let state = initialState {
                     // No history yet — show appropriate placeholder (mirrors web addSession)
                     let isReady = state != .starting && state != .dead
                     let placeholder = isReady ? "Claude connected." : "Session started. Waiting for Claude..."
-                    self.sessions[idx].messages = [ChatMessage(role: "system", text: placeholder)]
+                    self.messagesBySession[sessionId] = [ChatMessage(role: "system", text: placeholder)]
                 }
             }
         }.resume()
@@ -843,12 +843,13 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     // Falls back to full fetchHistory if no cursor is available (empty history).
     // Mirrors web _reconnectSyncSession.
     private func reconnectSyncHistory(voiceId: String, sessionId: String) {
-        guard let idx = sessionIndex(sessionId) else { return }
+        guard sessionIndex(sessionId) != nil else { return }
 
         // Find last message with a server-assigned ID (cursor)
-        let cursor = sessions[idx].messages.reversed().first(where: { $0.msgId != nil })?.msgId
+        let cursor = messagesBySession[sessionId]?.reversed().first(where: { $0.msgId != nil })?.msgId
+        let messagesEmpty = messagesBySession[sessionId]?.isEmpty ?? true
 
-        if cursor == nil && sessions[idx].messages.isEmpty {
+        if cursor == nil && messagesEmpty {
             // No history yet — full fetch with placeholder
             fetchHistory(voiceId: voiceId, sessionId: sessionId)
             return
@@ -887,11 +888,10 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     m.parentId = parentId
                     m.isBareAck = isBareAck
                     if let msgId = mid,
-                        let i = self.sessionIndex(sessionId),
-                        self.sessions[i].messages.contains(where: { $0.msgId == msgId })
+                        self.messagesBySession[sessionId]?.contains(where: { $0.msgId == msgId }) == true
                     { continue } // skip duplicates
-                    if let i = self.sessionIndex(sessionId) {
-                        self.sessions[i].messages.append(m)
+                    if self.sessionIndex(sessionId) != nil {
+                        self.messagesBySession[sessionId, default: []].append(m)
                     }
                 }
             }
@@ -918,7 +918,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
               let baseURL = httpBaseURL() else { completion?(); return }
         let session = sessions[idx]
         // Use timestamp of the oldest currently-loaded message as cursor
-        let oldestTs = sessions[idx].messages.map(\.timestamp.timeIntervalSince1970).min()
+        let oldestTs = messagesBySession[sessionId]?.map(\.timestamp.timeIntervalSince1970).min()
         var comps = URLComponents(
             url: baseURL.appendingPathComponent("api/history/\(session.voice)"),
             resolvingAgainstBaseURL: false)!
@@ -953,13 +953,14 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     return
                 }
                 // Deduplicate: prefer msgId match, fall back to timestamp
-                let existingIds = Set(self.sessions[i].messages.compactMap { $0.msgId })
-                let existingTs  = Set(self.sessions[i].messages.filter { $0.msgId == nil }.map { $0.timestamp.timeIntervalSince1970 })
+                let existing = self.messagesBySession[sessionId] ?? []
+                let existingIds = Set(existing.compactMap { $0.msgId })
+                let existingTs  = Set(existing.filter { $0.msgId == nil }.map { $0.timestamp.timeIntervalSince1970 })
                 let newOlder = older.filter { m in
                     if let mid = m.msgId { return !existingIds.contains(mid) }
                     return !existingTs.contains(m.timestamp.timeIntervalSince1970)
                 }
-                self.sessions[i].messages = newOlder + self.sessions[i].messages
+                self.messagesBySession[sessionId] = newOlder + existing
                 // Use server's has_more — accurate count regardless of message types
                 self.sessions[i].hasOlderMessages = hasMore
                 completion?()
@@ -1490,8 +1491,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 ack.msgId = json["ack_id"] as? String
                 ack.parentId = msgId
                 ack.isBareAck = true
-                if let idx = sessionIndex(sid) {
-                    sessions[idx].messages.append(ack)
+                if sessionIndex(sid) != nil {
+                    messagesBySession[sid, default: []].append(ack)
                 }
             }
 
@@ -1503,8 +1504,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 // Always enqueue — drain immediately only if this is the active session
                 // and nothing is currently playing. This matches web enqueueAudio logic:
                 // never replace a playing player, never drop chunks.
-                if let idx = sessionIndex(sid) {
-                    sessions[idx].audioBuffer.append(audioData)
+                if sessionIndex(sid) != nil {
+                    audioBufferBySession[sid, default: []].append(audioData)
                 }
                 if sid == activeSessionId {
                     if !isPlaying && !isPlaybackPaused { audio.drainAudioBuffer(sid) }
@@ -1549,7 +1550,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     } else if effectiveAutoRecord || bgAutoRecord {
                         // Defer if audio is playing OR buffered — mirrors web pendingListenAfterPlayback
                         let audioActive = isPlaying
-                            || (sessionIndex(sid).map { !sessions[$0].audioBuffer.isEmpty } ?? false)
+                            || !(audioBufferBySession[sid]?.isEmpty ?? true)
                         if audioActive {
                             if let idx = sessionIndex(sid) {
                                 sessions[idx].pendingListen = true
@@ -1583,7 +1584,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 // Mirror web: if audio still active (playing or buffered), stay — let
                 // playback completion drive the next transition via _checkPendingListen
                 let audioStillActive = (isPlaying && audio.currentPlayingSessionId == sid)
-                    || !sessions[idx].audioBuffer.isEmpty
+                    || !(audioBufferBySession[sid]?.isEmpty ?? true)
                 if !audioStillActive {
                     sessions[idx].state = .idle
                     stopThinkingSound()
@@ -1790,7 +1791,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 }
             }
             // Play buffered audio received while in background
-            else if let idx = sessionIndex(id), !sessions[idx].audioBuffer.isEmpty {
+            else if !(audioBufferBySession[id]?.isEmpty ?? true) {
                 audio.drainAudioBuffer(id)
             }
             // Handle pending listen
@@ -2124,6 +2125,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         // Clean up audio state for this session (delegates to AudioManager)
         audio.cleanupSession(id)
         clearSessionPrefs(id)
+        messagesBySession.removeValue(forKey: id)
+        audioBufferBySession.removeValue(forKey: id)
         sessions.removeAll { $0.id == id }
         if activeSessionId == id {
             activeSessionId = sessions.first?.id
@@ -2593,7 +2596,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         let state = ClawMuxActivityAttributes.ContentState(
             voiceName: session.label,
             status: voiceHubStatus(for: session),
-            lastMessage: session.messages.last(where: { $0.role == "assistant" })?
+            lastMessage: messagesBySession[sessionId]?.last(where: { $0.role == "assistant" })?
                 .text.prefix(80).description ?? "",
             inputMode: inputMode
         )
@@ -2618,7 +2621,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         let state = ClawMuxActivityAttributes.ContentState(
             voiceName: session.label,
             status: voiceHubStatus(for: session),
-            lastMessage: session.messages.last(where: { $0.role == "assistant" })?
+            lastMessage: messagesBySession[sessionId]?.last(where: { $0.role == "assistant" })?
                 .text.prefix(80).description ?? "",
             inputMode: inputMode
         )

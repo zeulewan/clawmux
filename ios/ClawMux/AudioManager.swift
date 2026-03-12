@@ -351,7 +351,7 @@ final class AudioManager: NSObject {
         pausedAudioSessionId = nil
         // Clear any remaining buffered audio
         if let idx = vm.sessionIndex(sid) {
-            vm.sessions[idx].audioBuffer.removeAll()
+            vm.audioBufferBySession.removeValue(forKey: sid)
             vm.sessions[idx].statusText = "Ready"
         }
         vm.statusText = "Ready"
@@ -362,9 +362,10 @@ final class AudioManager: NSObject {
     /// Matches web _playNextQueued — never called while isPlaying is true.
     func drainAudioBuffer(_ sessionId: String) {
         guard let vm,
-              let idx = vm.sessionIndex(sessionId),
-              !vm.sessions[idx].audioBuffer.isEmpty else { return }
-        let data = vm.sessions[idx].audioBuffer.removeFirst()
+              var buf = vm.audioBufferBySession[sessionId],
+              !buf.isEmpty else { return }
+        let data = buf.removeFirst()
+        vm.audioBufferBySession[sessionId] = buf.isEmpty ? nil : buf
         playAudio(sessionId, data: data)
     }
 
@@ -1062,9 +1063,7 @@ extension AudioManager: AVAudioPlayerDelegate {
 
             // Drain next chunk before sending playback_done (matches web _playNextQueued behavior:
             // only send playback_done when the per-session queue is fully empty)
-            if !sid.isEmpty, let idx = vm.sessionIndex(sid),
-                !vm.sessions[idx].audioBuffer.isEmpty
-            {
+            if !sid.isEmpty, vm.audioBufferBySession[sid]?.isEmpty == false {
                 self.drainAudioBuffer(sid)
                 return
             }
@@ -1141,8 +1140,8 @@ extension AudioManager: AVAudioPlayerDelegate {
             self.playingSessionId = nil
             vm.statusText = "Audio decode error"
             // Drain stale buffer so it doesn't play on next session switch
-            if !sid.isEmpty, let idx = vm.sessionIndex(sid) {
-                vm.sessions[idx].audioBuffer.removeAll()
+            if !sid.isEmpty {
+                vm.audioBufferBySession.removeValue(forKey: sid)
             }
             if !sid.isEmpty {
                 vm.sendJSON(["session_id": sid, "type": "playback_done"])
