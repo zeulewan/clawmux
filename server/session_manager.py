@@ -436,7 +436,7 @@ class SessionManager:
                 prev = await self.agents_store.get(voice_id)
                 if prev and prev.project:
                     session.project = prev.project
-                    session.project_repo = prev.area or ""
+                    session.project_repo = prev.repo or ""
                 if prev:
                     session.role = prev.role or ""
                     session.task = prev.task or ""

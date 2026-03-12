@@ -819,19 +819,19 @@ function renderSidebar() {
     const isCollapsed = _collapsedProjects.has(slug);
     const voices = (proj.voices || []).map(v => [v, VOICE_NAMES[v] || v.replace(/^[a-z]{2}_/, '').replace(/^./, c => c.toUpperCase())]);
 
-    // Hide default folder if it has no voices
-    if (slug === 'default' && voices.length === 0) {
-      const stale = existingGroups.get(slug);
-      if (stale) stale.remove();
-      continue;
-    }
-
     // Count active agents
     let activeCount = 0;
     for (const [vid] of voices) {
       for (const [, s] of sessions) {
         if (s.voice === vid) { activeCount++; break; }
       }
+    }
+
+    // Hide default folder if it has no active agents
+    if (slug === 'default' && activeCount === 0) {
+      const stale = existingGroups.get(slug);
+      if (stale) stale.remove();
+      continue;
     }
 
     let group = existingGroups.get(slug);

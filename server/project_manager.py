@@ -42,17 +42,6 @@ class ProjectManager:
                         "voices": [],
                     }
                     changed = True
-                # Move any voices not in any project into default
-                all_assigned = set()
-                for slug, proj in data["projects"].items():
-                    if slug != "default":
-                        all_assigned.update(proj.get("voices", []))
-                pool_ids = [v[0] for v in VOICE_POOL]
-                orphaned = [v for v in pool_ids if v not in all_assigned
-                            and v not in data["projects"]["default"].get("voices", [])]
-                if orphaned:
-                    data["projects"]["default"].setdefault("voices", []).extend(orphaned)
-                    changed = True
                 if changed:
                     try:
                         self.projects_file.write_text(json.dumps(data, indent=2))
@@ -62,15 +51,14 @@ class ProjectManager:
                 return data
             except Exception as e:
                 log.error("Failed to load projects.json: %s", e)
-        # Fresh install: create default project with all voices
-        pool_ids = [v[0] for v in VOICE_POOL]
+        # Fresh install: create default project (empty — voices are assigned when spawned)
         return {
             "projects": {
                 "default": {
                     "name": "Default",
                     "created": time.time(),
                     "flat_layout": False,
-                    "voices": pool_ids,
+                    "voices": [],
                 }
             },
             "active_project": "default",
