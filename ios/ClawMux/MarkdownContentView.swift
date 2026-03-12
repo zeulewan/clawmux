@@ -401,7 +401,7 @@ struct MarkdownContentView: View {
 }
 
 extension MarkdownContentView: Equatable {
-    static func == (lhs: MarkdownContentView, rhs: MarkdownContentView) -> Bool {
+    nonisolated static func == (lhs: MarkdownContentView, rhs: MarkdownContentView) -> Bool {
         lhs.text == rhs.text && lhs.foreground == rhs.foreground &&
         lhs.fontSize == rhs.fontSize && lhs.baseURL == rhs.baseURL
     }
