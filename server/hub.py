@@ -1381,6 +1381,9 @@ async def assign_agent(voice_id: str, request: Request):
             log.warning("[agents] move_voice failed: %s", e)
     # Auto-regenerate CLAUDE.md for the reassigned agent
     session = next((s for s in session_mgr.sessions.values() if s.voice == voice_id), None)
+    # Update session.project_slug so _sync_projects_from_sessions() doesn't revert the move
+    if session and "project" in fields:
+        session.project_slug = fields["project"]
     if session and session.work_dir:
         await template_renderer.render_to_file(voice_id, Path(session.work_dir))
     return JSONResponse(updated.to_dict())
