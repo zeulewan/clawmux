@@ -2053,6 +2053,11 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         let voice = sessions[idx].voice
         let area = sessions[idx].projectArea
         sessions[idx].project = project
+        // Optimistically update folders so the sidebar regroups immediately
+        for i in folders.indices { folders[i].voices.removeAll { $0 == voice } }
+        if let fi = folders.firstIndex(where: { $0.id == project }) {
+            if !folders[fi].voices.contains(voice) { folders[fi].voices.append(voice) }
+        }
         var req = URLRequest(url: baseURL.appendingPathComponent("api/project-status/\(id)"))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
