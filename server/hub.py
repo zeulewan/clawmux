@@ -1720,7 +1720,6 @@ async def delete_project(slug: str):
 # ── Group Chat API ────────────────────────────────────────────────────────────
 
 _GROUPS_DIR = hub_config.CLAWMUX_HOME / "groups"
-_GROUPS_META = hub_config.DATA_DIR / "groups.json"
 
 
 def _label_for_voice(voice_id: str) -> str:
@@ -1756,28 +1755,19 @@ def _resolve_voice_id(voice: str) -> str:
 
 
 def _save_groups() -> None:
-    import fcntl
     data = {
         name: {"id": g["id"], "name": g["name"], "voices": list(g["voices"])}
         for name, g in _group_chats.items()
     }
-    try:
-        with open(_GROUPS_META, "w") as f:
-            fcntl.flock(f, fcntl.LOCK_EX)
-            json.dump(data, f)
-            fcntl.flock(f, fcntl.LOCK_UN)
-    except Exception:
-        pass
+    project_mgr.save_groups(data)
 
 
 def _load_groups() -> None:
-    if not _GROUPS_META.exists():
-        return
     try:
-        data = json.loads(_GROUPS_META.read_text())
+        data = project_mgr.get_groups()
         for name, g in data.items():
             raw_voices = g.get("voices", g.get("session_ids", []))
-            # Migrate: normalize any stored labels/short names to proper voice IDs
+            # Normalize any stored labels/short names to proper voice IDs
             normalized = [_resolve_voice_id(v) for v in raw_voices]
             _group_chats[name] = {
                 "id": g["id"],
@@ -2861,35 +2851,15 @@ async def update_settings(request: Request):
 
 
 def _load_settings() -> dict:
-    settings_path = hub_config.DATA_DIR / "settings.json"
-    defaults = {
-        "model": "opus",
-        "effort": "high",
-        "auto_record": False,
-        "auto_end": True,
-        "auto_interrupt": False,
-        "thinking_sounds": True,
-        "audio_cues": True,
-        "tts_enabled": True,
-        "stt_enabled": True,
-        "silent_startup": False,
-        "tts_url": hub_config.KOKORO_URL,
-        "stt_url": hub_config.WHISPER_URL,
-        "quality_mode": "high",
-    }
-    if settings_path.exists():
-        try:
-            stored = json.loads(settings_path.read_text())
-            defaults.update(stored)
-        except Exception:
-            pass
-    return defaults
+    settings = project_mgr.get_settings()
+    # Always inject live URLs in case they've changed at runtime
+    settings.setdefault("tts_url", hub_config.KOKORO_URL)
+    settings.setdefault("stt_url", hub_config.WHISPER_URL)
+    return settings
 
 
 def _save_settings(settings: dict) -> None:
-    settings_path = hub_config.DATA_DIR / "settings.json"
-    settings_path.parent.mkdir(parents=True, exist_ok=True)
-    settings_path.write_text(json.dumps(settings, indent=2))
+    project_mgr.save_settings(settings)
 
 
 
