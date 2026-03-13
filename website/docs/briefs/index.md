@@ -8,3 +8,4 @@ High-level overviews of ClawMux features and direction. Written for humans, not 
 2. [Deployment Modes](deployment-modes.md): How ClawMux will run on different devices and network configurations
 3. [Architecture Refactor](refactor.md): How ClawMux will break apart its monolithic files into maintainable modules
 4. [Message Pipeline](message-pipeline.md): How ClawMux will deliver messages reliably between the hub, agents, and browser
+5. [Multi-Backend Support](multi-backend.md): How ClawMux will support OpenCode, Gemini CLI, and Codex alongside Claude Code — with seamless model switching
