@@ -203,12 +203,14 @@ struct ContentView: View {
 
     private var chatMainView: some View {
         ZStack(alignment: .top) {
+            // ChatScrollArea always alive — never destroyed by debug panel toggle
+            chatScrollArea
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .safeAreaInset(edge: .bottom, spacing: 0) { bottomInputArea }
+
             if vm.showDebug {
                 DebugView(vm: vm)
-            } else {
-                chatScrollArea
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .safeAreaInset(edge: .bottom, spacing: 0) { bottomInputArea }
+                    .transition(.opacity)
             }
             // Copy toast
             if showCopiedToast {
