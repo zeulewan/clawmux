@@ -34,9 +34,11 @@ struct InputBarView: View {
     private var voiceControlBar: some View {
         VStack(spacing: 0) {
             VStack(spacing: 0) {
-                if vm.isRecording {
-                    waveformView.transition(.opacity.combined(with: .move(edge: .bottom)))
-                }
+                // Waveform always occupies layout space — opacity-only transition so the input
+                // bar height never changes. safeAreaInset stays constant → no scroll drift.
+                waveformView
+                    .opacity(vm.isRecording ? 1 : 0)
+                    .animation(.easeInOut(duration: 0.2), value: vm.isRecording)
 
                 if vm.showTranscriptPreview {
                     HStack(spacing: 8) {
