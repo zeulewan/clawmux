@@ -32,6 +32,7 @@
 		DCDC60E202EB951E0C20A61E /* ClawMuxWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC5EB4981879BDC3BE644216 /* ClawMuxWidgetBundle.swift */; };
 		DD0B6C41043DEB376B75D6BE /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8850FD7D2AA1753841CA57F /* ChatView.swift */; };
 		EF98BD8285F5FAF97C9985E9 /* InputBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4385E6F9723F86B5AFE1680 /* InputBarView.swift */; };
+		FB2C3D4E5F6071829A3B4C5D /* MonitorWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1B2C3D4E5F60718293A4B5 /* MonitorWebView.swift */; };
 		F138DA556E94E3230F50457B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4678CAE85F0CB0CD3AC78DD6 /* Assets.xcassets */; };
 		B9C8D7E6F5A4031B2C4D5E6F /* katex in Resources */ = {isa = PBXBuildFile; fileRef = A8B7C6D5E4F3021A1B2C3D4E /* katex */; };
 /* End PBXBuildFile section */
@@ -99,6 +100,7 @@
 		DBE370FB4A09E91CFDAB57F9 /* AudioManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioManager.swift; sourceTree = "<group>"; };
 		DFF810E4C0B9F68B1E4AA4AD /* ClawMuxApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMuxApp.swift; sourceTree = "<group>"; };
 		E27E8D2876D7E37F89DAEACD /* SpectrumProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpectrumProcessor.swift; sourceTree = "<group>"; };
+		FA1B2C3D4E5F60718293A4B5 /* MonitorWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorWebView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -118,6 +120,7 @@
 				84B700834F3EECA10468DC91 /* MarkdownContentView.swift */,
 				F6E5D4C3B2A109876543210F /* MathView.swift */,
 				D547095052AD2B437A196FA2 /* NotesPanelView.swift */,
+				FA1B2C3D4E5F60718293A4B5 /* MonitorWebView.swift */,
 				BB917084CE6B997C8AA16A44 /* SettingsView.swift */,
 				A3DE4F7720F3C77DAED314F6 /* ShapeHelpers.swift */,
 				5C696CC95AF520F9CD224CD2 /* SidebarView.swift */,
@@ -372,6 +375,7 @@
 				1599B53E39A3CDEE562D5033 /* MarkdownContentView.swift in Sources */,
 				A1B2C3D4E5F60718293A4B5C /* MathView.swift in Sources */,
 				B9B8149250E7E844CE7BECE7 /* NotesPanelView.swift in Sources */,
+				FB2C3D4E5F6071829A3B4C5D /* MonitorWebView.swift in Sources */,
 				90993452C4CA5B2F35471F21 /* SettingsView.swift in Sources */,
 				CC9ABF885DDD9CF628A35EA0 /* ShapeHelpers.swift in Sources */,
 				C42C4DC2063494E4AC786256 /* SidebarView.swift in Sources */,

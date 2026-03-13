@@ -365,6 +365,7 @@ struct SidebarView: View {
     private func projectSection(_ project: String, voices: [VoiceInfo]) -> some View {
         let collapsed = collapsedProjects.contains(project)
         VStack(spacing: 0) {
+            let slug = vm.folders.first(where: { $0.name == project })?.id ?? project.lowercased()
             HStack(spacing: 0) {
                 Button {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
@@ -391,7 +392,6 @@ struct SidebarView: View {
                     .padding(.top, 8).padding(.bottom, 4)
                 }
                 .buttonStyle(.plain)
-                let slug = vm.folders.first(where: { $0.name == project })?.id ?? project.lowercased()
                 Button {
                     Task {
                         monitorLoading = "folder-\(slug)"
