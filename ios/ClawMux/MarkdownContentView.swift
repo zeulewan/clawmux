@@ -209,8 +209,8 @@ struct MarkdownContentView: View {
                         rows.append(parseRow(r))
                         i += 1
                     }
-                    result.append(.table(headers: headers, rows: rows))
-                    continue
+                    // Table rendering disabled — fall through to plain text
+                    _ = headers; _ = rows
                 }
             }
             // Image: ![alt](url) on its own line
