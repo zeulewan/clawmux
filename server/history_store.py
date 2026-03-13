@@ -256,6 +256,73 @@ class HistoryStore:
         results.sort(key=lambda r: r["message"].get("ts", 0), reverse=True)
         return results[:limit]
 
+    def get_read_cursor(self, voice_id: str, model_id: str, project: str | None = None) -> int:
+        """Get the read cursor (index of first unread message) for a model.
+
+        Returns 0 if this model has never been active for this agent.
+        """
+        return self._load_data(voice_id, project).get("read_cursors", {}).get(model_id, 0)
+
+    def set_read_cursor(self, voice_id: str, model_id: str, index: int, project: str | None = None) -> None:
+        """Set the read cursor for a model to index (number of messages processed)."""
+        data = self._load_data(voice_id, project)
+        cursors = data.get("read_cursors", {})
+        cursors[model_id] = index
+        data["read_cursors"] = cursors
+        self._save_data(voice_id, data, project)
+
+    def generate_catchup_context(self, voice_id: str, model_id: str, cap: int = 50, project: str | None = None) -> str | None:
+        """Generate catch-up context for a model that missed messages.
+
+        Computes the delta between this model's read cursor and the current end
+        of history, filters to conversational messages only (user and assistant
+        text, no bare acks, no tool calls), caps at `cap` messages, and returns
+        a markdown string suitable for injection before the first user message.
+
+        Returns None if the model is already up to date or if there are no
+        meaningful messages in the delta.
+        """
+        data = self._load_data(voice_id, project)
+        messages = data.get("messages", [])
+        cursor = data.get("read_cursors", {}).get(model_id, 0)
+
+        if cursor >= len(messages):
+            return None  # Model is up to date
+
+        delta = messages[cursor:]
+
+        # Filter to human-readable conversation only
+        chat_messages = [
+            m for m in delta
+            if m.get("role") in ("user", "assistant")
+            and m.get("text", "").strip()
+            and not m.get("bare_ack")
+        ]
+
+        if not chat_messages:
+            return None
+
+        if len(chat_messages) > cap:
+            chat_messages = chat_messages[-cap:]
+
+        lines = [
+            "# Messages Since You Were Last Active",
+            "The following conversation happened while you were away. Read it and continue seamlessly.\n",
+        ]
+
+        for m in chat_messages:
+            role = m.get("role", "")
+            text = m.get("text", "").strip()
+            if role == "user":
+                lines.append(f"**User:** {text}")
+            elif role == "assistant":
+                lines.append(f"**Assistant:** {text}")
+
+        lines.append("\n---")
+        lines.append("Resume where you left off.")
+
+        return "\n".join(lines)
+
     def copy_history(self, voice_id: str, from_project: str | None, to_project: str) -> bool:
         """Copy a voice's history from one project to another. Returns True on success.
 

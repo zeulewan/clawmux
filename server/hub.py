@@ -60,7 +60,7 @@ log = logging.getLogger("hub")
 # Filter noisy polling endpoints from uvicorn access log
 _NOISY_PATHS = frozenset([
     "/api/sessions", "/api/context", "/api/settings",
-    "/api/projects", "/api/groupchats", "/api/debug",
+    "/api/projects", "/api/groupchats", "/api/debug", "/api/monitor",
 ])
 
 class _NoiseFilter(logging.Filter):
@@ -102,6 +102,20 @@ _pending_injections: dict[str, asyncio.Task] = {}
 _injection_locks: dict[str, asyncio.Lock] = {}
 # Recently-injected message IDs per session — prevents re-delivery of same msg within 5 minutes
 _injected_ids: dict[str, dict[str, float]] = {}  # session_id -> {msg_id -> timestamp}
+
+# Active ttyd monitor processes: key -> {type, id, port, proc, url}
+_ttyd_monitors: dict[str, dict] = {}
+_TTYD_PORT_START = 9700
+_TTYD_PORT_END = 9799
+
+
+def _ttyd_free_port() -> int | None:
+    """Find a free port in the ttyd range."""
+    used = {m["port"] for m in _ttyd_monitors.values()}
+    for p in range(_TTYD_PORT_START, _TTYD_PORT_END + 1):
+        if p not in used:
+            return p
+    return None
 
 
 def _hist_prefix(session) -> str | None:
@@ -169,6 +183,21 @@ async def _flush_browser_queue(ws: WebSocket) -> None:
             break
     if flushed:
         log.info("Flushed %d queued messages to reconnected browser", flushed)
+
+
+def _session_status_msg(session, **extra) -> dict:
+    """Build a session_status payload including backend and model_id."""
+    return {
+        "type": "session_status",
+        "session_id": session.session_id,
+        "state": session.state.value,
+        "activity": session.activity,
+        "tool_name": session.tool_name,
+        "tool_input": session.tool_input,
+        "backend": session.backend,
+        "model_id": session.model_id,
+        **extra,
+    }
 
 
 async def send_to_browser(data: dict) -> bool:
@@ -489,10 +518,12 @@ async def lifespan(app: FastAPI):
     stuck_task = asyncio.create_task(stuck_buffer_monitor_loop())
     context_task = asyncio.create_task(context_poll_loop())
     usage_task = asyncio.create_task(usage_poll_loop())
-    # Load saved Whisper model quality on startup
-    startup_model = hub_config.QUALITY_MODEL_MAP.get(hub_config.QUALITY_MODE)
-    if startup_model:
-        asyncio.create_task(_load_whisper_model(startup_model))
+    # On startup, respect tts_enabled: stop Whisper when voice is off; start it when on
+    _startup_settings = _load_settings()
+    if not _startup_settings.get("tts_enabled", True):
+        asyncio.create_task(_stop_whisper_server())
+    else:
+        asyncio.create_task(_start_whisper_server())
     try:
         yield
     finally:
@@ -502,6 +533,25 @@ async def lifespan(app: FastAPI):
         compaction_task.cancel()
         context_task.cancel()
         usage_task.cancel()
+        # Kill all ttyd monitor processes and deregister from Tailscale Serve
+        for key, mon in list(_ttyd_monitors.items()):
+            proc = mon.get("proc")
+            if proc:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+            port = mon.get("port")
+            if port:
+                try:
+                    subprocess.run(
+                        ["tailscale", "serve", f"--https={port}", "off"],
+                        capture_output=True, timeout=3,
+                    )
+                except Exception:
+                    pass
+        _ttyd_monitors.clear()
+
         if _shutdown_mode == "reload":
             log.info("Hub reloading — keeping tmux sessions alive for re-adoption")
             # Save any pending interjections before shutdown
@@ -782,14 +832,7 @@ async def wait_websocket(ws: WebSocket, session_id: str):
 
     # Tell browser agent is idle (so voice input isn't treated as interjection)
     await send_to_browser({"session_id": session_id, "type": "listening", "state": "idle"})
-    await send_to_browser({
-        "type": "session_status",
-        "session_id": session_id,
-        "state": session.state.value,
-        "activity": session.activity,
-        "tool_name": session.tool_name,
-        "tool_input": session.tool_input,
-    })
+    await send_to_browser(_session_status_msg(session))
 
     # Register this WS for push notifications
     if not hasattr(session, "_wait_queue"):
@@ -844,14 +887,7 @@ async def wait_websocket(ws: WebSocket, session_id: str):
         session.tool_input = {}
         session.set_state(AgentState.PROCESSING)
         await _save_activity(session, "Processing")
-        await send_to_browser({
-            "type": "session_status",
-            "session_id": session_id,
-            "state": session.state.value,
-            "activity": session.activity,
-            "tool_name": session.tool_name,
-            "tool_input": session.tool_input,
-        })
+        await send_to_browser(_session_status_msg(session))
         if hasattr(session, "_wait_queue"):
             del session._wait_queue
 
@@ -1034,14 +1070,7 @@ async def hook_tool_status(request: Request):
         # Stay in PROCESSING after each tool call — Claude is deciding next action
         if session.state in (AgentState.PROCESSING, AgentState.IDLE):
             session.set_state(AgentState.PROCESSING)
-            await send_to_browser({
-                "type": "session_status",
-                "session_id": session.session_id,
-                "state": session.state.value,
-                "activity": session.activity,
-                "tool_name": session.tool_name,
-                "tool_input": session.tool_input,
-            })
+            await send_to_browser(_session_status_msg(session))
             await _save_activity(session, "Processing")
     elif event == "Stop":
         pass  # HTTP Stop hooks cannot block Claude; stop-check-inbox.sh handles idle signaling
@@ -1108,17 +1137,8 @@ async def hook_tool_status(request: Request):
     # PostToolUse doesn't broadcast — "Processing..." is transient; the next
     # PreToolUse or wait WS connect will broadcast the real state.
     if event not in ("PostToolUse", "PostToolUseFailure"):
-        msg = {
-            "type": "session_status",
-            "session_id": session.session_id,
-            "state": session.state.value,
-            "activity": session.activity,
-            "tool_name": session.tool_name,
-            "tool_input": session.tool_input,
-        }
-        if event == "Stop":
-            msg["agent_idle"] = True
-        await send_to_browser(msg)
+        extra = {"agent_idle": True} if event == "Stop" else {}
+        await send_to_browser(_session_status_msg(session, **extra))
     return JSONResponse(response_json)
 
 
@@ -1136,7 +1156,10 @@ async def spawn_session(request: Request):
         label = body.get("label", "")
         voice = body.get("voice", "")
         project = _resolve_slug(body.get("project")) if body.get("project") else None
-        session = await session_mgr.spawn_session(label, voice, project=project)
+        backend = body.get("backend", "claude-code")
+        model_id = body.get("model_id", "")
+        session = await session_mgr.spawn_session(label, voice, project=project,
+                                                  backend=backend, model_id=model_id)
         # Notify browser of the new session so the sidebar updates immediately
         await send_to_browser({"type": "session_spawned", "session": session.to_dict()})
         # Show thinking indicator while agent boots (state stays STARTING)
@@ -1216,14 +1239,7 @@ async def interrupt_session(session_id: str):
         session.tool_name = ""
         session.tool_input = {}
         await send_to_browser({"session_id": session_id, "type": "listening", "state": "idle"})
-        await send_to_browser({
-            "type": "session_status",
-            "session_id": session_id,
-            "state": session.state.value,
-            "activity": "",
-            "tool_name": "",
-            "tool_input": {},
-        })
+        await send_to_browser(_session_status_msg(session))
     asyncio.create_task(_delayed_idle())
 
     return JSONResponse({"status": "interrupted"})
@@ -1440,14 +1456,7 @@ async def agent_idle(session_id: str):
     session.tool_input = {}
     await _save_activity(session, "Idle")
     await send_to_browser({"session_id": session_id, "type": "listening", "state": "idle"})
-    await send_to_browser({
-        "type": "session_status",
-        "session_id": session_id,
-        "state": session.state.value,
-        "activity": "",
-        "tool_name": "",
-        "tool_input": {},
-    })
+    await send_to_browser(_session_status_msg(session))
 
     # Schedule injection if inbox has messages (lock in _inject_inbox serializes delivery)
     count = await asyncio.to_thread(inbox.peek, session.work_dir)
@@ -1487,15 +1496,7 @@ async def set_walking_mode(session_id: str, request: Request):
     enabled = bool(data.get("enabled", True))
     session.walking_mode = enabled
     log.info("[%s] Walking mode: %s", session_id, "on" if enabled else "off")
-    await send_to_browser({
-        "type": "session_status",
-        "session_id": session_id,
-        "state": session.state.value,
-        "activity": session.activity,
-        "tool_name": session.tool_name,
-        "tool_input": session.tool_input,
-        "walking_mode": enabled,
-    })
+    await send_to_browser(_session_status_msg(session, walking_mode=enabled))
     note = "on" if enabled else "off"
     await _inbox_write_and_notify(session, {
         "type": "system",
@@ -2704,14 +2705,7 @@ async def _inject_inbox(session, session_id: str) -> None:
             # This covers the gap between injection and first PreToolUse hook.
             if session.state == AgentState.IDLE:
                 session.set_state(AgentState.PROCESSING)
-                await send_to_browser({
-                    "type": "session_status",
-                    "session_id": session_id,
-                    "state": session.state.value,
-                    "activity": "",
-                    "tool_name": "",
-                    "tool_input": {},
-                })
+                await send_to_browser(_session_status_msg(session))
             await send_to_browser({
                 "type": "inbox_update",
                 "session_id": session_id,
@@ -2746,6 +2740,66 @@ async def _inbox_write_and_notify(session, msg_dict: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 # /api/transcribe, /api/tts, /api/tts-captioned → voice_router
+
+_WHISPER_START_SCRIPT = Path.home() / ".clawmux" / "services" / "whisper" / "bin" / "start-whisper-server.sh"
+_WHISPER_PID_FILE = Path.home() / ".clawmux" / "services" / "whisper" / "whisper.pid"
+
+
+async def _stop_whisper_server() -> None:
+    """Kill the whisper-server process to free GPU/RAM."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "pkill", "-f", "whisper-server",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await asyncio.wait_for(proc.wait(), timeout=5)
+        log.info("Whisper server stopped (offloaded)")
+    except Exception as e:
+        log.warning("Failed to stop whisper server: %s", e)
+
+
+async def _start_whisper_server() -> None:
+    """Start the whisper-server and then load the configured quality model.
+
+    The start script loads 'base' quickly (from VOICEMODE_WHISPER_MODEL or default).
+    Once the server is ready, we use /load to switch to the correct quality model.
+    """
+    if not _WHISPER_START_SCRIPT.exists():
+        log.warning("Whisper start script not found: %s", _WHISPER_START_SCRIPT)
+        return
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "bash", str(_WHISPER_START_SCRIPT),
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        _WHISPER_PID_FILE.write_text(str(proc.pid))
+        log.info("Whisper server starting (pid %d)", proc.pid)
+    except Exception as e:
+        log.error("Failed to start whisper server: %s", e)
+        return
+
+    # Poll until the server is ready (up to 60 seconds), then load the quality model
+    async def _wait_and_load():
+        deadline = asyncio.get_event_loop().time() + 60
+        async with httpx.AsyncClient(timeout=2) as client:
+            while asyncio.get_event_loop().time() < deadline:
+                try:
+                    await client.get(hub_config.WHISPER_URL + "/")
+                    break
+                except Exception:
+                    await asyncio.sleep(2)
+            else:
+                log.warning("Whisper server did not become ready within 60s")
+                return
+        model_name = hub_config.QUALITY_MODEL_MAP.get(hub_config.QUALITY_MODE, "base")
+        log.info("Whisper server ready — loading quality model: %s", model_name)
+        await _load_whisper_model(model_name)
+
+    asyncio.create_task(_wait_and_load())
+
 
 async def _load_whisper_model(model_name: str) -> None:
     """Dynamically load a Whisper model via the server's /load endpoint."""
@@ -2794,6 +2848,13 @@ async def update_settings(request: Request):
         log.info("Quality mode changed to: %s (model: %s)", data["quality_mode"], model_name)
         # Dynamically load the Whisper model via /load endpoint
         asyncio.create_task(_load_whisper_model(model_name))
+    if "tts_enabled" in data:
+        if not data["tts_enabled"]:
+            # Voice output disabled — offload Whisper to free GPU/RAM
+            asyncio.create_task(_stop_whisper_server())
+        else:
+            # Voice output re-enabled — restart Whisper server
+            asyncio.create_task(_start_whisper_server())
     _save_settings(settings)
     log.info("Settings updated: %s", data)
     return JSONResponse(settings)
@@ -3053,6 +3114,178 @@ async def debug_log():
     except Exception:
         pass
     return JSONResponse({"lines": lines})
+
+
+# --- ttyd Monitor endpoints ---
+
+@app.get("/api/monitor")
+async def list_monitors():
+    """Return all active ttyd monitor processes."""
+    return JSONResponse([
+        {"key": k, "type": v["type"], "id": v["id"], "port": v["port"], "url": v["url"]}
+        for k, v in _ttyd_monitors.items()
+    ])
+
+
+@app.post("/api/monitor/start")
+async def start_monitor(request: Request):
+    """Start a ttyd monitor for a folder or agent tmux session.
+
+    Body: {type: "folder"|"agent", id: slug_or_voice_id}
+    Returns: {key, port, url}
+    """
+    body = await request.json()
+    mon_type = body.get("type")
+    mon_id = body.get("id", "").strip()
+
+    if mon_type not in ("folder", "agent"):
+        return JSONResponse({"error": "type must be 'folder' or 'agent'"}, status_code=400)
+    if not mon_id:
+        return JSONResponse({"error": "id is required"}, status_code=400)
+
+    key = f"{mon_type}:{mon_id}"
+
+    # Return existing monitor if already running
+    if key in _ttyd_monitors:
+        m = _ttyd_monitors[key]
+        proc = m["proc"]
+        if proc.returncode is None:  # still alive
+            return JSONResponse({"key": key, "port": m["port"], "url": m["url"]})
+        # Process died — clean up and restart
+        del _ttyd_monitors[key]
+
+    port = _ttyd_free_port()
+    if port is None:
+        return JSONResponse({"error": "No free ports in ttyd range 7700-7799"}, status_code=503)
+
+    if mon_type == "folder":
+        # Ensure the monitor tmux session exists (create/update it)
+        slug = mon_id
+        suffix = f"-{slug}" if slug != "default" else ""
+        monitor_session = f"clawmux-monitor{suffix}"
+
+        # Build/refresh the monitor session in the background
+        try:
+            create_proc = await asyncio.create_subprocess_exec(
+                "clawmux", "monitor", slug, "--detach",
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await asyncio.wait_for(create_proc.wait(), timeout=15)
+        except asyncio.TimeoutError:
+            log.warning("[monitor] clawmux monitor %s --detach timed out", slug)
+        except Exception as e:
+            log.warning("[monitor] Failed to create monitor session for %s: %s", slug, e)
+
+        tmux_target = monitor_session
+
+    else:  # agent
+        voice_id = mon_id
+        # Look up tmux session name from live sessions
+        session = next(
+            (s for s in session_mgr.sessions.values() if s.voice == voice_id),
+            None,
+        )
+        if session is None:
+            return JSONResponse({"error": f"No active session for voice '{voice_id}'"}, status_code=404)
+        tmux_target = session.tmux_session
+
+    # Launch ttyd bound to loopback only (avoids interface conflict with Tailscale Serve).
+    # ttyd is read-only by default — no flag needed.
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "ttyd", "-i", "lo", "--port", str(port),
+            "tmux", "attach-session", "-t", f"={tmux_target}",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+    except FileNotFoundError:
+        return JSONResponse({"error": "ttyd not found — run: sudo apt install ttyd"}, status_code=503)
+    except Exception as e:
+        return JSONResponse({"error": f"Failed to start ttyd: {e}"}, status_code=500)
+
+    # Brief pause to let ttyd bind before Tailscale Serve starts proxying
+    await asyncio.sleep(0.5)
+
+    # Register with Tailscale Serve so the browser gets an HTTPS URL (avoids mixed-content block)
+    ts_domain = None
+    try:
+        ts_proc = await asyncio.create_subprocess_exec(
+            "tailscale", "serve", f"--https={port}", "--bg", f"http://localhost:{port}",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await asyncio.wait_for(ts_proc.wait(), timeout=5)
+        if ts_proc.returncode == 0:
+            # Derive Tailscale domain from request host (strip port)
+            req_host = request.headers.get("host", "").split(":")[0]
+            if req_host and ("tailscale" in req_host or req_host.endswith(".ts.net")):
+                ts_domain = req_host
+            else:
+                # Fallback: query tailscale status for domain
+                try:
+                    ts_status = await asyncio.create_subprocess_exec(
+                        "tailscale", "status", "--json",
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.DEVNULL,
+                    )
+                    ts_out, _ = await asyncio.wait_for(ts_status.communicate(), timeout=3)
+                    ts_data = json.loads(ts_out)
+                    ts_domain = ts_data.get("Self", {}).get("DNSName", "").rstrip(".")
+                except Exception:
+                    pass
+    except Exception as e:
+        log.warning("[monitor] Tailscale serve registration failed: %s", e)
+
+    if ts_domain:
+        url = f"https://{ts_domain}:{port}"
+    else:
+        req_host = request.headers.get("host", "localhost").split(":")[0]
+        url = f"http://{req_host}:{port}"
+
+    _ttyd_monitors[key] = {"type": mon_type, "id": mon_id, "port": port, "proc": proc, "url": url}
+    log.info("[monitor] Started ttyd for %s on port %d (tmux: %s) url: %s", key, port, tmux_target, url)
+    return JSONResponse({"key": key, "port": port, "url": url})
+
+
+@app.post("/api/monitor/stop")
+async def stop_monitor(request: Request):
+    """Stop a ttyd monitor process.
+
+    Body: {key: "folder:slug" or "agent:voice_id"}
+    """
+    body = await request.json()
+    key = body.get("key", "").strip()
+    if not key:
+        return JSONResponse({"error": "key is required"}, status_code=400)
+    if key not in _ttyd_monitors:
+        return JSONResponse({"error": "Monitor not found"}, status_code=404)
+
+    mon = _ttyd_monitors.pop(key)
+    proc = mon.get("proc")
+    if proc and proc.returncode is None:
+        try:
+            proc.terminate()
+            await asyncio.wait_for(proc.wait(), timeout=3)
+        except asyncio.TimeoutError:
+            proc.kill()
+        except Exception:
+            pass
+
+    # Deregister from Tailscale Serve
+    port = mon["port"]
+    try:
+        ts_proc = await asyncio.create_subprocess_exec(
+            "tailscale", "serve", f"--https={port}", "off",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await asyncio.wait_for(ts_proc.wait(), timeout=5)
+    except Exception as e:
+        log.warning("[monitor] Tailscale serve deregistration failed for port %d: %s", port, e)
+
+    log.info("[monitor] Stopped ttyd for %s (port %d)", key, port)
+    return JSONResponse({"ok": True})
 
 
 _uvicorn_server = None

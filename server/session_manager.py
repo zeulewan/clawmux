@@ -52,6 +52,8 @@ class Session:
     interjections: list[str] = field(default_factory=list)  # queued user messages sent while agent was busy
     model: str = ""  # per-session Claude model override (opus/sonnet/haiku); empty = use global default
     effort: str = ""  # per-session effort level override (low/medium/high); empty = use global default
+    backend: str = "claude-code"  # backend type: "claude-code", "opencode", "gemini"
+    model_id: str = ""  # actual model string, e.g. "claude-opus-4-6", "gpt-5"
     pending_model_restart: bool = False  # True when model was changed and needs restart after current turn
     restarting: bool = False  # True while model restart is in progress (skip health checks)
     processing: bool = False  # DEPRECATED — derived from state during migration
@@ -113,6 +115,8 @@ class Session:
             "task": self.task,
             "model": self.model,
             "effort": self.effort,
+            "backend": self.backend,
+            "model_id": self.model_id,
             "unread_count": self.unread_count,
             "work_dir": self.work_dir,
             "project_slug": self.project_slug,
@@ -155,6 +159,8 @@ class SessionManager:
             last_active=session.last_activity,
             model=session.model or "opus",
             effort=session.effort or "",
+            backend=session.backend or "claude-code",
+            model_id=session.model_id or "",
             state=session.state.value if hasattr(session.state, 'value') else str(session.state),
         )
         for k, v in overrides.items():
@@ -272,6 +278,9 @@ class SessionManager:
                 session.model = hub_config.CLAUDE_MODEL
             # Restore effort from agents.json
             session.effort = getattr(entry, 'effort', '') or ""
+            # Restore backend and model_id from agents.json
+            session.backend = getattr(entry, 'backend', 'claude-code') or "claude-code"
+            session.model_id = getattr(entry, 'model_id', '') or ""
             self.sessions[adopt_id] = session
             self._counter += 1
             adopted += 1
@@ -384,7 +393,8 @@ class SessionManager:
         idx = self._counter % len(project_voices)
         return project_voices[idx]
 
-    async def spawn_session(self, label: str = "", voice: str = "", project: str | None = None) -> Session:
+    async def spawn_session(self, label: str = "", voice: str = "", project: str | None = None,
+                            backend: str = "claude-code", model_id: str = "") -> Session:
         """Create a temp dir with session config, tmux session, and start Claude."""
         # Determine which project this session belongs to
         project_slug = project or self.project_mgr.active_project
@@ -422,6 +432,8 @@ class SessionManager:
             label=voice_name,
             voice=voice_id,
             project_slug=project_slug,
+            backend=backend,
+            model_id=model_id,
         )
         session.init_bridge()
         self.sessions[session_id] = session
