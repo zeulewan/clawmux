@@ -327,34 +327,36 @@ struct MarkdownContentView: View {
                           isBlock: isBlock)
 
         case .table(let headers, let rows):
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 0) {
-                    ForEach(headers.indices, id: \.self) { i in
-                        Text(headers[i])
-                            .font(.system(size: fontSize - 1, weight: .semibold))
-                            .foregroundStyle(foreground)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 8).padding(.vertical, 6)
-                        if i < headers.count - 1 { Divider() }
-                    }
-                }
-                .background(Color.canvas2)
-                Divider()
-                ForEach(rows.indices, id: \.self) { r in
+            ScrollView(.horizontal, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 0) {
-                        ForEach(rows[r].indices, id: \.self) { c in
-                            Text(rows[r][c])
-                                .font(.system(size: fontSize - 1))
+                        ForEach(headers.indices, id: \.self) { i in
+                            Text(headers[i])
+                                .font(.system(size: fontSize - 1, weight: .semibold))
                                 .foregroundStyle(foreground)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 8).padding(.vertical, 5)
-                            if c < rows[r].count - 1 { Divider() }
+                                .frame(minWidth: 72, alignment: .leading)
+                                .padding(.horizontal, 8).padding(.vertical, 6)
+                            if i < headers.count - 1 { Divider() }
                         }
                     }
-                    if r < rows.count - 1 { Divider() }
+                    .background(Color.canvas2)
+                    Divider()
+                    ForEach(rows.indices, id: \.self) { r in
+                        HStack(spacing: 0) {
+                            ForEach(rows[r].indices, id: \.self) { c in
+                                Text(rows[r][c])
+                                    .font(.system(size: fontSize - 1))
+                                    .foregroundStyle(foreground)
+                                    .frame(minWidth: 72, alignment: .leading)
+                                    .padding(.horizontal, 8).padding(.vertical, 5)
+                                if c < rows[r].count - 1 { Divider() }
+                            }
+                        }
+                        if r < rows.count - 1 { Divider() }
+                    }
                 }
+                .fixedSize(horizontal: true, vertical: false)
             }
-            .frame(maxWidth: .infinity)
             .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .strokeBorder(Color.cBorder, lineWidth: 0.5))
             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
