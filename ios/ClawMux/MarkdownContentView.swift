@@ -66,6 +66,32 @@ struct ScrollBottomDetector: ViewModifier {
     }
 }
 
+// MARK: - Chat Scroll Lock
+
+/// Walks the view hierarchy to find the backing UIScrollView and disables horizontal scroll.
+/// Applied as .background(ChatScrollLock()) on the chat ScrollView.
+/// isDirectionalLockEnabled prevents diagonal/horizontal drift during keyboard animations.
+/// alwaysBounceHorizontal=false removes the horizontal bounce that makes drift visible.
+struct ChatScrollLock: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .clear
+        DispatchQueue.main.async {
+            var superview = view.superview
+            while let sv = superview {
+                if let scrollView = sv as? UIScrollView {
+                    scrollView.isDirectionalLockEnabled = true
+                    scrollView.alwaysBounceHorizontal = false
+                    break
+                }
+                superview = sv.superview
+            }
+        }
+        return view
+    }
+    func updateUIView(_ uiView: UIView, context: Context) {}
+}
+
 // MARK: - Markdown Content View
 
 struct MarkdownContentView: View {
