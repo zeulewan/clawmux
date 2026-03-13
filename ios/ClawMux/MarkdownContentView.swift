@@ -421,6 +421,8 @@ private struct TableView: View {
             .fixedSize(horizontal: true, vertical: false)
             .background(TableScrollFix())
         }
+        .frame(maxWidth: .infinity)  // caps reported width so parent layout is not inflated
+        .clipped()                   // prevents visual overflow beyond the constrained width
         .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
             .strokeBorder(Color.cBorder, lineWidth: 0.5))
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
