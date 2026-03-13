@@ -428,20 +428,35 @@ private struct TableView: View {
 }
 
 // MARK: - Table Scroll Fix
-// Walks up to the nearest UIScrollView and sets isDirectionalLockEnabled = true so
-// horizontal swipes on a table don't bleed into the outer vertical chat scroll.
+// Sets a gesture delegate on the table's inner UIScrollView pan recognizer.
+// gestureRecognizerShouldBegin fails the horizontal scroll immediately when the pan
+// is primarily vertical, so the outer chat ScrollView can recognize without any delay.
+// shouldRecognizeSimultaneously returns false to prevent both scrolls firing together.
 private struct TableScrollFix: UIViewRepresentable {
+    func makeCoordinator() -> Coordinator { Coordinator() }
     func makeUIView(context: Context) -> UIView { UIView() }
     func updateUIView(_ uiView: UIView, context: Context) {
         DispatchQueue.main.async {
             var v: UIView? = uiView.superview
             while let vv = v {
                 if let sv = vv as? UIScrollView {
-                    sv.isDirectionalLockEnabled = true
+                    sv.panGestureRecognizer.delegate = context.coordinator
                     return
                 }
                 v = vv.superview
             }
+        }
+    }
+
+    class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
+            guard let pan = recognizer as? UIPanGestureRecognizer else { return true }
+            let v = pan.velocity(in: pan.view)
+            return abs(v.x) >= abs(v.y)   // fail if pan is primarily vertical
+        }
+        func gestureRecognizer(_ recognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            false
         }
     }
 }
