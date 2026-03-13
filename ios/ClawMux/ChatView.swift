@@ -47,6 +47,9 @@ struct ChatScrollAreaView: View {
                 }
                 .scrollPosition(id: $scrollPositionID, anchor: .top)
                 .defaultScrollAnchor(.bottom)
+                // Fresh ScrollView per session → defaultScrollAnchor(.bottom) fires reliably on switch.
+                // proxy.scrollTo("bottom") on a LazyVStack with unrendered tail items is unreliable.
+                .id(vm.activeSessionId)
                 .scrollDismissesKeyboard(.interactively)
                 .accessibilityIdentifier("ChatScrollView")
                 .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
@@ -85,11 +88,10 @@ struct ChatScrollAreaView: View {
                 .onChange(of: vm.activeSessionId) { _, _ in
                     scrollPositionID = nil
                     cachedMessageGroups = []
-                    var t = Transaction()
-                    t.disablesAnimations = true
-                    withTransaction(t) { proxy.scrollTo("bottom", anchor: .bottom) }
                     isAtBottom = true
                     rebuildMessageGroups()
+                    // No proxy.scrollTo needed — .id(vm.activeSessionId) above creates a fresh
+                    // ScrollView on switch, so defaultScrollAnchor(.bottom) fires automatically.
                 }
                 .onAppear { rebuildMessageGroups() }
                 .onChange(of: vm.activeMessages.last?.id) { _, _ in rebuildMessageGroups() }
