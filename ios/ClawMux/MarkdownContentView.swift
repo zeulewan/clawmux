@@ -328,76 +328,47 @@ struct MarkdownContentView: View {
 
         case .table(let headers, let rows):
             ScrollView(.horizontal, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 0) {
+                // Grid aligns all column widths automatically across header and data rows.
+                Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
+                    GridRow {
                         ForEach(headers.indices, id: \.self) { i in
                             Text(headers[i])
                                 .font(.system(size: fontSize - 1, weight: .semibold))
                                 .foregroundStyle(foreground)
-                                .frame(minWidth: 72, alignment: .leading)
+                                .frame(minWidth: 64, alignment: .leading)
                                 .padding(.horizontal, 8).padding(.vertical, 6)
-                            if i < headers.count - 1 { Divider() }
                         }
                     }
                     .background(Color.canvas2)
-                    Divider()
+                    GridRow {
+                        Color.cBorder.frame(height: 0.5).gridCellColumns(headers.count)
+                    }
                     ForEach(rows.indices, id: \.self) { r in
-                        HStack(spacing: 0) {
+                        GridRow {
                             ForEach(rows[r].indices, id: \.self) { c in
                                 Text(rows[r][c])
                                     .font(.system(size: fontSize - 1))
                                     .foregroundStyle(foreground)
-                                    .frame(minWidth: 72, alignment: .leading)
+                                    .frame(minWidth: 64, alignment: .leading)
                                     .padding(.horizontal, 8).padding(.vertical, 5)
-                                if c < rows[r].count - 1 { Divider() }
                             }
                         }
-                        if r < rows.count - 1 { Divider() }
+                        if r < rows.count - 1 {
+                            GridRow {
+                                Color.cBorder.frame(height: 0.5).gridCellColumns(headers.count)
+                            }
+                        }
                     }
                 }
                 .fixedSize(horizontal: true, vertical: false)
+                .background(TableScrollFix())  // enables directional lock on the inner UIScrollView
             }
             .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .strokeBorder(Color.cBorder, lineWidth: 0.5))
             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
         case .image(let alt, let path):
-            let resolved: URL? = {
-                if path.hasPrefix("http://") || path.hasPrefix("https://") {
-                    return URL(string: path)
-                }
-                let base = baseURL.hasSuffix("/") ? String(baseURL.dropLast()) : baseURL
-                return URL(string: base + path)
-            }()
-            if let url = resolved {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable()
-                            .scaledToFit()
-                            .frame(maxWidth: .infinity)
-                            .cornerRadius(8)
-                    case .failure:
-                        HStack(spacing: 6) {
-                            Image(systemName: "photo")
-                                .foregroundStyle(Color.cTextTer)
-                            Text(alt.isEmpty ? path : alt)
-                                .font(.system(size: fontSize - 1))
-                                .foregroundStyle(Color.cTextTer)
-                        }
-                    case .empty:
-                        HStack(spacing: 6) {
-                            ProgressView().scaleEffect(0.7)
-                            Text(alt.isEmpty ? "Loading image…" : alt)
-                                .font(.system(size: fontSize - 1))
-                                .foregroundStyle(Color.cTextTer)
-                        }
-                    @unknown default:
-                        EmptyView()
-                    }
-                }
-                .frame(maxWidth: .infinity)
-            }
+            ImageBlockView(alt: alt, path: path, baseURL: baseURL, fontSize: fontSize)
         }
     }
 }
@@ -406,5 +377,80 @@ extension MarkdownContentView: Equatable {
     nonisolated static func == (lhs: MarkdownContentView, rhs: MarkdownContentView) -> Bool {
         lhs.text == rhs.text && lhs.foreground == rhs.foreground &&
         lhs.fontSize == rhs.fontSize && lhs.baseURL == rhs.baseURL
+    }
+}
+
+// MARK: - Table Scroll Fix
+// Walks up to the nearest UIScrollView and sets isDirectionalLockEnabled = true so
+// horizontal swipes on a table don't bleed into the outer vertical chat scroll.
+private struct TableScrollFix: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIView { UIView() }
+    func updateUIView(_ uiView: UIView, context: Context) {
+        DispatchQueue.main.async {
+            var v: UIView? = uiView.superview
+            while let vv = v {
+                if let sv = vv as? UIScrollView {
+                    sv.isDirectionalLockEnabled = true
+                    return
+                }
+                v = vv.superview
+            }
+        }
+    }
+}
+
+// MARK: - Lazy Image Block
+// Shows a load button instead of auto-fetching — user must tap to load.
+private struct ImageBlockView: View {
+    let alt: String
+    let path: String
+    let baseURL: String
+    let fontSize: CGFloat
+    @State private var loaded = false
+
+    private var resolvedURL: URL? {
+        if path.hasPrefix("http://") || path.hasPrefix("https://") { return URL(string: path) }
+        let base = baseURL.hasSuffix("/") ? String(baseURL.dropLast()) : baseURL
+        return URL(string: base + path)
+    }
+
+    var body: some View {
+        if loaded, let url = resolvedURL {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFit().frame(maxWidth: .infinity).cornerRadius(8)
+                case .failure:
+                    HStack(spacing: 6) {
+                        Image(systemName: "photo").foregroundStyle(Color.cTextTer)
+                        Text(alt.isEmpty ? path : alt)
+                            .font(.system(size: fontSize - 1)).foregroundStyle(Color.cTextTer)
+                    }
+                case .empty:
+                    HStack(spacing: 6) {
+                        ProgressView().scaleEffect(0.7)
+                        Text("Loading…").font(.system(size: fontSize - 1)).foregroundStyle(Color.cTextTer)
+                    }
+                @unknown default: EmptyView()
+                }
+            }
+            .frame(maxWidth: .infinity)
+        } else {
+            Button { loaded = true } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "photo").font(.system(size: 13)).foregroundStyle(Color.cTextSec)
+                    Text(alt.isEmpty ? "Load image" : alt)
+                        .font(.system(size: fontSize - 1)).foregroundStyle(Color.cTextSec)
+                    Spacer()
+                    Image(systemName: "arrow.down.circle")
+                        .font(.system(size: 13)).foregroundStyle(Color.cAccent)
+                }
+                .padding(.horizontal, 10).padding(.vertical, 8)
+                .background(Color.cCard, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(Color.cBorder, lineWidth: 0.5))
+            }
+            .buttonStyle(.plain)
+        }
     }
 }
