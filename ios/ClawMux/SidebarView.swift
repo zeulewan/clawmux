@@ -14,6 +14,10 @@ struct SidebarView: View {
     @Binding var newGroupChatName: String
 
     @State private var dropTargetVoiceId: String? = nil
+    @State private var monitorTitle: String = ""
+    @State private var monitorURL: String? = nil
+    @State private var monitorKey: String? = nil
+    @State private var monitorLoading: String? = nil  // key being loaded (shows spinner)
 
     var body: some View {
         sidebarStripView
@@ -165,6 +169,14 @@ struct SidebarView: View {
             if !expanded { withAnimation { sidebarProxy.scrollTo("sidebar-top", anchor: .top) } }
         }
         .animation(.easeInOut(duration: 0.25), value: sidebarExpanded)
+        .sheet(isPresented: Binding(
+            get: { monitorURL != nil },
+            set: { if !$0 { monitorURL = nil; monitorKey = nil } }
+        )) {
+            if let url = monitorURL, let key = monitorKey {
+                MonitorSheet(title: monitorTitle, url: url, monitorKey: key, vm: vm)
+            }
+        }
         } // ScrollViewReader
     }
 
@@ -353,31 +365,58 @@ struct SidebarView: View {
     private func projectSection(_ project: String, voices: [VoiceInfo]) -> some View {
         let collapsed = collapsedProjects.contains(project)
         VStack(spacing: 0) {
-            Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                    if collapsed { collapsedProjects.remove(project) }
-                    else         { collapsedProjects.insert(project) }
+            HStack(spacing: 0) {
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                        if collapsed { collapsedProjects.remove(project) }
+                        else         { collapsedProjects.insert(project) }
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(Color.cTextTer)
+                            .rotationEffect(.degrees(collapsed ? 0 : 90))
+                            .animation(.spring(response: 0.3), value: collapsed)
+                        Text(project.uppercased())
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(Color.cTextTer)
+                            .tracking(0.8)
+                        Text("\(voices.count)")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color.cTextTer.opacity(0.55))
+                        Spacer()
+                    }
+                    .padding(.leading, 16)
+                    .padding(.top, 8).padding(.bottom, 4)
                 }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(Color.cTextTer)
-                        .rotationEffect(.degrees(collapsed ? 0 : 90))
-                        .animation(.spring(response: 0.3), value: collapsed)
-                    Text(project.uppercased())
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(Color.cTextTer)
-                        .tracking(0.8)
-                    Text("\(voices.count)")
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color.cTextTer.opacity(0.55))
-                    Spacer()
+                .buttonStyle(.plain)
+                let slug = vm.folders.first(where: { $0.name == project })?.id ?? project.lowercased()
+                Button {
+                    Task {
+                        monitorLoading = "folder-\(slug)"
+                        if let result = await vm.startMonitor(type: "folder", id: slug) {
+                            monitorTitle = project
+                            monitorKey = result.key
+                            monitorURL = result.url
+                        }
+                        monitorLoading = nil
+                    }
+                } label: {
+                    if monitorLoading == "folder-\(slug)" {
+                        ProgressView()
+                            .scaleEffect(0.6)
+                            .frame(width: 28, height: 28)
+                    } else {
+                        Image(systemName: "terminal")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.cTextTer)
+                            .frame(width: 28, height: 28)
+                    }
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 8).padding(.bottom, 4)
+                .buttonStyle(.plain)
+                .padding(.trailing, 8)
             }
-            .buttonStyle(.plain)
 
             if !collapsed {
                 VStack(spacing: 2) {
@@ -762,6 +801,19 @@ struct SidebarView: View {
                             }
                         }
                     } label: { Label("Add to Group Chat", systemImage: "bubble.left.and.bubble.right") }
+                }
+                Button {
+                    Task {
+                        monitorLoading = s.id
+                        if let result = await vm.startMonitor(type: "agent", id: voice.id) {
+                            monitorTitle = voice.name
+                            monitorKey = result.key
+                            monitorURL = result.url
+                        }
+                        monitorLoading = nil
+                    }
+                } label: {
+                    Label("Monitor", systemImage: "terminal")
                 }
                 if !s.groupId.isEmpty {
                     Button(role: .destructive) { vm.disbandGroup(s.groupId) } label: {
