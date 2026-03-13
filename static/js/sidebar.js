@@ -979,7 +979,7 @@ function _renderGroupChatSection(list, afterIndex) {
 
       const avatars = document.createElement('div');
       avatars.className = 'gc-avatars';
-      for (const m of (g.members || []).slice(0, 4)) {
+      for (const m of (g.members || [])) {
         const dot = document.createElement('div');
         dot.className = 'gc-avatar';
         const vc = (typeof voiceColor === 'function') ? voiceColor(m.voice) : '#4a9eff';

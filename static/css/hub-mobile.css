@@ -50,9 +50,10 @@
   /* gap:0 overrides base gap:10px so hidden gc-info doesn't offset the centered avatars */
   .sidebar-gc-card { justify-content: center; padding: 5px 0; margin: 0; gap: 0; transition: padding 0.25s ease; }
   .gc-info { max-width: 0; overflow: hidden; opacity: 0; transition: max-width 0.25s ease, opacity 0.15s ease; }
-  /* Collapsed gc avatars: 2x2 grid so they fit in 48px strip */
+  /* Collapsed gc avatars: 2x2 grid (max 4) so they fit in 48px strip */
   .gc-avatars { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; width: 34px; }
   .gc-avatar { margin-left: 0 !important; width: 14px; height: 14px; font-size: 0.45rem; }
+  .gc-avatar:nth-child(n+5) { display: none; }
   #sidebar.expanded .sidebar-gc-header { justify-content: space-between; padding: 4px 10px; }
   #sidebar.expanded .sidebar-gc-header span { max-width: 200px; opacity: 1; }
   #sidebar.expanded .sidebar-gc-card { justify-content: flex-start; padding: 7px 12px; margin: 0 4px; }
