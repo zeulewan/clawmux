@@ -75,11 +75,12 @@ struct ChatScrollAreaView: View {
                 }
                 .onChange(of: vm.activeSession?.activity) { _, _ in scrollBottom(proxy) }
                 .onChange(of: vm.activeSessionId) { _, _ in
-                    rebuildMessageGroups()
+                    cachedMessageGroups = []
                     var t = Transaction()
                     t.disablesAnimations = true
                     withTransaction(t) { proxy.scrollTo("bottom", anchor: .bottom) }
                     isAtBottom = true
+                    rebuildMessageGroups()
                 }
                 .onAppear { rebuildMessageGroups() }
                 .onChange(of: vm.activeMessages.last?.id) { _, _ in rebuildMessageGroups() }
@@ -303,7 +304,6 @@ struct ChatScrollAreaView: View {
                         MarkdownContentView(text: msg.text, foreground: Color.cText, fontSize: CGFloat(vm.chatFontSize),
                                             baseURL: vm.httpBaseURL()?.absoluteString ?? "")
                             .equatable()
-                            .frame(maxWidth: .infinity, alignment: .leading)
                     } else if role == "user" {
                         Text(msg.text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\n", with: " "))
                             .font(.system(size: CGFloat(vm.chatFontSize)))
@@ -386,7 +386,6 @@ struct ChatScrollAreaView: View {
                 }
             }
 
-            if role == "assistant" { Spacer(minLength: 56) }
             if role == "system"   { Spacer() }
         })
     }
