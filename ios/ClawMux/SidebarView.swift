@@ -769,24 +769,25 @@ struct SidebarView: View {
     func ringColor(_ session: VoiceSession?, spawning: Bool) -> Color {
         if spawning { return .cCaution }
         guard let s = session else { return .cTextTer }
-        if s.state == .starting { return .cCaution }
-        if s.unreadCount > 0   { return .cDanger }
-        if s.state == .compacting { return .cCaution }
-        if s.isThinking        { return .cWarning }
-        if s.isSpeaking        { return .cAccent }
-        return .cSuccess
+        if s.state == .starting    { return .cCaution }  // yellow — starting
+        if s.unreadCount > 0       { return .cDanger }   // red — unread
+        if s.state == .compacting  { return .cWarning }  // orange — working (matches web)
+        if s.isThinking            { return .cWarning }  // orange — working
+        // isSpeaking is a user-side browser state — web sidebar shows idle (green) for it
+        return .cSuccess  // green — idle / speaking / recording
     }
 
     func cardStatus(_ session: VoiceSession?, spawning: Bool) -> String {
         if spawning { return "Starting…" }
         guard let s = session else { return "Tap to start" }
-        if s.state == .starting { return "Starting…" }
+        if s.state == .starting   { return "Starting…" }
         if s.state == .compacting { return s.activity.isEmpty ? "Compacting…" : s.activity }
         if s.state == .processing { return s.activity.isEmpty ? (s.toolName.isEmpty ? "Processing…" : s.toolName) : s.activity }
         if s.state == .thinking   { return s.activity.isEmpty ? "Thinking…" : s.activity }
         if s.unreadCount > 1 { return "\(s.unreadCount) new messages" }
         if s.unreadCount == 1 { return "1 new message" }
-        let st = s.statusText
-        return st.isEmpty ? "Idle" : st
+        // Recording, speaking, and other user-side states must not appear on agent rows.
+        // Only show server-derived agent states above — everything else is Idle.
+        return "Idle"
     }
 }
