@@ -245,7 +245,7 @@ struct ContentView: View {
                     .foregroundStyle(color)  // agent voice color
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .layoutPriority(2)  // protect name from being squeezed by fixed-size pills
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                 // Model label — confirmationDialog avoids iOS 26 Menu portal blocker
                 Button { showModelPicker = true } label: {
@@ -313,8 +313,6 @@ struct ContentView: View {
                     }
                 }
             }
-
-            Spacer()
 
             // Usage bar pill — mirrors web #usage-bar (ctx / 5h / 7d). Tap opens Settings.
             let hasUsage = vm.contextPct != nil || vm.usage5hPct != nil || vm.usage7dPct != nil

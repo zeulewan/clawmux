@@ -414,7 +414,7 @@ private final class BandSmoother {
 }
 
 private struct SpectrumWaveformView: View {
-    @ObservedObject var spectrum: SpectrumBandSource
+    let spectrum: SpectrumBandSource  // not @ObservedObject — TimelineView drives rendering, not objectWillChange
     let color: Color
     @State private var smoother = BandSmoother()
 
