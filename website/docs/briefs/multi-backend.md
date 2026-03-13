@@ -40,9 +40,15 @@ The spawn dialog gains two new fields when creating an agent:
 
 Everything else is unchanged: name, voice, role, folder.
 
-### The Sidebar
+### The Top Bar
 
-Each agent card shows a small backend badge. Claude Code agents look exactly as they do today. OpenCode agents display their underlying model name (e.g. `gpt-5`, `qwen-local`) instead of `opus`/`sonnet`. A subtle icon distinguishes the backend type.
+Today the agent header shows a Claude-specific control: `Opus High`, `Sonnet Low`, `Sonnet High Q`, etc. This is hardcoded around Claude Code's model and effort tiers.
+
+With multi-backend support, the top bar becomes **model-agnostic**. It shows the actual model name — `claude-opus-4-6`, `gpt-5`, `gemini-3`, `qwen2.5-coder` — whatever is running. The effort/quality selector only appears when the active backend supports it (Claude Code does; OpenCode's equivalent is picking the model itself).
+
+The key design principle: **the UI is backend-neutral first**. The top bar describes what model is running, not which CLI it runs through. Switching an agent from Claude Opus to GPT-5 changes the label; the rest of the interface is identical.
+
+The sidebar is unchanged.
 
 ### Settings
 
