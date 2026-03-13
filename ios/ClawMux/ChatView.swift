@@ -55,7 +55,11 @@ struct ChatScrollAreaView: View {
                 // Fresh ScrollView per session → defaultScrollAnchor(.bottom) fires reliably on switch.
                 // proxy.scrollTo("bottom") on a LazyVStack with unrendered tail items is unreliable.
                 .id(vm.activeSessionId)
-                .scrollDismissesKeyboard(.interactively)
+                // .interactively allows horizontal drift during keyboard appearance animation — use
+                // .immediately to avoid the UIScrollView briefly accepting horizontal scroll input.
+                // If this feels too abrupt, fall back to a UIViewRepresentable shim that sets
+                // isDirectionalLockEnabled=true + alwaysBounceHorizontal=false on the underlying UIScrollView.
+                .scrollDismissesKeyboard(.immediately)
                 .accessibilityIdentifier("ChatScrollView")
                 .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
                 .modifier(ScrollTopDetector(
