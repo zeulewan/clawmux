@@ -1184,6 +1184,10 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     func sendInterrupt() {
         // Always suppress auto-record after an interrupt — whether agent is thinking or speaking
         audio.currentSuppressNextAutoRecord = true
+        // Clear any existing pendingListen so interrupt cannot trigger recording via session switch
+        if let sid = activeSessionId, let idx = sessionIndex(sid) {
+            sessions[idx].pendingListen = false
+        }
         // If audio is playing, stop it immediately (matches web stop-agent-speaking)
         if isPlaying || isPlaybackPaused { interruptPlayback() }
         guard let sid = activeSessionId, let baseURL = httpBaseURL() else { return }
@@ -1545,9 +1549,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 let bgAutoRecord = isBackground && backgroundMode && isAutoMode
                 if isActive || (isBackground && (effectiveAutoRecord || bgAutoRecord)) {
                     if audio.currentSuppressNextAutoRecord {
-                        if let idx = sessionIndex(sid) {
-                            sessions[idx].pendingListen = true
-                        }
+                        // Interrupt was pressed — do NOT set pendingListen.
+                        // Setting it here allows recording to leak via switchToSession after
+                        // clearSessionSwitchState() clears suppressNextAutoRecord.
                     } else if typingMode {
                         if let idx = sessionIndex(sid) {
                             sessions[idx].pendingListen = true
