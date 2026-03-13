@@ -418,8 +418,6 @@ private struct TableView: View {
             .onPreferenceChange(ColWidthKey.self) { widths in
                 for (i, w) in widths where w > (colWidths[i] ?? 0) { colWidths[i] = w }
             }
-            .fixedSize(horizontal: true, vertical: false)
-            .background(TableScrollFix())
         }
         .frame(maxWidth: .infinity)  // caps reported width so parent layout is not inflated
         .clipped()                   // prevents visual overflow beyond the constrained width
