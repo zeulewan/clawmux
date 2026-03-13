@@ -1114,7 +1114,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         guard isConnected || isConnecting else { return }  // debounce duplicate calls
         isConnected = false
         isConnecting = false
-        if isRecording { audio.stopRecording(discard: true) }
+        // Do NOT stop recording on disconnect — let it continue locally.
+        // When recording ends (VAD/user), stopRecording() stashes audio to pendingAudioSend
+        // because !isConnected, and flushPendingAudio() replays it on reconnect.
         if isPlaying {
             audio.stopPlaybackVAD()
             isPlaying = false
