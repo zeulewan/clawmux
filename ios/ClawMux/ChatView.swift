@@ -44,6 +44,11 @@ struct ChatScrollAreaView: View {
                     }
                     .padding(.leading, 60).padding(.trailing, 12)
                     .padding(.top, 64).padding(.bottom, 16)
+                    // ChatScrollLock is on the LazyVStack (inside the scroll content), not the ScrollView.
+                    // .background() on a SwiftUI ScrollView places the UIView as a sibling in UIKit —
+                    // walking superview from a sibling never reaches the UIScrollView. From inside the
+                    // content layer the chain is: content view → UIScrollView → found.
+                    .background(ChatScrollLock())
                     // scrollTargetLayout() lets scrollPosition(id:) resolve item IDs during layout.
                     // LazyVStack only materialises views on demand, so proxy.scrollTo has no target
                     // yet when it fires post-onChange. scrollPosition(id:) defers resolution to the
@@ -56,10 +61,6 @@ struct ChatScrollAreaView: View {
                 // proxy.scrollTo("bottom") on a LazyVStack with unrendered tail items is unreliable.
                 .id(vm.activeSessionId)
                 .scrollDismissesKeyboard(.immediately)
-                // ChatScrollLock walks the UIKit hierarchy to set isDirectionalLockEnabled=true
-                // and alwaysBounceHorizontal=false on the backing UIScrollView — prevents horizontal
-                // drift during keyboard appearance even when .immediately isn't sufficient alone.
-                .background(ChatScrollLock())
                 .accessibilityIdentifier("ChatScrollView")
                 .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
                 .modifier(ScrollTopDetector(
