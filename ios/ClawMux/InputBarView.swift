@@ -207,10 +207,7 @@ struct InputBarView: View {
             }
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: vm.isRecording)
         }
-        // Fully transparent outside the pill — body ZStack canvas1 covers the safe area zone.
-        // Pill has its own glassEffect background; no outer background needed.
-        .padding(.horizontal, 16).padding(.top, 4)
-        .ignoresSafeArea(edges: .bottom)
+        .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 8)
     }
 
     // MARK: - Text Input Bar
