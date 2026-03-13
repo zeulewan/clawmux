@@ -425,9 +425,8 @@ struct DebugView: View {
                         Text(vm.debugStatus.isEmpty ? "Loading…" : vm.debugStatus)
                             .font(.system(size: 10, design: .monospaced))
                             .foregroundStyle(Theme.textSecondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .frame(maxHeight: 200)
                     .padding(8)
                     .background(Theme.bg, in: RoundedRectangle(cornerRadius: 8))
                 }

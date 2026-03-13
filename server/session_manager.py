@@ -65,10 +65,13 @@ class Session:
     reinject_attempts: int = 0  # number of voice-mode re-injection attempts
     max_reinject_attempts: int = 3  # max re-injection attempts before giving up
     walking_mode: bool = False  # user is walking — agent should use plain spoken text only
+    last_state_change: float = 0.0  # monotonic time of last set_state() call
 
 
     def set_state(self, new_state: AgentState) -> None:
         """Transition to a new state, syncing deprecated boolean flags."""
+        import time as _time
+        self.last_state_change = _time.monotonic()
         self.state = new_state
         # Sync legacy booleans for backward compat
         self.processing = new_state == AgentState.PROCESSING
