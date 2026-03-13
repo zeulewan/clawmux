@@ -136,6 +136,17 @@ struct ChatScrollAreaView: View {
                 .onAppear { rebuildMessageGroups() }
                 .onChange(of: vm.showAgentMessages) { _, _ in rebuildMessageGroups() }
                 .onChange(of: vm.verboseMode) { _, _ in rebuildMessageGroups() }
+                .onChange(of: vm.isRecording) { _, recording in
+                    if !recording && isAtBottom {
+                        // Waveform left the layout — safeAreaInset shrank ~56pt.
+                        // UIKit clamps contentOffset on inset shrink, so the scroll
+                        // position no longer sits at the true bottom. Re-anchor instantly
+                        // after layout settles to eliminate the visual drift.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            proxy.scrollTo("bottom", anchor: .bottom)
+                        }
+                    }
+                }
 
                 if !isAtBottom {
                     Button {

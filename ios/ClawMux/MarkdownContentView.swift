@@ -69,7 +69,18 @@ struct ScrollBottomDetector: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 18.0, *) {
             content.onScrollGeometryChange(for: Bool.self) { geo in
-                geo.contentOffset.y >= geo.contentSize.height - geo.containerSize.height - 120
+                // Handle both standard coords (y=0 at top) and bottom-anchored coords
+                // (y=0 at bottom, used when defaultScrollAnchor(.bottom) is set).
+                let y = geo.contentOffset.y
+                let distanceFromBottom: CGFloat
+                if y > 0 {
+                    // Standard coords: bottom is at y = contentSize - containerSize
+                    distanceFromBottom = geo.contentSize.height - geo.containerSize.height - y
+                } else {
+                    // Bottom-anchored coords: y=0 is at bottom, negative = scrolled up
+                    distanceFromBottom = -y
+                }
+                return distanceFromBottom < 120
             } action: { _, atBottom in
                 isAtBottom = atBottom
             }
