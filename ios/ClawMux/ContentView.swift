@@ -149,6 +149,8 @@ struct ContentView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Hard containment boundary — no child view can overflow horizontally into the sidebar.
+        .clipped()
         // Voice color background tint — uses @State so animation only fires on explicit onChange,
         // not on every ViewModel re-render (fixes random color flicker on iOS 26)
         .background(voiceTintColor.opacity(0.10).ignoresSafeArea())
