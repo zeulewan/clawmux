@@ -2367,6 +2367,32 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         }.resume()
     }
 
+    // MARK: - Monitor
+
+    /// Start a monitor panel. Returns (key, url) on success.
+    func startMonitor(type: String, id: String) async -> (key: String, url: String)? {
+        guard let baseURL = httpBaseURL() else { return nil }
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/monitor/start"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["type": type, "id": id])
+        guard let (data, _) = try? await URLSession.shared.data(for: req),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let key = json["key"] as? String,
+              let url = json["url"] as? String
+        else { return nil }
+        return (key: key, url: url)
+    }
+
+    func stopMonitor(key: String) {
+        guard let baseURL = httpBaseURL() else { return }
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/monitor/stop"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["key": key])
+        URLSession.shared.dataTask(with: req) { _, _, _ in }.resume()
+    }
+
     func fetchUsage() {
         guard let baseURL = httpBaseURL() else { return }
         let url = baseURL.appendingPathComponent("api/usage")
