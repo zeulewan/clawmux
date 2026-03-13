@@ -1698,6 +1698,15 @@ async def delete_project(slug: str):
     try:
         was_active = project_mgr.active_project == slug
         project_mgr.delete_project(slug)
+        # Move any agents that were in this project back to default
+        all_agents = await agents_store.all_agents()
+        for voice_id, entry in all_agents.items():
+            if entry.project == slug:
+                await agents_store.update(voice_id, project="default")
+                session = session_mgr.sessions.get(entry.session_id or "")
+                if session:
+                    session.project_slug = "default"
+                    session.project = ""
         # Notify browser so sidebar/header refresh immediately
         await send_to_browser({"type": "project_deleted", "slug": slug})
         if was_active:

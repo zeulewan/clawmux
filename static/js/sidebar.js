@@ -828,12 +828,7 @@ function renderSidebar() {
       }
     }
 
-    // Hide default folder if it has no active agents
-    if (slug === 'default' && activeCount === 0) {
-      const stale = existingGroups.get(slug);
-      if (stale) stale.remove();
-      continue;
-    }
+    // Default folder always stays visible (drop target for agents, even when empty)
 
     let group = existingGroups.get(slug);
     if (!group) {
