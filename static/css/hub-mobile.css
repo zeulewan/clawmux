@@ -177,6 +177,8 @@
   /* Chat messages: wider on mobile, disable text selection for long-press menu */
   .msg { max-width: 90%; animation-duration: 0.6s; }
   .msg, .msg * { touch-action: pan-y; }
+  /* Allow horizontal swipe inside code blocks */
+  .msg pre, .msg pre * { touch-action: auto; }
   #sidebar, #sidebar * { touch-action: manipulation; }
   #controls, #controls * { touch-action: manipulation; }
   /* Karaoke words: disable hover effect on mobile but allow tap for playback */
