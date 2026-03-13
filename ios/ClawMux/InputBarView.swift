@@ -395,24 +395,32 @@ struct InputBarView: View {
 
 // MARK: - Spectrum Waveform View
 
-/// Renders 12 equalizer bars at display refresh rate with exponential smoothing.
-/// Uses a reference-type smoother so state updates don't trigger SwiftUI redraws.
+/// Exponential smoother with separate per-band attack and decay alphas.
+/// Bass has more inertia (slow attack/decay); treble is snappier.
+/// Uses a reference type so mutations don't trigger SwiftUI redraws.
 private final class BandSmoother {
     var smooth: [CGFloat] = Array(repeating: 0, count: SpectrumProcessor.bandCount)
-    // Decay per display frame: bass=0.78 (slower), treble=0.45 (faster), at 120Hz
-    private let decayPerFrame: [CGFloat] = (0..<SpectrumProcessor.bandCount).map { b in
-        0.78 - CGFloat(b) / CGFloat(SpectrumProcessor.bandCount - 1) * 0.33
+    // Attack alpha: fraction of gap closed per frame (bass=0.20, treble=0.45)
+    private let attackAlpha: [CGFloat] = (0..<SpectrumProcessor.bandCount).map { b in
+        0.20 + CGFloat(b) / CGFloat(SpectrumProcessor.bandCount - 1) * 0.25
+    }
+    // Decay alpha: slower than attack for natural release (bass=0.06, treble=0.22)
+    private let decayAlpha: [CGFloat] = (0..<SpectrumProcessor.bandCount).map { b in
+        0.06 + CGFloat(b) / CGFloat(SpectrumProcessor.bandCount - 1) * 0.16
     }
 
     func update(toward target: [CGFloat]) {
         guard target.count == smooth.count else { return }
         for i in 0..<smooth.count {
-            let t = target[i]
-            smooth[i] = t >= smooth[i] ? t : smooth[i] * decayPerFrame[i]
+            let alpha = target[i] > smooth[i] ? attackAlpha[i] : decayAlpha[i]
+            smooth[i] += alpha * (target[i] - smooth[i])
         }
     }
 }
 
+/// Renders a smooth continuous frequency curve using Catmull-Rom spline
+/// (converted to cubic bezier). The line floats at the vertical center
+/// at silence and peaks upward with each band's amplitude.
 private struct SpectrumWaveformView: View {
     @ObservedObject var spectrum: SpectrumBandSource
     let color: Color
@@ -424,21 +432,40 @@ private struct SpectrumWaveformView: View {
                 smoother.update(toward: spectrum.bands)
                 let smoothed = smoother.smooth
                 let count = smoothed.count
-                guard count > 0 else { return }
-                let barW: CGFloat = 8
-                let gap: CGFloat = 4
-                let totalW = CGFloat(count) * barW + CGFloat(count - 1) * gap
-                let startX = (size.width - totalW) / 2
-                for i in 0..<count {
-                    let level = smoothed[i]
-                    let h = max(3, level * (size.height - 4))
-                    let x = startX + CGFloat(i) * (barW + gap)
-                    let y = size.height - h
-                    context.fill(
-                        Path(roundedRect: CGRect(x: x, y: y, width: barW, height: h), cornerRadius: 2),
-                        with: .color(color.opacity(0.35 + level * 0.65))
+                guard count >= 2 else { return }
+
+                let midY  = size.height / 2
+                let amp   = size.height * 0.42   // max upward swing from center
+
+                // Map each band to a 2D point (x spread across width, y = amplitude above midY)
+                let pts: [CGPoint] = (0..<count).map { i in
+                    CGPoint(
+                        x: CGFloat(i) / CGFloat(count - 1) * size.width,
+                        y: midY - smoothed[i] * amp
                     )
                 }
+
+                // Build smooth path using Catmull-Rom → cubic bezier conversion:
+                // For segment pts[i]→pts[i+1], control points are derived from
+                // neighboring points so the curve passes smoothly through every band.
+                var path = Path()
+                path.move(to: pts[0])
+                for i in 0..<count - 1 {
+                    let p0 = i > 0 ? pts[i - 1] : pts[i]
+                    let p1 = pts[i]
+                    let p2 = pts[i + 1]
+                    let p3 = i + 2 < count ? pts[i + 2] : pts[i + 1]
+                    let cp1 = CGPoint(x: p1.x + (p2.x - p0.x) / 6,
+                                      y: p1.y + (p2.y - p0.y) / 6)
+                    let cp2 = CGPoint(x: p2.x - (p3.x - p1.x) / 6,
+                                      y: p2.y - (p3.y - p1.y) / 6)
+                    path.addCurve(to: p2, control1: cp1, control2: cp2)
+                }
+
+                let avgLevel = smoothed.reduce(0, +) / CGFloat(count)
+                context.stroke(path,
+                               with: .color(color.opacity(0.45 + avgLevel * 0.55)),
+                               lineWidth: 1.5)
             }
         }
     }
