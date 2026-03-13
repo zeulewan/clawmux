@@ -540,7 +540,7 @@ final class AudioManager: NSObject {
             _ = resumePlaybackForSession(pausedSid)
         }
         // Flush any TTS audio that arrived during recording (held back by !isRecording guard)
-        if !isPlaying, let targetSid = sid ?? vm.activeSessionId,
+        if vm.isPlaying != true, let targetSid = sid ?? vm.activeSessionId,
            vm.audioBufferBySession[targetSid]?.isEmpty == false {
             drainAudioBuffer(targetSid)
         }
