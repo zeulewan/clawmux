@@ -251,9 +251,34 @@ struct ContentView: View {
                     .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                // Model label — confirmationDialog avoids iOS 26 Menu portal blocker
-                Button { showModelPicker = true } label: {
-                    Text(modelName(s.model))
+                // Model label — tappable picker for Claude Code, plain label for other backends
+                let isClaudeCode = s.backend.isEmpty || s.backend == "claude-code"
+                let displayModel = modelName(s.model, modelId: s.modelId)
+                if isClaudeCode {
+                    Button { showModelPicker = true } label: {
+                        Text(displayModel)
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(Color.cTextSec)
+                            .padding(.horizontal, 6).padding(.vertical, 3)
+                            .background(Color.glass, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
+                            .fixedSize()
+                    }
+                    .confirmationDialog("Select Model", isPresented: $showModelPicker) {
+                        let cur = vm.activeSession?.model ?? ""
+                        Button(cur == "opus" || cur.isEmpty ? "Opus ✓" : "Opus") {
+                            if cur != "opus" { pendingModelSwitch = "opus"; showModelRestartConfirm = true }
+                        }
+                        Button(cur == "sonnet" ? "Sonnet ✓" : "Sonnet") {
+                            if cur != "sonnet" { pendingModelSwitch = "sonnet"; showModelRestartConfirm = true }
+                        }
+                        Button(cur == "haiku" ? "Haiku ✓" : "Haiku") {
+                            if cur != "haiku" { pendingModelSwitch = "haiku"; showModelRestartConfirm = true }
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    }
+                } else {
+                    Text(displayModel)
                         .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(Color.cTextSec)
                         .padding(.horizontal, 6).padding(.vertical, 3)
@@ -261,22 +286,9 @@ struct ContentView: View {
                         .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Color.glassBorder, lineWidth: 0.5))
                         .fixedSize()
                 }
-                .confirmationDialog("Select Model", isPresented: $showModelPicker) {
-                    let cur = vm.activeSession?.model ?? ""
-                    Button(cur == "opus" || cur.isEmpty ? "Opus ✓" : "Opus") {
-                        if cur != "opus" { pendingModelSwitch = "opus"; showModelRestartConfirm = true }
-                    }
-                    Button(cur == "sonnet" ? "Sonnet ✓" : "Sonnet") {
-                        if cur != "sonnet" { pendingModelSwitch = "sonnet"; showModelRestartConfirm = true }
-                    }
-                    Button(cur == "haiku" ? "Haiku ✓" : "Haiku") {
-                        if cur != "haiku" { pendingModelSwitch = "haiku"; showModelRestartConfirm = true }
-                    }
-                    Button("Cancel", role: .cancel) {}
-                }
 
-                // Effort label — confirmationDialog avoids iOS 26 Menu portal blocker
-                if s.model != "haiku" {
+                // Effort label — Claude Code only; hidden for other backends
+                if isClaudeCode && s.model != "haiku" {
                     Button { showEffortPicker = true } label: {
                         Text(s.effort.isEmpty ? "High" : s.effort.capitalized)
                             .font(.system(size: 9, weight: .medium))
@@ -372,7 +384,8 @@ struct ContentView: View {
         }
     }
 
-    private func modelName(_ m: String) -> String {
+    private func modelName(_ m: String, modelId: String = "") -> String {
+        if !modelId.isEmpty { return modelId }
         switch m { case "sonnet": "Sonnet"; case "haiku": "Haiku"; default: "Opus" }
     }
 

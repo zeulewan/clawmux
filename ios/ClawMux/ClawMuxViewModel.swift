@@ -63,6 +63,8 @@ struct VoiceSession: Identifiable {
     var projectRepo: String = ""
     var model: String = ""
     var effort: String = ""
+    var backend: String = ""     // "claude-code", "opencode", "gemini"
+    var modelId: String = ""     // actual model string, e.g. "claude-opus-4-6", "gpt-5"
     var activity: String = ""
     var toolName: String = ""
     var unreadCount: Int = 0
@@ -1273,6 +1275,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                             if let speed = s["speed"] as? Double { sessions[idx].speed = speed }
                             if let model = s["model"] as? String, !model.isEmpty { sessions[idx].model = model }
                             if let effort = s["effort"] as? String, !effort.isEmpty { sessions[idx].effort = effort }
+                            if let backend = s["backend"] as? String { sessions[idx].backend = backend }
+                            if let modelId = s["model_id"] as? String { sessions[idx].modelId = modelId }
                             if let project = s["project"] as? String { sessions[idx].project = project }
                             if let area = s["project_area"] as? String { sessions[idx].projectArea = area }
                             if let repo = s["project_repo"] as? String { sessions[idx].projectRepo = repo }
@@ -1731,6 +1735,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         session.projectRepo = dict["project_repo"] as? String ?? ""
         session.model = dict["model"] as? String ?? ""
         session.effort = dict["effort"] as? String ?? ""
+        session.backend = dict["backend"] as? String ?? ""
+        session.modelId = dict["model_id"] as? String ?? ""
         session.activity = dict["activity"] as? String ?? ""
         session.toolName = dict["tool_name"] as? String ?? ""
         session.unreadCount = dict["unread_count"] as? Int ?? 0
