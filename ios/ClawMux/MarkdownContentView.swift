@@ -68,28 +68,79 @@ struct ScrollBottomDetector: ViewModifier {
 
 // MARK: - Chat Scroll Lock
 
-/// Walks the view hierarchy to find the backing UIScrollView and disables horizontal scroll.
-/// Applied as .background(ChatScrollLock()) on the chat ScrollView.
-/// isDirectionalLockEnabled prevents diagonal/horizontal drift during keyboard animations.
-/// alwaysBounceHorizontal=false removes the horizontal bounce that makes drift visible.
+/// Permanently prevents horizontal drift in the chat ScrollView.
+/// Applied as .background(ChatScrollLock()) — the UIView sits inside the scroll view's
+/// content layer, giving us a stable anchor to walk up and find the UIScrollView.
+///
+/// Strategy:
+/// - Retries the superview walk every 0.1s until the scroll view is found (handles
+///   the case where the view isn't in the hierarchy yet at makeUIView time).
+/// - Stores the original SwiftUI delegate and forwards all calls to it via
+///   forwardingTarget(for:) so SwiftUI's internal scroll machinery keeps working.
+/// - scrollViewDidScroll hard-clamps contentOffset.x to 0 on every scroll event.
 struct ChatScrollLock: UIViewRepresentable {
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
     func makeUIView(context: Context) -> UIView {
         let view = UIView()
         view.backgroundColor = .clear
-        DispatchQueue.main.async {
+        context.coordinator.attach(to: view)
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {}
+
+    class Coordinator: NSObject, UIScrollViewDelegate {
+        weak var scrollView: UIScrollView?
+        weak var originalDelegate: UIScrollViewDelegate?
+
+        func attach(to view: UIView) {
+            findScrollView(in: view)
+        }
+
+        private func findScrollView(in view: UIView) {
             var superview = view.superview
             while let sv = superview {
-                if let scrollView = sv as? UIScrollView {
-                    scrollView.isDirectionalLockEnabled = true
-                    scrollView.alwaysBounceHorizontal = false
-                    break
+                if let found = sv as? UIScrollView {
+                    configure(found)
+                    return
                 }
                 superview = sv.superview
             }
+            // Not in hierarchy yet — retry after one frame
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak view] in
+                guard let view else { return }
+                self.findScrollView(in: view)
+            }
         }
-        return view
+
+        private func configure(_ sv: UIScrollView) {
+            scrollView = sv
+            originalDelegate = sv.delegate
+            sv.isDirectionalLockEnabled = true
+            sv.alwaysBounceHorizontal = false
+            sv.delegate = self
+        }
+
+        // Clamp horizontal offset to zero on every scroll event
+        func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            if scrollView.contentOffset.x != 0 {
+                scrollView.setContentOffset(
+                    CGPoint(x: 0, y: scrollView.contentOffset.y),
+                    animated: false)
+            }
+            originalDelegate?.scrollViewDidScroll?(scrollView)
+        }
+
+        // Forward all other UIScrollViewDelegate calls to SwiftUI's internal delegate
+        override func responds(to aSelector: Selector!) -> Bool {
+            super.responds(to: aSelector) || (originalDelegate?.responds(to: aSelector) ?? false)
+        }
+        override func forwardingTarget(for aSelector: Selector!) -> Any? {
+            if originalDelegate?.responds(to: aSelector) == true { return originalDelegate }
+            return super.forwardingTarget(for: aSelector)
+        }
     }
-    func updateUIView(_ uiView: UIView, context: Context) {}
 }
 
 // MARK: - Markdown Content View
