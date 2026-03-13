@@ -430,7 +430,10 @@
 <div id="debug-panel" style="display:none; flex:1; overflow-y:auto; padding:1.25rem; font-family:'SF Mono','Menlo','Monaco','Consolas',monospace; font-size:0.75rem;">
   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
     <span style="font-size:0.95rem; font-weight:600;"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="vertical-align:middle; margin-right:4px;"><path d="M20 8h-2.81a5.985 5.985 0 0 0-1.82-1.96L17 4.41 15.59 3l-2.17 2.17C12.96 5.06 12.49 5 12 5s-.96.06-1.41.17L8.41 3 7 4.41l1.62 1.63C7.88 6.55 7.26 7.22 6.81 8H4v2h2.09c-.05.33-.09.66-.09 1v1H4v2h2v1c0 .34.04.67.09 1H4v2h2.81c1.04 1.79 2.97 3 5.19 3s4.15-1.21 5.19-3H20v-2h-2.09c.05-.33.09-.66.09-1v-1h2v-2h-2v-1c0-.34-.04-.67-.09-1H20V8zm-6 8h-4v-2h4v2zm0-4h-4v-2h4v2z"/></svg>Debug</span>
-    <span id="debug-refresh-info" style="color:var(--text-tertiary); font-size:0.65rem;"></span>
+    <span style="display:flex; align-items:center; gap:10px;">
+      <span id="debug-refresh-info" style="color:var(--text-tertiary); font-size:0.65rem;"></span>
+      <button onclick="hideDebugPanel()" title="Close" style="background:none; border:none; color:var(--text-tertiary); font-size:1.1rem; line-height:1; cursor:pointer; padding:2px 6px; border-radius:4px; font-family:inherit;" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text-tertiary)'">✕</button>
+    </span>
   </div>
 
   <div class="debug-section">
@@ -477,6 +480,13 @@
   <div class="debug-section">
     <div class="debug-title">Actions</div>
     <button onclick="killAllSessions()" style="background:var(--red-dim); color:var(--red); border:1px solid var(--red); border-radius:var(--radius-sm); padding:8px 16px; font-size:0.75rem; font-weight:600; cursor:pointer; font-family:inherit; transition:all 0.15s;">Kill All Sessions</button>
+  </div>
+
+  <div class="debug-section">
+    <div class="debug-title">Monitors</div>
+    <div id="debug-monitors-folders" style="display:flex; flex-wrap:wrap; gap:0.4rem; margin-bottom:0.5rem;"></div>
+    <div id="debug-monitors-agents" style="display:flex; flex-wrap:wrap; gap:0.4rem; margin-bottom:0.75rem;"></div>
+    <div id="debug-monitors-frames" style="display:flex; flex-direction:column; gap:0.75rem;"></div>
   </div>
 
   <div class="debug-section">
@@ -1850,6 +1860,11 @@ async function refreshDebug() {
     }
 
     document.getElementById('debug-refresh-info').textContent = 'Updated ' + new Date().toLocaleTimeString();
+
+    // Store for monitor button rendering
+    window._debugProjects = data.projects || {};
+    window._debugSessions = data.sessions || [];
+    renderMonitorButtons();
   } catch (e) {
     console.warn('Debug refresh error:', e);
   }
@@ -1873,6 +1888,108 @@ async function refreshDebug() {
       el.scrollTop = el.scrollHeight;
     }
   } catch {}
+}
+
+// --- Monitor panel ---
+const _monitorFrames = new Map(); // key -> {port, url}
+
+function _monitorBtn(label, key, isActive) {
+  const btn = document.createElement('button');
+  btn.textContent = label;
+  btn.dataset.monKey = key;
+  btn.style.cssText = `background:${isActive ? 'var(--accent)' : 'var(--bg-card)'}; color:${isActive ? '#fff' : 'var(--text-secondary)'}; border:1px solid ${isActive ? 'var(--accent)' : 'var(--border)'}; border-radius:var(--radius-sm); padding:4px 10px; font-size:0.7rem; cursor:pointer; font-family:inherit; transition:all 0.15s;`;
+  btn.onclick = () => toggleMonitor(key);
+  return btn;
+}
+
+async function toggleMonitor(key) {
+  if (_monitorFrames.has(key)) {
+    await stopMonitorFrame(key);
+  } else {
+    await startMonitorFrame(key);
+  }
+}
+
+async function startMonitorFrame(key) {
+  const [monType, monId] = key.split(':');
+  try {
+    const resp = await fetch('/api/monitor/start', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({type: monType, id: monId}),
+    });
+    const data = await resp.json();
+    if (!resp.ok) { alert('Monitor error: ' + (data.error || resp.status)); return; }
+    _monitorFrames.set(key, {port: data.port, url: data.url});
+    renderMonitorFrames();
+    renderMonitorButtons();
+  } catch (e) {
+    alert('Monitor start failed: ' + e.message);
+  }
+}
+
+async function stopMonitorFrame(key) {
+  _monitorFrames.delete(key);
+  renderMonitorFrames();
+  renderMonitorButtons();
+  try {
+    await fetch('/api/monitor/stop', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({key}),
+    });
+  } catch (_) {}
+}
+
+function renderMonitorButtons() {
+  // Folder buttons
+  const foldersEl = document.getElementById('debug-monitors-folders');
+  if (foldersEl) {
+    foldersEl.innerHTML = '';
+    for (const [slug, proj] of Object.entries(window._debugProjects || {})) {
+      const key = `folder:${slug}`;
+      const label = `📁 ${proj.name || slug}`;
+      foldersEl.appendChild(_monitorBtn(label, key, _monitorFrames.has(key)));
+    }
+  }
+
+  // Agent buttons
+  const agentsEl = document.getElementById('debug-monitors-agents');
+  if (agentsEl) {
+    agentsEl.innerHTML = '';
+    for (const s of (window._debugSessions || [])) {
+      const key = `agent:${s.voice}`;
+      const label = `🖥 ${s.voice}`;
+      agentsEl.appendChild(_monitorBtn(label, key, _monitorFrames.has(key)));
+    }
+  }
+}
+
+function renderMonitorFrames() {
+  const framesEl = document.getElementById('debug-monitors-frames');
+  if (!framesEl) return;
+  framesEl.innerHTML = '';
+  for (const [key, mon] of _monitorFrames) {
+    const [, monId] = key.split(':');
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'background:var(--bg-card); border:1px solid var(--border); border-radius:6px; overflow:hidden;';
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:0.35rem 0.6rem; border-bottom:1px solid var(--border); font-size:0.7rem; color:var(--text-secondary);';
+    header.innerHTML = `<span>${monId} <span style="color:var(--text-tertiary)">:${mon.port}</span></span>`;
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '×';
+    closeBtn.title = 'Stop monitor';
+    closeBtn.style.cssText = 'background:none; border:none; color:var(--text-tertiary); font-size:1rem; cursor:pointer; padding:0 4px; line-height:1;';
+    closeBtn.onclick = () => stopMonitorFrame(key);
+    header.appendChild(closeBtn);
+    const frame = document.createElement('iframe');
+    frame.src = mon.url;
+    frame.style.cssText = 'width:100%; height:300px; border:none; display:block;';
+    frame.sandbox = 'allow-scripts allow-same-origin';
+    wrapper.appendChild(header);
+    wrapper.appendChild(frame);
+    framesEl.appendChild(wrapper);
+  }
 }
 
 // --- Options menu ---
