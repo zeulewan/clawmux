@@ -1,6 +1,16 @@
 import AVFoundation
 import UIKit
 
+// MARK: - CADisplayLink Target Helper
+
+/// Trampoline that holds a weak-safe closure for CADisplayLink callbacks,
+/// avoiding the retain cycle that would occur if AudioManager were the direct target.
+final class SpectrumDisplayLinkTarget: NSObject {
+    private let action: () -> Void
+    init(_ action: @escaping () -> Void) { self.action = action }
+    @objc func fire() { action() }
+}
+
 // MARK: - AudioManager
 // Handles all audio I/O: recording, playback, silence keepalive, VAD, metering,
 // thinking sounds, PTT preview transcription, and push-to-talk logic.
@@ -43,6 +53,8 @@ final class AudioManager: NSObject {
     private var vadProcessor: VADProcessor?
     private var spectrumEngine: AVAudioEngine?
     private var spectrumProcessor: SpectrumProcessor?
+    private var spectrumDisplayLink: CADisplayLink?
+    private var spectrumLinkTarget: SpectrumDisplayLinkTarget?
 
     // MARK: - Init
 
@@ -978,11 +990,8 @@ final class AudioManager: NSObject {
         let format = input.outputFormat(forBus: 0)
         let sampleRate = format.sampleRate > 0 ? format.sampleRate : 44100
 
-        let processor = SpectrumProcessor(sampleRate: sampleRate) { [weak self] bands in
-            Task { @MainActor in
-                self?.vm?.spectrumSource.bands = bands
-            }
-        }
+        // Processor writes to latestBands under os_unfair_lock — no main-thread hops per buffer
+        let processor = SpectrumProcessor(sampleRate: sampleRate)
         spectrumProcessor = processor
         installSpectrumTap(on: input, format: format, processor: processor)
 
@@ -992,10 +1001,25 @@ final class AudioManager: NSObject {
         } catch {
             print("[spectrum] Engine start failed: \(error)")
             input.removeTap(onBus: 0)
+            return
         }
+
+        // CADisplayLink samples latestBands at display rate — decouples @Published update rate
+        // (60Hz, VSync-aligned) from audio tap rate (~44Hz, irregular)
+        let target = SpectrumDisplayLinkTarget { [weak self] in
+            guard let self, let processor = self.spectrumProcessor else { return }
+            self.vm?.spectrumSource.bands = processor.latestBands
+        }
+        spectrumLinkTarget = target
+        let dl = CADisplayLink(target: target, selector: #selector(SpectrumDisplayLinkTarget.fire))
+        dl.add(to: .main, forMode: .common)
+        spectrumDisplayLink = dl
     }
 
     private func stopSpectrumAnalysis() {
+        spectrumDisplayLink?.invalidate()
+        spectrumDisplayLink = nil
+        spectrumLinkTarget = nil
         spectrumEngine?.inputNode.removeTap(onBus: 0)
         spectrumEngine?.stop()
         spectrumEngine = nil

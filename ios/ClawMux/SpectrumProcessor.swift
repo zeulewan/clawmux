@@ -1,6 +1,7 @@
 import AVFoundation
 import Accelerate
 import Foundation
+import os.lock
 
 // MARK: - Spectrum Band Source
 // Isolated ObservableObject so only SpectrumWaveformView re-renders on band updates,
@@ -8,10 +9,10 @@ import Foundation
 
 @MainActor
 final class SpectrumBandSource: ObservableObject {
-    // Not @Published — TimelineView(.animation) drives rendering at display rate and Canvas reads
-    // this directly each frame. Publishing on every audio buffer (~44Hz) was restarting the
-    // TimelineView schedule and causing animation stutter.
-    var bands: [CGFloat] = Array(repeating: 0, count: SpectrumProcessor.bandCount)
+    // @Published so SwiftUI invalidates SpectrumWaveformView each time bands change.
+    // Band updates are now driven by CADisplayLink at display rate (~60Hz), not by the
+    // audio tap rate (~44Hz irregular), so publishing is safe and smooth.
+    @Published var bands: [CGFloat] = Array(repeating: 0, count: SpectrumProcessor.bandCount)
 }
 
 // MARK: - Spectrum Tap Helper (must be outside @MainActor to avoid isolation inheritance)
@@ -30,7 +31,8 @@ func installSpectrumTap(
 
 /// Computes a 12-band log-spaced FFT power spectrum from PCM audio buffers.
 /// Designed to run on the AVAudioEngine realtime tap thread.
-/// Thread-safe via @unchecked Sendable — only called from one audio tap at a time.
+/// Thread-safe: processBuffer writes to _latestBands under os_unfair_lock;
+/// latestBands is read by the CADisplayLink on the main thread.
 final class SpectrumProcessor: @unchecked Sendable {
 
     static let bandCount = 12
@@ -49,14 +51,21 @@ final class SpectrumProcessor: @unchecked Sendable {
     // Band configuration
     private let bandEdges: [Int]        // bandCount+1 FFT bin indices
 
-    private let onBandsUpdated: @Sendable ([CGFloat]) -> Void
+    // Thread-safe latest band snapshot — written by audio tap, read by CADisplayLink on main thread
+    private var _latestBands: [CGFloat] = Array(repeating: 0, count: bandCount)
+    private var lock = os_unfair_lock_s()
 
-    init(sampleRate: Double = 44100, onBandsUpdated: @escaping @Sendable ([CGFloat]) -> Void) {
+    var latestBands: [CGFloat] {
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
+        return _latestBands
+    }
+
+    init(sampleRate: Double = 44100) {
         let n = 512
         let l2n = vDSP_Length(log2f(Float(n)))
         self.log2n = l2n
         self.fftSetup = vDSP_create_fftsetup(l2n, FFTRadix(kFFTRadix2))
-        self.onBandsUpdated = onBandsUpdated
 
         // Hann window for spectral leakage reduction
         var win = [Float](repeating: 0, count: n)
@@ -128,6 +137,10 @@ final class SpectrumProcessor: @unchecked Sendable {
             let db = 20.0 * log10f(rms + 1e-8)
             result[b] = CGFloat(max(0.0, min(1.0, (db + 60.0) / 60.0)))
         }
-        onBandsUpdated(result)
+
+        // Store under lock — CADisplayLink reads on main thread at display rate
+        os_unfair_lock_lock(&lock)
+        _latestBands = result
+        os_unfair_lock_unlock(&lock)
     }
 }
