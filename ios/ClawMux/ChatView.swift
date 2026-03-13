@@ -164,6 +164,7 @@ struct ChatScrollAreaView: View {
                             .frame(maxWidth: .infinity, alignment: .trailing)
                     } else {
                         bubble
+                            .padding(.trailing, 24)
                     }
                     if let mid = msg.msgId, ackedIds.contains(mid) {
                         Text("👍").font(.system(size: 14)).padding(.horizontal, 4)
