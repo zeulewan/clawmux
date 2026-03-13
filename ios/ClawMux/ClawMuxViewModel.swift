@@ -1514,7 +1514,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     audioBufferBySession[sid, default: []].append(audioData)
                 }
                 if sid == activeSessionId {
-                    if !isPlaying && !isPlaybackPaused { audio.drainAudioBuffer(sid) }
+                    if !isPlaying && !isPlaybackPaused && !isRecording { audio.drainAudioBuffer(sid) }
                     updateLiveActivity()
                 }
             }
