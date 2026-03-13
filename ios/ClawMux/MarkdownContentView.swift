@@ -341,7 +341,41 @@ struct MarkdownContentView: View {
                           isBlock: isBlock)
 
         case .table(let headers, let rows):
-            TableView(headers: headers, rows: rows, fontSize: fontSize, foreground: foreground)
+            // Equal-width columns: each cell gets frame(maxWidth: .infinity) so HStack distributes
+            // space evenly. No horizontal scroll, no PreferenceKey — zero layout pollution.
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 0) {
+                    ForEach(headers.indices, id: \.self) { i in
+                        Text(headers[i])
+                            .font(.system(size: fontSize - 1, weight: .semibold))
+                            .foregroundStyle(foreground)
+                            .lineLimit(1).truncationMode(.tail)
+                            .padding(.horizontal, 8).padding(.vertical, 6)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if i < headers.count - 1 { Color.cBorder.frame(width: 0.5) }
+                    }
+                }
+                .background(Color.canvas2)
+                Color.cBorder.frame(height: 0.5)
+                ForEach(rows.indices, id: \.self) { r in
+                    HStack(spacing: 0) {
+                        ForEach(rows[r].indices, id: \.self) { c in
+                            Text(rows[r][c])
+                                .font(.system(size: fontSize - 1))
+                                .foregroundStyle(foreground)
+                                .lineLimit(1).truncationMode(.tail)
+                                .padding(.horizontal, 8).padding(.vertical, 5)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            if c < rows[r].count - 1 { Color.cBorder.frame(width: 0.5) }
+                        }
+                    }
+                    if r < rows.count - 1 { Color.cBorder.frame(height: 0.5) }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(Color.cBorder, lineWidth: 0.5))
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
         case .image(let alt, let path):
             ImageBlockView(alt: alt, path: path, baseURL: baseURL, fontSize: fontSize)
@@ -353,111 +387,6 @@ extension MarkdownContentView: Equatable {
     nonisolated static func == (lhs: MarkdownContentView, rhs: MarkdownContentView) -> Bool {
         lhs.text == rhs.text && lhs.foreground == rhs.foreground &&
         lhs.fontSize == rhs.fontSize && lhs.baseURL == rhs.baseURL
-    }
-}
-
-// MARK: - Table Column Width Measurement
-// Collects natural cell widths per column index; reduce takes the max so every column
-// is sized to its widest cell across header and all data rows.
-private struct ColWidthKey: PreferenceKey {
-    static let defaultValue: [Int: CGFloat] = [:]
-    static func reduce(value: inout [Int: CGFloat], nextValue: () -> [Int: CGFloat]) {
-        nextValue().forEach { k, v in value[k] = max(value[k] ?? 0, v) }
-    }
-}
-
-// MARK: - Table View
-// Two-pass layout: first pass measures natural cell widths via PreferenceKey,
-// second pass renders every column at its max width — guaranteed alignment.
-private struct TableView: View {
-    let headers: [String]
-    let rows: [[String]]
-    let fontSize: CGFloat
-    let foreground: Color
-    @State private var colWidths: [Int: CGFloat] = [:]
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 0) {
-                // Header
-                HStack(spacing: 0) {
-                    ForEach(headers.indices, id: \.self) { i in
-                        Text(headers[i])
-                            .font(.system(size: fontSize - 1, weight: .semibold))
-                            .foregroundStyle(foreground)
-                            .lineLimit(1)
-                            .padding(.horizontal, 8).padding(.vertical, 6)
-                            .background(GeometryReader { geo in
-                                Color.clear.preference(key: ColWidthKey.self, value: [i: geo.size.width])
-                            })
-                            .frame(width: colWidths[i], alignment: .leading)
-                        if i < headers.count - 1 { Color.cBorder.frame(width: 0.5) }
-                    }
-                }
-                .background(Color.canvas2)
-                Color.cBorder.frame(height: 0.5)
-                // Data rows
-                ForEach(rows.indices, id: \.self) { r in
-                    HStack(spacing: 0) {
-                        ForEach(rows[r].indices, id: \.self) { c in
-                            Text(rows[r][c])
-                                .font(.system(size: fontSize - 1))
-                                .foregroundStyle(foreground)
-                                .lineLimit(1)
-                                .padding(.horizontal, 8).padding(.vertical, 5)
-                                .background(GeometryReader { geo in
-                                    Color.clear.preference(key: ColWidthKey.self, value: [c: geo.size.width])
-                                })
-                                .frame(width: colWidths[c], alignment: .leading)
-                            if c < rows[r].count - 1 { Color.cBorder.frame(width: 0.5) }
-                        }
-                    }
-                    if r < rows.count - 1 { Color.cBorder.frame(height: 0.5) }
-                }
-            }
-            .onPreferenceChange(ColWidthKey.self) { widths in
-                for (i, w) in widths where w > (colWidths[i] ?? 0) { colWidths[i] = w }
-            }
-        }
-        .frame(maxWidth: .infinity)  // caps reported width so parent layout is not inflated
-        .clipped()                   // prevents visual overflow beyond the constrained width
-        .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
-            .strokeBorder(Color.cBorder, lineWidth: 0.5))
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-    }
-}
-
-// MARK: - Table Scroll Fix
-// Sets a gesture delegate on the table's inner UIScrollView pan recognizer.
-// gestureRecognizerShouldBegin fails the horizontal scroll immediately when the pan
-// is primarily vertical, so the outer chat ScrollView can recognize without any delay.
-// shouldRecognizeSimultaneously returns false to prevent both scrolls firing together.
-private struct TableScrollFix: UIViewRepresentable {
-    func makeCoordinator() -> Coordinator { Coordinator() }
-    func makeUIView(context: Context) -> UIView { UIView() }
-    func updateUIView(_ uiView: UIView, context: Context) {
-        DispatchQueue.main.async {
-            var v: UIView? = uiView.superview
-            while let vv = v {
-                if let sv = vv as? UIScrollView {
-                    sv.panGestureRecognizer.delegate = context.coordinator
-                    return
-                }
-                v = vv.superview
-            }
-        }
-    }
-
-    class Coordinator: NSObject, UIGestureRecognizerDelegate {
-        func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
-            guard let pan = recognizer as? UIPanGestureRecognizer else { return true }
-            let v = pan.velocity(in: pan.view)
-            return abs(v.x) >= abs(v.y)   // fail if pan is primarily vertical
-        }
-        func gestureRecognizer(_ recognizer: UIGestureRecognizer,
-                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
-            false
-        }
     }
 }
 
