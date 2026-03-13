@@ -67,7 +67,9 @@ struct ChatScrollAreaView: View {
                         topAnchorId = nil
                     }
                 }
-                .onChange(of: vm.activeMessages.count) { _, _ in
+                // Single handler for both count and last-message-id changes — avoids a double
+                // rebuildMessageGroups() call when a new message arrives (count fires AND id fires).
+                .onChange(of: (vm.activeMessages.count, vm.activeMessages.last?.id)) { _, _ in
                     rebuildMessageGroups()
                     if isLoadingOlder, let aid = topAnchorId {
                         // Older messages were prepended — anchor to what was the top message.
@@ -101,7 +103,6 @@ struct ChatScrollAreaView: View {
                     // ScrollView on switch, so defaultScrollAnchor(.bottom) fires automatically.
                 }
                 .onAppear { rebuildMessageGroups() }
-                .onChange(of: vm.activeMessages.last?.id) { _, _ in rebuildMessageGroups() }
                 .onChange(of: vm.showAgentMessages) { _, _ in rebuildMessageGroups() }
                 .onChange(of: vm.verboseMode) { _, _ in rebuildMessageGroups() }
 
