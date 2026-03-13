@@ -1719,6 +1719,32 @@ def _label_for_voice(voice_id: str) -> str:
     return part.capitalize()
 
 
+# Build name→id lookup from the full voice pool
+_voice_name_to_id: dict[str, str] = {
+    name.lower(): vid for vid, name in hub_config.VOICE_POOL
+}
+
+def _resolve_voice_id(voice: str) -> str:
+    """Normalize a voice label or short name to a full voice ID.
+
+    Accepts full IDs ('af_sky'), short names ('sky'), or display names ('Sky').
+    Returns the canonical ID, or the input unchanged if no match is found.
+    """
+    if not voice:
+        return voice
+    pool_ids = {vid for vid, _ in hub_config.VOICE_POOL}
+    if voice in pool_ids:
+        return voice  # already correct
+    resolved = _voice_name_to_id.get(voice.lower())
+    if resolved:
+        return resolved
+    # Also check live sessions (covers dynamic/custom voice labels)
+    for s in session_mgr.sessions.values():
+        if s.label and s.label.lower() == voice.lower():
+            return s.voice
+    return voice
+
+
 def _save_groups() -> None:
     import fcntl
     data = {
@@ -1740,11 +1766,15 @@ def _load_groups() -> None:
     try:
         data = json.loads(_GROUPS_META.read_text())
         for name, g in data.items():
+            raw_voices = g.get("voices", g.get("session_ids", []))
+            # Migrate: normalize any stored labels/short names to proper voice IDs
+            normalized = [_resolve_voice_id(v) for v in raw_voices]
             _group_chats[name] = {
                 "id": g["id"],
                 "name": g["name"],
-                "voices": list(g.get("voices", g.get("session_ids", []))),
+                "voices": normalized,
             }
+        _save_groups()  # persist normalized data
     except Exception:
         pass
 
@@ -1875,6 +1905,7 @@ async def groupchat_add_member(name: str, request: Request):
             voice = s.voice if s else ""
     if not voice:
         return JSONResponse({"error": "voice is required"}, status_code=400)
+    voice = _resolve_voice_id(voice)
     g = _group_chats[key]
     if voice not in g["voices"]:
         g["voices"].append(voice)
@@ -1895,6 +1926,7 @@ async def groupchat_remove_member(name: str, request: Request):
         if sid:
             s = session_mgr.sessions.get(sid)
             voice = s.voice if s else ""
+    voice = _resolve_voice_id(voice) if voice else voice
     g = _group_chats[key]
     if voice and voice in g["voices"]:
         g["voices"].remove(voice)

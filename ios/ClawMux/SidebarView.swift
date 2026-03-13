@@ -437,7 +437,10 @@ struct SidebarView: View {
         var result: [(groupId: String, name: String?, voices: [VoiceInfo])] = []
         for gc in vm.knownGroupChats {
             guard let gid = vm.groupId(for: gc.name) else { continue }
-            let voices = ALL_VOICES.filter { gc.voices.contains($0.id) }
+            // Match by ID or by display name (handles legacy data where labels were stored instead of IDs)
+            let voices = ALL_VOICES.filter { v in
+                gc.voices.contains(v.id) || gc.voices.contains(v.name.lowercased())
+            }
             result.append((groupId: gid, name: gc.name, voices: voices))
         }
         // Fallback: active sessions whose group isn't in knownGroupChats yet
