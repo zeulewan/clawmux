@@ -329,6 +329,8 @@ struct MarkdownContentView: View {
                         .padding(.bottom, 8)
                         .fixedSize(horizontal: true, vertical: false)
                 }
+                .frame(maxWidth: .infinity)
+                .clipped()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.canvas2, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
