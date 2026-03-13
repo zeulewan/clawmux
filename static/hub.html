@@ -631,12 +631,12 @@ function switchTab(sessionId, manual = false) {
     if (voiceSelect) voiceSelect.value = s.voice || 'af_sky';
     speedSelect.value = String(parseFloat(s.speed || 1.0).toFixed(1));
     const sessionModelEl = document.getElementById('session-model');
-    if (sessionModelEl) {
+    if (sessionModelEl && (!s.backend || s.backend === 'claude-code')) {
       sessionModelEl.value = s.model || 'opus';
     }
     updateModelLabel();
     const sessionEffortEl = document.getElementById('session-effort');
-    if (sessionEffortEl) {
+    if (sessionEffortEl && (!s.backend || s.backend === 'claude-code')) {
       sessionEffortEl.value = s.effort || 'high';
     }
     updateEffortLabel();
@@ -1608,16 +1608,26 @@ function updateModelLabel() {
   const label = document.getElementById('model-label');
   if (!label) return;
   const s = activeSessionId ? sessions.get(activeSessionId) : null;
+  const backend = s?.backend || 'claude-code';
+  if (backend !== 'claude-code') {
+    // Non-Claude backend: show actual model name as read-only text
+    label.textContent = s?.model_id || s?.model || 'unknown';
+    label.style.cursor = 'default';
+    label.style.display = 'inline';
+    return;
+  }
   const model = s?.model || 'opus';
   label.textContent = model.charAt(0).toUpperCase() + model.slice(1) + ' ▾';
+  label.style.cursor = '';
   label.style.display = 'inline';
 }
 
 function toggleModelPopup(e) {
   e.stopPropagation();
+  const s = activeSessionId ? sessions.get(activeSessionId) : null;
+  if (s?.backend && s.backend !== 'claude-code') return; // non-Claude: model is set at spawn time
   const popup = document.getElementById('model-popup');
   if (popup.style.display !== 'none') { popup.style.display = 'none'; return; }
-  const s = activeSessionId ? sessions.get(activeSessionId) : null;
   const current = s?.model || 'opus';
   const models = ['opus', 'sonnet', 'haiku'];
   popup.innerHTML = models.map(m => {
@@ -1659,6 +1669,8 @@ function updateEffortLabel() {
   const label = document.getElementById('effort-label');
   if (!label) return;
   const s = activeSessionId ? sessions.get(activeSessionId) : null;
+  const backend = s?.backend || 'claude-code';
+  if (backend !== 'claude-code') { label.style.display = 'none'; return; }
   const model = s?.model || 'opus';
   if (model === 'haiku') { label.style.display = 'none'; return; }
   const effort = s?.effort || 'high';
@@ -1668,9 +1680,10 @@ function updateEffortLabel() {
 
 function toggleEffortPopup(e) {
   e.stopPropagation();
+  const s = activeSessionId ? sessions.get(activeSessionId) : null;
+  if (s?.backend && s.backend !== 'claude-code') return; // effort is Claude-specific
   const popup = document.getElementById('effort-popup');
   if (popup.style.display !== 'none') { popup.style.display = 'none'; return; }
-  const s = activeSessionId ? sessions.get(activeSessionId) : null;
   const current = s?.effort || 'high';
   const efforts = ['high', 'medium', 'low'];
   popup.innerHTML = efforts.map(ef => {
@@ -1776,7 +1789,8 @@ function hideDebugPanel() {
   debugActive = false;
   document.getElementById('debug-panel').style.display = 'none';
   if (debugTimer) { clearInterval(debugTimer); debugTimer = null; }
-  renderSidebar();
+  if (typeof applyInputMode === 'function') applyInputMode();
+  else renderSidebar();
 }
 
 async function killAllSessions() {
