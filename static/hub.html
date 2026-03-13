@@ -172,6 +172,35 @@
 </div>
 <div id="model-popup" class="popup"></div>
 <div id="effort-popup" class="popup"></div>
+
+<!-- Spawn options dialog -->
+<div id="spawn-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:var(--z-modal); align-items:center; justify-content:center;" onclick="cancelSpawn(event)">
+  <div id="spawn-dialog" style="background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:24px; min-width:280px; max-width:360px; box-shadow:var(--shadow-xl);" onclick="event.stopPropagation()">
+    <div style="font-weight:600; font-size:1rem; margin-bottom:16px; color:var(--text);">New Agent</div>
+    <div style="margin-bottom:12px;">
+      <label style="display:block; font-size:0.75rem; color:var(--text-secondary); margin-bottom:4px;">Backend</label>
+      <select id="spawn-backend" onchange="onSpawnBackendChange()" style="width:100%; padding:6px 10px; font-size:0.85rem; border:1px solid var(--border); border-radius:var(--radius-xs); background:var(--bg-card); color:var(--text); font-family:inherit;">
+        <option value="claude-code">Claude Code</option>
+        <option value="opencode">OpenCode</option>
+        <option value="gemini">Gemini CLI</option>
+      </select>
+    </div>
+    <div id="spawn-model-row" style="display:none; margin-bottom:12px;">
+      <label style="display:block; font-size:0.75rem; color:var(--text-secondary); margin-bottom:4px;">Model</label>
+      <select id="spawn-model" style="width:100%; padding:6px 10px; font-size:0.85rem; border:1px solid var(--border); border-radius:var(--radius-xs); background:var(--bg-card); color:var(--text); font-family:inherit;">
+        <option value="claude-opus-4-6">Claude Opus</option>
+        <option value="gpt-5">GPT-5</option>
+        <option value="gemini-3">Gemini 3</option>
+        <option value="qwen2.5-coder">Local (Qwen)</option>
+      </select>
+    </div>
+    <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:4px;">
+      <button onclick="cancelSpawn()" style="padding:6px 16px; font-size:0.85rem; border:1px solid var(--border); border-radius:var(--radius-xs); background:transparent; color:var(--text-secondary); cursor:pointer; font-family:inherit;">Cancel</button>
+      <button onclick="confirmSpawn()" style="padding:6px 16px; font-size:0.85rem; border:none; border-radius:var(--radius-xs); background:var(--blue); color:#fff; cursor:pointer; font-family:inherit; font-weight:600;">Spawn</button>
+    </div>
+  </div>
+</div>
+
 <div id="app-loading-bar" class="active"></div>
 
 <div id="app-body">
@@ -693,7 +722,41 @@ function switchTab(sessionId, manual = false) {
 
 
 // --- Session management ---
-async function spawnSession(voiceId = '') {
+let _spawnVoiceId = '';
+
+function showSpawnDialog(voiceId) {
+  if (voiceId && spawningVoices.has(voiceId)) return;
+  _spawnVoiceId = voiceId || '';
+  document.getElementById('spawn-backend').value = 'claude-code';
+  document.getElementById('spawn-model-row').style.display = 'none';
+  const overlay = document.getElementById('spawn-overlay');
+  overlay.style.display = 'flex';
+  overlay.focus();
+}
+
+function onSpawnBackendChange() {
+  const backend = document.getElementById('spawn-backend').value;
+  document.getElementById('spawn-model-row').style.display =
+    (backend === 'opencode') ? 'block' : 'none';
+}
+
+function cancelSpawn(e) {
+  if (e && e.target !== document.getElementById('spawn-overlay')) return;
+  document.getElementById('spawn-overlay').style.display = 'none';
+  _spawnVoiceId = '';
+}
+
+async function confirmSpawn() {
+  const backend = document.getElementById('spawn-backend').value;
+  const modelId = backend === 'opencode'
+    ? document.getElementById('spawn-model').value
+    : '';
+  document.getElementById('spawn-overlay').style.display = 'none';
+  await spawnSession(_spawnVoiceId, backend, modelId);
+  _spawnVoiceId = '';
+}
+
+async function spawnSession(voiceId = '', backend = 'claude-code', modelId = '') {
   if (voiceId && spawningVoices.has(voiceId)) return; // already spawning this voice
 
   // Mark voice as spawning immediately and update grid
@@ -706,7 +769,8 @@ async function spawnSession(voiceId = '') {
   try { await getMicStream(); } catch (e) { console.warn('Mic permission denied:', e); }
 
   try {
-    const body = { voice: voiceId, project: currentProject };
+    const body = { voice: voiceId, project: currentProject, backend };
+    if (modelId) body.model_id = modelId;
     const resp = await fetch('/api/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1990,15 +2054,22 @@ function renderMonitorFrames() {
     const header = document.createElement('div');
     header.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:0.35rem 0.6rem; border-bottom:1px solid var(--border); font-size:0.7rem; color:var(--text-secondary);';
     header.innerHTML = `<span>${monId} <span style="color:var(--text-tertiary)">:${mon.port}</span></span>`;
+    const _btnStyle = 'background:none; border:none; color:var(--text-tertiary); cursor:pointer; padding:0 5px; line-height:1;';
+    const newTabBtn = document.createElement('button');
+    newTabBtn.textContent = '⧉';
+    newTabBtn.title = 'Open in new tab';
+    newTabBtn.style.cssText = _btnStyle + 'font-size:0.85rem;';
+    newTabBtn.onclick = () => window.open(mon.url, '_blank');
     const closeBtn = document.createElement('button');
     closeBtn.textContent = '×';
     closeBtn.title = 'Stop monitor';
-    closeBtn.style.cssText = 'background:none; border:none; color:var(--text-tertiary); font-size:1rem; cursor:pointer; padding:0 4px; line-height:1;';
+    closeBtn.style.cssText = _btnStyle + 'font-size:1rem;';
     closeBtn.onclick = () => stopMonitorFrame(key);
+    header.appendChild(newTabBtn);
     header.appendChild(closeBtn);
     const frame = document.createElement('iframe');
     frame.src = mon.url;
-    frame.style.cssText = 'width:100%; height:300px; border:none; display:block;';
+    frame.style.cssText = 'width:100%; height:500px; border:none; display:block;';
     frame.sandbox = 'allow-scripts allow-same-origin';
     wrapper.appendChild(header);
     wrapper.appendChild(frame);
@@ -2187,7 +2258,7 @@ document.getElementById('context-menu').addEventListener('click', (e) => {
 });
 
 document.getElementById('ctx-launch').addEventListener('click', () => {
-  if (contextMenuVoiceId) spawnSession(contextMenuVoiceId);
+  if (contextMenuVoiceId) showSpawnDialog(contextMenuVoiceId);
   hideContextMenu();
 });
 
@@ -2251,6 +2322,13 @@ document.addEventListener('keydown', (e) => {
     // Prevent browser from exiting fullscreen — Escape should pause/stop audio instead
     e.preventDefault();
     e.stopPropagation();
+    // Close spawn dialog if open
+    const spawnOverlay = document.getElementById('spawn-overlay');
+    if (spawnOverlay && spawnOverlay.style.display !== 'none') {
+      spawnOverlay.style.display = 'none';
+      _spawnVoiceId = '';
+      return;
+    }
     hideContextMenu();
     // Stop any active playback
     if (currentAudio || currentBufferedPlayer) {
@@ -2363,7 +2441,7 @@ document.addEventListener('keydown', (e) => {
       for (const [sid, s] of sessions) {
         if (s.voice === voiceId && (!s.project_slug || s.project_slug === currentProject)) { switchTab(sid); return; }
       }
-      spawnSession(voiceId);
+      showSpawnDialog(voiceId);
     }
   }
 });

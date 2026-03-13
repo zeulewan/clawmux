@@ -321,6 +321,14 @@ function handleMessage(data) {
           setToggle('walking_mode', data.walking_mode);
         }
       }
+      if ('backend' in data) s.backend = data.backend;
+      if ('model_id' in data) {
+        s.model_id = data.model_id;
+        if (data.session_id === activeSessionId) {
+          if (typeof updateModelLabel === 'function') updateModelLabel();
+          if (typeof updateEffortLabel === 'function') updateEffortLabel();
+        }
+      }
       // Use canonical state field
       const serverState = data.state;
       if (serverState) {
