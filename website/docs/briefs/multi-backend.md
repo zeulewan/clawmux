@@ -103,24 +103,24 @@ If Claude Opus resumes next, its cursor is already at 142 (it was last active). 
 
 ## Implementation Plan
 
-### Phase 1 — Foundation (2–3 days)
+### Phase 1 — Foundation
 - `OpenCodeBackend` class: spawn, terminate, deliver_message (HTTP POST), capture_pane
 - Bridge TypeScript plugin: translates OpenCode hook events to `POST /api/hooks/tool-status`
 - `opencode.json` template generation (replaces `CLAUDE.md` for OpenCode agents)
 - `read_cursors` map in `history_store` — updated on every model write
 - `generate_catchup_context(model_id, cap=50)` method in `HistoryStore` — returns delta since cursor, filtered to chat-only, capped at 50
 
-### Phase 2 — Startup Integration (1 day)
+### Phase 2 — Startup Integration
 - On agent adopt: call `generate_catchup_context`, prepend to first injection if non-None
 - Works identically for Claude Code and OpenCode backends
 - Skip injection if Claude Code `--resume` detects native session match
 
-### Phase 3 — UI (1–2 days)
+### Phase 3 — UI
 - Spawn form: backend dropdown + model picker
 - Sidebar badge: backend icon + model name for non-Claude-Code agents
 - Settings panel: provider API key fields
 
-### Phase 4 — Gemini CLI Backend (1–2 days)
+### Phase 4 — Gemini CLI Backend
 Gemini CLI hook protocol is nearly identical to Claude Code (same JSON format, same exit-code semantics, `BeforeToolSelection` → `PreToolUse`, `AfterTool` → `PostToolUse`). A `GeminiBackend` requires:
 - Different spawn command (`gemini` instead of `claude`)
 - `GEMINI.md` template instead of `CLAUDE.md`
@@ -132,4 +132,4 @@ The entire messaging layer, groups, history storage format, TTS, WebSocket proto
 
 ## Current Status
 
-Backend abstraction is in place. `ClaudeCodeBackend` is the only implementation. The `last_writer_model` feature and `OpenCodeBackend` are not yet built. Phase 1 is estimated at 2–3 days and is the prerequisite for everything else.
+Backend abstraction is in place. `ClaudeCodeBackend` is the only implementation. The read cursor and `OpenCodeBackend` are not yet built. Phase 1 is the prerequisite for everything else.
