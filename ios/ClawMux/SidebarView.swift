@@ -433,16 +433,25 @@ struct SidebarView: View {
     // MARK: - Group Chat Card
 
     private var activeGroups: [(groupId: String, name: String?, voices: [VoiceInfo])] {
+        // Groups with active sessions
         var byGroup: [String: [String]] = [:]
         for s in vm.sessions where !s.groupId.isEmpty {
             if !(byGroup[s.groupId, default: []].contains(s.voice)) {
                 byGroup[s.groupId, default: []].append(s.voice)
             }
         }
-        return byGroup.map { gid, voiceIds in
+        var result = byGroup.map { gid, voiceIds in
             let voices = ALL_VOICES.filter { voiceIds.contains($0.id) }
             return (gid, vm.groupName(for: gid), voices)
-        }.sorted { $0.groupId < $1.groupId }
+        }
+        // Also include known groups that have no active sessions yet (e.g. just created)
+        for gc in vm.knownGroupChats {
+            guard let gid = vm.groupId(for: gc.name),
+                  !result.contains(where: { $0.groupId == gid }) else { continue }
+            let voices = ALL_VOICES.filter { gc.voices.contains($0.id) }
+            result.append((gid, gc.name, voices))
+        }
+        return result.sorted { $0.groupId < $1.groupId }
     }
 
     @ViewBuilder

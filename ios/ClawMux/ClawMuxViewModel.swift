@@ -207,6 +207,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     private var groupIdToName: [String: String] = [:]  // "gc-xxx" → "group name" for disband API
 
     func groupName(for groupId: String) -> String? { groupIdToName[groupId] }
+    func groupId(for name: String) -> String? { groupIdToName.first(where: { $0.value == name })?.key }
     @Published var errorMessage: String?
     @Published var ttsPlayingMessageId: UUID?
 
