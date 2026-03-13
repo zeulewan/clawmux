@@ -39,6 +39,10 @@ struct ChatScrollAreaView: View {
                     }
                     .padding(.leading, 60).padding(.trailing, 12)
                     .padding(.top, 64).padding(.bottom, 16)
+                    // scrollTargetLayout() lets scrollPosition(id:) resolve item IDs during layout.
+                    // LazyVStack only materialises views on demand, so proxy.scrollTo has no target
+                    // yet when it fires post-onChange. scrollPosition(id:) defers resolution to the
+                    // same layout pass where the new views are created — jitter-free prepend.
                     .scrollTargetLayout()
                 }
                 .scrollPosition(id: $scrollPositionID, anchor: .top)
