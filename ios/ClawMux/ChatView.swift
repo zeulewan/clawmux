@@ -19,6 +19,7 @@ struct ChatScrollAreaView: View {
     @State private var topAnchorId: String? = nil   // first message ID captured before older-message load
     @State private var cachedMessageGroups: [MessageGroup] = []
     @State private var scrollPositionID: String? = nil  // declarative scroll anchor for jitter-free prepend
+    @State private var thinkingJustEnded = false     // true while thinking bubble's fade-out is in flight
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -61,6 +62,9 @@ struct ChatScrollAreaView: View {
                 // proxy.scrollTo("bottom") on a LazyVStack with unrendered tail items is unreliable.
                 .id(vm.activeSessionId)
                 .scrollDismissesKeyboard(.immediately)
+                // Only allow vertical bounce when content overflows — prevents snap-back
+                // past the bottom when content height changes during animations.
+                .scrollBounceBehavior(.basedOnSize, axes: .vertical)
                 .accessibilityIdentifier("ChatScrollView")
                 .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
                 .modifier(ScrollTopDetector(
@@ -92,15 +96,26 @@ struct ChatScrollAreaView: View {
                     // Clear any lingering prepend anchor — new content arrived, anchor is no longer valid.
                     // nil binding = no positional constraint; does NOT change scroll position.
                     scrollPositionID = nil
-                    scrollBottom(proxy)
+                    if thinkingJustEnded {
+                        // Thinking bubble was just removed. Its .easeOut(duration: 0.18) fade-out
+                        // transition keeps the bubble's frame in the UIKit layout while it plays —
+                        // proxy.scrollTo("bottom") fired NOW would target a position below the
+                        // still-present bubble frame. Content then shrinks → scroll stranded past
+                        // the real bottom. Delay until after the transition clears the layout.
+                        thinkingJustEnded = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { scrollBottom(proxy) }
+                    } else {
+                        scrollBottom(proxy)
+                    }
                 }
                 .onChange(of: vm.activeSession?.isThinking) { _, thinking in
-                    if thinking != true { thinkingExpanded = false }
+                    if thinking != true {
+                        thinkingExpanded = false
+                        // Flag that the bubble's fade-out transition is now in flight.
+                        // The MessageListKey handler will delay scrollBottom until after it completes.
+                        thinkingJustEnded = true
+                    }
                     // Only scroll when bubble appears — not when it disappears.
-                    // Scrolling on disappear targets the taller (with-bubble) content,
-                    // but content shrinks immediately as the bubble animates out.
-                    // The spring overshoot lands past the new shorter bottom → blank screen.
-                    // The activeMessages.count handler scrolls when the reply arrives.
                     if thinking == true { scrollBottom(proxy) }
                 }
                 .onChange(of: vm.activeSession?.activity) { _, _ in scrollBottom(proxy) }
