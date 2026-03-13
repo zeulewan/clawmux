@@ -66,37 +66,40 @@ When an agent switches backends — or when you restart an agent that was previo
 
 The new design is smarter:
 
-### The Last-Writer Check
+### The Read Cursor
 
-`history.json` gains a `last_writer_model` field, updated every time a model appends a message. On startup, the hub compares `last_writer_model` to the current model:
+`history.json` gains a `read_cursors` map — one entry per `(agent, model)` pair, storing the index of the last message that model processed. On startup, the hub compares the cursor to the current message count:
 
-- **Match** — the same model was last to write. Its context window already has the conversation (via native session resume). Skip the injection.
-- **No match** — a different model wrote last. This model needs to catch up.
+- **Cursor at end** — this model has seen everything. Skip injection.
+- **Cursor behind** — messages arrived since this model was last active. Inject the delta.
 
-### Catch-Up Context
-
-When catch-up is needed, the hub builds a filtered summary of the last N messages (default 30) and prepends it to the agent's first turn as a system block.
-
-The filter is important: **tool calls are stripped**. The catch-up only contains human-readable conversation — user messages and assistant text. No `Bash(...)` calls, no tool inputs, no bare acks. Just the chat.
-
-The goal is that from the agent's perspective, there was no interruption. It reads the context, understands where things stand, and responds as if it had been there all along.
-
-```
-history.json
+```json
 {
-  "last_writer_model": "claude-opus-4-6",
   "messages": [...],
-  ...
+  "read_cursors": {
+    "claude-opus-4-6": 142,
+    "gpt-5": 89
+  }
 }
 ```
 
-On startup with GPT-5:
-1. Hub sees `last_writer_model` ≠ `gpt-5`
-2. Generates filtered catch-up of last 30 conversational messages
-3. Injects as system block before first user message
-4. Agent responds — and updates `last_writer_model` to `gpt-5`
+### Catch-Up Context
 
-If Claude Opus resumes next time, same check — it was not last to write — so it gets a catch-up of what GPT-5 said.
+The catch-up injects **exactly the messages this model missed** — from its cursor position to the current end of history. If only two messages came in while the model was away, it gets two messages. If fifty came in, it gets fifty.
+
+The cap is **50 messages** (configurable). If the delta exceeds the cap, the most recent 50 are used. The model gets what it needs to be useful right now, not a full replay of everything it ever missed.
+
+The filter is important: **tool calls are stripped**. The catch-up only contains human-readable conversation — user messages and assistant text responses. No `Bash(...)` calls, no tool inputs, no bare acks. Just the chat.
+
+The goal is that from the agent's perspective, there was no interruption. It reads the delta, understands where things stand, and responds as if it had been there all along.
+
+On startup with GPT-5 (cursor at 89, history at 142):
+1. Hub computes delta: messages 89–142 = 53 messages
+2. Filters to conversational text only: say 31 messages remain
+3. Injects as system block before first user message
+4. Agent responds — cursor for `gpt-5` advances to 142
+
+If Claude Opus resumes next, its cursor is already at 142 (it was last active). Skip injection.
 
 ## Implementation Plan
 
@@ -104,8 +107,8 @@ If Claude Opus resumes next time, same check — it was not last to write — so
 - `OpenCodeBackend` class: spawn, terminate, deliver_message (HTTP POST), capture_pane
 - Bridge TypeScript plugin: translates OpenCode hook events to `POST /api/hooks/tool-status`
 - `opencode.json` template generation (replaces `CLAUDE.md` for OpenCode agents)
-- `last_writer_model` field in `history_store.append()`
-- `generate_catchup_context(model_id, n=30)` method in `HistoryStore`
+- `read_cursors` map in `history_store` — updated on every model write
+- `generate_catchup_context(model_id, cap=50)` method in `HistoryStore` — returns delta since cursor, filtered to chat-only, capped at 50
 
 ### Phase 2 — Startup Integration (1 day)
 - On agent adopt: call `generate_catchup_context`, prepend to first injection if non-None
