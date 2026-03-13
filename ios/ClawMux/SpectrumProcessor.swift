@@ -8,7 +8,10 @@ import Foundation
 
 @MainActor
 final class SpectrumBandSource: ObservableObject {
-    @Published var bands: [CGFloat] = Array(repeating: 0, count: SpectrumProcessor.bandCount)
+    // Not @Published — TimelineView(.animation) drives rendering at display rate and Canvas reads
+    // this directly each frame. Publishing on every audio buffer (~44Hz) was restarting the
+    // TimelineView schedule and causing animation stutter.
+    var bands: [CGFloat] = Array(repeating: 0, count: SpectrumProcessor.bandCount)
 }
 
 // MARK: - Spectrum Tap Helper (must be outside @MainActor to avoid isolation inheritance)
