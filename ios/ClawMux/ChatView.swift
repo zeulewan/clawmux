@@ -13,6 +13,7 @@ struct ChatScrollAreaView: View {
     @Binding var showCopiedToast: Bool
     @State private var topAnchorId: String? = nil   // first message ID captured before older-message load
     @State private var cachedMessageGroups: [MessageGroup] = []
+    @State private var scrollPositionID: String? = nil  // declarative scroll anchor for jitter-free prepend
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -38,7 +39,9 @@ struct ChatScrollAreaView: View {
                     }
                     .padding(.leading, 60).padding(.trailing, 12)
                     .padding(.top, 64).padding(.bottom, 16)
+                    .scrollTargetLayout()
                 }
+                .scrollPosition(id: $scrollPositionID, anchor: .top)
                 .defaultScrollAnchor(.bottom)
                 .scrollDismissesKeyboard(.interactively)
                 .accessibilityIdentifier("ChatScrollView")
@@ -60,13 +63,14 @@ struct ChatScrollAreaView: View {
                 .onChange(of: vm.activeMessages.count) { _, _ in
                     rebuildMessageGroups()
                     if isLoadingOlder, let aid = topAnchorId {
-                        // Older messages were prepended — scroll to what was the top message
-                        var t = Transaction()
-                        t.disablesAnimations = true
-                        withTransaction(t) { proxy.scrollTo(aid, anchor: .top) }
+                        // Older messages were prepended — anchor to what was the top message.
+                        // Using scrollPosition(id:) instead of proxy.scrollTo so the position
+                        // is resolved in the same render pass as the new content — no jitter.
+                        scrollPositionID = aid
                         return
                     }
                     guard !isLoadingOlder else { return }
+                    scrollPositionID = nil
                     scrollBottom(proxy)
                 }
                 .onChange(of: vm.activeSession?.isThinking) { _, thinking in
@@ -75,6 +79,7 @@ struct ChatScrollAreaView: View {
                 }
                 .onChange(of: vm.activeSession?.activity) { _, _ in scrollBottom(proxy) }
                 .onChange(of: vm.activeSessionId) { _, _ in
+                    scrollPositionID = nil
                     cachedMessageGroups = []
                     var t = Transaction()
                     t.disablesAnimations = true
