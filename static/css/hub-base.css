@@ -1013,7 +1013,7 @@ body {
 /* Mirror action buttons: bottom-left on user messages */
 .msg.user .msg-actions { right: auto; left: 4px; }
 .msg .msg-action-btn.playing { color: var(--green); }
-#chat-area { overflow-x: hidden; }
+#chat-area { overflow-x: clip; } /* clip (not hidden) so nested pre scroll works on iOS */
 @keyframes msgAppear {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -1866,7 +1866,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 }
 .msg.assistant .md-content pre {
   background: var(--md-pre-bg, rgba(0,0,0,0.4)); border-radius: var(--radius-xs); padding: 28px 14px 10px;
-  margin: 0.4em 0; overflow-x: auto; position: relative;
+  margin: 0.4em 0; overflow-x: auto; -webkit-overflow-scrolling: touch; position: relative;
   border-top: 1px solid rgba(255,255,255,0.06);
 }
 .msg.assistant .md-content pre .code-copy-btn {
