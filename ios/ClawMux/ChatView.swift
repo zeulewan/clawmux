@@ -89,8 +89,14 @@ struct ChatScrollAreaView: View {
                         // Older messages were prepended — anchor to what was the top message.
                         // Using scrollPosition(id:) instead of proxy.scrollTo so the position
                         // is resolved in the same render pass as the new content — no jitter.
-                        scrollPositionID = aid
-                        return
+                        //
+                        // Guard: if user was at the bottom, isLoadingOlder was triggered
+                        // spuriously (ScrollTopDetector false positive during view transitions).
+                        // In that case, skip the top-anchor and fall through to scrollBottom.
+                        if !isAtBottom {
+                            scrollPositionID = aid
+                            return
+                        }
                     }
                     guard !isLoadingOlder else { return }
                     // Clear any lingering prepend anchor — new content arrived, anchor is no longer valid.
