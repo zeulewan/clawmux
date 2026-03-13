@@ -3,6 +3,11 @@ import SwiftUI
 // MARK: - Chat Scroll Area View
 // Contains chat scroll area, message grouping, bubbles, and thinking bubble.
 
+private struct MessageListKey: Equatable {
+    let count: Int
+    let lastId: UUID?
+}
+
 struct ChatScrollAreaView: View {
     @ObservedObject var vm: ClawMuxViewModel
     @Binding var isAtBottom: Bool
@@ -69,7 +74,7 @@ struct ChatScrollAreaView: View {
                 }
                 // Single handler for both count and last-message-id changes — avoids a double
                 // rebuildMessageGroups() call when a new message arrives (count fires AND id fires).
-                .onChange(of: (vm.activeMessages.count, vm.activeMessages.last?.id)) { _, _ in
+                .onChange(of: MessageListKey(count: vm.activeMessages.count, lastId: vm.activeMessages.last?.id)) { _, _ in
                     rebuildMessageGroups()
                     if isLoadingOlder, let aid = topAnchorId {
                         // Older messages were prepended — anchor to what was the top message.
