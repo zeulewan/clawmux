@@ -8,6 +8,11 @@ struct ScrollTopDetector: ViewModifier {
     var sessionId: String?
     var load: (String, @escaping () -> Void) -> Void
 
+    // Post-load cooldown: blocks re-triggering while the scroll view settles after a load.
+    // scrollPosition(id:) resolution can fire onScrollGeometryChange with distanceFromTop < 200
+    // during the transition, so isLoadingOlder alone isn't a sufficient guard.
+    @State private var cooldownUntil: Date = .distantPast
+
     func body(content: Content) -> some View {
         if #available(iOS 18.0, *) {
             // Use CGFloat so action fires on every scroll event — avoids Bool toggle dead zone
@@ -23,10 +28,19 @@ struct ScrollTopDetector: ViewModifier {
                 let standard = geo.contentOffset.y
                 return min(anchored, standard)
             } action: { _, distanceFromTop in
-                guard distanceFromTop < 200, !isLoadingOlder, hasOlderMessages, let sid = sessionId else { return }
+                guard distanceFromTop < 200,
+                      !isLoadingOlder,
+                      Date() >= cooldownUntil,
+                      hasOlderMessages,
+                      let sid = sessionId else { return }
                 isLoadingOlder = true
                 load(sid) {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { isLoadingOlder = false }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        isLoadingOlder = false
+                        // Hold off re-triggering for 1s after load completes — gives the scroll
+                        // view time to settle at the restored anchor position.
+                        cooldownUntil = Date().addingTimeInterval(1.0)
+                    }
                 }
             }
         } else {
