@@ -77,12 +77,19 @@ struct ChatScrollAreaView: View {
                         return
                     }
                     guard !isLoadingOlder else { return }
+                    // Clear any lingering prepend anchor — new content arrived, anchor is no longer valid.
+                    // nil binding = no positional constraint; does NOT change scroll position.
                     scrollPositionID = nil
                     scrollBottom(proxy)
                 }
                 .onChange(of: vm.activeSession?.isThinking) { _, thinking in
                     if thinking != true { thinkingExpanded = false }
-                    scrollBottom(proxy)
+                    // Only scroll when bubble appears — not when it disappears.
+                    // Scrolling on disappear targets the taller (with-bubble) content,
+                    // but content shrinks immediately as the bubble animates out.
+                    // The spring overshoot lands past the new shorter bottom → blank screen.
+                    // The activeMessages.count handler scrolls when the reply arrives.
+                    if thinking == true { scrollBottom(proxy) }
                 }
                 .onChange(of: vm.activeSession?.activity) { _, _ in scrollBottom(proxy) }
                 .onChange(of: vm.activeSessionId) { _, _ in
@@ -127,7 +134,9 @@ struct ChatScrollAreaView: View {
 
     private func scrollBottom(_ proxy: ScrollViewProxy) {
         guard isAtBottom else { return }
-        withAnimation(.spring(response: 0.3)) { proxy.scrollTo("bottom", anchor: .bottom) }
+        // easeOut instead of spring — spring physics can overshoot the content bottom
+        // producing blank space below the last message.
+        withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("bottom", anchor: .bottom) }
     }
 
     // MARK: - Message Grouping
