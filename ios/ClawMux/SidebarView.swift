@@ -433,23 +433,25 @@ struct SidebarView: View {
     // MARK: - Group Chat Card
 
     private var activeGroups: [(groupId: String, name: String?, voices: [VoiceInfo])] {
-        // Groups with active sessions
-        var byGroup: [String: [String]] = [:]
-        for s in vm.sessions where !s.groupId.isEmpty {
-            if !(byGroup[s.groupId, default: []].contains(s.voice)) {
-                byGroup[s.groupId, default: []].append(s.voice)
-            }
-        }
-        var result: [(groupId: String, name: String?, voices: [VoiceInfo])] = byGroup.map { gid, voiceIds in
-            let voices = ALL_VOICES.filter { voiceIds.contains($0.id) }
-            return (groupId: gid, name: vm.groupName(for: gid), voices: voices)
-        }
-        // Also include known groups that have no active sessions yet (e.g. just created)
+        // Primary source: knownGroupChats has the authoritative member list from the hub
+        var result: [(groupId: String, name: String?, voices: [VoiceInfo])] = []
         for gc in vm.knownGroupChats {
-            guard let gid = vm.groupId(for: gc.name),
-                  !result.contains(where: { $0.groupId == gid }) else { continue }
+            guard let gid = vm.groupId(for: gc.name) else { continue }
             let voices = ALL_VOICES.filter { gc.voices.contains($0.id) }
             result.append((groupId: gid, name: gc.name, voices: voices))
+        }
+        // Fallback: active sessions whose group isn't in knownGroupChats yet
+        var byGroup: [String: [String]] = [:]
+        for s in vm.sessions where !s.groupId.isEmpty {
+            if !result.contains(where: { $0.groupId == s.groupId }) {
+                if !(byGroup[s.groupId, default: []].contains(s.voice)) {
+                    byGroup[s.groupId, default: []].append(s.voice)
+                }
+            }
+        }
+        for (gid, voiceIds) in byGroup {
+            let voices = ALL_VOICES.filter { voiceIds.contains($0.id) }
+            result.append((groupId: gid, name: vm.groupName(for: gid), voices: voices))
         }
         return result.sorted { $0.groupId < $1.groupId }
     }
