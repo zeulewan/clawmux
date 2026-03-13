@@ -630,11 +630,8 @@ final class AudioManager: NSObject {
         lastMicActionTime = now
 
         if vm.isPlaying {
-            // Pause (don't discard) and start recording immediately — matches web behavior
-            pauseCurrentPlaybackForSessionSwitch()
-            if let sid = vm.activeSessionId {
-                startRecording(sessionId: sid)
-            }
+            // Per spec: center button = Interrupt when agent is speaking (stops audio + cancels generation)
+            vm.sendInterrupt()
             return
         } else if vm.isRecording {
             stopRecording()
@@ -815,7 +812,8 @@ final class AudioManager: NSObject {
         guard let vm else { return }
         if vm.showTranscriptPreview { vm.clearTranscriptPreview() }
         if vm.isPlaying {
-            interruptPlayback()
+            // Per spec: Interrupt = stop audio + cancel generation
+            vm.sendInterrupt()
             pttInterrupted = true
             return
         }

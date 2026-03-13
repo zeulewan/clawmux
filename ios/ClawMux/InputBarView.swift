@@ -165,10 +165,8 @@ struct InputBarView: View {
                         .foregroundStyle(pttDragOffset > 40 ? Color.cAccent : Color.cTextTer)
                         .opacity(pttDragOffset > 10 ? min(1, Double(pttDragOffset - 10) / 50) : 0.3)
                         .frame(width: 60).transition(.opacity)
-                    } else if let s = vm.activeSession,
-                        s.isThinking || s.state == .starting || s.isSpeaking
-                    {
-                        // Interrupt button — mirrors web #voice-stop (red, 46×46)
+                    } else if let s = vm.activeSession, s.isThinking {
+                        // Cancel thinking — only visible while agent is generating (thinking/processing/compacting)
                         Button { vm.sendInterrupt() } label: {
                             Image(systemName: "stop.fill")
                                 .font(.system(size: 13, weight: .bold))
