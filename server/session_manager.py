@@ -534,12 +534,15 @@ class SessionManager:
             session.model = session_model  # Store effective model so browser can display it
             session_effort = session.effort or hub_config.CLAUDE_EFFORT
             session.effort = session_effort
+            # For non-Claude backends, pass model_id (e.g. "opencode/nemotron-3-super-free")
+            # instead of the Claude model shorthand ("opus"/"sonnet")
+            spawn_model = session.model_id if backend != "claude-code" and session.model_id else session_model
             await self._get_backend(backend).spawn(
                 session_name=tmux_name, work_dir=str(work_dir),
                 session_id=session_id, hub_port=HUB_PORT,
                 voice_id=voice_id, voice_name=voice_name,
                 claude_session_id=claude_session_id,
-                resuming=resuming, model=session_model,
+                resuming=resuming, model=spawn_model,
                 effort=session_effort,
             )
 
