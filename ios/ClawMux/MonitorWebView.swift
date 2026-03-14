@@ -35,21 +35,37 @@ struct MonitorSheet: View {
 private struct MonitorWebViewRepresentable: UIViewRepresentable {
     let urlString: String
 
-    func makeUIView(context: Context) -> WKWebView {
+    func makeUIView(context: Context) -> InputCapableWebView {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
-        let webView = WKWebView(frame: .zero, configuration: config)
-        webView.scrollView.isScrollEnabled = true
+        let webView = InputCapableWebView(frame: .zero, configuration: config)
+        webView.scrollView.isScrollEnabled = false
+        webView.scrollView.bounces = false
         webView.isOpaque = false
-        webView.backgroundColor = .clear
+        webView.backgroundColor = .black
+        webView.scrollView.backgroundColor = .black
         return webView
     }
 
-    func updateUIView(_ webView: WKWebView, context: Context) {
+    func updateUIView(_ webView: InputCapableWebView, context: Context) {
         guard let url = URL(string: urlString) else { return }
-        // Only load once
         if webView.url == nil {
             webView.load(URLRequest(url: url))
+        }
+    }
+}
+
+// MARK: - WKWebView subclass that accepts keyboard input
+
+private class InputCapableWebView: WKWebView {
+    override var canBecomeFirstResponder: Bool { true }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window != nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.becomeFirstResponder()
+            }
         }
     }
 }
