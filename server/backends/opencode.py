@@ -127,6 +127,27 @@ class OpenCodeBackend(AgentBackend):
         except Exception as e:
             log.error("[%s] Failed to create OpenCode session: %s", session_name, e)
 
+    def restore_session(self, session_name: str, work_dir: str) -> bool:
+        """Restore port/session state from .clawmux-opencode.json after hub reload.
+
+        Returns True if state was restored successfully.
+        """
+        import json as _json
+        info_path = Path(work_dir) / ".clawmux-opencode.json"
+        if not info_path.exists():
+            return False
+        try:
+            info = _json.loads(info_path.read_text())
+            port = info["port"]
+            oc_session_id = info["session_id"]
+            _session_ports[session_name] = port
+            _opencode_sessions[session_name] = oc_session_id
+            log.info("[%s] Restored OpenCode state: port=%d, session=%s", session_name, port, oc_session_id)
+            return True
+        except Exception as e:
+            log.error("[%s] Failed to restore OpenCode state: %s", session_name, e)
+            return False
+
     async def terminate(self, session_name: str) -> None:
         _free_port(session_name)
         _opencode_sessions.pop(session_name, None)

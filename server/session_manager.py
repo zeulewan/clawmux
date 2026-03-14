@@ -293,6 +293,11 @@ class SessionManager:
             # Restore backend and model_id from agents.json
             session.backend = getattr(entry, 'backend', 'claude-code') or "claude-code"
             session.model_id = getattr(entry, 'model_id', '') or ""
+            # Restore OpenCode port/session state from disk so HTTP delivery works after reload
+            if session.backend == "opencode":
+                backend_inst = self._get_backend("opencode")
+                if hasattr(backend_inst, 'restore_session'):
+                    backend_inst.restore_session(adopt_id, str(work_dir))
             self.sessions[adopt_id] = session
             self._counter += 1
             adopted += 1
@@ -514,9 +519,9 @@ class SessionManager:
 
             session.claude_session_id = claude_session_id
 
-            # Write instructions using the template renderer (backend-aware)
+            # Write instructions for all backends (CLAUDE.md + INSTRUCTIONS.md + opencode.json)
             if self._template_renderer:
-                await self._template_renderer.render_to_file(voice_id, work_dir, backend)
+                await self._template_renderer.render_to_file(voice_id, work_dir)
             else:
                 # Fallback: write minimal CLAUDE.md
                 (work_dir / "CLAUDE.md").write_text(f"Your name is {voice_name}.\n")
@@ -528,14 +533,13 @@ class SessionManager:
                     voice_id, voice_name, hist_prefix
                 )
                 if context_summary:
-                    # Append to the correct instructions file per backend
-                    if backend == "opencode":
-                        instructions_file = work_dir / "INSTRUCTIONS.md"
-                    else:
-                        instructions_file = work_dir / "CLAUDE.md"
-                    existing = instructions_file.read_text() if instructions_file.exists() else ""
-                    instructions_file.write_text(existing + f"\n{context_summary}\n")
-                    log.info("[%s] Injected context summary into %s", session_id, instructions_file.name)
+                    # Append context summary to all instruction files
+                    for fname in ("CLAUDE.md", "INSTRUCTIONS.md"):
+                        instructions_file = work_dir / fname
+                        if instructions_file.exists():
+                            existing = instructions_file.read_text()
+                            instructions_file.write_text(existing + f"\n{context_summary}\n")
+                    log.info("[%s] Injected context summary", session_id)
 
             # Pre-accept workspace trust so Claude Code doesn't prompt on first launch
             self._accept_workspace_trust(str(work_dir))
