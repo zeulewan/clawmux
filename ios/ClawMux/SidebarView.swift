@@ -14,10 +14,14 @@ struct SidebarView: View {
     @Binding var newGroupChatName: String
 
     @State private var dropTargetVoiceId: String? = nil
-    @State private var monitorTitle: String = ""
-    @State private var monitorURL: String? = nil
-    @State private var monitorKey: String? = nil
+    @State private var monitorItem: MonitorItem? = nil
     @State private var monitorLoading: String? = nil  // key being loaded (shows spinner)
+
+    private struct MonitorItem: Identifiable {
+        let id: String   // monitor key
+        let title: String
+        let url: String
+    }
 
     var body: some View {
         sidebarStripView
@@ -169,13 +173,8 @@ struct SidebarView: View {
             if !expanded { withAnimation { sidebarProxy.scrollTo("sidebar-top", anchor: .top) } }
         }
         .animation(.easeInOut(duration: 0.25), value: sidebarExpanded)
-        .sheet(isPresented: Binding(
-            get: { monitorURL != nil },
-            set: { if !$0 { monitorURL = nil; monitorKey = nil } }
-        )) {
-            if let url = monitorURL, let key = monitorKey {
-                MonitorSheet(title: monitorTitle, url: url, monitorKey: key, vm: vm)
-            }
+        .sheet(item: $monitorItem) { item in
+            MonitorSheet(title: item.title, url: item.url, monitorKey: item.id, vm: vm)
         }
         } // ScrollViewReader
     }
@@ -396,9 +395,7 @@ struct SidebarView: View {
                     Task {
                         monitorLoading = "folder-\(slug)"
                         if let result = await vm.startMonitor(type: "folder", id: slug) {
-                            monitorTitle = project
-                            monitorKey = result.key
-                            monitorURL = result.url
+                            monitorItem = MonitorItem(id: result.key, title: project, url: result.url)
                         }
                         monitorLoading = nil
                     }
@@ -806,9 +803,7 @@ struct SidebarView: View {
                     Task {
                         monitorLoading = s.id
                         if let result = await vm.startMonitor(type: "agent", id: voice.id) {
-                            monitorTitle = voice.name
-                            monitorKey = result.key
-                            monitorURL = result.url
+                            monitorItem = MonitorItem(id: result.key, title: voice.name, url: result.url)
                         }
                         monitorLoading = nil
                     }

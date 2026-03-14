@@ -27,6 +27,9 @@ struct MonitorSheet: View {
                     }
                 }
         }
+        .onDisappear {
+            vm.stopMonitor(key: monitorKey)
+        }
     }
 }
 
