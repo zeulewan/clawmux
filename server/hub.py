@@ -518,9 +518,9 @@ async def lifespan(app: FastAPI):
     stuck_task = asyncio.create_task(stuck_buffer_monitor_loop())
     context_task = asyncio.create_task(context_poll_loop())
     usage_task = asyncio.create_task(usage_poll_loop())
-    # On startup, respect tts_enabled: stop Whisper when voice is off; start it when on
+    # On startup, respect stt_enabled: Whisper is STT (user speech input), independent of TTS
     _startup_settings = _load_settings()
-    if not _startup_settings.get("tts_enabled", True):
+    if not _startup_settings.get("stt_enabled", True):
         asyncio.create_task(_stop_whisper_server())
     else:
         asyncio.create_task(_start_whisper_server())
@@ -902,10 +902,12 @@ async def set_project_status(session_id: str, request: Request):
         return JSONResponse({"error": "session not found"}, status_code=404)
     data = await request.json()
     if "project" in data:
+        new_folder = _resolve_slug(data["project"])
         session.project = data["project"]
-        # Note: project_slug (organizational folder) is NOT updated here.
-        # Agents set their working repo via this endpoint; folder assignment
-        # is managed separately by the user via the UI / folder API.
+        # Move agent to the specified folder in workspace.json if it exists
+        if new_folder in project_mgr.projects:
+            session.project_slug = new_folder
+            project_mgr.move_voice(session.voice, new_folder)
     session.project_repo = data.get("repo", data.get("area", session.project_repo))
     if "role" in data:
         role_val = data["role"].lower()
@@ -2758,6 +2760,9 @@ async def _start_whisper_server() -> None:
     if not _WHISPER_START_SCRIPT.exists():
         log.warning("Whisper start script not found: %s", _WHISPER_START_SCRIPT)
         return
+    # Stop any existing instance first to avoid duplicates
+    await _stop_whisper_server()
+    await asyncio.sleep(1)
     try:
         proc = await asyncio.create_subprocess_exec(
             "bash", str(_WHISPER_START_SCRIPT),
@@ -2838,12 +2843,11 @@ async def update_settings(request: Request):
         log.info("Quality mode changed to: %s (model: %s)", data["quality_mode"], model_name)
         # Dynamically load the Whisper model via /load endpoint
         asyncio.create_task(_load_whisper_model(model_name))
-    if "tts_enabled" in data:
-        if not data["tts_enabled"]:
-            # Voice output disabled — offload Whisper to free GPU/RAM
+    if "stt_enabled" in data:
+        # STT (Whisper) is for user speech input — independent of TTS
+        if not data["stt_enabled"]:
             asyncio.create_task(_stop_whisper_server())
         else:
-            # Voice output re-enabled — restart Whisper server
             asyncio.create_task(_start_whisper_server())
     _save_settings(settings)
     log.info("Settings updated: %s", data)
