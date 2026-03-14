@@ -173,25 +173,16 @@
 <div id="model-popup" class="popup"></div>
 <div id="effort-popup" class="popup"></div>
 
-<!-- Spawn options dialog -->
+<!-- OpenCode model picker (shown when spawning with OpenCode backend) -->
 <div id="spawn-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:var(--z-modal); align-items:center; justify-content:center;" onclick="cancelSpawn(event)">
   <div id="spawn-dialog" style="background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:24px; min-width:280px; max-width:360px; box-shadow:var(--shadow-xl);" onclick="event.stopPropagation()">
-    <div style="font-weight:600; font-size:1rem; margin-bottom:16px; color:var(--text);">New Agent</div>
+    <div style="font-weight:600; font-size:1rem; margin-bottom:16px; color:var(--text);">OpenCode — Pick Model</div>
     <div style="margin-bottom:12px;">
-      <label style="display:block; font-size:0.75rem; color:var(--text-secondary); margin-bottom:4px;">Backend</label>
-      <select id="spawn-backend" onchange="onSpawnBackendChange()" style="width:100%; padding:6px 10px; font-size:0.85rem; border:1px solid var(--border); border-radius:var(--radius-xs); background:var(--bg-card); color:var(--text); font-family:inherit;">
-        <option value="claude-code">Claude Code</option>
-        <option value="opencode">OpenCode</option>
-        <option value="gemini">Gemini CLI</option>
-      </select>
-    </div>
-    <div id="spawn-model-row" style="display:none; margin-bottom:12px;">
       <label style="display:block; font-size:0.75rem; color:var(--text-secondary); margin-bottom:4px;">Model</label>
       <select id="spawn-model" style="width:100%; padding:6px 10px; font-size:0.85rem; border:1px solid var(--border); border-radius:var(--radius-xs); background:var(--bg-card); color:var(--text); font-family:inherit;">
-        <option value="claude-opus-4-6">Claude Opus</option>
-        <option value="gpt-5">GPT-5</option>
-        <option value="gemini-3">Gemini 3</option>
-        <option value="qwen2.5-coder">Local (Qwen)</option>
+        <option value="opencode/nemotron-3-super-free">Nemotron 3 Super (free)</option>
+        <option value="opencode/minimax-m2.5-free">MiniMax M2.5 (free)</option>
+        <option value="opencode/mimo-v2-flash-free">Mimo V2 Flash (free)</option>
       </select>
     </div>
     <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:4px;">
@@ -438,6 +429,12 @@
 
 <div id="context-menu">
   <div class="ctx-item" id="ctx-launch">Launch Session</div>
+  <div class="ctx-item ctx-has-submenu" id="ctx-spawn-with">Spawn with ▸
+    <div class="ctx-submenu" id="ctx-spawn-backend-list">
+      <div class="ctx-sub-item" data-backend="claude-code">Claude Code</div>
+      <div class="ctx-sub-item" data-backend="opencode">OpenCode</div>
+    </div>
+  </div>
   <div class="ctx-item" id="ctx-mark-unread">Mark as Unread</div>
   <div class="ctx-item" id="ctx-mark-read">Mark as Read</div>
   <div class="ctx-item ctx-has-submenu" id="ctx-set-role">Set Role ▸
@@ -724,20 +721,11 @@ function switchTab(sessionId, manual = false) {
 // --- Session management ---
 let _spawnVoiceId = '';
 
-function showSpawnDialog(voiceId) {
+function showOpenCodeModelPicker(voiceId) {
   if (voiceId && spawningVoices.has(voiceId)) return;
   _spawnVoiceId = voiceId || '';
-  document.getElementById('spawn-backend').value = 'claude-code';
-  document.getElementById('spawn-model-row').style.display = 'none';
   const overlay = document.getElementById('spawn-overlay');
   overlay.style.display = 'flex';
-  overlay.focus();
-}
-
-function onSpawnBackendChange() {
-  const backend = document.getElementById('spawn-backend').value;
-  document.getElementById('spawn-model-row').style.display =
-    (backend === 'opencode') ? 'block' : 'none';
 }
 
 function cancelSpawn(e) {
@@ -747,12 +735,9 @@ function cancelSpawn(e) {
 }
 
 async function confirmSpawn() {
-  const backend = document.getElementById('spawn-backend').value;
-  const modelId = backend === 'opencode'
-    ? document.getElementById('spawn-model').value
-    : '';
+  const modelId = document.getElementById('spawn-model').value;
   document.getElementById('spawn-overlay').style.display = 'none';
-  await spawnSession(_spawnVoiceId, backend, modelId);
+  await spawnSession(_spawnVoiceId, 'opencode', modelId);
   _spawnVoiceId = '';
 }
 
@@ -2092,6 +2077,7 @@ function showContextMenu(e, sessionId, voiceId) {
   const hasSession = !!sessionId;
   document.getElementById('ctx-terminate').style.display = hasSession ? 'block' : 'none';
   document.getElementById('ctx-launch').style.display = hasSession ? 'none' : 'block';
+  document.getElementById('ctx-spawn-with').style.display = hasSession ? 'none' : 'block';
   const sess = sessionId ? sessions.get(sessionId) : null;
   const hasUnread = sess && (sess.unreadCount || 0) > 0;
   document.getElementById('ctx-mark-unread').style.display = (hasSession && !hasUnread) ? 'block' : 'none';
@@ -2258,7 +2244,20 @@ document.getElementById('context-menu').addEventListener('click', (e) => {
 });
 
 document.getElementById('ctx-launch').addEventListener('click', () => {
-  if (contextMenuVoiceId) showSpawnDialog(contextMenuVoiceId);
+  if (contextMenuVoiceId) spawnSession(contextMenuVoiceId);
+  hideContextMenu();
+});
+
+// "Spawn with..." submenu handlers
+document.getElementById('ctx-spawn-backend-list').addEventListener('click', (e) => {
+  const item = e.target.closest('[data-backend]');
+  if (!item || !contextMenuVoiceId) return;
+  const backend = item.dataset.backend;
+  if (backend === 'opencode') {
+    showOpenCodeModelPicker(contextMenuVoiceId);
+  } else {
+    spawnSession(contextMenuVoiceId, backend);
+  }
   hideContextMenu();
 });
 
@@ -2441,7 +2440,7 @@ document.addEventListener('keydown', (e) => {
       for (const [sid, s] of sessions) {
         if (s.voice === voiceId && (!s.project_slug || s.project_slug === currentProject)) { switchTab(sid); return; }
       }
-      showSpawnDialog(voiceId);
+      spawnSession(voiceId);
     }
   }
 });
