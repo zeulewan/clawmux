@@ -97,12 +97,13 @@ class OpenCodeBackend(AgentBackend):
         # Apply colored status bar
         await self._cc.apply_status_bar(session_name, voice_name, voice_id)
 
-        # Set environment variables
+        # Set environment variables (includes OPENCODE_PORT for bridge plugin inbox delivery)
         await self._cc._run(
             f'tmux send-keys -t {session_name} '
             f'"export CLAWMUX_SESSION_ID={session_id} '
             f'&& export CLAWMUX_WORK_DIR={work_dir} '
-            f'&& export CLAWMUX_PORT={hub_port}" Enter'
+            f'&& export CLAWMUX_PORT={hub_port} '
+            f'&& export OPENCODE_PORT={port}" Enter'
         )
 
         # Start opencode serve (model is configured in opencode.json, not CLI)
@@ -119,6 +120,10 @@ class OpenCodeBackend(AgentBackend):
                 oc_session_id = r.json()["id"]
                 _opencode_sessions[session_name] = oc_session_id
                 log.info("[%s] Created OpenCode session %s", session_name, oc_session_id)
+                # Write session info for bridge plugin inbox delivery
+                import json as _json
+                oc_info_path = Path(work_dir) / ".clawmux-opencode.json"
+                oc_info_path.write_text(_json.dumps({"port": port, "session_id": oc_session_id}) + "\n")
         except Exception as e:
             log.error("[%s] Failed to create OpenCode session: %s", session_name, e)
 
