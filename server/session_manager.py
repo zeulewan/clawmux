@@ -358,19 +358,24 @@ class SessionManager:
             if result.returncode != 0:
                 return None
             last_usage = None
+            last_model = None
             for line in result.stdout.strip().split("\n"):
                 if not line:
                     continue
                 try:
                     d = json.loads(line)
                     usage = None
+                    model = None
                     if d.get("type") == "assistant" and "message" in d:
                         msg = d["message"] if isinstance(d["message"], dict) else {}
                         usage = msg.get("usage") or d.get("usage")
+                        model = msg.get("model")
                     elif d.get("type") == "assistant" and "usage" in d:
                         usage = d["usage"]
                     if usage:
                         last_usage = usage
+                    if model:
+                        last_model = model
                 except (json.JSONDecodeError, KeyError):
                     continue
             if not last_usage:
@@ -380,8 +385,12 @@ class SessionManager:
             cache_read = last_usage.get("cache_read_input_tokens", 0)
             output_tokens = last_usage.get("output_tokens", 0)
             total_context = input_tokens + cache_creation + cache_read
-            # Claude context window is 200K tokens
+            # Determine context limit from model — Opus 4.6 has 1M, others 200K
             context_limit = 200000
+            if last_model and "opus" in last_model:
+                context_limit = 1000000
+            elif session.model == "opus":
+                context_limit = 1000000
             return {
                 "total_context_tokens": total_context,
                 "output_tokens": output_tokens,
