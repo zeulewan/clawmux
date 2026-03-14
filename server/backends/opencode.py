@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import socket
 from pathlib import Path
 import time
 
@@ -27,12 +28,29 @@ _opencode_sessions: dict[str, str] = {}  # session_name → opencode session_id
 _port_counter = 0
 
 
+def _port_is_free(port: int) -> bool:
+    """Check if a TCP port is available."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("127.0.0.1", port))
+            return True
+    except OSError:
+        return False
+
+
 def _alloc_port(session_name: str) -> int:
+    """Allocate a free port for an OpenCode session."""
     global _port_counter
-    if session_name not in _session_ports:
-        _session_ports[session_name] = _OPENCODE_BASE_PORT + _port_counter
+    if session_name in _session_ports:
+        return _session_ports[session_name]
+    # Find next free port starting from base + counter
+    port = _OPENCODE_BASE_PORT + _port_counter
+    while not _port_is_free(port):
         _port_counter += 1
-    return _session_ports[session_name]
+        port = _OPENCODE_BASE_PORT + _port_counter
+    _session_ports[session_name] = port
+    _port_counter += 1
+    return port
 
 
 def _free_port(session_name: str) -> None:
@@ -65,8 +83,8 @@ class OpenCodeBackend(AgentBackend):
     ) -> None:
         port = _alloc_port(session_name)
 
-        # Deploy ClawMux bridge plugin into the agent workspace
-        self._deploy_plugin(work_dir)
+        # Deploy ClawMux bridge plugin and model config into the agent workspace
+        self._deploy_plugin(work_dir, model)
 
         # Kill any stale tmux session
         await self._cc._run(f"tmux kill-session -t {session_name} 2>/dev/null || true")
@@ -87,8 +105,8 @@ class OpenCodeBackend(AgentBackend):
             f'&& export CLAWMUX_PORT={hub_port}" Enter'
         )
 
-        # Start opencode serve on the allocated port
-        opencode_cmd = f"opencode serve --port {port} --model {model}"
+        # Start opencode serve (model is configured in opencode.json, not CLI)
+        opencode_cmd = f"opencode serve --port {port}"
         await self._cc._run(f'tmux send-keys -t {session_name} "{opencode_cmd}" Enter')
 
         # Wait for the HTTP server to become ready
@@ -97,10 +115,7 @@ class OpenCodeBackend(AgentBackend):
         # Create an OpenCode session for message delivery
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
-                r = await client.post(
-                    f"http://localhost:{port}/session",
-                    params={"directory": work_dir},
-                )
+                r = await client.post(f"http://localhost:{port}/session", json={})
                 oc_session_id = r.json()["id"]
                 _opencode_sessions[session_name] = oc_session_id
                 log.info("[%s] Created OpenCode session %s", session_name, oc_session_id)
@@ -171,8 +186,8 @@ class OpenCodeBackend(AgentBackend):
 
     # --- Internal helpers ---
 
-    def _deploy_plugin(self, work_dir: str) -> None:
-        """Register the ClawMux bridge plugin in the workspace opencode.json."""
+    def _deploy_plugin(self, work_dir: str, model: str = "") -> None:
+        """Write opencode.json with bridge plugin and model config."""
         import json
 
         config_path = Path(work_dir) / "opencode.json"
@@ -183,6 +198,11 @@ class OpenCodeBackend(AgentBackend):
             except Exception:
                 pass
 
+        # Set model if provided
+        if model:
+            config["model"] = model
+
+        # Register ClawMux bridge plugin
         plugin_uri = f"file://{_PLUGIN_SRC.resolve()}"
         plugins = config.get("plugin", [])
         if plugin_uri not in plugins:
@@ -191,9 +211,9 @@ class OpenCodeBackend(AgentBackend):
 
         try:
             config_path.write_text(json.dumps(config, indent=2) + "\n")
-            log.info("Registered ClawMux plugin in %s", config_path)
+            log.info("Wrote opencode.json (model=%s) to %s", model or "default", config_path)
         except Exception as e:
-            log.error("Failed to register plugin in %s: %s", config_path, e)
+            log.error("Failed to write opencode.json at %s: %s", config_path, e)
 
     async def _wait_for_server(self, session_name: str, port: int, timeout: float = 30.0) -> None:
         """Poll until the OpenCode HTTP server is accepting connections."""
