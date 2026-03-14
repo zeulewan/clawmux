@@ -111,7 +111,9 @@ struct ChatScrollAreaView: View {
                         thinkingJustEnded = false
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { scrollBottom(proxy) }
                     } else {
-                        scrollBottom(proxy)
+                        // Delay one layout cycle so the new message view is measured
+                        // before scrollTo resolves the "bottom" anchor position.
+                        DispatchQueue.main.async { scrollBottom(proxy) }
                     }
                 }
                 .onChange(of: vm.activeSession?.isThinking) { _, thinking in
@@ -124,7 +126,11 @@ struct ChatScrollAreaView: View {
                     // Only scroll when bubble appears — not when it disappears.
                     if thinking == true { scrollBottom(proxy) }
                 }
-                .onChange(of: vm.activeSession?.activity) { _, _ in scrollBottom(proxy) }
+                // Activity changes (tool name, status) — only scroll if thinking bubble is visible.
+                // Prevents repeated scroll calls during streaming responses.
+                .onChange(of: vm.activeSession?.activity) { _, _ in
+                    if vm.activeSession?.isThinking == true { scrollBottom(proxy) }
+                }
                 .onChange(of: vm.activeSessionId) { _, _ in
                     scrollPositionID = nil
                     cachedMessageGroups = []
@@ -175,11 +181,15 @@ struct ChatScrollAreaView: View {
         }
     }
 
-    private func scrollBottom(_ proxy: ScrollViewProxy) {
+    private func scrollBottom(_ proxy: ScrollViewProxy, animated: Bool = false) {
         guard isAtBottom else { return }
-        // easeOut instead of spring — spring physics can overshoot the content bottom
-        // producing blank space below the last message.
-        withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("bottom", anchor: .bottom) }
+        if animated {
+            withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("bottom", anchor: .bottom) }
+        } else {
+            // Snap without animation — avoids compounding overshoot when multiple
+            // onChange handlers fire in quick succession (message + thinking + activity).
+            proxy.scrollTo("bottom", anchor: .bottom)
+        }
     }
 
     // MARK: - Message Grouping
