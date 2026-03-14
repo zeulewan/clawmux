@@ -250,6 +250,13 @@ class ProjectManager:
 
     # ── Voice lookup (backwards compat) ──────────────────────────────────────
 
+    def get_voice_folder(self, voice_id: str) -> str | None:
+        """Find which folder a voice is assigned to, or None if unassigned."""
+        for slug, agents in self._data["agent_order"].items():
+            if voice_id in agents:
+                return slug
+        return None
+
     def get_voices(self, project_slug: str | None = None) -> list[tuple[str, str]]:
         slug = project_slug or self.active_project
         voice_ids = self._data["agent_order"].get(slug, [])

@@ -396,8 +396,15 @@ class SessionManager:
     async def spawn_session(self, label: str = "", voice: str = "", project: str | None = None,
                             backend: str = "claude-code", model_id: str = "") -> Session:
         """Create a temp dir with session config, tmux session, and start Claude."""
-        # Determine which project this session belongs to
-        project_slug = project or self.project_mgr.active_project
+        # Determine which project this session belongs to.
+        # If a voice is specified but no project, use the voice's existing folder
+        # assignment from workspace.json — only fall back to active_project if unassigned.
+        if project:
+            project_slug = project
+        elif voice:
+            project_slug = self.project_mgr.get_voice_folder(voice) or self.project_mgr.active_project
+        else:
+            project_slug = self.project_mgr.active_project
 
         # Reject duplicate voice within the same project
         if voice:
