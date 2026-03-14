@@ -140,6 +140,11 @@ def _gen_msg_id() -> str:
     return "msg-" + uuid.uuid4().hex[:8]
 
 
+def _active_model_id(session) -> str:
+    """Return the model identifier for read cursor tracking."""
+    return session.model_id or session.model or ""
+
+
 async def _save_activity(session, text: str) -> None:
     """Save a completed activity entry in history and broadcast to browser.
 
@@ -710,7 +715,7 @@ async def handle_browser_message(data: dict) -> None:
             log.info("[%s] Audio STT: %s", session_id, text[:100])
             umid = _gen_msg_id()
             await send_to_browser({"session_id": session_id, "type": "user_text", "text": text, "msg_id": umid})
-            await asyncio.to_thread(history.append, session.voice, session.label, "user", text, _hist_prefix(session), msg_id=umid)
+            await asyncio.to_thread(history.append, session.voice, session.label, "user", text, _hist_prefix(session), msg_id=umid, model_id=_active_model_id(session))
             if session.work_dir:
                 await _inbox_write_and_notify(session, {
                     "id": umid,
@@ -729,7 +734,7 @@ async def handle_browser_message(data: dict) -> None:
             log.info("[%s] Text from browser: %s", session_id, text[:100])
             umid = _gen_msg_id()
             await send_to_browser({"session_id": session_id, "type": "user_text", "text": text, "msg_id": umid})
-            await asyncio.to_thread(history.append, session.voice, session.label, "user", text, _hist_prefix(session), msg_id=umid)
+            await asyncio.to_thread(history.append, session.voice, session.label, "user", text, _hist_prefix(session), msg_id=umid, model_id=_active_model_id(session))
             if session.work_dir:
                 await _inbox_write_and_notify(session, {
                     "id": umid,
@@ -762,7 +767,7 @@ async def handle_browser_message(data: dict) -> None:
             # Send to browser FIRST for instant display, then persist
             await send_to_browser({"session_id": session_id, "type": "user_text", "text": text, "interjection": True, "msg_id": umid})
             await asyncio.to_thread(history.save_interjections, session.voice, session.interjections, _hist_prefix(session))
-            await asyncio.to_thread(history.append, session.voice, session.label, "user", text, _hist_prefix(session), msg_id=umid)
+            await asyncio.to_thread(history.append, session.voice, session.label, "user", text, _hist_prefix(session), msg_id=umid, model_id=_active_model_id(session))
 
             # If agent is in wait mode, push via inbox for immediate pickup by wait WS
             if session.state == AgentState.IDLE and session.work_dir:
@@ -2289,11 +2294,13 @@ async def send_message(request: Request):
     await asyncio.to_thread(history.append, recipient.voice, recipient.label, "system",
                    f"[Agent msg from {sender_name.capitalize()}] {content}",
                    _hist_prefix(recipient),
-                   msg_id=msg.id, parent_id=parent_id or None, bare_ack=is_bare_ack)
+                   msg_id=msg.id, parent_id=parent_id or None, bare_ack=is_bare_ack,
+                   model_id=_active_model_id(recipient))
     await asyncio.to_thread(history.append, sender.voice, sender.label, "system",
                    f"[Agent msg to {recip_name.capitalize()}] {content}",
                    _hist_prefix(sender),
-                   msg_id=msg.id, parent_id=parent_id or None, bare_ack=is_bare_ack)
+                   msg_id=msg.id, parent_id=parent_id or None, bare_ack=is_bare_ack,
+                   model_id=_active_model_id(sender))
 
     # Notify browser about the message
     await send_to_browser({
@@ -2389,7 +2396,8 @@ async def send_external_message(request: Request):
     await asyncio.to_thread(history.append, recipient.voice, recipient.label, "system",
                    f"[Agent msg from {sender_name.capitalize()}] {content}",
                    _hist_prefix(recipient),
-                   msg_id=msg.id, parent_id=parent_id or None)
+                   msg_id=msg.id, parent_id=parent_id or None,
+                   model_id=_active_model_id(recipient))
 
     await send_to_browser({"type": "agent_message", "message": msg.to_dict()})
     log.info("External message from '%s' to '%s': %s", sender_name, recipient.session_id, msg.id)
@@ -2436,7 +2444,8 @@ async def log_external_outbound(request: Request):
     await asyncio.to_thread(history.append, sender.voice, sender.label, "system",
                    f"[Agent msg to {recipient_name.capitalize()}] {content}",
                    _hist_prefix(sender),
-                   msg_id=msg_id, parent_id=parent_id or None)
+                   msg_id=msg_id, parent_id=parent_id or None,
+                   model_id=_active_model_id(sender))
 
     await send_to_browser({"type": "agent_message", "message": msg.to_dict()})
     log.info("Outbound external message from '%s' to '%s': %s", sender.session_id, recipient_name, msg_id)
@@ -2473,7 +2482,7 @@ async def agent_post_image(request: Request, file: UploadFile):
     })
     await asyncio.to_thread(
         history.append, sender.voice, sender.label, "assistant",
-        markdown, _hist_prefix(sender), msg_id=msg_id
+        markdown, _hist_prefix(sender), msg_id=msg_id, model_id=_active_model_id(sender)
     )
     log.info("[%s] Agent posted image: %s", sender_id, unique_name)
     return JSONResponse({"status": "ok", "url": url, "msg_id": msg_id})
@@ -2517,7 +2526,8 @@ async def speak_to_user(request: Request):
         # Save to history so ack persists across reloads
         await asyncio.to_thread(history.append, sender.voice, sender.label, "assistant", "",
                        _hist_prefix(sender), msg_id=msg_id,
-                       parent_id=parent_id, bare_ack=True)
+                       parent_id=parent_id, bare_ack=True,
+                       model_id=_active_model_id(sender))
         await send_to_browser({
             "type": "agent_message",
             "message": {
@@ -2546,7 +2556,7 @@ async def speak_to_user(request: Request):
     await send_to_browser({"session_id": sender_id, "type": "assistant_text", "text": content, "msg_id": msg_id, "fire_and_forget": True})
 
     # Save to history (in thread to avoid blocking event loop)
-    await asyncio.to_thread(history.append, sender.voice, sender.label, "assistant", content, _hist_prefix(sender), msg_id=msg_id)
+    await asyncio.to_thread(history.append, sender.voice, sender.label, "assistant", content, _hist_prefix(sender), msg_id=msg_id, model_id=_active_model_id(sender))
 
     # TTS — strip non-speakable content and play
     settings = _load_settings()

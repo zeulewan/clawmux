@@ -51,7 +51,11 @@ class HistoryStore:
     def load(self, voice_id: str, project: str | None = None) -> list[dict]:
         return self._load_data(voice_id, project).get("messages", [])
 
-    def append(self, voice_id: str, voice_name: str, role: str, text: str, project: str | None = None, *, msg_id: str | None = None, parent_id: str | None = None, bare_ack: bool = False) -> None:
+    def message_count(self, voice_id: str, project: str | None = None) -> int:
+        """Return the number of messages in history for a voice."""
+        return len(self._load_data(voice_id, project).get("messages", []))
+
+    def append(self, voice_id: str, voice_name: str, role: str, text: str, project: str | None = None, *, msg_id: str | None = None, parent_id: str | None = None, bare_ack: bool = False, model_id: str | None = None) -> None:
         path = self._path(voice_id, project)
         entry: dict = {"role": role, "text": text, "ts": time.time()}
         if msg_id:
@@ -76,6 +80,11 @@ class HistoryStore:
                 if len(messages) > MAX_MESSAGES:
                     messages = messages[-MAX_MESSAGES:]
                 data.update({"voice_id": voice_id, "voice_name": voice_name, "messages": messages})
+                # Auto-advance read cursor for the active model
+                if model_id:
+                    cursors = data.get("read_cursors", {})
+                    cursors[model_id] = len(messages)
+                    data["read_cursors"] = cursors
                 f.seek(0)
                 f.truncate()
                 f.write(json.dumps(data, indent=2))

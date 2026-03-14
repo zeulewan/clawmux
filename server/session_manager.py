@@ -562,6 +562,20 @@ class SessionManager:
                 effort=session_effort,
             )
 
+            # Deliver catch-up context if this model missed messages
+            if self.history_store:
+                cursor_model = session.model_id or session.model
+                hist_prefix = self.project_mgr.get_history_prefix(project_slug)
+                catchup = self.history_store.generate_catchup_context(
+                    voice_id, cursor_model, project=hist_prefix
+                )
+                if catchup:
+                    await self._get_backend(backend).deliver_message(tmux_name, catchup)
+                    log.info("[%s] Delivered catch-up context for model %s", session_id, cursor_model)
+                # Advance cursor to head regardless (this model is now current)
+                msg_count = self.history_store.message_count(voice_id, hist_prefix)
+                self.history_store.set_read_cursor(voice_id, cursor_model, msg_count, hist_prefix)
+
             # State stays STARTING — transitions to IDLE when wait WS connects
             session.status = "ready"  # legacy compat: browser checks this for mic enable
             session.touch()
