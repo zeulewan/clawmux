@@ -114,65 +114,68 @@ class TemplateRenderer:
             lines.pop()
         return "\n".join(lines) + "\n"
 
-    async def render_to_file(self, voice_id: str, work_dir: Path, backend: str = "claude-code") -> bool:
-        """Render instructions and write to the agent's work directory.
+    async def render_to_file(self, voice_id: str, work_dir: Path, **_kw: str) -> bool:
+        """Render instructions in ALL formats to the agent's work directory.
 
-        For claude-code: writes CLAUDE.md + .claude/rules/role.md
-        For opencode: writes INSTRUCTIONS.md + .opencode/rules/role.md, registers in opencode.json
+        Always writes both Claude Code and OpenCode formats so agents can
+        switch backends without re-rendering.
         """
         content = await self.render(voice_id)
         if content is None:
             return False
 
-        if backend == "opencode":
-            return await self._write_opencode(voice_id, work_dir, content)
+        # Claude Code: CLAUDE.md
+        (work_dir / "CLAUDE.md").write_text(content)
+        log.info("Rendered CLAUDE.md for %s at %s", voice_id, work_dir / "CLAUDE.md")
 
-        # Default: Claude Code
-        claude_md = work_dir / "CLAUDE.md"
-        claude_md.write_text(content)
-        log.info("Rendered CLAUDE.md for %s at %s", voice_id, claude_md)
+        # OpenCode: INSTRUCTIONS.md
+        (work_dir / "INSTRUCTIONS.md").write_text(content)
+        log.info("Rendered INSTRUCTIONS.md for %s at %s", voice_id, work_dir / "INSTRUCTIONS.md")
+
+        # Role rules for all backends
         await self.render_role_to_file(voice_id, work_dir)
+
+        # Register OpenCode instruction files
+        self._update_opencode_instructions(work_dir)
         return True
 
-    async def render_role_to_file(self, voice_id: str, work_dir: Path, backend: str = "claude-code") -> bool:
-        """Write role-specific rules for the given backend."""
+    async def render_role_to_file(self, voice_id: str, work_dir: Path, **_kw: str) -> bool:
+        """Write role-specific rules for ALL backends."""
         entry = await self._store.get(voice_id)
         if entry is None:
             return False
 
         role = entry.role or ""
-
-        if backend == "opencode":
-            role_file = work_dir / ".opencode" / "rules" / "role.md"
-        else:
-            role_file = work_dir / ".claude" / "rules" / "role.md"
+        claude_role = work_dir / ".claude" / "rules" / "role.md"
+        opencode_role = work_dir / ".opencode" / "rules" / "role.md"
 
         if not role:
-            if role_file.exists():
-                role_file.unlink()
-                log.info("Removed %s for %s (no role)", role_file, voice_id)
+            for rf in (claude_role, opencode_role):
+                if rf.exists():
+                    rf.unlink()
+                    log.info("Removed %s for %s (no role)", rf, voice_id)
             return True
 
         role_rules = self._load_rules(role)
-        role_file.parent.mkdir(parents=True, exist_ok=True)
-        role_file.write_text(role_rules + "\n" if role_rules else "")
-        log.info("Rendered %s (role=%s) for %s", role_file, role, voice_id)
+        content = role_rules + "\n" if role_rules else ""
+        for rf in (claude_role, opencode_role):
+            rf.parent.mkdir(parents=True, exist_ok=True)
+            rf.write_text(content)
+        log.info("Rendered role rules (role=%s) for %s", role, voice_id)
 
-        # For opencode, update the instructions array in opencode.json
-        if backend == "opencode":
-            self._update_opencode_instructions(work_dir)
-
+        # Update opencode.json instructions array
+        self._update_opencode_instructions(work_dir)
         return True
 
     async def render_all(self, sessions: dict | None = None) -> int:
-        """Regenerate instructions for all agents with known work directories.
+        """Regenerate instructions (all formats) for all agents with known work directories.
 
         Args:
-            sessions: dict of session_id -> session objects with .voice, .work_dir, .backend.
+            sessions: dict of session_id -> session objects with .voice and .work_dir.
                       If None, renders without writing (dry run).
 
         Returns:
-            Number of files rendered.
+            Number of agents rendered.
         """
         if sessions is None:
             log.info("render_all called without sessions — no files written")
@@ -182,29 +185,12 @@ class TemplateRenderer:
         for session in sessions.values():
             voice_id = getattr(session, "voice", None)
             work_dir = getattr(session, "work_dir", None)
-            backend = getattr(session, "backend", "claude-code") or "claude-code"
             if voice_id and work_dir:
-                if await self.render_to_file(voice_id, Path(work_dir), backend):
+                if await self.render_to_file(voice_id, Path(work_dir)):
                     count += 1
 
-        log.info("Rendered %d instruction files", count)
+        log.info("Rendered %d instruction sets", count)
         return count
-
-    # --- OpenCode helpers ---
-
-    async def _write_opencode(self, voice_id: str, work_dir: Path, content: str) -> bool:
-        """Write instructions for an OpenCode agent."""
-        # Write main instructions file
-        instructions_file = work_dir / "INSTRUCTIONS.md"
-        instructions_file.write_text(content)
-        log.info("Rendered INSTRUCTIONS.md for %s at %s", voice_id, instructions_file)
-
-        # Write role rules
-        await self.render_role_to_file(voice_id, work_dir, backend="opencode")
-
-        # Register instruction files in opencode.json
-        self._update_opencode_instructions(work_dir)
-        return True
 
     def _update_opencode_instructions(self, work_dir: Path) -> None:
         """Merge instruction file paths into opencode.json."""

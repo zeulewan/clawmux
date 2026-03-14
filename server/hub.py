@@ -965,7 +965,7 @@ async def set_project_status(session_id: str, request: Request):
     await session_mgr._sync_agent_store(session.voice, session)
     # Write role rules (Claude Code: .claude/rules/role.md, OpenCode: .opencode/rules/role.md)
     if "role" in data and session.work_dir:
-        await template_renderer.render_role_to_file(session.voice, Path(session.work_dir), session.backend or "claude-code")
+        await template_renderer.render_role_to_file(session.voice, Path(session.work_dir))
         await _inbox_write_and_notify(session, {
             "type": "system",
             "content": f"Your role has been updated to: {session.role}. Your role rules file has been rewritten — Claude Code will pick up the changes automatically.",
@@ -1449,7 +1449,7 @@ async def assign_agent(voice_id: str, request: Request):
     if session and "project" in fields:
         session.project_slug = fields["project"]
     if session and session.work_dir:
-        await template_renderer.render_to_file(voice_id, Path(session.work_dir), session.backend or "claude-code")
+        await template_renderer.render_to_file(voice_id, Path(session.work_dir))
     return JSONResponse(updated.to_dict())
 
 
@@ -1468,7 +1468,7 @@ async def regenerate_template(voice_id: str):
     session = next((s for s in session_mgr.sessions.values() if s.voice == voice_id), None)
     if not session or not session.work_dir:
         return JSONResponse({"error": "Agent not found or not active"}, status_code=404)
-    ok = await template_renderer.render_to_file(voice_id, Path(session.work_dir), session.backend or "claude-code")
+    ok = await template_renderer.render_to_file(voice_id, Path(session.work_dir))
     if not ok:
         return JSONResponse({"error": "Agent not in agents.json"}, status_code=404)
     return JSONResponse({"regenerated": voice_id})
@@ -1652,7 +1652,7 @@ async def create_project(request: Request):
         for vid in voice_ids:
             session = next((s for s in session_mgr.sessions.values() if s.voice == vid), None)
             if session and session.work_dir:
-                await template_renderer.render_to_file(vid, Path(session.work_dir), session.backend or "claude-code")
+                await template_renderer.render_to_file(vid, Path(session.work_dir))
         await send_to_browser({"type": "project_created", "slug": slug, "name": name})
         return JSONResponse(project)
     except ValueError as e:
