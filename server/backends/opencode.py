@@ -23,6 +23,7 @@ log = logging.getLogger("hub.backend.opencode")
 # Port range for OpenCode HTTP servers: one per session
 _OPENCODE_BASE_PORT = 7700
 _session_ports: dict[str, int] = {}  # session_name → port
+_opencode_sessions: dict[str, str] = {}  # session_name → opencode session_id
 _port_counter = 0
 
 
@@ -93,23 +94,43 @@ class OpenCodeBackend(AgentBackend):
         # Wait for the HTTP server to become ready
         await self._wait_for_server(session_name, port)
 
+        # Create an OpenCode session for message delivery
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                r = await client.post(
+                    f"http://localhost:{port}/session",
+                    params={"directory": work_dir},
+                )
+                oc_session_id = r.json()["id"]
+                _opencode_sessions[session_name] = oc_session_id
+                log.info("[%s] Created OpenCode session %s", session_name, oc_session_id)
+        except Exception as e:
+            log.error("[%s] Failed to create OpenCode session: %s", session_name, e)
+
     async def terminate(self, session_name: str) -> None:
         _free_port(session_name)
+        _opencode_sessions.pop(session_name, None)
         await self._cc.terminate(session_name)
 
     async def health_check(self, session_name: str) -> bool:
         return await self._cc.health_check(session_name)
 
     async def deliver_message(self, session_name: str, text: str) -> None:
-        """POST the message directly to the OpenCode HTTP server."""
+        """POST the message to the OpenCode REST API (fire-and-forget)."""
         port = _session_ports.get(session_name)
         if not port:
             log.error("[%s] No port allocated — cannot deliver message", session_name)
             return
-        url = f"http://localhost:{port}/message"
+        oc_session = _opencode_sessions.get(session_name)
+        if not oc_session:
+            log.error("[%s] No OpenCode session — cannot deliver message", session_name)
+            return
+        url = f"http://localhost:{port}/session/{oc_session}/prompt_async"
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
-                await client.post(url, json={"content": text})
+                await client.post(url, json={
+                    "parts": [{"type": "text", "text": text}],
+                })
         except Exception as e:
             log.error("[%s] HTTP message delivery failed: %s", session_name, e)
 

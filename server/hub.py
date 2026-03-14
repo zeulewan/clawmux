@@ -2683,7 +2683,7 @@ async def _inject_inbox(session, session_id: str) -> None:
         text = "\n".join(lines)
         delivered = False
         try:
-            await session_mgr.backend.deliver_message(session.tmux_session, text)
+            await session_mgr._get_backend(session.backend).deliver_message(session.tmux_session, text)
             delivered = True
             log.info("[%s] Injected %d message(s) via tmux", session_id, len(messages))
         except Exception as exc:
@@ -3165,10 +3165,10 @@ async def start_monitor(request: Request):
         tmux_target = session.tmux_session
 
     # Launch ttyd bound to loopback only (avoids interface conflict with Tailscale Serve).
-    # ttyd is read-only by default — no flag needed.
+    # --writable enables keyboard input so users can type in the tmux session.
     try:
         proc = await asyncio.create_subprocess_exec(
-            "ttyd", "-i", "lo", "--port", str(port),
+            "ttyd", "-W", "-i", "lo", "--port", str(port),
             "tmux", "attach-session", "-t", f"={tmux_target}",
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,

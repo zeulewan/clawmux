@@ -21,6 +21,7 @@ from hub_config import (
     VOICES,
 )
 from agents_store import AgentEntry, AgentsStore
+from backends.opencode import OpenCodeBackend
 from project_manager import ProjectManager
 from state_machine import AgentState
 from template_renderer import TemplateRenderer
@@ -138,10 +139,18 @@ class SessionManager:
         self.history_store = history_store
         self.project_mgr = project_mgr or ProjectManager()
         self.agents_store = agents_store
-        self.backend = backend  # AgentBackend instance
+        self.backend = backend  # AgentBackend instance (default/claude-code)
+        self._backends = {
+            "claude-code": backend,
+            "opencode": OpenCodeBackend(),
+        }
         self._on_session_death = on_session_death  # async callback(session_id)
         self._template_renderer = TemplateRenderer(agents_store) if agents_store else None
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+
+    def _get_backend(self, backend_str: str):
+        """Return the backend instance for a given backend type string."""
+        return self._backends.get(backend_str, self.backend)
 
     async def _sync_agent_store(self, voice_id: str, session: Session | None = None, **overrides) -> None:
         """Dual-write: update agents.json for a voice. If session is None, marks agent as dead."""
@@ -186,7 +195,10 @@ class SessionManager:
                     vname = voice_names_map.get(vid, vid)
                     known_session_names.add(f"{clean_slug}-{vname.lower()}")  # legacy: "hnapp-bella"
 
-        live_tmux = await self.backend.list_live_sessions(known_session_names)
+        # Query ALL backends for live sessions and union the results
+        live_tmux: set[str] = set()
+        for b in self._backends.values():
+            live_tmux |= await b.list_live_sessions(known_session_names)
 
         adopted = 0
 
@@ -287,7 +299,7 @@ class SessionManager:
             log.info("Adopted orphaned session: %s (voice=%s, tmux=%s, model=%s)",
                      adopt_id, voice_id, adopt_id, session.model)
             # Apply agent-colored status bar to adopted session
-            await self.backend.apply_status_bar(adopt_id, voice_name, voice_id)
+            await self._get_backend(session.backend).apply_status_bar(adopt_id, voice_name, voice_id)
             # Update agents.json with restored state
             await self._sync_agent_store(voice_id, session)
 
@@ -431,7 +443,7 @@ class SessionManager:
         tmux_name = session_id
 
         # Kill stale session with same name if it exists
-        await self.backend.terminate(tmux_name)
+        await self._get_backend(backend).terminate(tmux_name)
 
         session = Session(
             session_id=session_id,
@@ -522,7 +534,7 @@ class SessionManager:
             session.model = session_model  # Store effective model so browser can display it
             session_effort = session.effort or hub_config.CLAUDE_EFFORT
             session.effort = session_effort
-            await self.backend.spawn(
+            await self._get_backend(backend).spawn(
                 session_name=tmux_name, work_dir=str(work_dir),
                 session_id=session_id, hub_port=HUB_PORT,
                 voice_id=voice_id, voice_name=voice_name,
@@ -539,7 +551,7 @@ class SessionManager:
 
         except Exception as e:
             log.error("Failed to spawn session %s: %s", session_id, e)
-            await self.backend.terminate(tmux_name)
+            await self._get_backend(backend).terminate(tmux_name)
             self._cleanup_workdir(session)
             del self.sessions[session_id]
             raise
@@ -553,7 +565,7 @@ class SessionManager:
         log.info("Terminating session %s", session_id)
         voice_id = session.voice
         session.set_state(AgentState.DEAD)
-        await self.backend.terminate(session.tmux_session)
+        await self._get_backend(session.backend).terminate(session.tmux_session)
         self._cleanup_workdir(session)
         del self.sessions[session_id]
         # Dual-write: mark agent as dead in agents.json
@@ -592,7 +604,7 @@ class SessionManager:
                     self.history_store.set_claude_session_id(session.voice, claude_session_id, hist_prefix)
 
         # Delegate restart to the backend
-        await self.backend.restart(
+        await self._get_backend(session.backend).restart(
             session_name=tmux_name, work_dir=work_dir,
             session_id=session_id, hub_port=HUB_PORT,
             voice_id=session.voice, voice_name=session.label,
@@ -609,7 +621,7 @@ class SessionManager:
         log.info("[%s] Model restart complete", session_id)
 
     async def check_health(self, session: Session) -> bool:
-        return await self.backend.health_check(session.tmux_session)
+        return await self._get_backend(session.backend).health_check(session.tmux_session)
 
     async def run_timeout_loop(self) -> None:
         while True:
