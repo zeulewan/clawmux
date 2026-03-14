@@ -110,11 +110,23 @@ _TTYD_PORT_END = 9799
 
 
 def _ttyd_free_port() -> int | None:
-    """Find a free port in the ttyd range."""
+    """Find a free port in the ttyd range.
+
+    Checks both our dict AND actual system port usage to avoid
+    collisions with orphaned ttyd processes from previous hub runs.
+    """
+    import socket
     used = {m["port"] for m in _ttyd_monitors.values()}
     for p in range(_TTYD_PORT_START, _TTYD_PORT_END + 1):
-        if p not in used:
+        if p in used:
+            continue
+        # Verify the port is truly free at the OS level
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("127.0.0.1", p))
             return p
+        except OSError:
+            continue  # Port in use by orphaned process
     return None
 
 
@@ -262,6 +274,10 @@ async def stuck_buffer_monitor_loop() -> None:
             if not session or session.state in (AgentState.DEAD, AgentState.COMPACTING) or not session.work_dir:
                 _stuck_seen.pop(session_id, None)
                 continue
+            # OpenCode delivers messages via HTTP, not tmux paste — skip stuck buffer check
+            if session.backend != "claude-code":
+                _stuck_seen.pop(session_id, None)
+                continue
             is_processing = session.state == AgentState.PROCESSING
             try:
                 result = await asyncio.create_subprocess_exec(
@@ -318,6 +334,9 @@ async def compaction_monitor_loop() -> None:
         for session_id in list(session_mgr.sessions):
             session = session_mgr.sessions.get(session_id)
             if not session or session.state == AgentState.DEAD:
+                continue
+            # OpenCode handles compaction via its own plugin hooks — skip tmux polling
+            if session.backend != "claude-code":
                 continue
             # Check when context usage is >= 80% OR when already compacting
             usage = _context_cache.get(session_id)
@@ -483,7 +502,8 @@ async def lifespan(app: FastAPI):
     # input buffer by an injection that was killed mid-way during the previous hub run.
     # On a clean Claude Code prompt, Enter is a no-op. On a stuck buffer, it submits it.
     for session in list(session_mgr.sessions.values()):
-        if session.tmux_session:
+        # Only send Enter to Claude Code sessions — OpenCode uses HTTP delivery
+        if session.tmux_session and session.backend == "claude-code":
             try:
                 proc = await asyncio.create_subprocess_exec(
                     "tmux", "send-keys", "-t", session.tmux_session, "Enter",
@@ -511,6 +531,16 @@ async def lifespan(app: FastAPI):
             })
             session.set_state(AgentState.IDLE)
             log.info("[%s] Flushed %d interjection(s) to inbox on startup", session.session_id, 1)
+    # Kill orphaned ttyd processes from previous hub runs
+    try:
+        await asyncio.create_subprocess_exec(
+            "pkill", "-f", "ttyd.*--port.*9[78][0-9][0-9]",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+    except Exception:
+        pass
+
     broker.start()
     timeout_task = asyncio.create_task(session_mgr.run_timeout_loop())
     hb_task = asyncio.create_task(heartbeat_loop())
@@ -1075,7 +1105,15 @@ async def hook_tool_status(request: Request):
             await send_to_browser(_session_status_msg(session))
             await _save_activity(session, "Processing")
     elif event == "Stop":
-        pass  # HTTP Stop hooks cannot block Claude; stop-check-inbox.sh handles idle signaling
+        if session.backend != "claude-code":
+            # Non-Claude backends signal Stop via bridge plugin — transition to IDLE directly
+            session.set_state(AgentState.IDLE)
+            session.activity = ""
+            session.tool_name = ""
+            session.tool_input = {}
+            await _save_activity(session, "Idle")
+            await send_to_browser({"session_id": session.session_id, "type": "listening", "state": "idle"})
+        # For Claude Code: HTTP Stop hooks cannot block Claude; stop-check-inbox.sh handles idle signaling
     elif event == "PreToolUse":
         # PreToolUse means the agent is actively making a tool call.
         # Don't cancel pending injections — tmux buffers input so delivery is safe at any time.
@@ -1411,7 +1449,7 @@ async def assign_agent(voice_id: str, request: Request):
     if session and "project" in fields:
         session.project_slug = fields["project"]
     if session and session.work_dir:
-        await template_renderer.render_to_file(voice_id, Path(session.work_dir))
+        await template_renderer.render_to_file(voice_id, Path(session.work_dir), session.backend or "claude-code")
     return JSONResponse(updated.to_dict())
 
 
@@ -3138,10 +3176,10 @@ async def start_monitor(request: Request):
         suffix = f"-{slug}" if slug != "default" else ""
         monitor_session = f"clawmux-monitor{suffix}"
 
-        # Build/refresh the monitor session in the background
+        # Always recreate the monitor session so dead/moved agents are dropped
         try:
             create_proc = await asyncio.create_subprocess_exec(
-                "clawmux", "monitor", slug, "--detach",
+                "clawmux", "monitor", slug, "--detach", "--restart",
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
             )
@@ -3152,6 +3190,17 @@ async def start_monitor(request: Request):
             log.warning("[monitor] Failed to create monitor session for %s: %s", slug, e)
 
         tmux_target = monitor_session
+
+        # Set a hook so the tiled layout re-distributes when a new client connects/resizes
+        try:
+            await asyncio.create_subprocess_exec(
+                "tmux", "set-hook", "-t", f"={monitor_session}",
+                "client-resized", "select-layout tiled",
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+        except Exception:
+            pass
 
     else:  # agent
         voice_id = mon_id
