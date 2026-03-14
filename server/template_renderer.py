@@ -1,9 +1,13 @@
-"""CLAUDE.md template renderer.
+"""Template renderer for agent instructions.
 
-Renders a CLAUDE.md template with agent-specific variables from agents.json.
+Renders instruction templates with agent-specific variables from agents.json.
+Supports multiple backends:
+  - claude-code: writes CLAUDE.md + .claude/rules/role.md
+  - opencode: writes INSTRUCTIONS.md + .opencode/rules/role.md, registers in opencode.json
 Role-specific rules are loaded from server/templates/rules/.
 """
 
+import json
 import logging
 from pathlib import Path
 
@@ -110,47 +114,61 @@ class TemplateRenderer:
             lines.pop()
         return "\n".join(lines) + "\n"
 
-    async def render_to_file(self, voice_id: str, work_dir: Path) -> bool:
-        """Render CLAUDE.md and write it to the agent's work directory."""
+    async def render_to_file(self, voice_id: str, work_dir: Path, backend: str = "claude-code") -> bool:
+        """Render instructions and write to the agent's work directory.
+
+        For claude-code: writes CLAUDE.md + .claude/rules/role.md
+        For opencode: writes INSTRUCTIONS.md + .opencode/rules/role.md, registers in opencode.json
+        """
         content = await self.render(voice_id)
         if content is None:
             return False
 
+        if backend == "opencode":
+            return await self._write_opencode(voice_id, work_dir, content)
+
+        # Default: Claude Code
         claude_md = work_dir / "CLAUDE.md"
         claude_md.write_text(content)
         log.info("Rendered CLAUDE.md for %s at %s", voice_id, claude_md)
-
-        # Also write role rules to .claude/CLAUDE.md
         await self.render_role_to_file(voice_id, work_dir)
         return True
 
-    async def render_role_to_file(self, voice_id: str, work_dir: Path) -> bool:
-        """Write role-specific rules to {work_dir}/.claude/rules/role.md."""
+    async def render_role_to_file(self, voice_id: str, work_dir: Path, backend: str = "claude-code") -> bool:
+        """Write role-specific rules for the given backend."""
         entry = await self._store.get(voice_id)
         if entry is None:
             return False
 
         role = entry.role or ""
-        role_file = work_dir / ".claude" / "rules" / "role.md"
+
+        if backend == "opencode":
+            role_file = work_dir / ".opencode" / "rules" / "role.md"
+        else:
+            role_file = work_dir / ".claude" / "rules" / "role.md"
 
         if not role:
-            # No role assigned — remove the role file if it exists
             if role_file.exists():
                 role_file.unlink()
-                log.info("Removed .claude/rules/role.md for %s (no role)", voice_id)
+                log.info("Removed %s for %s (no role)", role_file, voice_id)
             return True
 
         role_rules = self._load_rules(role)
         role_file.parent.mkdir(parents=True, exist_ok=True)
         role_file.write_text(role_rules + "\n" if role_rules else "")
-        log.info("Rendered .claude/rules/role.md (role=%s) for %s", role, voice_id)
+        log.info("Rendered %s (role=%s) for %s", role_file, role, voice_id)
+
+        # For opencode, update the instructions array in opencode.json
+        if backend == "opencode":
+            self._update_opencode_instructions(work_dir)
+
         return True
 
     async def render_all(self, sessions: dict | None = None) -> int:
-        """Regenerate CLAUDE.md for all agents with known work directories.
+        """Regenerate instructions for all agents with known work directories.
 
         Args:
-            sessions: dict of session_id -> session objects with .voice and .work_dir.
+            sessions: dict of session_id -> session objects with .voice, .work_dir, .backend.
                       If None, renders without writing (dry run).
 
         Returns:
@@ -164,9 +182,52 @@ class TemplateRenderer:
         for session in sessions.values():
             voice_id = getattr(session, "voice", None)
             work_dir = getattr(session, "work_dir", None)
+            backend = getattr(session, "backend", "claude-code") or "claude-code"
             if voice_id and work_dir:
-                if await self.render_to_file(voice_id, Path(work_dir)):
+                if await self.render_to_file(voice_id, Path(work_dir), backend):
                     count += 1
 
-        log.info("Rendered %d CLAUDE.md files", count)
+        log.info("Rendered %d instruction files", count)
         return count
+
+    # --- OpenCode helpers ---
+
+    async def _write_opencode(self, voice_id: str, work_dir: Path, content: str) -> bool:
+        """Write instructions for an OpenCode agent."""
+        # Write main instructions file
+        instructions_file = work_dir / "INSTRUCTIONS.md"
+        instructions_file.write_text(content)
+        log.info("Rendered INSTRUCTIONS.md for %s at %s", voice_id, instructions_file)
+
+        # Write role rules
+        await self.render_role_to_file(voice_id, work_dir, backend="opencode")
+
+        # Register instruction files in opencode.json
+        self._update_opencode_instructions(work_dir)
+        return True
+
+    def _update_opencode_instructions(self, work_dir: Path) -> None:
+        """Merge instruction file paths into opencode.json."""
+        config_path = work_dir / "opencode.json"
+        config: dict = {}
+        if config_path.exists():
+            try:
+                config = json.loads(config_path.read_text())
+            except Exception:
+                pass
+
+        # Collect instruction files that exist
+        instruction_paths = []
+        if (work_dir / "INSTRUCTIONS.md").exists():
+            instruction_paths.append("INSTRUCTIONS.md")
+        role_file = work_dir / ".opencode" / "rules" / "role.md"
+        if role_file.exists():
+            instruction_paths.append(".opencode/rules/role.md")
+
+        config["instructions"] = instruction_paths
+
+        try:
+            config_path.write_text(json.dumps(config, indent=2) + "\n")
+            log.info("Updated opencode.json instructions: %s", instruction_paths)
+        except Exception as e:
+            log.error("Failed to update opencode.json: %s", e)
