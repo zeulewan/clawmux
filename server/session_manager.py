@@ -514,13 +514,12 @@ class SessionManager:
 
             session.claude_session_id = claude_session_id
 
-            # Write CLAUDE.md using the template renderer, then append context summary
-            claude_md = work_dir / "CLAUDE.md"
-
+            # Write instructions using the template renderer (backend-aware)
             if self._template_renderer:
-                identity = await self._template_renderer.render(voice_id) or f"Your name is {voice_name}.\n"
+                await self._template_renderer.render_to_file(voice_id, work_dir, backend)
             else:
-                identity = f"Your name is {voice_name}.\n"
+                # Fallback: write minimal CLAUDE.md
+                (work_dir / "CLAUDE.md").write_text(f"Your name is {voice_name}.\n")
 
             # Inject context summary from previous session history
             if self.history_store:
@@ -529,10 +528,14 @@ class SessionManager:
                     voice_id, voice_name, hist_prefix
                 )
                 if context_summary:
-                    identity += f"\n{context_summary}\n"
-                    log.info("[%s] Injected context summary into CLAUDE.md", session_id)
-
-            claude_md.write_text(identity)
+                    # Append to the correct instructions file per backend
+                    if backend == "opencode":
+                        instructions_file = work_dir / "INSTRUCTIONS.md"
+                    else:
+                        instructions_file = work_dir / "CLAUDE.md"
+                    existing = instructions_file.read_text() if instructions_file.exists() else ""
+                    instructions_file.write_text(existing + f"\n{context_summary}\n")
+                    log.info("[%s] Injected context summary into %s", session_id, instructions_file.name)
 
             # Pre-accept workspace trust so Claude Code doesn't prompt on first launch
             self._accept_workspace_trust(str(work_dir))
