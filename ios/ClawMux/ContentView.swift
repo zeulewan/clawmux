@@ -386,7 +386,7 @@ struct ContentView: View {
 
     private func modelName(_ m: String, modelId: String = "") -> String {
         if !modelId.isEmpty { return modelId }
-        switch m { case "sonnet": "Sonnet"; case "haiku": "Haiku"; default: "Opus" }
+        switch m { case "sonnet": return "Sonnet"; case "haiku": return "Haiku"; default: return "Opus" }
     }
 
     // MARK: - Chat Scroll Area
