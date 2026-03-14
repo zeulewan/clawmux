@@ -3,5 +3,8 @@
   "version": "1.0.0",
   "description": "ClawMux bridge plugin for OpenCode — forwards hook events to the ClawMux hub",
   "main": "index.ts",
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@opencode-ai/plugin": "*"
+  }
 }

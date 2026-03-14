@@ -151,17 +151,28 @@ class OpenCodeBackend(AgentBackend):
     # --- Internal helpers ---
 
     def _deploy_plugin(self, work_dir: str) -> None:
-        """Symlink the ClawMux bridge plugin into the agent's .opencode/plugins/ dir."""
-        plugins_dir = Path(work_dir) / ".opencode" / "plugins"
-        plugins_dir.mkdir(parents=True, exist_ok=True)
-        link = plugins_dir / "clawmux"
-        if link.exists() or link.is_symlink():
-            link.unlink()
+        """Register the ClawMux bridge plugin in the workspace opencode.json."""
+        import json
+
+        config_path = Path(work_dir) / "opencode.json"
+        config: dict = {}
+        if config_path.exists():
+            try:
+                config = json.loads(config_path.read_text())
+            except Exception:
+                pass
+
+        plugin_uri = f"file://{_PLUGIN_SRC.resolve()}"
+        plugins = config.get("plugin", [])
+        if plugin_uri not in plugins:
+            plugins.append(plugin_uri)
+        config["plugin"] = plugins
+
         try:
-            link.symlink_to(_PLUGIN_SRC.resolve())
-            log.info("Deployed ClawMux plugin to %s", link)
+            config_path.write_text(json.dumps(config, indent=2) + "\n")
+            log.info("Registered ClawMux plugin in %s", config_path)
         except Exception as e:
-            log.error("Failed to deploy plugin to %s: %s", link, e)
+            log.error("Failed to register plugin in %s: %s", config_path, e)
 
     async def _wait_for_server(self, session_name: str, port: int, timeout: float = 30.0) -> None:
         """Poll until the OpenCode HTTP server is accepting connections."""
