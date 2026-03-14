@@ -42,9 +42,12 @@ private struct MonitorWebViewRepresentable: UIViewRepresentable {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         let webView = InputCapableWebView(frame: .zero, configuration: config)
-        webView.scrollView.isScrollEnabled = false
+        // Keep scroll enabled so touch gestures pass through to xterm.js
+        // (xterm.js translates touch swipes → mouse wheel → tmux scrollback)
+        webView.scrollView.isScrollEnabled = true
         webView.scrollView.bounces = false
-        webView.isOpaque = false
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
+        webView.isOpaque = true
         webView.backgroundColor = .black
         webView.scrollView.backgroundColor = .black
         return webView
