@@ -576,10 +576,13 @@ class SessionManager:
                 msg_count = self.history_store.message_count(voice_id, hist_prefix)
                 self.history_store.set_read_cursor(voice_id, cursor_model, msg_count, hist_prefix)
 
-            # State stays STARTING — transitions to IDLE when wait WS connects
+            # For Claude Code: state stays STARTING until wait WS connects (idle signal)
+            # For other backends: transition to IDLE immediately (no wait WS)
+            if backend != "claude-code":
+                session.set_state(AgentState.IDLE)
             session.status = "ready"  # legacy compat: browser checks this for mic enable
             session.touch()
-            log.info("Session %s ready", session_id)
+            log.info("Session %s ready (backend=%s)", session_id, backend)
             return session
 
         except Exception as e:
