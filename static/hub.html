@@ -446,6 +446,7 @@
   <div class="ctx-item ctx-has-submenu" id="ctx-add-group">Add to Group Chat ▸
     <div class="ctx-submenu" id="ctx-group-list"></div>
   </div>
+  <div class="ctx-item" id="ctx-monitor">Monitor Terminal</div>
   <div class="ctx-item" id="ctx-reset" style="color:#e63946;">Reset</div>
 <div class="ctx-item" id="ctx-terminate">Terminate Session</div>
 </div>
@@ -509,19 +510,26 @@
   </div>
 
   <div class="debug-section">
-    <div class="debug-title">Monitors</div>
-    <div id="debug-monitors-folders" style="display:flex; flex-wrap:wrap; gap:0.4rem; margin-bottom:0.5rem;"></div>
-    <div id="debug-monitors-agents" style="display:flex; flex-wrap:wrap; gap:0.4rem; margin-bottom:0.75rem;"></div>
-    <div id="debug-monitors-frames" style="display:flex; flex-direction:column; gap:0.75rem;"></div>
-  </div>
-
-  <div class="debug-section">
     <div class="debug-title">Hub Log (last 50 lines)</div>
     <div id="debug-log" style="background:var(--bg-card); border:1px solid var(--border); border-radius:6px; padding:0.5rem; max-height:300px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; font-size:0.7rem; color:var(--text-secondary); line-height:1.5;">Loading...</div>
   </div>
 </div>
 
 </div><!-- /main-content -->
+
+<div id="monitor-panel" style="display:none;">
+  <div id="monitor-panel-header">
+    <span id="monitor-panel-title">Monitor</span>
+    <div id="monitor-panel-controls">
+      <button onclick="monitorZoom(-10)" title="Zoom out">−</button>
+      <span id="monitor-font-size">100%</span>
+      <button onclick="monitorZoom(10)" title="Zoom in">+</button>
+      <button onclick="monitorOpenTab()" title="Open in new tab" style="font-size:0.85rem;">⧉</button>
+      <button onclick="closeMonitorPanel()" title="Close">&times;</button>
+    </div>
+  </div>
+  <div id="monitor-frame-container"><iframe id="monitor-panel-frame" sandbox="allow-scripts allow-same-origin"></iframe></div>
+</div>
 
 <div id="notes-panel">
   <div id="notes-panel-header">
@@ -843,10 +851,10 @@ async function addSession(data, autoSwitch = false) {
     if (isReady) {
       addMessage(data.session_id, 'system', '● ready');
     } else {
-      addMessage(data.session_id, 'system', 'Session started. Waiting for Claude...', { id: 'waiting-for-claude-' + data.session_id });
+      addMessage(data.session_id, 'system', 'Session started. Connecting...', { id: 'waiting-for-claude-' + data.session_id });
     }
   } else if (!isReady && (data.state === 'starting' || !data.state)) {
-    addMessage(data.session_id, 'system', 'Waiting for Claude...', { id: 'waiting-for-claude-' + data.session_id });
+    addMessage(data.session_id, 'system', 'Connecting...', { id: 'waiting-for-claude-' + data.session_id });
   }
 
   // Restore session state from server's canonical state field
@@ -2062,6 +2070,88 @@ function renderMonitorFrames() {
   }
 }
 
+// --- Inline monitor panel ---
+let _monitorPanelUrl = null;
+let _monitorPanelKey = null;
+let _monitorFontSize = 100;
+let _monitorPrevSession = null;
+
+async function openMonitorPanel(type, id) {
+  try {
+    const resp = await fetch('/api/monitor/start', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({type, id}),
+    });
+    const data = await resp.json();
+    if (!resp.ok) { alert('Monitor error: ' + (data.error || resp.status)); return; }
+    _monitorPanelUrl = data.url;
+    _monitorPanelKey = data.key;
+    _monitorFontSize = 100;
+    document.getElementById('monitor-font-size').textContent = _monitorFontSize + '%';
+    document.getElementById('monitor-panel-title').textContent = id;
+    const frame = document.getElementById('monitor-panel-frame');
+    frame.style.transform = '';
+    frame.style.width = '100%';
+    frame.style.height = '100%';
+    frame.src = data.url;
+
+    // Save current session so we can restore on close
+    _monitorPrevSession = activeSessionId;
+
+    if (window.innerWidth <= 600 && typeof collapseSidebar === 'function') collapseSidebar();
+
+    // Replace chat with monitor panel (same behavior on desktop and mobile)
+    document.getElementById('welcome-view').style.display = 'none';
+    chatArea.style.display = 'none';
+    controls.style.display = 'none';
+    document.getElementById('debug-panel').style.display = 'none';
+    document.getElementById('monitor-panel').style.display = 'flex';
+    textInputBar.classList.remove('active');
+  } catch (e) {
+    alert('Monitor failed: ' + e.message);
+  }
+}
+
+function closeMonitorPanel() {
+  document.getElementById('monitor-panel').style.display = 'none';
+  document.getElementById('monitor-panel-frame').src = '';
+  if (_monitorPanelKey) {
+    fetch('/api/monitor/stop', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({key: _monitorPanelKey}),
+    }).catch(() => {});
+  }
+  _monitorPanelUrl = null;
+  _monitorPanelKey = null;
+  // Restore previous agent chat or welcome view
+  if (_monitorPrevSession && sessions.has(_monitorPrevSession)) {
+    switchTab(_monitorPrevSession, true);
+  } else {
+    document.getElementById('welcome-view').style.display = '';
+  }
+  _monitorPrevSession = null;
+}
+
+function monitorZoom(delta) {
+  _monitorFontSize = Math.max(30, Math.min(200, _monitorFontSize + delta));
+  document.getElementById('monitor-font-size').textContent = _monitorFontSize + '%';
+  // Wrap iframe in a scrollable container and scale it
+  const container = document.getElementById('monitor-frame-container');
+  const frame = document.getElementById('monitor-panel-frame');
+  const scale = _monitorFontSize / 100;
+  frame.style.transform = `scale(${scale})`;
+  frame.style.transformOrigin = 'top left';
+  // Scale inverse dimensions so the frame fills the container at any zoom
+  frame.style.width = (100 / scale) + '%';
+  frame.style.height = (100 / scale) + '%';
+}
+
+function monitorOpenTab() {
+  if (_monitorPanelUrl) window.open(_monitorPanelUrl, '_blank');
+}
+
 // --- Options menu ---
 // --- Context menu ---
 let contextMenuSessionId = null;
@@ -2075,9 +2165,10 @@ function showContextMenu(e, sessionId, voiceId) {
   const menu = document.getElementById('context-menu');
   // Show/hide items based on session state
   const hasSession = !!sessionId;
-  document.getElementById('ctx-terminate').style.display = hasSession ? 'block' : 'none';
+  document.getElementById('ctx-terminate').style.display = (hasSession || voiceId) ? 'block' : 'none';
   document.getElementById('ctx-launch').style.display = hasSession ? 'none' : 'block';
   document.getElementById('ctx-spawn-with').style.display = hasSession ? 'none' : 'block';
+  document.getElementById('ctx-monitor').style.display = (hasSession || voiceId) ? 'block' : 'none';
   const sess = sessionId ? sessions.get(sessionId) : null;
   const hasUnread = sess && (sess.unreadCount || 0) > 0;
   document.getElementById('ctx-mark-unread').style.display = (hasSession && !hasUnread) ? 'block' : 'none';
@@ -2263,6 +2354,11 @@ document.getElementById('ctx-spawn-backend-list').addEventListener('click', (e) 
 
 document.getElementById('ctx-terminate').addEventListener('click', () => {
   if (contextMenuSessionId) terminateSession(contextMenuSessionId);
+  hideContextMenu();
+});
+
+document.getElementById('ctx-monitor').addEventListener('click', () => {
+  if (contextMenuVoiceId) openMonitorPanel('agent', contextMenuVoiceId);
   hideContextMenu();
 });
 

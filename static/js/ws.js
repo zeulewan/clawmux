@@ -350,8 +350,8 @@ function handleMessage(data) {
       // Legacy status field (ready/starting)
       if (data.status === 'ready' && !data.silent) {
         cueSessionReady();
-        addMessage(data.session_id, 'system', 'Claude connected.');
-        // Remove "Waiting for Claude..." in minimal mode
+        addMessage(data.session_id, 'system', 'Connected.');
+        // Remove "Connecting..." in minimal mode
         if (!activityVerbose) {
           const s = sessions.get(data.session_id);
           if (s) s.messages = s.messages.filter(m => m.id !== 'waiting-for-claude-' + data.session_id);
@@ -480,7 +480,7 @@ function handleMessage(data) {
   } else if (type === 'listening') {
     // Show "ready" indicator on first idle transition (startup)
     if (data.state === 'idle' && s.sidebarState === 'starting') {
-      // Remove "Waiting for Claude..." placeholder
+      // Remove "Connecting..." placeholder
       if (s) s.messages = (s.messages || []).filter(m => m.id !== 'waiting-for-claude-' + session_id);
       const waitEl = chatArea && chatArea.querySelector('[data-msg-id="waiting-for-claude-' + session_id + '"]');
       if (waitEl) waitEl.remove();
