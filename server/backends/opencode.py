@@ -241,6 +241,20 @@ class OpenCodeBackend(AgentBackend):
         except Exception as e:
             log.error("Failed to write opencode.json at %s: %s", config_path, e)
 
+        # Ensure plugin dependencies are installed (bun may not be available)
+        plugin_node_modules = _PLUGIN_SRC / "node_modules"
+        if not plugin_node_modules.exists():
+            import subprocess
+            try:
+                subprocess.run(
+                    ["npm", "install", "--prefix", str(_PLUGIN_SRC.resolve())],
+                    capture_output=True, timeout=30,
+                    env=_SUBPROCESS_ENV,
+                )
+                log.info("Installed plugin dependencies via npm")
+            except Exception as e:
+                log.warning("Failed to install plugin dependencies: %s", e)
+
     async def _wait_for_server(self, session_name: str, port: int, timeout: float = 30.0) -> None:
         """Poll until the OpenCode HTTP server is accepting connections."""
         url = f"http://localhost:{port}/health"
