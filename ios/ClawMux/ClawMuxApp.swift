@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 import UserNotifications
 
+@MainActor
 class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(_ application: UIApplication,
                      configurationForConnecting connectingSceneSession: UISceneSession,
