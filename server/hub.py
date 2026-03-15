@@ -1234,11 +1234,14 @@ async def restart_session(session_id: str):
         return JSONResponse({"error": "session not found"}, status_code=404)
     voice = session.voice
     project_slug = session.project_slug
+    backend = session.backend
+    model_id = session.model_id
     # Terminate the existing session
     await session_mgr.terminate_session(session_id)
     await send_to_browser({"type": "session_terminated", "session_id": session_id})
-    # Respawn with the same voice and project
-    new_session = await session_mgr.spawn_session(voice=voice, project=project_slug)
+    # Respawn with the same voice, project, backend, and model
+    new_session = await session_mgr.spawn_session(voice=voice, project=project_slug,
+                                                  backend=backend, model_id=model_id)
     await send_to_browser({"type": "session_spawned", "session": new_session.to_dict()})
     await send_to_browser({"session_id": new_session.session_id, "type": "thinking"})
     return JSONResponse({"status": "restarted", "session_id": new_session.session_id})
