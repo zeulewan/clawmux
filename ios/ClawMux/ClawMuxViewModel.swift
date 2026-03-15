@@ -849,7 +849,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 } else if let state = initialState {
                     // No history yet — show appropriate placeholder (mirrors web addSession)
                     let isReady = state != .starting && state != .dead
-                    let placeholder = isReady ? "Claude connected." : "Session started. Waiting for Claude..."
+                    let placeholder = isReady ? "Connected." : "Session started. Connecting..."
                     self.messagesBySession[sessionId] = [ChatMessage(role: "system", text: placeholder)]
                 }
             }
@@ -1364,7 +1364,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
 
                 // First time becoming idle from starting = session just connected
                 if prevState == .starting && newState != .starting && newState != .dead {
-                    if verboseMode { addMessage(sid, role: "system", text: "Claude connected.") }
+                    if verboseMode { addMessage(sid, role: "system", text: "Connected.") }
                     if globalSounds, (isAutoMode && soundReadyAuto) || (pushToTalk && soundReadyPTT) {
                         audio.cueSessionReady()
                     }
