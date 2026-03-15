@@ -190,6 +190,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     @Published var isConnecting = false
     @Published var showSettings = false
     @Published var showNotes = false
+    @Published var pendingNotificationSessionId: String? = nil
     @Published var isFocusMode = false
     @Published var serverURL: String {
         didSet { UserDefaults.standard.set(serverURL, forKey: "serverURL") }
@@ -682,6 +683,16 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 self?.endLiveActivity()
             }
         }
+        // Handle notification tap → switch to agent session
+        NotificationCenter.default.addObserver(
+            forName: .switchToSession, object: nil, queue: .main
+        ) { [weak self] notification in
+            let sid = notification.userInfo?["sessionId"] as? String
+            Task { @MainActor in
+                guard let self, let sid else { return }
+                self.switchToSession(sid)
+            }
+        }
         // Handle audio session interruptions (e.g. user opens Spotify)
         NotificationCenter.default.addObserver(
             forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
@@ -764,11 +775,14 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
-    func sendNotification(title: String, body: String) {
+    func sendNotification(title: String, body: String, sessionId: String? = nil) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = String(body.prefix(140))
         content.sound = .default
+        if let sid = sessionId {
+            content.userInfo = ["sessionId": sid]
+        }
         let request = UNNotificationRequest(
             identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
@@ -1421,7 +1435,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     if shouldNotify {
                         let voiceName =
                             sessions.first(where: { $0.id == sid })?.label ?? "Agent"
-                        sendNotification(title: voiceName, body: t)
+                        sendNotification(title: voiceName, body: t, sessionId: sid)
                     }
                 }
             }

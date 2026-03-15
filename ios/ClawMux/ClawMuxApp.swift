@@ -1,7 +1,8 @@
 import SwiftUI
 import UIKit
+import UserNotifications
 
-class AppDelegate: NSObject, UIApplicationDelegate {
+class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(_ application: UIApplication,
                      configurationForConnecting connectingSceneSession: UISceneSession,
                      options: UIScene.ConnectionOptions) -> UISceneConfiguration {
@@ -9,6 +10,40 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         config.delegateClass = SceneDelegate.self
         return config
     }
+
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        UNUserNotificationCenter.current().delegate = self
+        return true
+    }
+
+    // Called when user taps a notification
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        let userInfo = response.notification.request.content.userInfo
+        if let sessionId = userInfo["sessionId"] as? String {
+            Task { @MainActor in
+                NotificationCenter.default.post(
+                    name: .switchToSession,
+                    object: nil,
+                    userInfo: ["sessionId": sessionId]
+                )
+            }
+        }
+        completionHandler()
+    }
+
+    // Show notifications even when app is in foreground
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound])
+    }
+}
+
+extension Notification.Name {
+    static let switchToSession = Notification.Name("switchToSession")
 }
 
 class SceneDelegate: NSObject, UIWindowSceneDelegate {
