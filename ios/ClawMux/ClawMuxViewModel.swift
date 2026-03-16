@@ -126,7 +126,7 @@ let ALL_VOICES: [VoiceInfo] = [
 ]
 
 /// O(1) name→id lookup — avoids O(n) linear scan on ALL_VOICES per message in group history parsing.
-private let VOICE_NAME_TO_ID: [String: String] = Dictionary(
+let VOICE_NAME_TO_ID: [String: String] = Dictionary(
     uniqueKeysWithValues: ALL_VOICES.map { ($0.name.lowercased(), $0.id) }
 )
 
