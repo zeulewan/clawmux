@@ -794,7 +794,22 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
 
     // Ping Watchdog, WebSocket, Hub Protocol → ClawMuxViewModel+WebSocket.swift
 
+    // MARK: - URL Helpers
 
+    func httpBaseURL() -> URL? {
+        var base = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if base.hasPrefix("wss://") {
+            base = "https://" + base.dropFirst(6)
+        } else if base.hasPrefix("ws://") {
+            base = "http://" + base.dropFirst(5)
+        } else if !base.hasPrefix("http://") && !base.hasPrefix("https://") {
+            base = "https://" + base
+        }
+        // Strip /ws suffix or trailing slash — serverURL may include these but HTTP base should not
+        if base.hasSuffix("/ws") { base = String(base.dropLast(3)) }
+        if base.hasSuffix("/") { base = String(base.dropLast()) }
+        return URL(string: base)
+    }
 }
 
 // MARK: - Helpers
