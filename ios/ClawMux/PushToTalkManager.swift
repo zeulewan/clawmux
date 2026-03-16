@@ -29,12 +29,14 @@ class PushToTalkManager: NSObject, ObservableObject {
     }
 
     func setup() {
+        pttLog.error("[PTT] setup() called — creating channel manager")
         Task {
             do {
                 channelManager = try await PTChannelManager.channelManager(delegate: self,
                                                                            restorationDelegate: self)
+                pttLog.error("[PTT] Channel manager created successfully")
             } catch {
-                pttLog.info("[PTT] Failed to create channel manager: \(error)")
+                pttLog.error("[PTT] Failed to create channel manager: \(error.localizedDescription)")
             }
         }
     }
