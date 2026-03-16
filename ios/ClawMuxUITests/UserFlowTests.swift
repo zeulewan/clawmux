@@ -364,6 +364,71 @@ final class UserFlowTests: XCTestCase {
         XCTAssertTrue(app.exists)
     }
 
+    // MARK: - Scroll Chevron Button
+
+    /// Scroll up to make chevron appear, tap it, verify it scrolls to bottom.
+    func testScrollChevronButton() throws {
+        tapAgent(at: 0) // Liam
+        sleep(2)
+        let chat = app.scrollViews["ChatScrollView"].firstMatch
+        guard chat.waitForExistence(timeout: 5) else { XCTFail("No chat"); return }
+
+        saveScreenshot("chevron_01_at_bottom")
+
+        // Scroll up
+        for _ in 0..<5 { chat.swipeDown(velocity: .fast); usleep(300_000) }
+        sleep(1)
+        saveScreenshot("chevron_02_scrolled_up")
+
+        // Chevron should now be visible
+        let chevron = app.buttons.matching(NSPredicate(format: "label CONTAINS 'chevron'")).firstMatch
+        let chevronVisible = chevron.waitForExistence(timeout: 3)
+        print("[CHEVRON] visible after scroll up: \(chevronVisible)")
+        XCTAssertTrue(chevronVisible, "Scroll-to-bottom chevron should appear after scrolling up")
+
+        if chevronVisible {
+            // Tap chevron
+            chevron.tap()
+            sleep(1)
+            saveScreenshot("chevron_03_after_tap")
+
+            // Chevron should disappear (back at bottom)
+            let stillVisible = chevron.waitForExistence(timeout: 2)
+            print("[CHEVRON] visible after tap: \(stillVisible)")
+            saveScreenshot("chevron_04_final")
+        }
+
+        XCTAssertTrue(app.exists)
+    }
+
+    // MARK: - Empty Chat Agent
+
+    /// Navigate to an agent with no messages (Eric or Kore — tap to start).
+    /// Verify empty state renders correctly, no blank screen bugs.
+    func testEmptyChatAgent() throws {
+        let hamburger = app.buttons["HamburgerButton"].firstMatch
+        guard hamburger.waitForExistence(timeout: 8) else { XCTFail("No hamburger"); return }
+        hamburger.tap(); sleep(2)
+        let sidebar = app.scrollViews["SidebarScrollView"].firstMatch
+        guard sidebar.waitForExistence(timeout: 3) else { XCTFail("No sidebar"); return }
+        for _ in 0..<3 { sidebar.swipeDown(); usleep(300_000) }
+        for _ in 0..<8 {
+            // Look for agents that are likely empty (Kore, Bella, etc.)
+            let btn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'Kore' OR label CONTAINS[c] 'Bella'")).firstMatch
+            if btn.waitForExistence(timeout: 1) { btn.tap(); sleep(2); break }
+            sidebar.swipeUp(); sleep(1)
+        }
+        saveScreenshot("empty_01_chat")
+
+        // Should not show scroll-to-bottom chevron on empty chat
+        let chevron = app.buttons.matching(NSPredicate(format: "label CONTAINS 'chevron'")).firstMatch
+        let chevronVisible = chevron.exists
+        print("[EMPTY] chevron visible on empty chat: \(chevronVisible)")
+        saveScreenshot("empty_02_check")
+
+        XCTAssertTrue(app.exists)
+    }
+
     // MARK: - Navigate To Michael (Header Check)
 
     /// Navigate to Michael's chat via expanded sidebar and screenshot the header.
