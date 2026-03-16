@@ -1,5 +1,6 @@
 import ActivityKit
 import Foundation
+import UIKit
 
 // MARK: - Audio Delegation
 // Delegates to AudioManager. All @Published audio state stays on ViewModel.
