@@ -666,6 +666,12 @@ async function _fetchOlderHistory(sessionId) {
     s.loadingOlderHistory = false;
     const indicator = chatArea.querySelector('#history-loading-indicator');
     if (indicator) indicator.remove();
+    // Re-check: if viewport still isn't filled, keep fetching (activity-heavy agents)
+    if (sessionId === activeSessionId) {
+      requestAnimationFrame(() => {
+        if (typeof _fillViewportMessages === 'function') _fillViewportMessages();
+      });
+    }
   }
 }
 
