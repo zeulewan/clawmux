@@ -2473,17 +2473,34 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
 
     /// Start a monitor panel. Returns (key, url) on success.
     func startMonitor(type: String, id: String) async -> (key: String, url: String)? {
-        guard let baseURL = httpBaseURL() else { return nil }
-        var req = URLRequest(url: baseURL.appendingPathComponent("api/monitor/start"))
+        guard let baseURL = httpBaseURL() else {
+            print("[monitor] no baseURL")
+            return nil
+        }
+        let endpoint = baseURL.appendingPathComponent("api/monitor/start")
+        print("[monitor] POST \(endpoint) type=\(type) id=\(id)")
+        var req = URLRequest(url: endpoint)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try? JSONSerialization.data(withJSONObject: ["type": type, "id": id])
-        guard let (data, _) = try? await URLSession.shared.data(for: req),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let key = json["key"] as? String,
-              let url = json["url"] as? String
-        else { return nil }
-        return (key: key, url: url)
+        do {
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            let raw = String(data: data, encoding: .utf8) ?? "nil"
+            print("[monitor] status=\(status) body=\(raw)")
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let key = json["key"] as? String,
+                  let url = json["url"] as? String
+            else {
+                print("[monitor] parse failed — missing 'key' or 'url' in response")
+                return nil
+            }
+            print("[monitor] success key=\(key) url=\(url)")
+            return (key: key, url: url)
+        } catch {
+            print("[monitor] request failed: \(error)")
+            return nil
+        }
     }
 
     func stopMonitor(key: String) {

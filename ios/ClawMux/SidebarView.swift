@@ -424,9 +424,13 @@ struct SidebarView: View {
                 .buttonStyle(.plain)
                 Button {
                     Task {
+                        print("[sidebar] monitor tap: folder=\(slug)")
                         monitorLoading = "folder-\(slug)"
                         if let result = await vm.startMonitor(type: "folder", id: slug) {
+                            print("[sidebar] monitor sheet opening: key=\(result.key) url=\(result.url)")
                             monitorItem = MonitorItem(id: result.key, title: project, url: result.url)
+                        } else {
+                            print("[sidebar] monitor returned nil — sheet will not open")
                         }
                         monitorLoading = nil
                     }
