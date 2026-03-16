@@ -314,6 +314,21 @@ struct SidebarView: View {
                     Label("Add to Group Chat", systemImage: "bubble.left.and.bubble.right")
                 }
             }
+            if session != nil {
+                Button {
+                    Task {
+                        monitorLoading = voice.id
+                        vm.stopMonitor(key: "agent:\(voice.id)")
+                        try? await Task.sleep(nanoseconds: 300_000_000)
+                        if let result = await vm.startMonitor(type: "agent", id: voice.id) {
+                            monitorItem = MonitorItem(id: result.key, title: voice.name, url: result.url)
+                        }
+                        monitorLoading = nil
+                    }
+                } label: {
+                    Label("Monitor", systemImage: "terminal")
+                }
+            }
             Button(role: .destructive) { resetVoiceId = voice.id; showResetConfirm = true } label: {
                 Label("Reset", systemImage: "arrow.counterclockwise")
             }
