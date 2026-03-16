@@ -77,21 +77,18 @@ struct GroupChatScrollView: View {
                             }
                             Color.clear.frame(height: 16).id("gc-bottom")
                         }
-                        .padding(.horizontal, 12).padding(.top, 64).padding(.bottom, 8)
+                        .padding(.leading, 60).padding(.trailing, 12).padding(.top, 64).padding(.bottom, 8)
                         .background(ChatScrollLock())
                         .scrollTargetLayout()
                     }
                     .defaultScrollAnchor(.bottom)
                     .id(vm.activeGroupName)
-                    .contentMargins(.leading, 48, for: .scrollContent)
                     .scrollDismissesKeyboard(.immediately)
                     .scrollBounceBehavior(.basedOnSize, axes: .vertical)
                     .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
                     .onChange(of: vm.groupMessages.count) { _, _ in
                         guard isAtBottom else { return }
-                        withAnimation(.easeOut(duration: 0.18)) {
-                            proxy.scrollTo("gc-bottom", anchor: .bottom)
-                        }
+                        proxy.scrollTo("gc-bottom", anchor: .bottom)
                     }
                     .onChange(of: vm.activeGroupName) { _, _ in
                         isAtBottom = true
