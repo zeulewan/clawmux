@@ -109,7 +109,10 @@ struct ChatScrollAreaView: View {
                         if thinkingJustEnded {
                             // Thinking bubble fade-out (.18s) still in layout —
                             // delay scroll until after the transition clears.
+                            // Force isAtBottom so ScrollBottomDetector flipping it
+                            // during the fade-out doesn't block the delayed scroll.
                             thinkingJustEnded = false
+                            isAtBottom = true
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { scrollBottom(proxy) }
                         } else {
                             scrollBottom(proxy)
@@ -143,12 +146,11 @@ struct ChatScrollAreaView: View {
                 .onChange(of: vm.showAgentMessages) { _, _ in rebuildMessageGroups() }
                 .onChange(of: vm.verboseMode) { _, _ in rebuildMessageGroups() }
                 .onChange(of: vm.isRecording) { _, recording in
+                    // Recording start/stop changes InputBarView height (waveform appears/disappears),
+                    // shifting the safeAreaInset. ScrollBottomDetector may flip isAtBottom to false
+                    // during the layout transition. Force it true in both directions.
+                    isAtBottom = true
                     if !recording {
-                        // User was recording → definitionally at the bottom.
-                        // The inset shrink from waveform removal can flip isAtBottom
-                        // to false via ScrollBottomDetector before this handler runs,
-                        // so we force it back and always re-anchor.
-                        isAtBottom = true
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                             proxy.scrollTo("bottom", anchor: .bottom)
                         }
