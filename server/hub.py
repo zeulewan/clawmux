@@ -278,8 +278,8 @@ async def stuck_buffer_monitor_loop() -> None:
             if not session or session.state in (AgentState.DEAD, AgentState.COMPACTING) or not session.work_dir:
                 _stuck_seen.pop(session_id, None)
                 continue
-            # OpenCode delivers messages via HTTP, not tmux paste — skip stuck buffer check
-            if session.backend != "claude-code":
+            # Only check stuck buffers for tmux-injection backends (not HTTP-delivery ones)
+            if session.backend not in ("claude-code", "codex"):
                 _stuck_seen.pop(session_id, None)
                 continue
             is_processing = session.state == AgentState.PROCESSING
@@ -506,8 +506,8 @@ async def lifespan(app: FastAPI):
     # input buffer by an injection that was killed mid-way during the previous hub run.
     # On a clean Claude Code prompt, Enter is a no-op. On a stuck buffer, it submits it.
     for session in list(session_mgr.sessions.values()):
-        # Only send Enter to Claude Code sessions — OpenCode uses HTTP delivery
-        if session.tmux_session and session.backend == "claude-code":
+        # Send Enter to tmux-injection backends (not HTTP-delivery ones like OpenCode)
+        if session.tmux_session and session.backend in ("claude-code", "codex"):
             try:
                 proc = await asyncio.create_subprocess_exec(
                     "tmux", "send-keys", "-t", session.tmux_session, "Enter",

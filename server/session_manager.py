@@ -21,6 +21,7 @@ from hub_config import (
     VOICES,
 )
 from agents_store import AgentEntry, AgentsStore
+from backends.codex import CodexBackend
 from backends.opencode import OpenCodeBackend
 from project_manager import ProjectManager
 from state_machine import AgentState
@@ -143,6 +144,7 @@ class SessionManager:
         self._backends = {
             "claude-code": backend,
             "opencode": OpenCodeBackend(),
+            "codex": CodexBackend(),
         }
         self._on_session_death = on_session_death  # async callback(session_id)
         self._template_renderer = TemplateRenderer(agents_store) if agents_store else None
