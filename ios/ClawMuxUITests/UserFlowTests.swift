@@ -990,7 +990,10 @@ final class UserFlowTests: XCTestCase {
             hamburger.tap(); sleep(2)
             let sidebar = app.scrollViews["SidebarScrollView"].firstMatch
             guard sidebar.waitForExistence(timeout: 3) else { return false }
-            for _ in 0..<6 {
+            // Scroll to top first to reset position
+            for _ in 0..<3 { sidebar.swipeDown(); usleep(300_000) }
+            // Now search downward
+            for _ in 0..<8 {
                 let btn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] '\(name)'")).firstMatch
                 if btn.waitForExistence(timeout: 1) { btn.tap(); sleep(2); return true }
                 sidebar.swipeUp(); sleep(1)
@@ -1008,7 +1011,7 @@ final class UserFlowTests: XCTestCase {
             input.typeText(text)
             let sendBtn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'send' OR label CONTAINS[c] 'arrow'")).firstMatch
             guard sendBtn.waitForExistence(timeout: 3) else { return false }
-            sendBtn.tap(); sleep(1) // short wait — we want to catch the thinking state
+            sendBtn.tap(); sleep(1)
             return true
         }
 
