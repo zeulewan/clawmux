@@ -18,6 +18,7 @@
 		3BDA61563FEF791C08A9111B /* SpectrumProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E27E8D2876D7E37F89DAEACD /* SpectrumProcessor.swift */; };
 		3EFBF80FC3E456A6DD67B39B /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5C9B19E7C4B946A8C69830 /* WelcomeView.swift */; };
 		D2E3F4A5B607183ACA4D6201 /* WalkingModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2E3F4A5B607183ACA4D6202 /* WalkingModeView.swift */; };
+		E3F4A5B6C7D8091A2B3C4D01 /* PushToTalkManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3F4A5B6C7D8091A2B3C4D02 /* PushToTalkManager.swift */; };
 		5A53815B6D61991600040435 /* ClawMuxLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B4CFDC5835A92120A013FE1 /* ClawMuxLiveActivity.swift */; };
 		7D32CC24BDDFA37E956A459A /* VADProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40068200828EAB10352BF7E0 /* VADProcessor.swift */; };
 		819F94636A67C9D060539C09 /* ClawMuxActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ECE0D61F0C08405ECE874C8 /* ClawMuxActivityAttributes.swift */; };
@@ -83,6 +84,7 @@
 		2EF7724BFBA3F18A21324642 /* TonePlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TonePlayer.swift; sourceTree = "<group>"; };
 		3A5C9B19E7C4B946A8C69830 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
 		D2E3F4A5B607183ACA4D6202 /* WalkingModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkingModeView.swift; sourceTree = "<group>"; };
+		E3F4A5B6C7D8091A2B3C4D02 /* PushToTalkManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushToTalkManager.swift; sourceTree = "<group>"; };
 		40068200828EAB10352BF7E0 /* VADProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VADProcessor.swift; sourceTree = "<group>"; };
 		443ABC04B7A435B58F1FC6D4 /* GroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupChatView.swift; sourceTree = "<group>"; };
 		4678CAE85F0CB0CD3AC78DD6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -149,6 +151,7 @@
 				25C554BD1E23697D898B05CE /* ViewHelpers.swift */,
 				3A5C9B19E7C4B946A8C69830 /* WelcomeView.swift */,
 				D2E3F4A5B607183ACA4D6202 /* WalkingModeView.swift */,
+				E3F4A5B6C7D8091A2B3C4D02 /* PushToTalkManager.swift */,
 			);
 			path = ClawMux;
 			sourceTree = "<group>";
@@ -413,6 +416,7 @@
 				D123D0FD38CA70DCC2923F69 /* ViewHelpers.swift in Sources */,
 				3EFBF80FC3E456A6DD67B39B /* WelcomeView.swift in Sources */,
 				D2E3F4A5B607183ACA4D6201 /* WalkingModeView.swift in Sources */,
+				E3F4A5B6C7D8091A2B3C4D01 /* PushToTalkManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -436,6 +440,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = ClawMux/ClawMux.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 25QMAKVCBN;
@@ -495,6 +500,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = ClawMux/ClawMux.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 25QMAKVCBN;
