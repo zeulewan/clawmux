@@ -130,6 +130,11 @@ private let VOICE_NAME_TO_ID: [String: String] = Dictionary(
     uniqueKeysWithValues: ALL_VOICES.map { ($0.name.lowercased(), $0.id) }
 )
 
+/// O(1) id→name lookup — used by GroupChatView bubble sender labels.
+let VOICE_ID_TO_NAME: [String: String] = Dictionary(
+    uniqueKeysWithValues: ALL_VOICES.map { ($0.id, $0.name) }
+)
+
 let SPEED_OPTIONS: [(label: String, value: Double)] = [
     ("0.75x", 0.75), ("1x", 1.0), ("1.25x", 1.25), ("1.5x", 1.5), ("2x", 2.0),
 ]
@@ -390,7 +395,10 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         didSet { UserDefaults.standard.set(globalHaptics, forKey: "globalHaptics") }
     }
     @Published var globalSounds: Bool {
-        didSet { UserDefaults.standard.set(globalSounds, forKey: "globalSounds") }
+        didSet {
+            UserDefaults.standard.set(globalSounds, forKey: "globalSounds")
+            if !globalSounds { audio.stopToneEngine() }
+        }
     }
     @Published var globalNotifications: Bool {
         didSet { UserDefaults.standard.set(globalNotifications, forKey: "globalNotifications") }

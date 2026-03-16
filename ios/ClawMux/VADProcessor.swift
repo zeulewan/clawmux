@@ -82,10 +82,11 @@ final class PlaybackVADProcessor: @unchecked Sendable {
         for i in 0..<count { sum += data[i] * data[i] }
         let rms = sqrt(sum / Float(count)) * 200
 
+        let now = Date()
         if rms > speechThreshold {
-            if speechStart == nil { speechStart = Date() }
+            if speechStart == nil { speechStart = now }
             if let start = speechStart,
-                Date().timeIntervalSince(start) > speechDuration
+                now.timeIntervalSince(start) > speechDuration
             {
                 speechStart = nil
                 onSpeechDetected()

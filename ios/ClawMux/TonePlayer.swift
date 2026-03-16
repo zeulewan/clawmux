@@ -24,6 +24,13 @@ final class TonePlayer {
         }
     }
 
+    /// Stops the AVAudioEngine to release audio resources when sounds are disabled or idle.
+    func stop() {
+        guard engine.isRunning else { return }
+        player.stop()
+        engine.stop()
+    }
+
     func play(_ tones: [(freq: Double, dur: Double, delay: Double, gain: Float)]) {
         let sr = format.sampleRate
         guard let end = tones.map({ $0.delay + $0.dur }).max(), end > 0 else { return }

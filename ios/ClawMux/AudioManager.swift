@@ -115,6 +115,7 @@ final class AudioManager: NSObject {
 
     func cueSessionReady() { tonePlayer.cueSessionReady() }
     func cueListening()    { tonePlayer.cueListening() }
+    func stopToneEngine()  { tonePlayer.stop() }
 
     // MARK: - Thinking Sound
 
@@ -325,6 +326,7 @@ final class AudioManager: NSObject {
             print("[audio] Playback error: \(error)")
             vm.statusText = "Audio error"
             vm.isPlaying = false
+            playingSessionId = nil
             vm.sendJSON(["session_id": sessionId, "type": "playback_done"])
         }
     }
@@ -540,7 +542,8 @@ final class AudioManager: NSObject {
             _ = resumePlaybackForSession(pausedSid)
         }
         // Flush any TTS audio that arrived during recording (held back by !isRecording guard)
-        if vm.isPlaying != true, let targetSid = sid ?? vm.activeSessionId,
+        if vm.isPlaying != true, vm.isPlaybackPaused != true,
+           let targetSid = sid ?? vm.activeSessionId,
            vm.audioBufferBySession[targetSid]?.isEmpty == false {
             drainAudioBuffer(targetSid)
         }
