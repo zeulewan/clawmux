@@ -38,6 +38,7 @@
 		E7D6C5B4A392817060BADE01 /* UserFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7D6C5B4A392817060BADE02 /* UserFlowTests.swift */; };
 		D8A747936F0FDA5E95EA77BB /* ClawMuxApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFF810E4C0B9F68B1E4AA4AD /* ClawMuxApp.swift */; };
 		DCDC60E202EB951E0C20A61E /* ClawMuxWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC5EB4981879BDC3BE644216 /* ClawMuxWidgetBundle.swift */; };
+		F4A5B6C7D809A1B2C3D4E501 /* WalkingModeControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4A5B6C7D809A1B2C3D4E502 /* WalkingModeControl.swift */; };
 		DD0B6C41043DEB376B75D6BE /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8850FD7D2AA1753841CA57F /* ChatView.swift */; };
 		EF98BD8285F5FAF97C9985E9 /* InputBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4385E6F9723F86B5AFE1680 /* InputBarView.swift */; };
 		FB2C3D4E5F6071829A3B4C5D /* MonitorWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1B2C3D4E5F60718293A4B5 /* MonitorWebView.swift */; };
@@ -108,6 +109,7 @@
 		A98C93E4123AFD12DB5663DE /* ClawMux.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ClawMux.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB917084CE6B997C8AA16A44 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		BC5EB4981879BDC3BE644216 /* ClawMuxWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMuxWidgetBundle.swift; sourceTree = "<group>"; };
+		F4A5B6C7D809A1B2C3D4E502 /* WalkingModeControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkingModeControl.swift; sourceTree = "<group>"; };
 		C75D80D8B5385DCFF85A8039 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		C8850FD7D2AA1753841CA57F /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		D4385E6F9723F86B5AFE1680 /* InputBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputBarView.swift; sourceTree = "<group>"; };
@@ -180,6 +182,7 @@
 			children = (
 				7B4CFDC5835A92120A013FE1 /* ClawMuxLiveActivity.swift */,
 				BC5EB4981879BDC3BE644216 /* ClawMuxWidgetBundle.swift */,
+				F4A5B6C7D809A1B2C3D4E502 /* WalkingModeControl.swift */,
 				2A65E8C4E54083EB652BA8A9 /* Info.plist */,
 			);
 			path = ClawMuxWidget;
@@ -383,6 +386,7 @@
 				819F94636A67C9D060539C09 /* ClawMuxActivityAttributes.swift in Sources */,
 				5A53815B6D61991600040435 /* ClawMuxLiveActivity.swift in Sources */,
 				DCDC60E202EB951E0C20A61E /* ClawMuxWidgetBundle.swift in Sources */,
+				F4A5B6C7D809A1B2C3D4E501 /* WalkingModeControl.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
