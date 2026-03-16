@@ -12,6 +12,8 @@
 		31BD7BC304045245A8CD50E0 /* AudioManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBE370FB4A09E91CFDAB57F9 /* AudioManager.swift */; };
 		B1C2D3E4F5061728394A5B6C /* ClawMuxViewModel+Audio.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5061728394A5B6E /* ClawMuxViewModel+Audio.swift */; };
 		B1C2D3E4F5061728394A5B6D /* ClawMuxViewModel+Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5061728394A5B6F /* ClawMuxViewModel+Settings.swift */; };
+		C1D2E3F4A5B607183ACA4D5E /* ClawMuxViewModel+WebSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F4A5B607183ACA4D60 /* ClawMuxViewModel+WebSocket.swift */; };
+		C1D2E3F4A5B607183ACA4D5F /* ClawMuxViewModel+Sessions.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F4A5B607183ACA4D61 /* ClawMuxViewModel+Sessions.swift */; };
 		34708E5BA49DCFE09A2770E8 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 472435D7BEC5E6A66C89A71A /* ContentView.swift */; };
 		3BDA61563FEF791C08A9111B /* SpectrumProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E27E8D2876D7E37F89DAEACD /* SpectrumProcessor.swift */; };
 		3EFBF80FC3E456A6DD67B39B /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5C9B19E7C4B946A8C69830 /* WelcomeView.swift */; };
@@ -88,6 +90,8 @@
 		72290AAFED98C8436AD778EF /* ClawMuxViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMuxViewModel.swift; sourceTree = "<group>"; };
 		B1C2D3E4F5061728394A5B6E /* ClawMuxViewModel+Audio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ClawMuxViewModel+Audio.swift"; sourceTree = "<group>"; };
 		B1C2D3E4F5061728394A5B6F /* ClawMuxViewModel+Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ClawMuxViewModel+Settings.swift"; sourceTree = "<group>"; };
+		C1D2E3F4A5B607183ACA4D60 /* ClawMuxViewModel+WebSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ClawMuxViewModel+WebSocket.swift"; sourceTree = "<group>"; };
+		C1D2E3F4A5B607183ACA4D61 /* ClawMuxViewModel+Sessions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ClawMuxViewModel+Sessions.swift"; sourceTree = "<group>"; };
 		7B4CFDC5835A92120A013FE1 /* ClawMuxLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMuxLiveActivity.swift; sourceTree = "<group>"; };
 		7ECE0D61F0C08405ECE874C8 /* ClawMuxActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClawMuxActivityAttributes.swift; sourceTree = "<group>"; };
 		82E2D679C152E4238145F02E /* ClawMuxUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ClawMuxUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -123,6 +127,8 @@
 				72290AAFED98C8436AD778EF /* ClawMuxViewModel.swift */,
 				B1C2D3E4F5061728394A5B6E /* ClawMuxViewModel+Audio.swift */,
 				B1C2D3E4F5061728394A5B6F /* ClawMuxViewModel+Settings.swift */,
+				C1D2E3F4A5B607183ACA4D60 /* ClawMuxViewModel+WebSocket.swift */,
+				C1D2E3F4A5B607183ACA4D61 /* ClawMuxViewModel+Sessions.swift */,
 				472435D7BEC5E6A66C89A71A /* ContentView.swift */,
 				443ABC04B7A435B58F1FC6D4 /* GroupChatView.swift */,
 				D7C804BA345F7AE206CF5AF7 /* Info.plist */,
