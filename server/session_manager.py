@@ -152,7 +152,11 @@ class SessionManager:
 
     def _get_backend(self, backend_str: str):
         """Return the backend instance for a given backend type string."""
-        return self._backends.get(backend_str, self.backend)
+        backend = self._backends.get(backend_str)
+        if backend is None:
+            log.warning("Unknown backend %r — falling back to claude-code", backend_str)
+            return self.backend
+        return backend
 
     async def _sync_agent_store(self, voice_id: str, session: Session | None = None, **overrides) -> None:
         """Dual-write: update agents.json for a voice. If session is None, marks agent as dead."""
@@ -554,13 +558,17 @@ class SessionManager:
 
             # Delegate spawning to the backend (tmux, env vars, Claude CLI, init polling)
             import hub_config
-            session_model = session.model or hub_config.CLAUDE_MODEL
-            session.model = session_model  # Store effective model so browser can display it
-            session_effort = session.effort or hub_config.CLAUDE_EFFORT
+            if backend == "claude-code":
+                session_model = session.model or hub_config.CLAUDE_MODEL
+                session_effort = session.effort or hub_config.CLAUDE_EFFORT
+                spawn_model = session_model
+            else:
+                # Non-Claude backends: use model_id as the model, don't default to "opus"
+                session_model = session.model_id or session.model or ""
+                session_effort = session.effort or ""
+                spawn_model = session.model_id or ""
+            session.model = session_model
             session.effort = session_effort
-            # For non-Claude backends, pass model_id (e.g. "opencode/nemotron-3-super-free")
-            # instead of the Claude model shorthand ("opus"/"sonnet")
-            spawn_model = session.model_id if backend != "claude-code" and session.model_id else session_model
             await self._get_backend(backend).spawn(
                 session_name=tmux_name, work_dir=str(work_dir),
                 session_id=session_id, hub_port=HUB_PORT,

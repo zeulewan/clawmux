@@ -81,6 +81,22 @@ async def _on_session_death(session_id: str):
 session_mgr = SessionManager(history_store=history, project_mgr=project_mgr, agents_store=agents_store, backend=_backend, on_session_death=_on_session_death)
 broker = MessageBroker()
 
+def _voice_display_name(voice_id: str) -> str:
+    """Convert a voice ID like 'bf_lily' to a display name like 'Lily'.
+
+    Uses the session label if available, otherwise strips any two-letter
+    gender prefix (af_, am_, bf_, bm_) via regex — future-proof against
+    new prefixes.
+    """
+    # Try live session label first
+    session = next((s for s in session_mgr.sessions.values() if s.voice == voice_id), None)
+    if session and session.label:
+        return session.label
+    # Regex: strip any two-letter prefix followed by underscore
+    name = re.sub(r'^[a-z]{2}_', '', voice_id)
+    return name.capitalize() if name else voice_id
+
+
 def _resolve_slug(project_val: str) -> str:
     """Resolve a project display name or slug to the canonical slug."""
     known = project_mgr.projects
@@ -1258,6 +1274,12 @@ async def interrupt_session(session_id: str):
     session = session_mgr.sessions.get(session_id)
     if not session:
         return JSONResponse({"error": "session not found"}, status_code=404)
+    # OpenCode uses HTTP — Escape via tmux doesn't interrupt the AI process.
+    # Skip for now; a proper cancel API can be added later.
+    if session.backend == "opencode":
+        log.info("[%s] Interrupt skipped for OpenCode backend (no tmux-based cancel)", session_id)
+        return JSONResponse({"status": "skipped", "reason": "opencode does not support tmux interrupt"})
+    # Claude Code and Codex: send Escape via tmux
     tmux_name = session.tmux_session
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -1272,7 +1294,7 @@ async def interrupt_session(session_id: str):
     except Exception as e:
         log.error("Interrupt error for %s: %s", tmux_name, e)
         return JSONResponse({"error": str(e)}, status_code=500)
-    log.info("Interrupted session %s (tmux: %s)", session_id, tmux_name)
+    log.info("Interrupted session %s (tmux: %s, backend: %s)", session_id, tmux_name, session.backend)
 
     # After Escape, Claude Code may not fire its Stop hook — force idle after a delay.
     # Capture interrupt time so we can detect if state changed AFTER the interrupt
@@ -2228,7 +2250,7 @@ async def set_viewing_session(session_id: str):
 def _resolve_session(name: str):
     """Resolve a friendly name (sky, alloy) or voice ID to a session."""
     for s in session_mgr.sessions.values():
-        voice_name = s.voice.replace("af_", "").replace("am_", "").replace("bm_", "")
+        voice_name = re.sub(r'^[a-z]{2}_', '', s.voice)
         if (voice_name == name or s.voice == name or
                 s.session_id == name or s.label.lower() == name.lower()):
             return s
@@ -2259,8 +2281,8 @@ async def send_message(request: Request):
     if not recipient.tmux_session:
         return JSONResponse({"error": f"recipient has no tmux session"}, status_code=400)
 
-    sender_name = sender.voice.replace("af_", "").replace("am_", "").replace("bm_", "")
-    recip_name = recipient.voice.replace("af_", "").replace("am_", "").replace("bm_", "")
+    sender_name = _voice_display_name(sender.voice)
+    recip_name = _voice_display_name(recipient.voice)
 
     # Send via broker (skip tmux injection for inter-agent messages)
     msg = await broker.send(
@@ -2374,7 +2396,7 @@ async def send_external_message(request: Request):
     if not recipient.tmux_session:
         return JSONResponse({"error": "recipient has no tmux session"}, status_code=400)
 
-    recip_name = recipient.voice.replace("af_", "").replace("am_", "").replace("bm_", "")
+    recip_name = _voice_display_name(recipient.voice)
     msg = await broker.send(
         sender=sender_name,
         recipient=recipient.session_id,
@@ -2515,7 +2537,7 @@ async def speak_to_user(request: Request):
         if group:
             # Route to group chat: only shows in browser group chat view, not delivered to other agents
             ack_id = _gen_msg_id()
-            sender_label = sender.voice.replace("af_", "").replace("am_", "").replace("bm_", "").capitalize()
+            sender_label = _voice_display_name(sender.voice)
             await asyncio.to_thread(_append_group_history, group["id"], "user", "",
                                     sender=sender_label, msg_id=ack_id, parent_id=parent_id, bare_ack=True,
                                     sender_voice=sender.voice)
@@ -2530,7 +2552,7 @@ async def speak_to_user(request: Request):
             return {"id": ack_id, "status": "ack_sent"}
         # Regular session ack — thumbs up in agent's own chat
         msg_id = _gen_msg_id()
-        sender_name = sender.voice.replace("af_", "").replace("am_", "").replace("bm_", "")
+        sender_name = _voice_display_name(sender.voice)
         # Save to history so ack persists across reloads
         await asyncio.to_thread(history.append, sender.voice, sender.label, "assistant", "",
                        _hist_prefix(sender), msg_id=msg_id,
@@ -2554,7 +2576,7 @@ async def speak_to_user(request: Request):
     if not content:
         return JSONResponse({"error": "message is required"}, status_code=400)
 
-    sender_name = sender.voice.replace("af_", "").replace("am_", "").replace("bm_", "")
+    sender_name = _voice_display_name(sender.voice)
     msg_id = _gen_msg_id()
 
     if sender_id != _browser_viewed_session:
