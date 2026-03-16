@@ -678,12 +678,20 @@ function _fillViewportMessages() {
   if (!s) return;
   if (chatArea.scrollHeight > chatArea.clientHeight + 10) return; // already filled
   const limit = _getChatLimit(activeSessionId);
-  if (!_getDisplaySlice(s.messages, limit).hasMore) return; // nothing more to load
-  // Load one more batch of visible messages
-  _chatRenderLimit.set(activeSessionId, limit + _CHAT_BATCH);
-  _scrollLoadPending = true;
-  renderChat(true);
-  requestAnimationFrame(() => { _scrollLoadPending = false; });
+  const { hasMore: localHasMore } = _getDisplaySlice(s.messages, limit);
+  if (localHasMore) {
+    // Load one more batch of visible messages from local buffer
+    _chatRenderLimit.set(activeSessionId, limit + _CHAT_BATCH);
+    _scrollLoadPending = true;
+    renderChat(true);
+    requestAnimationFrame(() => { _scrollLoadPending = false; });
+    return;
+  }
+  // Local buffer exhausted but server has more — fetch older page
+  // (common for activity-heavy agents where 150 messages are mostly activity)
+  if (s.hasMoreHistory && !s.loadingOlderHistory) {
+    _fetchOlderHistory(activeSessionId);
+  }
 }
 
 // Scroll-to-top listener for lazy loading + scroll-to-bottom unloading
