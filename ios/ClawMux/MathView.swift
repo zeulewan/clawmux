@@ -17,6 +17,8 @@ struct MathView: UIViewRepresentable {
     let expression: String   // LaTeX without delimiters
     let isBlock: Bool
     @Binding var height: CGFloat
+    // @Environment triggers updateUIView when appearance changes — fixes stale text color
+    @Environment(\.colorScheme) var colorScheme
 
     // Cache rendered heights by expression so repeated renders skip WKWebView reload.
     static var heightCache: [String: CGFloat] = [:]
@@ -36,13 +38,20 @@ struct MathView: UIViewRepresentable {
     }
 
     func updateUIView(_ wv: WKWebView, context: Context) {
-        // baseURL = app bundle root so relative paths katex/katex.min.{css,js} and
-        // katex/fonts/* (referenced by the CSS) all resolve to bundled resources.
+        let isDark = colorScheme == .dark
+        let coord = context.coordinator
+        // Skip reload if expression, display mode, and appearance are all unchanged
+        guard coord.lastExpression != expression ||
+              coord.lastIsBlock != isBlock ||
+              coord.lastIsDark != isDark else { return }
+        coord.lastExpression = expression
+        coord.lastIsBlock = isBlock
+        coord.lastIsDark = isDark
         wv.loadHTMLString(buildHTML(), baseURL: Bundle.main.resourceURL)
     }
 
     private func buildHTML() -> String {
-        let dark = UITraitCollection.current.userInterfaceStyle == .dark
+        let dark = colorScheme == .dark
         let textColor = dark ? "#e8e8e8" : "#1a1a1a"
         let justify = isBlock ? "center" : "flex-start"
         let padding = isBlock ? "6px 4px" : "1px 0"
@@ -95,6 +104,9 @@ struct MathView: UIViewRepresentable {
 
     class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         var parent: MathView
+        var lastExpression: String?
+        var lastIsBlock: Bool?
+        var lastIsDark: Bool?
         init(_ p: MathView) { parent = p }
 
         func userContentController(_ c: WKUserContentController, didReceive m: WKScriptMessage) {
