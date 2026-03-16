@@ -51,7 +51,6 @@ logging.basicConfig(
     format="%(asctime)s [%(name)s] %(message)s",
     datefmt="%H:%M:%S",
     handlers=[
-        logging.StreamHandler(sys.stderr),
         _log_file_handler,
     ],
 )
