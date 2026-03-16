@@ -1,5 +1,6 @@
 import Foundation
 import UserNotifications
+import Intents
 
 // MARK: - Settings, Preferences, Debug, Monitor, Notifications
 
@@ -15,9 +16,42 @@ extension ClawMuxViewModel {
         if let sid = sessionId {
             content.userInfo = ["sessionId": sid]
         }
-        let request = UNNotificationRequest(
-            identifier: UUID().uuidString, content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request)
+
+        // Communication Notification: iMessage-style bubble with sender persona
+        let voiceId = sessionId.flatMap { sid in sessions.first { $0.id == sid }?.voice }
+        let handle = INPersonHandle(value: voiceId ?? title, type: .unknown)
+        let sender = INPerson(
+            personHandle: handle,
+            nameComponents: nil,
+            displayName: title,
+            image: nil,
+            contactIdentifier: nil,
+            customIdentifier: voiceId
+        )
+        let intent = INSendMessageIntent(
+            recipients: nil,
+            outgoingMessageType: .outgoingMessageText,
+            content: String(body.prefix(140)),
+            speakableGroupName: nil,
+            conversationIdentifier: sessionId ?? "clawmux",
+            serviceName: nil,
+            sender: sender,
+            attachments: nil
+        )
+        let interaction = INInteraction(intent: intent, response: nil)
+        interaction.direction = .incoming
+        interaction.donate(completion: nil)
+
+        do {
+            let updated = try content.updating(from: intent)
+            let request = UNNotificationRequest(
+                identifier: UUID().uuidString, content: updated, trigger: nil)
+            UNUserNotificationCenter.current().add(request)
+        } catch {
+            let request = UNNotificationRequest(
+                identifier: UUID().uuidString, content: content, trigger: nil)
+            UNUserNotificationCenter.current().add(request)
+        }
     }
 
     // MARK: - Session Preferences Persistence

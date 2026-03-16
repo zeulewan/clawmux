@@ -318,8 +318,8 @@ extension ClawMuxViewModel {
                 let newState = AgentState(rawValue: json["state"] as? String ?? "") ?? sessions[idx].state
                 let prevState = sessions[idx].state
                 sessions[idx].state = newState
-                sessions[idx].activity = json["activity"] as? String ?? ""
-                sessions[idx].toolName = json["tool_name"] as? String ?? ""
+                if let activity = json["activity"] as? String { sessions[idx].activity = activity }
+                if let toolName = json["tool_name"] as? String { sessions[idx].toolName = toolName }
                 if let b = json["backend"] as? String, !b.isEmpty { sessions[idx].backend = b }
                 if let m = json["model_id"] as? String { sessions[idx].modelId = m }
 
