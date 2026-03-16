@@ -207,7 +207,7 @@ struct InputBarView: View {
             }
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: vm.isRecording)
         }
-        .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 8)
+        .padding(.horizontal, 16).padding(.top, 4)
     }
 
     // MARK: - Text Input Bar
