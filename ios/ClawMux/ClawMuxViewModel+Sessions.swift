@@ -39,14 +39,13 @@ extension ClawMuxViewModel {
         var comps = URLComponents(
             url: baseURL.appendingPathComponent("api/history/\(voiceId)"),
             resolvingAgainstBaseURL: false)!
-        comps.queryItems = [URLQueryItem(name: "limit", value: "100")]
+        comps.queryItems = [URLQueryItem(name: "limit", value: "200")]
         guard let url = comps.url else { return }
         URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
             guard let data,
                 let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                 let messages = json["messages"] as? [[String: Any]]
             else { return }
-            // Extract Sendable values before entering the actor context
             let hasMore = json["has_more"] as? Bool ?? false
             let chatMessages: [ChatMessage] = messages.compactMap { msg in
                 guard let role = msg["role"] as? String, let text = msg["text"] as? String else { return nil }
@@ -61,7 +60,6 @@ extension ClawMuxViewModel {
                 guard let self, let idx = self.sessionIndex(sessionId) else { return }
                 if !chatMessages.isEmpty {
                     self.messagesBySession[sessionId] = chatMessages
-                    // Use server's has_more — counts all stored messages, not just visible ones
                     self.sessions[idx].hasOlderMessages = hasMore
                 } else if let state = initialState {
                     // No history yet — show appropriate placeholder (mirrors web addSession)
@@ -156,7 +154,7 @@ extension ClawMuxViewModel {
         var comps = URLComponents(
             url: baseURL.appendingPathComponent("api/history/\(session.voice)"),
             resolvingAgainstBaseURL: false)!
-        var items: [URLQueryItem] = [URLQueryItem(name: "limit", value: "100")]
+        var items: [URLQueryItem] = [URLQueryItem(name: "limit", value: "200")]
         if let ts = oldestTs {
             items.append(URLQueryItem(name: "before_ts", value: String(ts)))
         }
