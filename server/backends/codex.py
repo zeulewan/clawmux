@@ -227,6 +227,46 @@ class CodexBackend(AgentBackend):
 
         return RecoveryResult()
 
+    def get_context_usage(self, session_name: str, session) -> dict | None:
+        """Parse model and context from Codex's tmux status line.
+
+        Status line format: "gpt-5.4 default · 85% left · /path/to/work"
+        We extract the model name and the percent-left value.
+        """
+        import subprocess as _sp
+        try:
+            result = _sp.run(
+                ["tmux", "capture-pane", "-t", session_name, "-p"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode != 0:
+                return None
+            pane = result.stdout.strip()
+            if not pane:
+                return None
+            lines = pane.splitlines()
+            last_line = lines[-1].strip() if lines else ""
+            # Match: "model-name default · N% left · /path"
+            import re
+            m = re.match(r'^(\S+)\s+\S+\s+·\s+(\d+)%\s+left\s+·', last_line)
+            if not m:
+                return None
+            model_name = m.group(1)
+            pct_left = int(m.group(2))
+            pct_used = 100 - pct_left
+            # Update session.model_id if we parsed a model
+            if model_name and hasattr(session, 'model_id'):
+                session.model_id = model_name
+            return {
+                "total_context_tokens": 0,
+                "output_tokens": 0,
+                "context_limit": 0,
+                "percent": pct_used,
+            }
+        except Exception as e:
+            log.warning("Error reading Codex context for %s: %s", session_name, e)
+            return None
+
     async def clear_stuck_buffer(self, session_name: str) -> None:
         """Send Enter to flush any text stuck in tmux input buffer."""
         await self._cc.clear_stuck_buffer(session_name)

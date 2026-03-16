@@ -229,6 +229,27 @@ class OpenCodeBackend(AgentBackend):
     async def list_live_sessions(self, known_names: set[str]) -> set[str]:
         return await self._cc.list_live_sessions(known_names)
 
+    def get_context_usage(self, session_name: str, session) -> dict | None:
+        """Read model from opencode.json and set model_id on the session.
+
+        OpenCode doesn't expose token usage, but we can read the configured
+        model so the top bar displays it correctly.
+        """
+        work_dir = getattr(session, 'work_dir', None)
+        if not work_dir:
+            return None
+        config_path = Path(work_dir) / "opencode.json"
+        if not config_path.exists():
+            return None
+        try:
+            config = json.loads(config_path.read_text())
+            model = config.get("model", "")
+            if model and hasattr(session, 'model_id') and not session.model_id:
+                session.model_id = model
+        except Exception:
+            pass
+        return None  # No token usage data for OpenCode
+
     async def recover(self, session_name: str, work_dir: str) -> RecoveryResult:
         """Check tmux, HTTP server, and OC session health — fix what we can."""
         # 1. Check tmux session
