@@ -21,29 +21,38 @@ struct WalkingModeView: View {
                 let isThinking = puckSession?.isThinking == true
                 let isRecording = vm.isRecording
 
-                ZStack {
-                    // Outer pulse ring
-                    Circle()
-                        .strokeBorder(Color.white.opacity(isPulsing ? 0.3 : 0.05), lineWidth: 2)
-                        .frame(width: 120, height: 120)
-                        .scaleEffect(isPulsing ? 1.1 : 1.0)
-                        .animation(
-                            (isThinking || isRecording)
-                                ? .easeInOut(duration: 1.2).repeatForever(autoreverses: true)
-                                : .default,
-                            value: isPulsing
-                        )
+                Button {
+                    if isRecording {
+                        vm.stopRecording()
+                    } else {
+                        vm.audio.startRecording()
+                    }
+                } label: {
+                    ZStack {
+                        // Outer pulse ring
+                        Circle()
+                            .strokeBorder(Color.white.opacity(isPulsing ? 0.3 : 0.05), lineWidth: 2)
+                            .frame(width: 120, height: 120)
+                            .scaleEffect(isPulsing ? 1.1 : 1.0)
+                            .animation(
+                                (isThinking || isRecording)
+                                    ? .easeInOut(duration: 1.2).repeatForever(autoreverses: true)
+                                    : .default,
+                                value: isPulsing
+                            )
 
-                    // Inner circle
-                    Circle()
-                        .fill(isRecording ? Color.red.opacity(0.3) : Color.white.opacity(0.08))
-                        .frame(width: 80, height: 80)
+                        // Inner circle
+                        Circle()
+                            .fill(isRecording ? Color.red.opacity(0.3) : Color.white.opacity(0.08))
+                            .frame(width: 80, height: 80)
 
-                    // Icon
-                    Image(systemName: isRecording ? "mic.fill" : isThinking ? "ellipsis" : "waveform")
-                        .font(.system(size: 28, weight: .medium))
-                        .foregroundStyle(isRecording ? .red : .white.opacity(0.6))
+                        // Icon
+                        Image(systemName: isRecording ? "mic.fill" : isThinking ? "ellipsis" : "waveform")
+                            .font(.system(size: 28, weight: .medium))
+                            .foregroundStyle(isRecording ? .red : .white.opacity(0.6))
+                    }
                 }
+                .buttonStyle(.plain)
 
                 Text("Walking Mode")
                     .font(.system(size: 15, weight: .medium))
