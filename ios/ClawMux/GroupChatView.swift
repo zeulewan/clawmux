@@ -40,7 +40,8 @@ struct GroupChatHeaderView: View {
 struct GroupChatScrollView: View {
     @ObservedObject var vm: ClawMuxViewModel
     @Binding var showCopiedToast: Bool
-    @State private var isAtBottom: Bool = true
+    @State private var userScrolledUp = false
+    @State private var isNearBottom = true
 
     var body: some View {
         ZStack {
@@ -85,20 +86,30 @@ struct GroupChatScrollView: View {
                     .id(vm.activeGroupName)
                     .scrollDismissesKeyboard(.immediately)
                     .scrollBounceBehavior(.basedOnSize, axes: .vertical)
-                    .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
+                    .onScrollPhaseChange { _, newPhase in
+                        if newPhase == .idle && !isNearBottom {
+                            userScrolledUp = true
+                        }
+                    }
+                    .modifier(ScrollBottomDetector(isAtBottom: $isNearBottom))
+                    .onChange(of: isNearBottom) { _, nearBottom in
+                        if nearBottom { userScrolledUp = false }
+                    }
                     .onChange(of: vm.groupMessages.count) { _, _ in
-                        guard isAtBottom else { return }
+                        guard !userScrolledUp else { return }
                         proxy.scrollTo("gc-bottom", anchor: .bottom)
                     }
                     .onChange(of: vm.activeGroupName) { _, _ in
-                        isAtBottom = true
+                        userScrolledUp = false
+                        isNearBottom = true
                     }
                     .onAppear {
                         if let name = vm.activeGroupName { vm.fetchGroupHistory(groupName: name) }
                     }
 
-                    if !isAtBottom {
+                    if userScrolledUp {
                         Button {
+                            userScrolledUp = false
                             withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo("gc-bottom", anchor: .bottom) }
                         } label: {
                             Image(systemName: "chevron.down")
@@ -118,7 +129,7 @@ struct GroupChatScrollView: View {
                         .padding(.trailing, 16)
                         .padding(.bottom, 8)
                         .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .bottomTrailing)))
-                        .animation(.spring(response: 0.25), value: isAtBottom)
+                        .animation(.spring(response: 0.25), value: userScrolledUp)
                     }
                 }
             }

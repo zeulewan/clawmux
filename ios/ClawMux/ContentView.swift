@@ -22,7 +22,6 @@ struct ContentView: View {
     @State private var thinkingExpanded        = false
     @State private var collapsedProjects:       Set<String> = []
     @State private var expandedAgentMsgIds:    Set<UUID> = []
-    @State private var isAtBottom:             Bool = true
     @State private var isLoadingOlder:         Bool = false
     @State private var sidebarExpanded:        Bool = false
     @State private var showFilePicker:         Bool = false
@@ -398,7 +397,6 @@ struct ContentView: View {
     private var chatScrollArea: some View {
         ChatScrollAreaView(
             vm: vm,
-            isAtBottom: $isAtBottom,
             isLoadingOlder: $isLoadingOlder,
             thinkingExpanded: $thinkingExpanded,
             expandedAgentMsgIds: $expandedAgentMsgIds,

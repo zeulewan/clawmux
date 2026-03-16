@@ -10,16 +10,19 @@ private struct MessageListKey: Equatable {
 
 struct ChatScrollAreaView: View {
     @ObservedObject var vm: ClawMuxViewModel
-    @Binding var isAtBottom: Bool
     @Binding var isLoadingOlder: Bool
     @Binding var thinkingExpanded: Bool
     @Binding var expandedAgentMsgIds: Set<UUID>
     @Binding var showCopiedToast: Bool
     @State private var isPulsing = false
-    @State private var topAnchorId: String? = nil   // first message ID captured before older-message load
+    @State private var topAnchorId: String? = nil
     @State private var cachedMessageGroups: [MessageGroup] = []
-    @State private var scrollPositionID: String? = nil  // declarative scroll anchor for jitter-free prepend
-    @State private var thinkingJustEnded = false     // true while thinking bubble's fade-out is in flight
+    @State private var scrollPositionID: String? = nil  // declarative anchor for older-messages prepend
+    // Scroll model: auto-scroll to bottom unless user has explicitly dragged up.
+    // Set true only by .onScrollPhaseChange (user drag). Cleared by ScrollBottomDetector
+    // (user returned to bottom) or session switch. Layout-driven geometry changes never set it.
+    @State private var userScrolledUp = false
+    @State private var isNearBottom = true  // tracks geometry for chevron visibility
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -46,28 +49,30 @@ struct ChatScrollAreaView: View {
                     }
                     .padding(.leading, 60).padding(.trailing, 12)
                     .padding(.top, 64).padding(.bottom, 16)
-                    // ChatScrollLock is on the LazyVStack (inside the scroll content), not the ScrollView.
-                    // .background() on a SwiftUI ScrollView places the UIView as a sibling in UIKit —
-                    // walking superview from a sibling never reaches the UIScrollView. From inside the
-                    // content layer the chain is: content view → UIScrollView → found.
                     .background(ChatScrollLock())
-                    // scrollTargetLayout() lets scrollPosition(id:) resolve item IDs during layout.
-                    // LazyVStack only materialises views on demand, so proxy.scrollTo has no target
-                    // yet when it fires post-onChange. scrollPosition(id:) defers resolution to the
-                    // same layout pass where the new views are created — jitter-free prepend.
                     .scrollTargetLayout()
                 }
                 .scrollPosition(id: $scrollPositionID, anchor: .top)
                 .defaultScrollAnchor(.bottom)
-                // Fresh ScrollView per session → defaultScrollAnchor(.bottom) fires reliably on switch.
-                // proxy.scrollTo("bottom") on a LazyVStack with unrendered tail items is unreliable.
                 .id(vm.activeSessionId)
                 .scrollDismissesKeyboard(.immediately)
-                // Only allow vertical bounce when content overflows — prevents snap-back
-                // past the bottom when content height changes during animations.
                 .scrollBounceBehavior(.basedOnSize, axes: .vertical)
                 .accessibilityIdentifier("ChatScrollView")
-                .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
+                // Detect user-initiated scroll: only .interacting phase = finger on screen.
+                // Layout-driven geometry changes do NOT trigger .interacting.
+                .onScrollPhaseChange { _, newPhase in
+                    if newPhase == .interacting && isNearBottom {
+                        // Will check at end of interaction whether user moved away from bottom
+                    }
+                    if newPhase == .idle && !isNearBottom {
+                        userScrolledUp = true
+                    }
+                }
+                // Geometry-based near-bottom check — used to CLEAR userScrolledUp and show/hide chevron.
+                .modifier(ScrollBottomDetector(isAtBottom: $isNearBottom))
+                .onChange(of: isNearBottom) { _, nearBottom in
+                    if nearBottom { userScrolledUp = false }
+                }
                 .modifier(ScrollTopDetector(
                     isLoadingOlder: $isLoadingOlder,
                     hasOlderMessages: vm.activeSession?.hasOlderMessages == true,
@@ -76,92 +81,47 @@ struct ChatScrollAreaView: View {
                 ))
                 .onChange(of: isLoadingOlder) { _, loading in
                     if loading {
-                        // Capture the first visible message before older messages are prepended
                         topAnchorId = cachedMessageGroups.first?.id
                     } else {
                         topAnchorId = nil
                     }
                 }
-                // Single handler for both count and last-message-id changes — avoids a double
-                // rebuildMessageGroups() call when a new message arrives (count fires AND id fires).
                 .onChange(of: MessageListKey(count: vm.activeMessages.count, lastId: vm.activeMessages.last?.id)) { _, _ in
                     rebuildMessageGroups()
+                    // Older messages prepend — anchor to previous top message
                     if isLoadingOlder, let aid = topAnchorId {
-                        // Older messages were prepended — anchor to what was the top message.
-                        // Using scrollPosition(id:) instead of proxy.scrollTo so the position
-                        // is resolved in the same render pass as the new content — no jitter.
-                        //
-                        // Guard: if user was at the bottom, isLoadingOlder was triggered
-                        // spuriously (ScrollTopDetector false positive during view transitions).
-                        // In that case, skip the top-anchor and fall through to scrollBottom.
-                        if !isAtBottom {
+                        if userScrolledUp {
                             scrollPositionID = aid
                             return
                         }
                     }
                     guard !isLoadingOlder else { return }
-                    // Clear any lingering prepend anchor — new content arrived, anchor is no longer valid.
-                    // nil binding = no positional constraint; does NOT change scroll position.
                     scrollPositionID = nil
-                    // Defer to next run-loop so all onChange handlers in this frame
-                    // complete first (thinkingJustEnded may be set by isThinking handler).
-                    DispatchQueue.main.async {
-                        if thinkingJustEnded {
-                            // Thinking bubble fade-out (.18s) still in layout —
-                            // delay scroll until after the transition clears.
-                            // Force isAtBottom so ScrollBottomDetector flipping it
-                            // during the fade-out doesn't block the delayed scroll.
-                            thinkingJustEnded = false
-                            isAtBottom = true
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { scrollBottom(proxy) }
-                        } else {
-                            scrollBottom(proxy)
-                        }
-                    }
+                    scrollBottom(proxy)
                 }
                 .onChange(of: vm.activeSession?.isThinking) { _, thinking in
-                    if thinking != true {
-                        thinkingExpanded = false
-                        // Flag that the bubble's fade-out transition is now in flight.
-                        // The MessageListKey handler will delay scrollBottom until after it completes.
-                        thinkingJustEnded = true
-                    }
-                    // Only scroll when bubble appears — not when it disappears.
+                    if thinking != true { thinkingExpanded = false }
                     if thinking == true { scrollBottom(proxy) }
                 }
-                // Activity changes (tool name, status) — only scroll if thinking bubble is visible.
-                // Prevents repeated scroll calls during streaming responses.
                 .onChange(of: vm.activeSession?.activity) { _, _ in
                     if vm.activeSession?.isThinking == true { scrollBottom(proxy) }
                 }
                 .onChange(of: vm.activeSessionId) { _, _ in
                     scrollPositionID = nil
                     cachedMessageGroups = []
-                    isAtBottom = true
-                    isLoadingOlder = false  // stale load from previous session must not block scrollBottom
-                    topAnchorId = nil       // stale anchor from previous session's prepend
-                    thinkingJustEnded = false
+                    userScrolledUp = false
+                    isNearBottom = true
+                    isLoadingOlder = false
+                    topAnchorId = nil
                     rebuildMessageGroups()
-                    // No proxy.scrollTo needed — .id(vm.activeSessionId) above creates a fresh
-                    // ScrollView on switch, so defaultScrollAnchor(.bottom) fires automatically.
                 }
                 .onAppear { rebuildMessageGroups() }
                 .onChange(of: vm.showAgentMessages) { _, _ in rebuildMessageGroups() }
                 .onChange(of: vm.verboseMode) { _, _ in rebuildMessageGroups() }
-                .onChange(of: vm.isRecording) { _, recording in
-                    // Recording start/stop changes InputBarView height (waveform appears/disappears),
-                    // shifting the safeAreaInset. ScrollBottomDetector may flip isAtBottom to false
-                    // during the layout transition. Force it true in both directions.
-                    isAtBottom = true
-                    if !recording {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                            proxy.scrollTo("bottom", anchor: .bottom)
-                        }
-                    }
-                }
 
-                if !isAtBottom {
+                if userScrolledUp {
                     Button {
+                        userScrolledUp = false
                         withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo("bottom", anchor: .bottom) }
                     } label: {
                         Image(systemName: "chevron.down")
@@ -181,21 +141,15 @@ struct ChatScrollAreaView: View {
                     .padding(.trailing, 16)
                     .padding(.bottom, 8)
                     .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .bottomTrailing)))
-                    .animation(.spring(response: 0.25), value: isAtBottom)
+                    .animation(.spring(response: 0.25), value: userScrolledUp)
                 }
             }
         }
     }
 
-    private func scrollBottom(_ proxy: ScrollViewProxy, animated: Bool = false) {
-        guard isAtBottom else { return }
-        if animated {
-            withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("bottom", anchor: .bottom) }
-        } else {
-            // Snap without animation — avoids compounding overshoot when multiple
-            // onChange handlers fire in quick succession (message + thinking + activity).
-            proxy.scrollTo("bottom", anchor: .bottom)
-        }
+    private func scrollBottom(_ proxy: ScrollViewProxy) {
+        guard !userScrolledUp else { return }
+        proxy.scrollTo("bottom", anchor: .bottom)
     }
 
     // MARK: - Message Grouping
