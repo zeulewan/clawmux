@@ -828,6 +828,8 @@ async function addSession(data, autoSwitch = false) {
     ...data,
     tmux_session: data.tmux_session || data.session_id,
     voice: data.voice || 'af_sky',
+    backend: data.backend || 'claude-code',
+    model_id: data.model_id || '',
     speed: _initSpeed,
     messages: serverMessages,
     hasMoreHistory,
@@ -852,10 +854,10 @@ async function addSession(data, autoSwitch = false) {
     if (isReady) {
       addMessage(data.session_id, 'system', '● ready');
     } else {
-      addMessage(data.session_id, 'system', 'Session started. Connecting...', { id: 'waiting-for-claude-' + data.session_id });
+      addMessage(data.session_id, 'system', 'Session started. Connecting...', { id: 'waiting-for-session-' + data.session_id });
     }
   } else if (!isReady && (data.state === 'starting' || !data.state)) {
-    addMessage(data.session_id, 'system', 'Connecting...', { id: 'waiting-for-claude-' + data.session_id });
+    addMessage(data.session_id, 'system', 'Connecting...', { id: 'waiting-for-session-' + data.session_id });
   }
 
   // Restore session state from server's canonical state field
@@ -1683,7 +1685,7 @@ function updateModelLabel() {
 function toggleModelPopup(e) {
   e.stopPropagation();
   const s = activeSessionId ? sessions.get(activeSessionId) : null;
-  if (s?.backend && s.backend !== 'claude-code') return; // non-Claude: model is set at spawn time
+  if ((s?.backend || 'claude-code') !== 'claude-code') return; // non-Claude: model is set at spawn time
   const popup = document.getElementById('model-popup');
   if (popup.style.display !== 'none') { popup.style.display = 'none'; return; }
   const current = s?.model || 'opus';
@@ -1739,7 +1741,7 @@ function updateEffortLabel() {
 function toggleEffortPopup(e) {
   e.stopPropagation();
   const s = activeSessionId ? sessions.get(activeSessionId) : null;
-  if (s?.backend && s.backend !== 'claude-code') return; // effort is Claude-specific
+  if ((s?.backend || 'claude-code') !== 'claude-code') return; // effort is Claude-specific
   const popup = document.getElementById('effort-popup');
   if (popup.style.display !== 'none') { popup.style.display = 'none'; return; }
   const current = s?.effort || 'high';

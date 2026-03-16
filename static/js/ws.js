@@ -140,8 +140,8 @@ function handleMessage(data) {
           existing.speed = s.speed || existing.speed;
           existing.model = s.model || existing.model;
           existing.effort = s.effort || existing.effort;
-          existing.backend = s.backend || existing.backend;
-          existing.model_id = s.model_id || existing.model_id;
+          existing.backend = s.backend !== undefined ? s.backend : existing.backend;
+          existing.model_id = s.model_id !== undefined ? s.model_id : existing.model_id;
           existing.project = s.project || existing.project || '';
           existing.project_repo = s.project_repo || existing.project_repo || '';
           existing.unreadCount = s.unread_count || 0;
@@ -323,7 +323,7 @@ function handleMessage(data) {
           setToggle('walking_mode', data.walking_mode);
         }
       }
-      if ('backend' in data) s.backend = data.backend;
+      if ('backend' in data && data.backend != null) s.backend = data.backend;
       if ('model_id' in data) {
         s.model_id = data.model_id;
         if (data.session_id === activeSessionId) {
@@ -356,8 +356,8 @@ function handleMessage(data) {
         // Remove "Connecting..." in minimal mode
         if (!activityVerbose) {
           const s = sessions.get(data.session_id);
-          if (s) s.messages = s.messages.filter(m => m.id !== 'waiting-for-claude-' + data.session_id);
-          const waitEl = chatArea && chatArea.querySelector('[data-msg-id="waiting-for-claude-' + data.session_id + '"]');
+          if (s) s.messages = s.messages.filter(m => m.id !== 'waiting-for-session-' + data.session_id);
+          const waitEl = chatArea && chatArea.querySelector('[data-msg-id="waiting-for-session-' + data.session_id + '"]');
           if (waitEl) waitEl.remove();
         }
       }
@@ -483,8 +483,8 @@ function handleMessage(data) {
     // Show "ready" indicator on first idle transition (startup)
     if (data.state === 'idle' && s.sidebarState === 'starting') {
       // Remove "Connecting..." placeholder
-      if (s) s.messages = (s.messages || []).filter(m => m.id !== 'waiting-for-claude-' + session_id);
-      const waitEl = chatArea && chatArea.querySelector('[data-msg-id="waiting-for-claude-' + session_id + '"]');
+      if (s) s.messages = (s.messages || []).filter(m => m.id !== 'waiting-for-session-' + session_id);
+      const waitEl = chatArea && chatArea.querySelector('[data-msg-id="waiting-for-session-' + session_id + '"]');
       if (waitEl) waitEl.remove();
       cueSessionReady();
       if (typeof addMessage === 'function') addMessage(session_id, 'system', '● ready');
