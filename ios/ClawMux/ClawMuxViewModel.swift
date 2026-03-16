@@ -256,6 +256,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             if let sid = activeSessionId {
                 sendJSON(["session_id": sid, "type": "set_mode", "mode": inputMode == "typing" ? "text" : "voice"])
             }
+            // Cancel in-flight recording when switching away from voice modes
+            if isRecording && inputMode == "typing" { audio.cancelRecording() }
             // Clear mute when leaving auto mode (mute is auto-only)
             if inputMode != "auto" { micMuted = false }
             // Update status text for the new mode
@@ -1813,6 +1815,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             pttPreviewText = ""
             pttTranscriptionError = nil
             clearTranscriptPreview()
+            typingText = ""  // clear draft — shared field should not leak between agents
         }
         activeSessionId = id
         activeGroupName = nil
