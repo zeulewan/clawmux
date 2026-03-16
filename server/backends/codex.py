@@ -64,11 +64,13 @@ class CodexBackend(AgentBackend):
         marker = f"__CODEX_INIT_{short_id}__"
         await self._cc._run(f'tmux send-keys -t {session_name} "echo {marker}" Enter')
 
-        # Build Codex command
-        model_flag = f" --model {model}" if model else ""
+        # Build Codex command — only pass model if it's an explicit model_id,
+        # not a Claude shorthand (opus/sonnet/haiku) that fell through
+        _claude_models = {"opus", "sonnet", "haiku", ""}
+        model_flag = f" --model {model}" if model and model not in _claude_models else ""
         startup_prompt = "Greet the user as instructed in your AGENTS.md. Then stop — the hub will deliver messages when they arrive."
         codex_cmd = (
-            f"{CODEX_COMMAND} --no-alt-screen --full-auto"
+            f"{CODEX_COMMAND} --no-alt-screen --yolo"
             f"{model_flag} '{startup_prompt}'"
         )
         await self._cc._run(f'tmux send-keys -t {session_name} "{codex_cmd}" Enter')
@@ -124,22 +126,54 @@ class CodexBackend(AgentBackend):
     # --- Internal helpers ---
 
     async def _wait_for_codex_init(self, session_name: str, marker: str) -> None:
-        """Poll tmux pane until Codex shows its prompt after the marker."""
+        """Poll tmux pane until Codex shows its idle prompt after the marker."""
         start = time.time()
+        # Phase 1: wait for marker + prompt character
         deadline = start + 30
         while time.time() < deadline:
             try:
                 result = await self._cc._run(f"tmux capture-pane -t {session_name} -p")
                 if result and marker in result:
                     after_marker = result.split(marker, 1)[1]
-                    # Codex prompt: > or ❯ or similar
-                    if ">" in after_marker or "❯" in after_marker:
-                        log.info("[%s] Codex ready (%.1fs)", session_name, time.time() - start)
+                    if "›" in after_marker or ">" in after_marker:
+                        log.info("[%s] Codex prompt detected (%.1fs)", session_name, time.time() - start)
                         break
             except Exception:
                 pass
             await asyncio.sleep(1)
         else:
             log.warning("[%s] Codex init poll timed out", session_name)
+
+        # Phase 2: wait for Codex to be fully initialized (model info banner)
+        ready_deadline = time.time() + 30
+        while time.time() < ready_deadline:
+            try:
+                result = await self._cc._run(f"tmux capture-pane -t {session_name} -p")
+                if result and "OpenAI Codex" in result:
+                    log.info("[%s] Codex fully initialized", session_name)
+                    break
+            except Exception:
+                pass
+            await asyncio.sleep(1)
+        else:
+            log.warning("[%s] Codex full init poll timed out", session_name)
+
+        # Phase 3: wait for startup prompt to finish processing
+        # Codex shows `────` separator and `› Implement` when idle
+        idle_deadline = time.time() + 60
+        while time.time() < idle_deadline:
+            try:
+                result = await self._cc._run(f"tmux capture-pane -t {session_name} -p")
+                if result:
+                    lines = result.strip().splitlines()
+                    last_lines = "\n".join(lines[-5:])
+                    if "────" in last_lines and "›" in last_lines:
+                        log.info("[%s] Codex idle after startup prompt", session_name)
+                        break
+            except Exception:
+                pass
+            await asyncio.sleep(2)
+        else:
+            log.warning("[%s] Codex startup processing timed out", session_name)
 
         await asyncio.sleep(1)
