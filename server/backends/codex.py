@@ -36,6 +36,10 @@ class CodexBackend(AgentBackend):
         return 3.0  # tmux Escape may not trigger Stop hook
 
     @property
+    def supports_model_restart(self) -> bool:
+        return True
+
+    @property
     def supports_effort(self) -> bool:
         return True  # Codex supports reasoning_effort: low/medium/high/default
 

@@ -182,8 +182,11 @@ async def handle_browser_message(data: dict) -> None:
             log.warning("[%s] restart_model ignored for backend %s", session_id, session.backend)
         else:
             model = data.get("model", "")
-            if model in ("opus", "sonnet", "haiku", ""):
-                session.model = model
+            if model:
+                if model in ("opus", "sonnet", "haiku"):
+                    session.model = model
+                else:
+                    session.model_id = model
                 log.info("[%s] Model restart requested: %s", session_id, model)
                 asyncio.create_task(session_mgr.restart_claude_with_model(session_id))
 

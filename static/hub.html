@@ -1651,18 +1651,19 @@ async function checkServiceStatus() {
 // --- Per-session model ---
 function setSessionModel(model) {
   if (!activeSessionId || !ws || ws.readyState !== WebSocket.OPEN) return;
-  // Blur the select so spacebar doesn't re-open it
   document.getElementById('session-model').blur();
   const s = sessions.get(activeSessionId);
-  const currentModel = s?.model || 'opus';
+  const backend = s?.backend || 'claude-code';
+  const currentModel = backend === 'codex' ? (s?.model_id || '') : (s?.model || 'opus');
   if (model === currentModel) return;
-  if (!confirm(`Switch to ${model.charAt(0).toUpperCase() + model.slice(1)}? This will restart the session. The conversation will be preserved.`)) {
-    // Reset the select to current value
+  if (!confirm(`Switch to ${model}? This will restart the session. The conversation will be preserved.`)) {
     document.getElementById('session-model').value = currentModel;
     return;
   }
   ws.send(JSON.stringify({ session_id: activeSessionId, type: 'restart_model', model }));
-  if (s) s.model = model;
+  if (s) {
+    if (backend === 'codex') { s.model_id = model; } else { s.model = model; }
+  }
   updateModelLabel();
 }
 
@@ -1671,30 +1672,42 @@ function updateModelLabel() {
   if (!label) return;
   const s = activeSessionId ? sessions.get(activeSessionId) : null;
   const backend = s?.backend || 'claude-code';
-  if (backend !== 'claude-code') {
-    // Non-Claude backend: show actual model name as read-only text
+  if (backend === 'codex') {
+    label.textContent = (s?.model_id || 'gpt-5.4') + ' ▾';
+    label.style.cursor = '';
+    label.style.display = 'inline';
+  } else if (backend === 'claude-code') {
+    const model = s?.model || 'opus';
+    label.textContent = model.charAt(0).toUpperCase() + model.slice(1) + ' ▾';
+    label.style.cursor = '';
+    label.style.display = 'inline';
+  } else {
+    // Other backends (e.g. OpenCode): read-only model display
     label.textContent = s?.model_id || s?.model || 'unknown';
     label.style.cursor = 'default';
     label.style.display = 'inline';
-    return;
   }
-  const model = s?.model || 'opus';
-  label.textContent = model.charAt(0).toUpperCase() + model.slice(1) + ' ▾';
-  label.style.cursor = '';
-  label.style.display = 'inline';
 }
 
 function toggleModelPopup(e) {
   e.stopPropagation();
   const s = activeSessionId ? sessions.get(activeSessionId) : null;
-  if ((s?.backend || 'claude-code') !== 'claude-code') return; // non-Claude: model is set at spawn time
+  const backend = s?.backend || 'claude-code';
+  if (backend !== 'claude-code' && backend !== 'codex') return;
   const popup = document.getElementById('model-popup');
   if (popup.style.display !== 'none') { popup.style.display = 'none'; return; }
-  const current = s?.model || 'opus';
-  const models = ['opus', 'sonnet', 'haiku'];
+  let current, models;
+  if (backend === 'codex') {
+    current = s?.model_id || 'gpt-5.4';
+    models = ['gpt-5.4', 'gpt-5.2', 'o3', 'gpt-5-mini'];
+  } else {
+    current = s?.model || 'opus';
+    models = ['opus', 'sonnet', 'haiku'];
+  }
   popup.innerHTML = models.map(m => {
     const sel = m === current ? 'font-weight:700;color:#4a9eff;' : 'color:#e0e0e0;';
-    return `<div style="padding:8px 16px;cursor:pointer;${sel}" onmousedown="selectModelPopup('${m}')" ontouchstart="selectModelPopup('${m}')">${m.charAt(0).toUpperCase() + m.slice(1)}${m === current ? ' ✓' : ''}</div>`;
+    const display = backend === 'codex' ? m : m.charAt(0).toUpperCase() + m.slice(1);
+    return `<div style="padding:8px 16px;cursor:pointer;${sel}" onmousedown="selectModelPopup('${m}')" ontouchstart="selectModelPopup('${m}')">${display}${m === current ? ' ✓' : ''}</div>`;
   }).join('');
   const label = document.getElementById('model-label');
   const rect = label.getBoundingClientRect();
