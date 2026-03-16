@@ -427,6 +427,122 @@ final class UserFlowTests: XCTestCase {
         XCTAssertTrue(app.exists, "App should survive full UI action sequence")
     }
 
+    // MARK: - Typing Mode: Send Messages to Multiple Agents
+
+    /// Switch to typing mode, send messages to two agents, switch between them,
+    /// verify messages render and scroll stays correct.
+    func testTypingModeSendToMultipleAgents() throws {
+        saveScreenshot("typing_00_start")
+
+        // Switch to text mode via header toggle
+        let modeBtn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'mode'")).firstMatch
+        if modeBtn.waitForExistence(timeout: 5) {
+            modeBtn.tap()
+            sleep(1)
+        }
+
+        // Expand sidebar to find Liam
+        let hamburger = app.buttons["HamburgerButton"].firstMatch
+        guard hamburger.waitForExistence(timeout: 5) else { XCTFail("No hamburger"); return }
+        hamburger.tap()
+        sleep(2)
+
+        let sidebar = app.scrollViews["SidebarScrollView"].firstMatch
+        if sidebar.waitForExistence(timeout: 3) { sidebar.swipeUp(); sleep(1) }
+
+        // Find and tap Liam
+        let liam = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'Liam'")).firstMatch
+        if liam.waitForExistence(timeout: 3) {
+            liam.tap()
+            sleep(2)
+        } else {
+            // Fallback: tap agent at position 6
+            hamburger.tap(); sleep(1)
+            tapAgent(at: 6); sleep(2)
+        }
+        saveScreenshot("typing_01_liam_selected")
+
+        // Find text input and type
+        let textField = app.textFields.firstMatch
+        let textView = app.textViews.firstMatch
+        let input: XCUIElement
+        if textField.waitForExistence(timeout: 3) {
+            input = textField
+        } else if textView.waitForExistence(timeout: 3) {
+            input = textView
+        } else {
+            saveScreenshot("typing_02_no_input")
+            return // No text input available — mode may not have switched
+        }
+
+        let msg1 = "Test from Onyx to Liam \(Int.random(in: 1000...9999))"
+        input.tap()
+        sleep(1)
+        input.typeText(msg1)
+        saveScreenshot("typing_03_liam_typed")
+
+        // Send
+        let sendBtn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'send' OR label CONTAINS[c] 'arrow'")).firstMatch
+        if sendBtn.waitForExistence(timeout: 3) {
+            sendBtn.tap()
+            sleep(2)
+        }
+        saveScreenshot("typing_04_liam_sent")
+
+        // Verify message visible
+        let msgVisible = app.staticTexts[msg1].waitForExistence(timeout: 5)
+        XCTAssertTrue(msgVisible, "Sent message should be visible in Liam's chat")
+
+        // No scroll-down chevron (should be at bottom)
+        XCTAssertFalse(scrollDownButtonVisible, "Should be at bottom after sending to Liam")
+
+        // Switch to Lewis via sidebar
+        hamburger.tap(); sleep(2)
+        if sidebar.waitForExistence(timeout: 3) { sidebar.swipeUp(); sleep(1) }
+        let lewis = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'Lewis'")).firstMatch
+        if lewis.waitForExistence(timeout: 3) {
+            lewis.tap()
+            sleep(2)
+        } else {
+            hamburger.tap(); sleep(1)
+            tapAgent(at: 7); sleep(2)
+        }
+        saveScreenshot("typing_05_lewis_selected")
+
+        // Type and send to Lewis
+        let input2 = app.textFields.firstMatch.exists ? app.textFields.firstMatch : app.textViews.firstMatch
+        if input2.waitForExistence(timeout: 3) {
+            let msg2 = "Test from Onyx to Lewis \(Int.random(in: 1000...9999))"
+            input2.tap(); sleep(1)
+            input2.typeText(msg2)
+
+            if sendBtn.waitForExistence(timeout: 3) {
+                sendBtn.tap()
+                sleep(2)
+            }
+            saveScreenshot("typing_06_lewis_sent")
+
+            let msg2Visible = app.staticTexts[msg2].waitForExistence(timeout: 5)
+            XCTAssertTrue(msg2Visible, "Sent message should be visible in Lewis's chat")
+        }
+
+        // Switch back to Liam — original message should still be there
+        hamburger.tap(); sleep(2)
+        if sidebar.waitForExistence(timeout: 3) { sidebar.swipeUp(); sleep(1) }
+        if liam.waitForExistence(timeout: 3) {
+            liam.tap()
+            sleep(2)
+        }
+        saveScreenshot("typing_07_back_to_liam")
+
+        // Verify Liam's message still visible
+        let msg1StillThere = app.staticTexts[msg1].waitForExistence(timeout: 5)
+        XCTAssertTrue(msg1StillThere, "Original message to Liam should still be visible after switching back")
+
+        XCTAssertFalse(scrollDownButtonVisible, "Should be at bottom when returning to Liam")
+        XCTAssertTrue(app.exists, "App should survive typing mode multi-agent test")
+    }
+
     // MARK: - Keyboard Open + Switch Agent: Clean Transition
 
     /// Open keyboard in text mode, then tap a different agent.
