@@ -35,6 +35,10 @@ class CodexBackend(AgentBackend):
     def idle_delay_after_interrupt(self) -> float:
         return 3.0  # tmux Escape may not trigger Stop hook
 
+    @property
+    def supports_effort(self) -> bool:
+        return True  # Codex supports reasoning_effort: low/medium/high/default
+
     async def spawn(
         self,
         session_name: str,
@@ -76,10 +80,13 @@ class CodexBackend(AgentBackend):
         # not a Claude shorthand (opus/sonnet/haiku) that fell through
         _claude_models = {"opus", "sonnet", "haiku", ""}
         model_flag = f" --model {model}" if model and model not in _claude_models else ""
+        # Codex reasoning effort: -c reasoning_effort=<level>
+        _valid_codex_efforts = {"low", "medium", "high"}
+        effort_flag = f' -c reasoning_effort="{effort}"' if effort in _valid_codex_efforts else ""
         startup_prompt = "Greet the user as instructed in your AGENTS.md. Then stop — the hub will deliver messages when they arrive."
         codex_cmd = (
             f"{CODEX_COMMAND} --no-alt-screen --yolo"
-            f"{model_flag} '{startup_prompt}'"
+            f"{model_flag}{effort_flag} '{startup_prompt}'"
         )
         await self._cc._run(f'tmux send-keys -t {session_name} "{codex_cmd}" Enter')
 
@@ -228,12 +235,13 @@ class CodexBackend(AgentBackend):
         return RecoveryResult()
 
     def get_context_usage(self, session_name: str, session) -> dict | None:
-        """Parse model and context from Codex's tmux status line.
+        """Parse model, effort, and context from Codex's tmux status line.
 
         Status line format: "gpt-5.4 default · 85% left · /path/to/work"
-        We extract the model name and the percent-left value.
+        We extract: model name, reasoning effort, and percent-left.
         """
         import subprocess as _sp
+        import re
         try:
             result = _sp.run(
                 ["tmux", "capture-pane", "-t", session_name, "-p"],
@@ -246,17 +254,19 @@ class CodexBackend(AgentBackend):
                 return None
             lines = pane.splitlines()
             last_line = lines[-1].strip() if lines else ""
-            # Match: "model-name default · N% left · /path"
-            import re
-            m = re.match(r'^(\S+)\s+\S+\s+·\s+(\d+)%\s+left\s+·', last_line)
+            # Match: "model-name effort · N% left · /path"
+            m = re.match(r'^(\S+)\s+(\S+)\s+·\s+(\d+)%\s+left\s+·', last_line)
             if not m:
                 return None
             model_name = m.group(1)
-            pct_left = int(m.group(2))
+            effort_level = m.group(2)
+            pct_left = int(m.group(3))
             pct_used = 100 - pct_left
-            # Update session.model_id if we parsed a model
+            # Update session fields from parsed values
             if model_name and hasattr(session, 'model_id'):
                 session.model_id = model_name
+            if effort_level and hasattr(session, 'effort'):
+                session.effort = effort_level
             return {
                 "total_context_tokens": 0,
                 "output_tokens": 0,

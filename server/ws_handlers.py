@@ -193,7 +193,7 @@ async def handle_browser_message(data: dict) -> None:
             log.warning("[%s] restart_effort ignored for backend %s", session_id, session.backend)
         else:
             effort = data.get("effort", "")
-            if effort in ("low", "medium", "high", "max"):
+            if effort in ("low", "medium", "high", "max", "default"):
                 session.effort = effort
                 log.info("[%s] Effort restart requested: %s", session_id, effort)
                 asyncio.create_task(session_mgr.restart_claude_with_model(session_id))
