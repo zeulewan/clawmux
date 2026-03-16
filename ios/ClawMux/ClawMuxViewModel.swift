@@ -763,12 +763,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 else { return }
                 switch reason {
                 case .oldDeviceUnavailable:
-                    // Output device removed — stop playback so it doesn't redirect unexpectedly
-                    if self.isPlaying {
-                        let sid = self.audio.currentPlayingSessionId
-                        self.audio.stopPlaybackVAD()
-                        self.isPlaying = false
-                        if let sid { self.sendJSON(["session_id": sid, "type": "playback_done"]) }
+                    // Output device removed — fully stop playback (player + VAD + buffer + playback_done)
+                    if self.isPlaying || self.isPlaybackPaused {
+                        self.audio.interruptPlayback()
                     }
                     // Restart keepalive engine if it died on route change
                     if self.backgroundMode && self.audio.appInBackground {
@@ -1149,9 +1146,10 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         // Do NOT stop recording on disconnect — let it continue locally.
         // When recording ends (VAD/user), stopRecording() stashes audio to pendingAudioSend
         // because !isConnected, and flushPendingAudio() replays it on reconnect.
-        if isPlaying {
+        if isPlaying || isPlaybackPaused {
             audio.stopPlaybackVAD()
             isPlaying = false
+            isPlaybackPaused = false
         }
         isProcessing = false
         audio.currentSuppressNextAutoRecord = false
@@ -1194,7 +1192,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         #if DEBUG
         print("[audio] Flushing stashed audio as \(type) for session \(pending.sessionId)")
         #endif
-        sendJSON(["session_id": pending.sessionId, "type": "interjection", "data": b64])
+        sendJSON(["session_id": pending.sessionId, "type": type, "data": b64])
         updateStatusText("Transcribing…", for: pending.sessionId)
     }
 
