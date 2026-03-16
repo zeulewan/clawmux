@@ -842,8 +842,16 @@ function renderSidebar() {
       header.draggable = true;
       header.innerHTML = '<span class="project-chevron">&#9660;</span>'
         + '<span class="project-name"></span>'
-        + '<span class="project-agent-count"></span>';
-      header.addEventListener('click', () => _toggleProjectCollapse(slug));
+        + '<span class="project-agent-count"></span>'
+        + '<button class="project-monitor-btn" title="Monitor folder"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><rect x="0.5" y="1.5" width="15" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M3.5 6l2.5 2.5L3.5 11" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><line x1="8" y1="11" x2="12" y2="11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>';
+      header.addEventListener('click', (e) => {
+        if (e.target.closest('.project-monitor-btn')) return;
+        _toggleProjectCollapse(slug);
+      });
+      header.querySelector('.project-monitor-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (typeof openMonitorPanel === 'function') openMonitorPanel('folder', slug);
+      });
       header.addEventListener('dragstart', (e) => {
         e.stopPropagation();
         _draggingProjectSlug = slug;

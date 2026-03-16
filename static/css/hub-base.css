@@ -319,6 +319,21 @@ body {
   opacity: 0.6;
   font-size: 0.6rem;
 }
+.sidebar-project-header .project-monitor-btn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0 4px;
+  opacity: 0.5;
+  transition: opacity 0.15s, color 0.15s;
+}
+.sidebar-project-header .project-monitor-btn:hover {
+  opacity: 1;
+  color: var(--accent);
+}
 .sidebar-project-agents {
   display: flex;
   flex-direction: column;
@@ -574,6 +589,72 @@ body {
 }
 
 /* Notes panel — overlays chat like sidebar (absolute), glass background */
+#monitor-panel {
+  position: absolute;
+  top: 48px;
+  left: var(--sidebar-w, 220px);
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  background: #1a1a1a;
+  overflow: hidden;
+  z-index: 45;
+}
+#monitor-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+#monitor-panel-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+#monitor-panel-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+#monitor-panel-controls button {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+#monitor-panel-controls button:hover {
+  color: var(--text);
+  border-color: var(--text-tertiary);
+}
+#monitor-font-size {
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  min-width: 20px;
+  text-align: center;
+}
+#monitor-frame-container {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  background: #000;
+}
+#monitor-panel-frame {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+  background: #000;
+}
 #notes-panel {
   position: absolute;
   top: 0; right: 0; bottom: 0;

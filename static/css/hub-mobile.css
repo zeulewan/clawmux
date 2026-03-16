@@ -341,4 +341,14 @@
     -webkit-backdrop-filter: blur(20px) saturate(160%) !important;
     box-shadow: -4px 0 24px rgba(0,0,0,0.4);
   }
+  /* Monitor panel: beside collapsed sidebar, below header */
+  #monitor-panel {
+    position: fixed !important;
+    top: 48px; left: 48px; right: 0; bottom: 0;
+    z-index: 55;
+    background: #000;
+  }
+  #monitor-panel-header {
+    padding: 6px 8px;
+  }
 }
