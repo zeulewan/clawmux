@@ -145,6 +145,20 @@ struct SidebarView: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
                         .accessibilityIdentifier("SidebarSettingsButton")
+                        Button {
+                            withAnimation(.spring(response: 0.3)) { sidebarExpanded = false }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                vm.activateWalkingMode()
+                            }
+                        } label: {
+                            VStack(spacing: 3) {
+                                Image(systemName: "figure.walk").font(.system(size: 13))
+                                Text("Walk").font(.system(size: 10, weight: .medium))
+                            }
+                            .foregroundStyle(Color.cTextSec)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                        .accessibilityIdentifier("SidebarWalkButton")
                     }
                 }
                 .frame(height: 52)

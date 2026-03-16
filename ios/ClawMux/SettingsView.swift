@@ -99,6 +99,14 @@ struct SettingsView: View {
                             set: { _ in vm.toggleWalkingMode() }
                         ))
                     }
+                    Button {
+                        dismiss()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            vm.activateWalkingMode()
+                        }
+                    } label: {
+                        Label("Walking Mode (Puck)", systemImage: "figure.walk")
+                    }
                 }
 
                 // Sounds
