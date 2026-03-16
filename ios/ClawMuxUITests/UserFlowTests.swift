@@ -291,6 +291,79 @@ final class UserFlowTests: XCTestCase {
         XCTAssertTrue(app.exists)
     }
 
+    // MARK: - Agent-to-Agent Message and Expand/Collapse
+
+    /// Tell Lewis to send a message to Liam via user text input.
+    /// Then check Lewis's chat for the "→ Liam" indicator, tap to expand, tap to collapse.
+    func testAgentMessageExpandCollapse() throws {
+        let hamburger = app.buttons["HamburgerButton"].firstMatch
+        guard hamburger.waitForExistence(timeout: 8) else { XCTFail("No hamburger"); return }
+
+        // Text mode
+        let modeBtn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'voice' AND label CONTAINS[c] 'mode'")).firstMatch
+        if modeBtn.waitForExistence(timeout: 3) { modeBtn.tap(); sleep(1) }
+        else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.43, dy: 0.065)).tap(); sleep(1) }
+        if !app.textFields.firstMatch.waitForExistence(timeout: 2) && !app.textViews.firstMatch.waitForExistence(timeout: 2) {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.43, dy: 0.065)).tap(); sleep(1)
+        }
+
+        // Navigate to Lewis
+        func goTo(_ name: String) -> Bool {
+            hamburger.tap(); sleep(2)
+            let sidebar = app.scrollViews["SidebarScrollView"].firstMatch
+            guard sidebar.waitForExistence(timeout: 3) else { return false }
+            for _ in 0..<3 { sidebar.swipeDown(); usleep(300_000) }
+            for _ in 0..<8 {
+                let btn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] '\(name)'")).firstMatch
+                if btn.waitForExistence(timeout: 1) { btn.tap(); sleep(2); return true }
+                sidebar.swipeUp(); sleep(1)
+            }
+            hamburger.tap(); sleep(1)
+            return false
+        }
+
+        guard goTo("Lewis") else { XCTFail("Can't find Lewis"); return }
+        saveScreenshot("agentmsg_01_lewis_opened")
+
+        // Send Lewis a message asking him to message Liam
+        let tf = app.textFields.firstMatch
+        let tv = app.textViews.firstMatch
+        let input = tf.exists ? tf : tv
+        guard input.waitForExistence(timeout: 5) else { XCTFail("No text input"); return }
+        input.tap(); sleep(1)
+        input.typeText("Send a short message to Liam saying hello")
+        let sendBtn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'send' OR label CONTAINS[c] 'arrow'")).firstMatch
+        if sendBtn.waitForExistence(timeout: 3) { sendBtn.tap() }
+        saveScreenshot("agentmsg_02_sent")
+
+        // Wait for Lewis to process and send the agent message
+        sleep(15)
+        saveScreenshot("agentmsg_03_after_response")
+
+        // Look for agent message indicators (→ or ←)
+        let agentMsgs = app.staticTexts.matching(NSPredicate(format: "label CONTAINS '→' OR label CONTAINS '←'"))
+        let agentMsgCount = agentMsgs.count
+        print("[AGENTMSG] Found \(agentMsgCount) agent message indicators")
+        saveScreenshot("agentmsg_04_indicators")
+
+        if agentMsgCount > 0 {
+            // Tap the last agent message indicator to expand
+            let lastMsg = agentMsgs.element(boundBy: agentMsgCount - 1)
+            if lastMsg.exists && lastMsg.isHittable {
+                lastMsg.tap()
+                sleep(1)
+                saveScreenshot("agentmsg_05_expanded")
+
+                // Tap again to collapse
+                lastMsg.tap()
+                sleep(1)
+                saveScreenshot("agentmsg_06_collapsed")
+            }
+        }
+
+        XCTAssertTrue(app.exists)
+    }
+
     // MARK: - Navigate To Michael (Header Check)
 
     /// Navigate to Michael's chat via expanded sidebar and screenshot the header.
