@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import socket
+import threading
 from pathlib import Path
 import time
 
@@ -27,6 +28,7 @@ _OPENCODE_BASE_PORT = 7700
 _session_ports: dict[str, int] = {}  # session_name → port
 _opencode_sessions: dict[str, str] = {}  # session_name → opencode session_id
 _port_counter = 0
+_port_lock = threading.Lock()
 
 
 def _port_is_free(port: int) -> bool:
@@ -40,18 +42,19 @@ def _port_is_free(port: int) -> bool:
 
 
 def _alloc_port(session_name: str) -> int:
-    """Allocate a free port for an OpenCode session."""
+    """Allocate a free port for an OpenCode session (thread-safe)."""
     global _port_counter
-    if session_name in _session_ports:
-        return _session_ports[session_name]
-    # Find next free port starting from base + counter
-    port = _OPENCODE_BASE_PORT + _port_counter
-    while not _port_is_free(port):
-        _port_counter += 1
+    with _port_lock:
+        if session_name in _session_ports:
+            return _session_ports[session_name]
+        # Find next free port starting from base + counter
         port = _OPENCODE_BASE_PORT + _port_counter
-    _session_ports[session_name] = port
-    _port_counter += 1
-    return port
+        while not _port_is_free(port):
+            _port_counter += 1
+            port = _OPENCODE_BASE_PORT + _port_counter
+        _session_ports[session_name] = port
+        _port_counter += 1
+        return port
 
 
 def _free_port(session_name: str) -> None:

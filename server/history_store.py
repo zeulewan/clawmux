@@ -280,12 +280,30 @@ class HistoryStore:
         return self._load_data(voice_id, project).get("read_cursors", {}).get(model_id, 0)
 
     def set_read_cursor(self, voice_id: str, model_id: str, index: int, project: str | None = None) -> None:
-        """Set the read cursor for a model to index (number of messages processed)."""
-        data = self._load_data(voice_id, project)
-        cursors = data.get("read_cursors", {})
-        cursors[model_id] = index
-        data["read_cursors"] = cursors
-        self._save_data(voice_id, data, project)
+        """Set the read cursor for a model to index (number of messages processed).
+
+        Uses atomic read-modify-write under a single file lock to prevent
+        concurrent calls from overwriting each other's cursor updates.
+        """
+        path = self._path(voice_id, project)
+        try:
+            with open(path, "r+") as f:
+                fcntl.flock(f, fcntl.LOCK_EX)
+                try:
+                    data = json.loads(f.read()) if f.readable() else {}
+                    cursors = data.get("read_cursors", {})
+                    cursors[model_id] = index
+                    data["read_cursors"] = cursors
+                    f.seek(0)
+                    f.truncate()
+                    f.write(json.dumps(data, indent=2))
+                finally:
+                    fcntl.flock(f, fcntl.LOCK_UN)
+        except FileNotFoundError:
+            data = {"read_cursors": {model_id: index}}
+            self._save_data(voice_id, data, project)
+        except Exception as e:
+            log.error("Failed to set read cursor for %s/%s: %s", voice_id, model_id, e)
 
     def generate_catchup_context(self, voice_id: str, model_id: str, cap: int = 50, project: str | None = None) -> str | None:
         """Generate catch-up context for a model that missed messages.
