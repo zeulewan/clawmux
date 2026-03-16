@@ -1240,7 +1240,10 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     func restartWithEffort(_ effort: String) {
         guard let sid = activeSessionId else { return }
         sendJSON(["session_id": sid, "type": "restart_effort", "effort": effort])
-        if let idx = sessionIndex(sid) { sessions[idx].effort = effort }
+        if let idx = sessionIndex(sid) {
+            sessions[idx].effort = effort
+            sessions[idx].state = .starting
+        }
     }
 
     func sendEffort(_ effort: String) {
