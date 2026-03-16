@@ -2811,8 +2811,7 @@ window._loadingBar = (function() {
 })();
 
 renderSidebar();
-connect();
-loadSettings().then(() => { loadProjects(); loadGroupChats(); });
+loadSettings().then(() => { loadProjects(); loadGroupChats(); connect(); });
 loadDeploymentConfig();
 startUsagePolling();
 startStateSync();
