@@ -16,6 +16,7 @@ struct SidebarView: View {
     @State private var dropTargetVoiceId: String? = nil
     @State private var monitorItem: MonitorItem? = nil
     @State private var monitorLoading: String? = nil  // key being loaded (shows spinner)
+    @State private var disbandGroupId: String? = nil  // pending disband confirmation
 
     private struct MonitorItem: Identifiable {
         let id: String   // monitor key
@@ -36,11 +37,12 @@ struct SidebarView: View {
                     Color.clear.frame(height: 60).id("sidebar-top")
                     let groups = projectGroups
                     let chatGroups = activeGroups
+                    let sessionMap = Dictionary(vm.sessions.map { ($0.voice, $0) }, uniquingKeysWith: { a, _ in a })
                     if sidebarExpanded {
                         VStack(spacing: 0) {
                             ForEach(groups.namedProjects, id: \.self) { project in
                                 let voices = groups.byProject[project] ?? []
-                                projectSection(project, voices: voices)
+                                projectSection(project, voices: voices, sessionMap: sessionMap)
                             }
                             if !chatGroups.isEmpty {
                                 HStack {
@@ -86,7 +88,7 @@ struct SidebarView: View {
                                 }
                                 if !collapsed {
                                     ForEach(voices) { voice in
-                                        sidebarIcon(for: voice)
+                                        sidebarIcon(for: voice, sessionMap: sessionMap)
                                     }
                                 }
                             }
@@ -178,13 +180,23 @@ struct SidebarView: View {
         .sheet(item: $monitorItem) { item in
             MonitorSheet(title: item.title, url: item.url, monitorKey: item.id, vm: vm)
         }
+        .alert("Disband Group Chat", isPresented: Binding(
+            get: { disbandGroupId != nil },
+            set: { if !$0 { disbandGroupId = nil } }
+        )) {
+            Button("Disband", role: .destructive) {
+                if let gid = disbandGroupId { vm.disbandGroup(gid) }
+                disbandGroupId = nil
+            }
+            Button("Cancel", role: .cancel) { disbandGroupId = nil }
+        } message: { Text("Remove this group chat? Agents will return to their individual sessions.") }
         } // ScrollViewReader
     }
 
     // MARK: - Sidebar Icon (collapsed)
 
-    private func sidebarIcon(for voice: VoiceInfo) -> some View {
-        let session   = vm.sessions.first { $0.voice == voice.id }
+    private func sidebarIcon(for voice: VoiceInfo, sessionMap: [String: VoiceSession]) -> some View {
+        let session   = sessionMap[voice.id]
         let spawning  = vm.spawningVoiceIds.contains(voice.id)
         let isSelected = !vm.isFocusMode && vm.activeSession?.voice == voice.id
         let color     = voiceColor(voice.id)
@@ -380,7 +392,7 @@ struct SidebarView: View {
     }
 
     @ViewBuilder
-    private func projectSection(_ project: String, voices: [VoiceInfo]) -> some View {
+    private func projectSection(_ project: String, voices: [VoiceInfo], sessionMap: [String: VoiceSession]) -> some View {
         let collapsed = collapsedProjects.contains(project)
         VStack(spacing: 0) {
             let slug = vm.folders.first(where: { $0.name == project })?.id ?? project.lowercased()
@@ -437,7 +449,7 @@ struct SidebarView: View {
             if !collapsed {
                 VStack(spacing: 2) {
                     ForEach(voices) { voice in
-                        agentCard(voice)
+                        agentCard(voice, sessionMap: sessionMap)
                             .draggable(voice.id)
                             .overlay {
                                 if dropTargetVoiceId == voice.id {
@@ -551,7 +563,7 @@ struct SidebarView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                     Button {
-                        vm.disbandGroup(groupId)
+                        disbandGroupId = groupId
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 10, weight: .semibold))
@@ -656,8 +668,8 @@ struct SidebarView: View {
 
     // MARK: - Agent Card (expanded sidebar)
 
-    private func agentCard(_ voice: VoiceInfo) -> some View {
-        let session    = vm.sessions.first { $0.voice == voice.id }
+    private func agentCard(_ voice: VoiceInfo, sessionMap: [String: VoiceSession]) -> some View {
+        let session    = sessionMap[voice.id]
         let spawning   = vm.spawningVoiceIds.contains(voice.id)
         let isSelected = !vm.isFocusMode && vm.activeSession?.voice == voice.id
         let color      = voiceColor(voice.id)
@@ -758,13 +770,13 @@ struct SidebarView: View {
             .background(
                 ZStack(alignment: .leading) {
                     if isSelected {
-                        Color(.systemPurple).opacity(0.08)
+                        Color.cAccent.opacity(0.08)
                     }
                     if isSelected {
                         Capsule()
-                            .fill(Color(.systemPurple))
+                            .fill(Color.cAccent)
                             .frame(width: 3, height: 26)
-                            .shadow(color: Color(.systemPurple).opacity(0.6), radius: 3)
+                            .shadow(color: Color.cAccent.opacity(0.6), radius: 3)
                     }
                 }
             )
