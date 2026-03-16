@@ -97,6 +97,14 @@ function _renderMarkdown(text) {
       pre.appendChild(btn);
     });
 
+    // Wrap tables in scrollable container for mobile horizontal scroll
+    container.querySelectorAll('table').forEach(table => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'md-table-scroll';
+      table.parentNode.insertBefore(wrapper, table);
+      wrapper.appendChild(table);
+    });
+
     // Click-to-copy for inline code
     container.querySelectorAll('code:not(pre code)').forEach(code => {
       code.onclick = (e) => {

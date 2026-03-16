@@ -1974,8 +1974,11 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 }
 .msg.assistant .md-content a { color: var(--blue); text-decoration: none; }
 .msg.assistant .md-content a:hover { text-decoration: underline; }
+.msg.assistant .md-content .md-table-scroll {
+  overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0.4em 0;
+}
 .msg.assistant .md-content table {
-  border-collapse: collapse; margin: 0.4em 0; font-size: 0.85em;
+  border-collapse: collapse; font-size: 0.85em; white-space: nowrap; min-width: 100%;
 }
 .msg.assistant .md-content th, .msg.assistant .md-content td {
   border: 1px solid var(--border); padding: 4px 8px; color: var(--text);
