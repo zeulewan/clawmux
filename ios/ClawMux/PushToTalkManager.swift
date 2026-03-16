@@ -83,8 +83,22 @@ class PushToTalkManager: NSObject, ObservableObject {
 extension PushToTalkManager: PTChannelManagerDelegate {
 
     nonisolated func channelManager(_ channelManager: PTChannelManager,
+                                     didJoinChannel channelUUID: UUID,
+                                     reason: PTChannelJoinReason) {
+        print("[PTT] Joined channel \(channelUUID) reason=\(reason)")
+    }
+
+    nonisolated func channelManager(_ channelManager: PTChannelManager,
+                                     didLeaveChannel channelUUID: UUID,
+                                     reason: PTChannelLeaveReason) {
+        print("[PTT] Left channel \(channelUUID) reason=\(reason)")
+        Task { @MainActor in
+            self.activeChannelUUID = nil
+        }
+    }
+
+    nonisolated func channelManager(_ channelManager: PTChannelManager,
                                      didActivate audioSession: AVAudioSession) {
-        // System activated audio for transmission — start recording
         print("[PTT] Audio session activated — begin recording")
         Task { @MainActor in
             self.vm?.audio.startRecording()
@@ -93,7 +107,6 @@ extension PushToTalkManager: PTChannelManagerDelegate {
 
     nonisolated func channelManager(_ channelManager: PTChannelManager,
                                      didDeactivate audioSession: AVAudioSession) {
-        // System deactivated audio — stop recording and send
         print("[PTT] Audio session deactivated — stop recording")
         Task { @MainActor in
             self.vm?.stopRecording()
@@ -103,28 +116,26 @@ extension PushToTalkManager: PTChannelManagerDelegate {
     nonisolated func channelManager(_ channelManager: PTChannelManager,
                                      channelUUID: UUID,
                                      didBeginTransmittingFrom source: PTChannelTransmitRequestSource) {
-        print("[PTT] Begin transmitting from: \(source)")
-        // source can be .userRequest (in-app), .handsfreeButton (Action Button), .programmaticRequest
+        print("[PTT] Begin transmitting from source=\(source.rawValue)")
     }
 
     nonisolated func channelManager(_ channelManager: PTChannelManager,
                                      channelUUID: UUID,
                                      didEndTransmittingFrom source: PTChannelTransmitRequestSource) {
-        print("[PTT] End transmitting from: \(source)")
+        print("[PTT] End transmitting from source=\(source.rawValue)")
     }
 
     nonisolated func channelManager(_ channelManager: PTChannelManager,
                                      receivedEphemeralPushToken pushToken: Data) {
         let token = pushToken.map { String(format: "%02x", $0) }.joined()
         print("[PTT] Received ephemeral push token: \(token.prefix(16))...")
-        // This token is used for server-initiated transmissions (incoming audio)
-        // Store it for the backend to send push notifications to trigger receive
     }
 
     nonisolated func incomingPushResult(channelManager: PTChannelManager,
-                                         channelUUID: UUID) -> PTChannelJoinRequest {
-        // Handle incoming push — for now, just accept
-        return PTChannelJoinRequest(channelDescriptor: PTChannelDescriptor(name: "ClawMux", image: nil))
+                                         channelUUID: UUID,
+                                         pushPayload: [String: Any]) -> PTPushResult {
+        // Handle incoming push — leave channel for now (no server pushes yet)
+        return PTPushResult.leaveChannel
     }
 }
 
