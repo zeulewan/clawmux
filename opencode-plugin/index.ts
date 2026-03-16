@@ -113,11 +113,21 @@ function readInbox(workDir: string): InboxMessage[] {
 }
 
 /**
- * Clear .inbox.jsonl. Call only after successful delivery.
+ * Remove delivered messages from .inbox.jsonl, preserving any that arrived
+ * during delivery (race window between read and clear).
  */
-function clearInbox(workDir: string): void {
+function clearDelivered(workDir: string, deliveredCount: number): void {
+  const inboxPath = join(workDir, ".inbox.jsonl")
   try {
-    writeFileSync(join(workDir, ".inbox.jsonl"), "")
+    const current = readFileSync(inboxPath, "utf-8")
+    const lines = current.split("\n").filter(l => l.trim())
+    if (lines.length <= deliveredCount) {
+      // No new messages arrived — safe to truncate
+      writeFileSync(inboxPath, "")
+    } else {
+      // New messages arrived during delivery — keep only the new ones
+      writeFileSync(inboxPath, lines.slice(deliveredCount).join("\n") + "\n")
+    }
   } catch {
     // Best effort
   }
@@ -172,8 +182,8 @@ export default (async ({ directory }) => {
           signal: AbortSignal.timeout(TIMEOUT_MS),
         },
       )
-      // Clear inbox only after successful delivery
-      clearInbox(cwd)
+      // Remove only the delivered messages, preserving any that arrived during delivery
+      clearDelivered(cwd, messages.length)
     } catch {
       // Delivery failed — inbox NOT cleared, messages will be retried next hook.
     }

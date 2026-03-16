@@ -170,6 +170,16 @@ class TemplateRenderer:
             rf.write_text(content)
         log.info("Rendered role rules (role=%s) for %s", role, voice_id)
 
+        # Codex: re-render AGENTS.md with updated role rules appended inline
+        agents_md = work_dir / "AGENTS.md"
+        if agents_md.exists():
+            base_content = await self.render(voice_id)
+            if base_content:
+                codex_content = base_content
+                if content:
+                    codex_content += "\n" + content
+                agents_md.write_text(codex_content)
+
         # Update opencode.json instructions array (needed for standalone role changes)
         self._update_opencode_instructions(work_dir)
         return True
