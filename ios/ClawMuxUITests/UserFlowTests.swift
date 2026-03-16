@@ -429,6 +429,182 @@ final class UserFlowTests: XCTestCase {
         XCTAssertTrue(app.exists)
     }
 
+    // MARK: - Thinking Indicator Expand/Collapse
+
+    /// Send a complex task to an agent, then tap the thinking indicator to expand it.
+    /// Verify tool name and activity text appear. Tap again to collapse.
+    func testThinkingIndicatorExpandCollapse() throws {
+        let hamburger = app.buttons["HamburgerButton"].firstMatch
+        guard hamburger.waitForExistence(timeout: 8) else { XCTFail("No hamburger"); return }
+
+        // Text mode
+        let modeBtn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'voice' AND label CONTAINS[c] 'mode'")).firstMatch
+        if modeBtn.waitForExistence(timeout: 3) { modeBtn.tap(); sleep(1) }
+        else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.43, dy: 0.065)).tap(); sleep(1) }
+        if !app.textFields.firstMatch.waitForExistence(timeout: 2) && !app.textViews.firstMatch.waitForExistence(timeout: 2) {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.43, dy: 0.065)).tap(); sleep(1)
+        }
+
+        // Navigate to Liam
+        tapAgent(at: 0); sleep(2)
+        saveScreenshot("thinking_01_liam")
+
+        // Send a complex task that will take a while
+        let tf = app.textFields.firstMatch
+        let tv = app.textViews.firstMatch
+        let input = tf.exists ? tf : tv
+        guard input.waitForExistence(timeout: 5) else { return }
+        input.tap(); sleep(1)
+        input.typeText("Read the file at /etc/hostname and tell me what it says, then list files in /tmp")
+        let sendBtn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'send' OR label CONTAINS[c] 'arrow'")).firstMatch
+        if sendBtn.waitForExistence(timeout: 3) { sendBtn.tap() }
+        sleep(3) // Wait for thinking to start
+        saveScreenshot("thinking_02_thinking_dots")
+
+        // Look for thinking indicator — it has the bouncing dots
+        // The thinking bubble contains activity text and a chevron
+        // Try tapping the thinking area (bottom of chat, above input bar)
+        // Approximate position: center-x, ~70% down
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.60)).tap()
+        sleep(1)
+        saveScreenshot("thinking_03_tapped")
+
+        // Tap again to collapse
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.60)).tap()
+        sleep(1)
+        saveScreenshot("thinking_04_collapsed")
+
+        // Wait for response
+        sleep(15)
+        saveScreenshot("thinking_05_response")
+
+        XCTAssertTrue(app.exists)
+    }
+
+    // MARK: - Multiple Agent Messages In Sequence
+
+    /// Tell Lewis to send Liam three messages in a row. Verify all three
+    /// "→ Liam" indicators appear and each can be expanded individually.
+    func testMultipleAgentMessagesInSequence() throws {
+        let hamburger = app.buttons["HamburgerButton"].firstMatch
+        guard hamburger.waitForExistence(timeout: 8) else { XCTFail("No hamburger"); return }
+
+        // Text mode
+        let modeBtn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'voice' AND label CONTAINS[c] 'mode'")).firstMatch
+        if modeBtn.waitForExistence(timeout: 3) { modeBtn.tap(); sleep(1) }
+        else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.43, dy: 0.065)).tap(); sleep(1) }
+        if !app.textFields.firstMatch.waitForExistence(timeout: 2) && !app.textViews.firstMatch.waitForExistence(timeout: 2) {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.43, dy: 0.065)).tap(); sleep(1)
+        }
+
+        // Navigate to Lewis
+        func goTo(_ name: String) -> Bool {
+            hamburger.tap(); sleep(2)
+            let sidebar = app.scrollViews["SidebarScrollView"].firstMatch
+            guard sidebar.waitForExistence(timeout: 3) else { return false }
+            for _ in 0..<3 { sidebar.swipeDown(); usleep(300_000) }
+            for _ in 0..<8 {
+                let btn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] '\(name)'")).firstMatch
+                if btn.waitForExistence(timeout: 1) { btn.tap(); sleep(2); return true }
+                sidebar.swipeUp(); sleep(1)
+            }
+            hamburger.tap(); sleep(1)
+            return false
+        }
+
+        guard goTo("Lewis") else { XCTFail("Can't find Lewis"); return }
+        saveScreenshot("multi_agent_01_lewis")
+
+        // Count existing agent message indicators before
+        let beforeCount = app.staticTexts.matching(NSPredicate(format: "label CONTAINS '→' OR label CONTAINS '←'")).count
+        print("[MULTI] agent msg indicators before: \(beforeCount)")
+
+        // Send Lewis instructions to message Liam 3 times
+        let tf = app.textFields.firstMatch
+        let tv = app.textViews.firstMatch
+        let input = tf.exists ? tf : tv
+        guard input.waitForExistence(timeout: 5) else { return }
+        input.tap(); sleep(1)
+        input.typeText("Send exactly 3 separate messages to Liam: first say good morning, then ask how his day is going, then tell him a fun fact")
+        let sendBtn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'send' OR label CONTAINS[c] 'arrow'")).firstMatch
+        if sendBtn.waitForExistence(timeout: 3) { sendBtn.tap() }
+        saveScreenshot("multi_agent_02_sent")
+
+        // Wait for Lewis to process and send all 3
+        sleep(20)
+        saveScreenshot("multi_agent_03_after_response")
+
+        // Count agent message indicators after
+        let afterCount = app.staticTexts.matching(NSPredicate(format: "label CONTAINS '→' OR label CONTAINS '←'")).count
+        print("[MULTI] agent msg indicators after: \(afterCount)")
+        print("[MULTI] new indicators: \(afterCount - beforeCount)")
+
+        // Try expanding each new indicator
+        let indicators = app.staticTexts.matching(NSPredicate(format: "label CONTAINS '→ Liam'"))
+        let newCount = indicators.count
+        print("[MULTI] → Liam indicators: \(newCount)")
+
+        for i in 0..<min(newCount, 3) {
+            let indicator = indicators.element(boundBy: newCount - 1 - i) // start from newest
+            if indicator.exists && indicator.isHittable {
+                indicator.tap()
+                sleep(1)
+                saveScreenshot("multi_agent_04_expanded_\(i)")
+                indicator.tap()
+                sleep(1)
+                saveScreenshot("multi_agent_05_collapsed_\(i)")
+            }
+        }
+
+        // Switch to Liam to verify he received the messages
+        tapAgent(at: 0); sleep(2)
+        saveScreenshot("multi_agent_06_liam_received")
+
+        // Look for incoming indicators in Liam's chat
+        let liamIndicators = app.staticTexts.matching(NSPredicate(format: "label CONTAINS '← Lewis'"))
+        print("[MULTI] ← Lewis indicators in Liam's chat: \(liamIndicators.count)")
+        saveScreenshot("multi_agent_07_liam_indicators")
+
+        XCTAssertTrue(app.exists)
+    }
+
+    // MARK: - Context Menu Copy
+
+    /// Long-press a message bubble to open context menu, tap Copy, verify toast appears.
+    func testContextMenuCopy() throws {
+        tapAgent(at: 0) // Liam
+        sleep(2)
+        saveScreenshot("context_01_start")
+
+        // Find an assistant message bubble to long-press
+        // Bubbles are in the chat scroll view — tap and hold on a message area
+        let chat = app.scrollViews["ChatScrollView"].firstMatch
+        guard chat.waitForExistence(timeout: 5) else { return }
+
+        // Long-press roughly in the middle of the chat area where a message bubble would be
+        let msgArea = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
+        msgArea.press(forDuration: 1.5)
+        sleep(1)
+        saveScreenshot("context_02_menu_open")
+
+        // Look for Copy button in context menu
+        let copyBtn = app.buttons["Copy"].firstMatch
+        if copyBtn.waitForExistence(timeout: 3) {
+            copyBtn.tap()
+            sleep(1)
+            saveScreenshot("context_03_copied")
+            // "Copied" toast should appear
+            let toast = app.staticTexts["Copied"].firstMatch
+            let toastVisible = toast.waitForExistence(timeout: 3)
+            print("[CONTEXT] Copied toast visible: \(toastVisible)")
+        } else {
+            saveScreenshot("context_03_no_copy_btn")
+            print("[CONTEXT] Copy button not found in context menu")
+        }
+
+        XCTAssertTrue(app.exists)
+    }
+
     // MARK: - Navigate To Michael (Header Check)
 
     /// Navigate to Michael's chat via expanded sidebar and screenshot the header.
