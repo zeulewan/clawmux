@@ -207,6 +207,7 @@ struct ContentView: View {
             chatScrollArea
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .safeAreaInset(edge: .bottom, spacing: 0) { bottomInputArea }
+                .allowsHitTesting(!vm.showDebug)
 
             if vm.showDebug {
                 DebugView(vm: vm)

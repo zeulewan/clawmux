@@ -93,8 +93,11 @@ struct ChatScrollLock: UIViewRepresentable {
     class Coordinator: NSObject, UIScrollViewDelegate {
         weak var scrollView: UIScrollView?
         weak var originalDelegate: UIScrollViewDelegate?
+        private var retryCount = 0
+        private let maxRetries = 30  // 3 seconds max
 
         func attach(to view: UIView) {
+            retryCount = 0
             findScrollView(in: view)
         }
 
@@ -107,9 +110,11 @@ struct ChatScrollLock: UIViewRepresentable {
                 }
                 superview = sv.superview
             }
-            // Not in hierarchy yet — retry after one frame
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak view] in
-                guard let view else { return }
+            // Not in hierarchy yet — retry after one frame, with cap
+            retryCount += 1
+            guard retryCount < maxRetries else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self, weak view] in
+                guard let self, let view else { return }
                 self.findScrollView(in: view)
             }
         }
@@ -260,8 +265,8 @@ struct MarkdownContentView: View {
                         rows.append(parseRow(r))
                         i += 1
                     }
-                    // Table rendering disabled — fall through to plain text
-                    _ = headers; _ = rows
+                    result.append(.table(headers: headers, rows: rows))
+                    continue
                 }
             }
             // Image: ![alt](url) on its own line

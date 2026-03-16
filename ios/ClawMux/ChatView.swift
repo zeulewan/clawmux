@@ -431,10 +431,6 @@ struct ChatScrollAreaView: View {
                         if let mid = msg.msgId {
                             Button {
                                 vm.sendUserAck(msgId: mid)
-                                withAnimation { showCopiedToast = true }
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                                    withAnimation { showCopiedToast = false }
-                                }
                             } label: {
                                 Label("Acknowledge", systemImage: "hand.thumbsup")
                             }
