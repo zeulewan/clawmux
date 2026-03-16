@@ -805,20 +805,26 @@ async def handle_browser_message(data: dict) -> None:
             log.info("[%s] Model set to %s", session_id, model or "(global default)")
 
     elif msg_type == "restart_model":
-        # User confirmed model restart from UI
-        model = data.get("model", "")
-        if model in ("opus", "sonnet", "haiku", ""):
-            session.model = model
-            log.info("[%s] Model restart requested: %s", session_id, model)
-            asyncio.create_task(session_mgr.restart_claude_with_model(session_id))
+        # User confirmed model restart from UI (Claude Code only)
+        if session.backend not in ("claude-code", ""):
+            log.warning("[%s] restart_model ignored for backend %s", session_id, session.backend)
+        else:
+            model = data.get("model", "")
+            if model in ("opus", "sonnet", "haiku", ""):
+                session.model = model
+                log.info("[%s] Model restart requested: %s", session_id, model)
+                asyncio.create_task(session_mgr.restart_claude_with_model(session_id))
 
     elif msg_type == "restart_effort":
-        # User changed effort level — requires restart
-        effort = data.get("effort", "")
-        if effort in ("low", "medium", "high"):
-            session.effort = effort
-            log.info("[%s] Effort restart requested: %s", session_id, effort)
-            asyncio.create_task(session_mgr.restart_claude_with_model(session_id))
+        # User changed effort level — requires restart (Claude Code only)
+        if session.backend not in ("claude-code", ""):
+            log.warning("[%s] restart_effort ignored for backend %s", session_id, session.backend)
+        else:
+            effort = data.get("effort", "")
+            if effort in ("low", "medium", "high"):
+                session.effort = effort
+                log.info("[%s] Effort restart requested: %s", session_id, effort)
+                asyncio.create_task(session_mgr.restart_claude_with_model(session_id))
 
     elif msg_type == "user_ack":
         # User acknowledged a message (double-click or thumbs-up button)
