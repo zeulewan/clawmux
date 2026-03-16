@@ -57,7 +57,7 @@ class PushToTalkManager: NSObject, ObservableObject {
                     pttLog.info("[PTT] Action Button PTT enabled")
                 }
             }
-            pttLog.info("[PTT] Joined channel \(channelUUID)")
+            pttLog.info("[PTT] Joined channel \(self.channelUUID)")
         } catch {
             pttLog.info("[PTT] Failed to join channel: \(error)")
         }
@@ -88,13 +88,13 @@ extension PushToTalkManager: PTChannelManagerDelegate {
     nonisolated func channelManager(_ channelManager: PTChannelManager,
                                      didJoinChannel channelUUID: UUID,
                                      reason: PTChannelJoinReason) {
-        pttLog.info("[PTT] Joined channel \(channelUUID) reason=\(reason)")
+        pttLog.info("[PTT] Joined channel \(channelUUID) reason=\(reason.rawValue)")
     }
 
     nonisolated func channelManager(_ channelManager: PTChannelManager,
                                      didLeaveChannel channelUUID: UUID,
                                      reason: PTChannelLeaveReason) {
-        pttLog.info("[PTT] Left channel \(channelUUID) reason=\(reason)")
+        pttLog.info("[PTT] Left channel \(channelUUID) reason=\(reason.rawValue)")
         Task { @MainActor in
             self.activeChannelUUID = nil
         }
