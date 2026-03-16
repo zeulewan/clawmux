@@ -25,6 +25,31 @@ class ClaudeCodeBackend(AgentBackend):
     def __init__(self) -> None:
         self._stuck_counts: dict[str, int] = {}  # session_name → consecutive count
 
+    # --- Capability overrides ---
+
+    @property
+    def handles_stop_hook_idle(self) -> bool:
+        return False  # Uses stop-check-inbox.sh, not HTTP Stop hook
+
+    @property
+    def supports_model_restart(self) -> bool:
+        return True
+
+    @property
+    def supports_effort(self) -> bool:
+        return True
+
+    @property
+    def idle_delay_after_interrupt(self) -> float:
+        return 3.0  # Stop hook may not fire after Escape
+
+    def role_update_message(self, role: str) -> str:
+        return (
+            f"Your role has been updated to: {role}. "
+            "Your role rules file has been rewritten — "
+            "Claude Code will pick up the changes automatically."
+        )
+
     async def spawn(
         self,
         session_name: str,

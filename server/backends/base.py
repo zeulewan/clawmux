@@ -175,6 +175,47 @@ class AgentBackend(ABC):
         """
         return None
 
+    # --- Backend capability declarations ---
+
+    @property
+    def handles_stop_hook_idle(self) -> bool:
+        """Whether the Stop hook should transition the agent to IDLE.
+
+        True for backends whose Stop hook reliably signals completion (OpenCode
+        bridge plugin, Codex). False for Claude Code, which uses an external
+        script (stop-check-inbox.sh) for idle signaling because HTTP Stop hooks
+        cannot block the Claude CLI.
+        """
+        return True
+
+    @property
+    def supports_model_restart(self) -> bool:
+        """Whether the UI can trigger a model restart for this backend."""
+        return False
+
+    @property
+    def supports_effort(self) -> bool:
+        """Whether this backend supports effort levels (low/medium/high)."""
+        return False
+
+    @property
+    def idle_delay_after_interrupt(self) -> float:
+        """Seconds to wait before forcing IDLE after interrupt.
+
+        Tmux backends may not fire their Stop hook after Escape, so the hub
+        needs a fallback timer. Hook-driven backends return 0 (Stop hook
+        handles idle transition).
+        """
+        return 0.0
+
+    def role_update_message(self, role: str) -> str:
+        """System message sent to the agent after a role update."""
+        return (
+            f"Your role has been updated to: {role}. "
+            "Your role rules file has been rewritten — "
+            "the agent will pick up the changes automatically."
+        )
+
     async def monitor_state(
         self,
         session_name: str,

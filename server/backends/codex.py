@@ -31,6 +31,10 @@ class CodexBackend(AgentBackend):
     def __init__(self) -> None:
         self._stuck_counts: dict[str, int] = {}  # session_name → consecutive count
 
+    @property
+    def idle_delay_after_interrupt(self) -> float:
+        return 3.0  # tmux Escape may not trigger Stop hook
+
     async def spawn(
         self,
         session_name: str,

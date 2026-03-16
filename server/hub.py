@@ -1,7 +1,7 @@
 """ClawMux — session launcher, TTS/STT engine, and WebSocket multiplexer.
 
 Standalone FastAPI service that:
-  - Spawns Claude Code sessions in tmux
+  - Spawns agent sessions via pluggable backends (Claude Code, OpenCode, Codex)
   - Handles TTS (Kokoro) and STT (Whisper) for all sessions
   - Multiplexes audio between browser and sessions via a single browser WS
 
@@ -731,8 +731,8 @@ async def handle_browser_message(data: dict) -> None:
             log.info("[%s] Model set to %s", session_id, model or "(global default)")
 
     elif msg_type == "restart_model":
-        # User confirmed model restart from UI (Claude Code only)
-        if session.backend not in ("claude-code", ""):
+        backend = session_mgr._get_backend(session.backend)
+        if not backend.supports_model_restart:
             log.warning("[%s] restart_model ignored for backend %s", session_id, session.backend)
         else:
             model = data.get("model", "")
@@ -742,8 +742,8 @@ async def handle_browser_message(data: dict) -> None:
                 asyncio.create_task(session_mgr.restart_claude_with_model(session_id))
 
     elif msg_type == "restart_effort":
-        # User changed effort level — requires restart (Claude Code only)
-        if session.backend not in ("claude-code", ""):
+        backend = session_mgr._get_backend(session.backend)
+        if not backend.supports_effort:
             log.warning("[%s] restart_effort ignored for backend %s", session_id, session.backend)
         else:
             effort = data.get("effort", "")
@@ -899,12 +899,13 @@ async def set_project_status(session_id: str, request: Request):
     })
     # Persist to agents.json (authoritative store)
     await session_mgr._sync_agent_store(session.voice, session)
-    # Write role rules (Claude Code: .claude/rules/role.md, OpenCode: .opencode/rules/role.md)
+    # Write role rules to backend-appropriate location
     if "role" in data and session.work_dir:
         await template_renderer.render_role_to_file(session.voice, Path(session.work_dir))
+        backend = session_mgr._get_backend(session.backend)
         await _inbox_write_and_notify(session, {
             "type": "system",
-            "content": f"Your role has been updated to: {session.role}. Your role rules file has been rewritten — Claude Code will pick up the changes automatically.",
+            "content": backend.role_update_message(session.role),
         })
     return JSONResponse({"ok": True})
 
@@ -1041,15 +1042,14 @@ async def hook_tool_status(request: Request):
             await send_to_browser(_session_status_msg(session))
             await _save_activity(session, "Processing")
     elif event == "Stop":
-        if session.backend != "claude-code":
-            # Non-Claude backends signal Stop via bridge plugin — transition to IDLE directly
+        backend = session_mgr._get_backend(session.backend)
+        if backend.handles_stop_hook_idle:
             session.set_state(AgentState.IDLE)
             session.activity = ""
             session.tool_name = ""
             session.tool_input = {}
             await _save_activity(session, "Idle")
             await send_to_browser({"session_id": session.session_id, "type": "listening", "state": "idle"})
-        # For Claude Code: HTTP Stop hooks cannot block Claude; stop-check-inbox.sh handles idle signaling
     elif event == "PreToolUse":
         # PreToolUse means the agent is actively making a tool call.
         # Don't cancel pending injections — tmux buffers input so delivery is safe at any time.
@@ -1191,26 +1191,26 @@ async def interrupt_session(session_id: str):
         return JSONResponse({"error": "interrupt failed"}, status_code=500)
     log.info("Interrupted session %s (backend=%s)", session_id, session.backend)
 
-    # After Escape, Claude Code may not fire its Stop hook — force idle after a delay.
-    # Capture interrupt time so we can detect if state changed AFTER the interrupt
-    # (e.g. a new inbox injection set PROCESSING) — that case should not be overridden.
-    import time as _itime
-    interrupt_at = _itime.monotonic()
+    # Some backends (tmux-based) may not fire their Stop hook after interrupt.
+    # If the backend declares a delay, schedule a fallback IDLE transition.
+    delay = backend.idle_delay_after_interrupt
+    if delay > 0:
+        import time as _itime
+        interrupt_at = _itime.monotonic()
 
-    async def _delayed_idle():
-        await asyncio.sleep(3)
-        if session.state in (AgentState.IDLE, AgentState.DEAD):
-            return
-        # If state changed after the interrupt (new injection, new tool use), don't override.
-        if session.last_state_change > interrupt_at:
-            return
-        session.set_state(AgentState.IDLE)
-        session.activity = ""
-        session.tool_name = ""
-        session.tool_input = {}
-        await send_to_browser({"session_id": session_id, "type": "listening", "state": "idle"})
-        await send_to_browser(_session_status_msg(session))
-    asyncio.create_task(_delayed_idle())
+        async def _delayed_idle():
+            await asyncio.sleep(delay)
+            if session.state in (AgentState.IDLE, AgentState.DEAD):
+                return
+            if session.last_state_change > interrupt_at:
+                return
+            session.set_state(AgentState.IDLE)
+            session.activity = ""
+            session.tool_name = ""
+            session.tool_input = {}
+            await send_to_browser({"session_id": session_id, "type": "listening", "state": "idle"})
+            await send_to_browser(_session_status_msg(session))
+        asyncio.create_task(_delayed_idle())
 
     return JSONResponse({"status": "interrupted"})
 
