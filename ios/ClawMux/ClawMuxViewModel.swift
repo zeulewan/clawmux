@@ -200,6 +200,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     @Published var isConnecting = false
     @Published var showSettings = false
     @Published var showNotes = false
+    @Published var walkingModeActive = false
     @Published var pendingNotificationSessionId: String? = nil
     @Published var isFocusMode = false
     @Published var serverURL: String {

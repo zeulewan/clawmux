@@ -80,6 +80,7 @@ struct ContentView: View {
         }
         .sheet(isPresented: $vm.showSettings) { SettingsView(vm: vm) }
         .sheet(isPresented: $vm.showNotes) { NotesPanelView(baseURL: vm.httpBaseURL()) { vm.showNotes = false } }
+        .fullScreenCover(isPresented: $vm.walkingModeActive) { WalkingModeView(vm: vm) }
         .onOpenURL { vm.handleOpenURL($0) }
         .alert("Reset History", isPresented: $showResetConfirm) {
             Button("Reset", role: .destructive) {

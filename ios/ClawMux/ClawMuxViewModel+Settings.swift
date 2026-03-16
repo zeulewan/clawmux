@@ -132,6 +132,38 @@ extension ClawMuxViewModel {
         URLSession.shared.dataTask(with: request) { _, _, _ in }.resume()
     }
 
+    func activateWalkingMode() {
+        guard let baseURL = httpBaseURL() else { return }
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/walking-mode"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["enabled": true, "voice": "am_puck"])
+        URLSession.shared.dataTask(with: req) { [weak self] data, _, _ in
+            guard let data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let sid = json["session_id"] as? String
+            else { return }
+            Task { @MainActor in
+                guard let self else { return }
+                // Switch to Puck's session
+                if let puck = self.sessions.first(where: { $0.id == sid }) {
+                    self.switchToSession(puck.id)
+                }
+                self.walkingModeActive = true
+            }
+        }.resume()
+    }
+
+    func deactivateWalkingMode() {
+        walkingModeActive = false
+        guard let baseURL = httpBaseURL() else { return }
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/walking-mode"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["enabled": false, "voice": "am_puck"])
+        URLSession.shared.dataTask(with: req) { _, _, _ in }.resume()
+    }
+
     // MARK: - Usage
 
     func fetchUsage() {
