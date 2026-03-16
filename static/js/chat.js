@@ -629,9 +629,11 @@ async function _fetchOlderHistory(sessionId) {
     if (oldestId) cursor = '&before=' + encodeURIComponent(oldestId);
     else if (oldestTs) cursor = '&before_ts=' + oldestTs;
     const url = `/api/history/${s.voice}?limit=150${cursor}${project ? '&project=' + encodeURIComponent(project) : ''}`;
+    console.log('[_fetchOlderHistory] fetching:', url, { oldestId, oldestTs });
     const resp = await fetch(url);
     if (!resp.ok) throw new Error('fetch failed: ' + resp.status);
     const hist = await resp.json();
+    console.log('[_fetchOlderHistory] got', (hist.messages || []).length, 'msgs, has_more:', hist.has_more);
     s.hasMoreHistory = hist.has_more === true;
     const olderMsgs = (hist.messages || []).map(m => {
       const obj = { role: m.role, text: m.text };
@@ -645,6 +647,7 @@ async function _fetchOlderHistory(sessionId) {
       // Deduplicate: skip any IDs already in s.messages
       const existingIds = new Set(s.messages.filter(m => m.id).map(m => m.id));
       const newMsgs = olderMsgs.filter(m => !m.id || !existingIds.has(m.id));
+      console.log('[_fetchOlderHistory] after dedup:', newMsgs.length, 'new msgs (of', olderMsgs.length, 'fetched)');
       if (newMsgs.length > 0) {
         // Prepend to s.messages and expand render limit to include them
         s.messages.unshift(...newMsgs);
@@ -687,11 +690,13 @@ function _fillViewportMessages() {
   if (!activeSessionId) return;
   const s = sessions.get(activeSessionId);
   if (!s) return;
-  if (chatArea.scrollHeight > chatArea.clientHeight + 10) return; // already filled
+  const filled = chatArea.scrollHeight > chatArea.clientHeight + 10;
   const limit = _getChatLimit(activeSessionId);
   const { hasMore: localHasMore } = _getDisplaySlice(s.messages, limit);
+  const visibleCount = s.messages.filter(m => !m.parentId && m.role !== 'activity').length;
+  console.log('[_fillViewportMessages]', { filled, scrollH: chatArea.scrollHeight, clientH: chatArea.clientHeight, localHasMore, hasMoreHistory: s.hasMoreHistory, loading: s.loadingOlderHistory, totalMsgs: s.messages.length, visibleCount, limit });
+  if (filled) return; // already filled
   if (localHasMore) {
-    // Load one more batch of visible messages from local buffer
     _chatRenderLimit.set(activeSessionId, limit + _CHAT_BATCH);
     _scrollLoadPending = true;
     renderChat(true);
@@ -699,8 +704,8 @@ function _fillViewportMessages() {
     return;
   }
   // Local buffer exhausted but server has more — fetch older page
-  // (common for activity-heavy agents where 150 messages are mostly activity)
   if (s.hasMoreHistory && !s.loadingOlderHistory) {
+    console.log('[_fillViewportMessages] triggering _fetchOlderHistory');
     _fetchOlderHistory(activeSessionId);
   }
 }
