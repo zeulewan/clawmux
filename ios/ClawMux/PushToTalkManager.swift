@@ -2,6 +2,9 @@ import Foundation
 import PushToTalk
 import AVFoundation
 import UIKit
+import os
+
+private let pttLog = Logger(subsystem: "com.zeul.clawmux", category: "ptt")
 
 /// Manages the PushToTalk framework integration for walkie-talkie style PTT.
 /// Uses PTChannelManager for Action Button hold-to-talk, lock screen PTT, and
@@ -31,14 +34,14 @@ class PushToTalkManager: NSObject, ObservableObject {
                 channelManager = try await PTChannelManager.channelManager(delegate: self,
                                                                            restorationDelegate: self)
             } catch {
-                print("[PTT] Failed to create channel manager: \(error)")
+                pttLog.info("[PTT] Failed to create channel manager: \(error)")
             }
         }
     }
 
     func joinChannel() {
         guard let manager = channelManager else {
-            print("[PTT] Channel manager not initialized")
+            pttLog.info("[PTT] Channel manager not initialized")
             return
         }
 
@@ -49,14 +52,14 @@ class PushToTalkManager: NSObject, ObservableObject {
             // Enable Action Button PTT
             manager.setAccessoryButtonEventsEnabled(true, channelUUID: channelUUID) { error in
                 if let error {
-                    print("[PTT] Failed to enable accessory button: \(error)")
+                    pttLog.info("[PTT] Failed to enable accessory button: \(error)")
                 } else {
-                    print("[PTT] Action Button PTT enabled")
+                    pttLog.info("[PTT] Action Button PTT enabled")
                 }
             }
-            print("[PTT] Joined channel \(channelUUID)")
+            pttLog.info("[PTT] Joined channel \(channelUUID)")
         } catch {
-            print("[PTT] Failed to join channel: \(error)")
+            pttLog.info("[PTT] Failed to join channel: \(error)")
         }
     }
 
@@ -64,7 +67,7 @@ class PushToTalkManager: NSObject, ObservableObject {
         guard let manager = channelManager, let uuid = activeChannelUUID else { return }
         manager.leaveChannel(channelUUID: uuid)
         activeChannelUUID = nil
-        print("[PTT] Left channel")
+        pttLog.info("[PTT] Left channel")
     }
 
     /// Called when walking mode activates — join the PTT channel
@@ -85,13 +88,13 @@ extension PushToTalkManager: PTChannelManagerDelegate {
     nonisolated func channelManager(_ channelManager: PTChannelManager,
                                      didJoinChannel channelUUID: UUID,
                                      reason: PTChannelJoinReason) {
-        print("[PTT] Joined channel \(channelUUID) reason=\(reason)")
+        pttLog.info("[PTT] Joined channel \(channelUUID) reason=\(reason)")
     }
 
     nonisolated func channelManager(_ channelManager: PTChannelManager,
                                      didLeaveChannel channelUUID: UUID,
                                      reason: PTChannelLeaveReason) {
-        print("[PTT] Left channel \(channelUUID) reason=\(reason)")
+        pttLog.info("[PTT] Left channel \(channelUUID) reason=\(reason)")
         Task { @MainActor in
             self.activeChannelUUID = nil
         }
@@ -99,7 +102,7 @@ extension PushToTalkManager: PTChannelManagerDelegate {
 
     nonisolated func channelManager(_ channelManager: PTChannelManager,
                                      didActivate audioSession: AVAudioSession) {
-        print("[PTT] Audio session activated — begin recording")
+        pttLog.info("[PTT] Audio session activated — begin recording")
         Task { @MainActor in
             self.vm?.audio.startRecording()
         }
@@ -107,7 +110,7 @@ extension PushToTalkManager: PTChannelManagerDelegate {
 
     nonisolated func channelManager(_ channelManager: PTChannelManager,
                                      didDeactivate audioSession: AVAudioSession) {
-        print("[PTT] Audio session deactivated — stop recording")
+        pttLog.info("[PTT] Audio session deactivated — stop recording")
         Task { @MainActor in
             self.vm?.stopRecording()
         }
@@ -116,19 +119,19 @@ extension PushToTalkManager: PTChannelManagerDelegate {
     nonisolated func channelManager(_ channelManager: PTChannelManager,
                                      channelUUID: UUID,
                                      didBeginTransmittingFrom source: PTChannelTransmitRequestSource) {
-        print("[PTT] Begin transmitting from source=\(source.rawValue)")
+        pttLog.info("[PTT] Begin transmitting from source=\(source.rawValue)")
     }
 
     nonisolated func channelManager(_ channelManager: PTChannelManager,
                                      channelUUID: UUID,
                                      didEndTransmittingFrom source: PTChannelTransmitRequestSource) {
-        print("[PTT] End transmitting from source=\(source.rawValue)")
+        pttLog.info("[PTT] End transmitting from source=\(source.rawValue)")
     }
 
     nonisolated func channelManager(_ channelManager: PTChannelManager,
                                      receivedEphemeralPushToken pushToken: Data) {
         let token = pushToken.map { String(format: "%02x", $0) }.joined()
-        print("[PTT] Received ephemeral push token: \(token.prefix(16))...")
+        pttLog.info("[PTT] Received ephemeral push token: \(token.prefix(16))...")
     }
 
     nonisolated func incomingPushResult(channelManager: PTChannelManager,
