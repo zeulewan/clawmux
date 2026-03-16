@@ -259,13 +259,14 @@ struct WelcomeView: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
-            let _session: VoiceSession? = session
-            if _session == nil {
+            Group {
+            if session == nil {
                 Button { vm.spawnSession(voiceId: voice.id) } label: {
                     Label("Launch Session", systemImage: "play.circle")
                 }
             }
-            if let s = _session {
+            }
+            if let s = session {
                 if s.unreadCount == 0 {
                     Button { vm.markSessionUnread(s.id) } label: {
                         Label("Mark as Unread", systemImage: "envelope.badge")
