@@ -1368,6 +1368,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 sessions[idx].state = newState
                 sessions[idx].activity = json["activity"] as? String ?? ""
                 sessions[idx].toolName = json["tool_name"] as? String ?? ""
+                if let b = json["backend"] as? String, !b.isEmpty { sessions[idx].backend = b }
+                if let m = json["model_id"] as? String { sessions[idx].modelId = m }
 
                 // First time becoming idle from starting = session just connected
                 if prevState == .starting && newState != .starting && newState != .dead {
