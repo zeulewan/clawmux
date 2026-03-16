@@ -66,6 +66,28 @@ struct ScrollBottomDetector: ViewModifier {
     }
 }
 
+// MARK: - Scroll Phase Detector (iOS 18+)
+
+/// Detects user-initiated scroll via .onScrollPhaseChange (iOS 18+).
+/// Sets userScrolledUp when user drags away from bottom.
+/// On iOS <18, userScrolledUp is never set by drag — only cleared by ScrollBottomDetector.
+struct ScrollPhaseDetector: ViewModifier {
+    var isNearBottom: Bool
+    @Binding var userScrolledUp: Bool
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.onScrollPhaseChange { _, newPhase in
+                if newPhase == .idle && !isNearBottom {
+                    userScrolledUp = true
+                }
+            }
+        } else {
+            content
+        }
+    }
+}
+
 // MARK: - Chat Scroll Lock
 
 /// Permanently prevents horizontal drift in the chat ScrollView.

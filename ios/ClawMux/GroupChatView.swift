@@ -86,11 +86,7 @@ struct GroupChatScrollView: View {
                     .id(vm.activeGroupName)
                     .scrollDismissesKeyboard(.immediately)
                     .scrollBounceBehavior(.basedOnSize, axes: .vertical)
-                    .onScrollPhaseChange { _, newPhase in
-                        if newPhase == .idle && !isNearBottom {
-                            userScrolledUp = true
-                        }
-                    }
+                    .modifier(ScrollPhaseDetector(isNearBottom: isNearBottom, userScrolledUp: $userScrolledUp))
                     .modifier(ScrollBottomDetector(isAtBottom: $isNearBottom))
                     .onChange(of: isNearBottom) { _, nearBottom in
                         if nearBottom { userScrolledUp = false }

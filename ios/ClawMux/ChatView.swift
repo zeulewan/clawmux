@@ -58,16 +58,7 @@ struct ChatScrollAreaView: View {
                 .scrollDismissesKeyboard(.immediately)
                 .scrollBounceBehavior(.basedOnSize, axes: .vertical)
                 .accessibilityIdentifier("ChatScrollView")
-                // Detect user-initiated scroll: only .interacting phase = finger on screen.
-                // Layout-driven geometry changes do NOT trigger .interacting.
-                .onScrollPhaseChange { _, newPhase in
-                    if newPhase == .interacting && isNearBottom {
-                        // Will check at end of interaction whether user moved away from bottom
-                    }
-                    if newPhase == .idle && !isNearBottom {
-                        userScrolledUp = true
-                    }
-                }
+                .modifier(ScrollPhaseDetector(isNearBottom: isNearBottom, userScrolledUp: $userScrolledUp))
                 // Geometry-based near-bottom check — used to CLEAR userScrolledUp and show/hide chevron.
                 .modifier(ScrollBottomDetector(isAtBottom: $isNearBottom))
                 .onChange(of: isNearBottom) { _, nearBottom in
