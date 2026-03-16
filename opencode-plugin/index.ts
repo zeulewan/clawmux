@@ -181,11 +181,11 @@ export default (async ({ directory }) => {
 
   return {
     // tool.execute.before — agent is about to call a tool → PreToolUse
-    "tool.execute.before": async (input, output) => {
+    "tool.execute.before": async (input, _output) => {
       await postToHub(port, sessionId, {
         hook_event_name: "PreToolUse",
         tool_name: input.tool,
-        tool_input: output.args ?? {},
+        tool_input: input.args ?? {},
         cwd,
       })
     },
