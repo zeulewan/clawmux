@@ -217,7 +217,8 @@ struct InputBarView: View {
         // Container: padding 8px 12px, border-radius 20px, glass/blur
         HStack(alignment: .bottom, spacing: 8) {
             // Stop button — mirrors web #text-stop (38x38, red, in-flow, shown when agent working or speaking)
-            if let s = vm.activeSession, s.isThinking || s.state == .starting || s.isSpeaking {
+            // Hidden in group chat (forceTypingMode) — no single session to interrupt.
+            if !forceTypingMode, let s = vm.activeSession, s.isThinking || s.state == .starting || s.isSpeaking {
                 Button { vm.sendInterrupt() } label: {
                     Image(systemName: "stop.fill")
                         .font(.system(size: 13, weight: .bold))
