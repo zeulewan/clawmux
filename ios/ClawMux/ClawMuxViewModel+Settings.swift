@@ -150,12 +150,14 @@ extension ClawMuxViewModel {
                     self.switchToSession(puck.id)
                 }
                 self.walkingModeActive = true
+                self.pttManager.activateForWalkingMode()
             }
         }.resume()
     }
 
     func deactivateWalkingMode() {
         walkingModeActive = false
+        pttManager.deactivateForWalkingMode()
         guard let baseURL = httpBaseURL() else { return }
         var req = URLRequest(url: baseURL.appendingPathComponent("api/walking-mode"))
         req.httpMethod = "POST"

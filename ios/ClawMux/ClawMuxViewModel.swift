@@ -544,6 +544,13 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     // Audio subsystem — owns all audio I/O, recording, playback, VAD, metering
     private(set) lazy var audio: AudioManager = AudioManager(vm: self)
 
+    // PushToTalk framework — Action Button hold-to-talk in walking mode
+    private(set) lazy var pttManager: PushToTalkManager = {
+        let m = PushToTalkManager()
+        m.vm = self
+        return m
+    }()
+
     // Private
     var webSocketTask: URLSessionWebSocketTask?
     var urlSession: URLSession?
@@ -639,6 +646,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         UserDefaults.standard.removeObject(forKey: "voice-hub-chats")
 
         audio.setupAudioSession()
+        pttManager.setup()
         observeAppLifecycle()
         endStaleLiveActivities()
         requestNotificationPermission()
