@@ -60,25 +60,9 @@ struct WelcomeView: View {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 0) {
                     let groups = projectGroups
+                    let sessionMap = Dictionary(vm.sessions.map { ($0.voice, $0) }, uniquingKeysWith: { a, _ in a })
                     ForEach(groups.namedProjects, id: \.self) { project in
-                        projectSection(project, voices: groups.byProject[project] ?? [])
-                    }
-                    if !groups.ungrouped.isEmpty {
-                        if !groups.namedProjects.isEmpty {
-                            HStack {
-                                Text("AGENTS")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(Color.cTextTer)
-                                    .tracking(0.8)
-                                Spacer()
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.top, 12).padding(.bottom, 4)
-                        }
-                        VStack(spacing: 2) {
-                            ForEach(groups.ungrouped) { voice in agentCard(voice) }
-                        }
-                        .padding(.horizontal, 8)
+                        projectSection(project, voices: groups.byProject[project] ?? [], sessionMap: sessionMap)
                     }
                 }
                 .padding(.bottom, 32)
@@ -94,7 +78,6 @@ struct WelcomeView: View {
     private struct ProjectGroups {
         let namedProjects: [String]
         let byProject:     [String: [VoiceInfo]]
-        let ungrouped:     [VoiceInfo]
     }
 
     private var projectGroups: ProjectGroups {
@@ -116,11 +99,11 @@ struct WelcomeView: View {
             byProject[f.name] != nil ? f.name : nil
         }
         let namedProjects = byProject["Other"] != nil ? folderOrder + ["Other"] : folderOrder
-        return ProjectGroups(namedProjects: namedProjects, byProject: byProject, ungrouped: [])
+        return ProjectGroups(namedProjects: namedProjects, byProject: byProject)
     }
 
     @ViewBuilder
-    private func projectSection(_ project: String, voices: [VoiceInfo]) -> some View {
+    private func projectSection(_ project: String, voices: [VoiceInfo], sessionMap: [String: VoiceSession]) -> some View {
         let collapsed = collapsedProjects.contains(project)
         VStack(spacing: 0) {
             Button {
@@ -151,7 +134,7 @@ struct WelcomeView: View {
 
             if !collapsed {
                 VStack(spacing: 2) {
-                    ForEach(voices) { voice in agentCard(voice) }
+                    ForEach(voices) { voice in agentCard(voice, sessionMap: sessionMap) }
                 }
                 .padding(.horizontal, 8)
                 .transition(.opacity.combined(with: .move(edge: .top)))
@@ -161,8 +144,8 @@ struct WelcomeView: View {
 
     // MARK: - Agent Card
 
-    private func agentCard(_ voice: VoiceInfo) -> some View {
-        let session    = vm.sessions.first { $0.voice == voice.id }
+    private func agentCard(_ voice: VoiceInfo, sessionMap: [String: VoiceSession]) -> some View {
+        let session    = sessionMap[voice.id]
         let spawning   = vm.spawningVoiceIds.contains(voice.id)
         let isSelected = !vm.isFocusMode && vm.activeSession?.voice == voice.id
         let color      = voiceColor(voice.id)
