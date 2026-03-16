@@ -85,8 +85,30 @@ class CodexBackend(AgentBackend):
         return await self._cc.health_check(session_name)
 
     async def deliver_message(self, session_name: str, text: str) -> None:
-        # Codex uses tmux injection like Claude Code
-        await asyncio.shield(self._cc._tmux_type(session_name, text))
+        """Type text into Codex TUI and submit with double Enter.
+
+        Codex's TUI requires two Enter presses: the first confirms the input
+        text, the second submits it for processing.
+        """
+        async def _codex_type(session: str, msg: str) -> None:
+            proc = await asyncio.create_subprocess_exec(
+                "tmux", "send-keys", "-t", session, "-l", msg,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+            await proc.communicate()
+            await asyncio.sleep(0.3)
+            proc = await asyncio.create_subprocess_exec(
+                "tmux", "send-keys", "-t", session, "Enter",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+            await proc.communicate()
+            await asyncio.sleep(0.3)
+            proc = await asyncio.create_subprocess_exec(
+                "tmux", "send-keys", "-t", session, "Enter",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+            await proc.communicate()
+        await asyncio.shield(_codex_type(session_name, text))
 
     async def restart(
         self,
@@ -126,54 +148,26 @@ class CodexBackend(AgentBackend):
     # --- Internal helpers ---
 
     async def _wait_for_codex_init(self, session_name: str, marker: str) -> None:
-        """Poll tmux pane until Codex shows its idle prompt after the marker."""
+        """Poll tmux pane until Codex is fully idle after processing the startup prompt.
+
+        The reliable ready signal is the status line at the bottom of the pane:
+        `gpt-5.4 default · 100% left · /path` — this only appears when Codex is
+        idle and ready for input.
+        """
         start = time.time()
-        # Phase 1: wait for marker + prompt character
-        deadline = start + 30
+        deadline = start + 90  # startup prompt processing can take a while
         while time.time() < deadline:
             try:
                 result = await self._cc._run(f"tmux capture-pane -t {session_name} -p")
                 if result and marker in result:
-                    after_marker = result.split(marker, 1)[1]
-                    if "›" in after_marker or ">" in after_marker:
-                        log.info("[%s] Codex prompt detected (%.1fs)", session_name, time.time() - start)
-                        break
-            except Exception:
-                pass
-            await asyncio.sleep(1)
-        else:
-            log.warning("[%s] Codex init poll timed out", session_name)
-
-        # Phase 2: wait for Codex to be fully initialized (model info banner)
-        ready_deadline = time.time() + 30
-        while time.time() < ready_deadline:
-            try:
-                result = await self._cc._run(f"tmux capture-pane -t {session_name} -p")
-                if result and "OpenAI Codex" in result:
-                    log.info("[%s] Codex fully initialized", session_name)
-                    break
-            except Exception:
-                pass
-            await asyncio.sleep(1)
-        else:
-            log.warning("[%s] Codex full init poll timed out", session_name)
-
-        # Phase 3: wait for startup prompt to finish processing
-        # Codex shows `────` separator and `› Implement` when idle
-        idle_deadline = time.time() + 60
-        while time.time() < idle_deadline:
-            try:
-                result = await self._cc._run(f"tmux capture-pane -t {session_name} -p")
-                if result:
+                    # Check for the status line (present only when idle)
                     lines = result.strip().splitlines()
-                    last_lines = "\n".join(lines[-5:])
-                    if "────" in last_lines and "›" in last_lines:
-                        log.info("[%s] Codex idle after startup prompt", session_name)
-                        break
+                    last_line = lines[-1].strip() if lines else ""
+                    # Status line format: "model default · N% left · /path"
+                    if "% left" in last_line:
+                        log.info("[%s] Codex ready (%.1fs)", session_name, time.time() - start)
+                        return
             except Exception:
                 pass
             await asyncio.sleep(2)
-        else:
-            log.warning("[%s] Codex startup processing timed out", session_name)
-
-        await asyncio.sleep(1)
+        log.warning("[%s] Codex init poll timed out after %.0fs", session_name, time.time() - start)
