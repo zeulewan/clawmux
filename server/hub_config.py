@@ -39,6 +39,7 @@ HEALTH_CHECK_INTERVAL_SECONDS = 15
 CLAUDE_BASE_COMMAND = "claude --dangerously-skip-permissions"
 CLAUDE_MODEL = os.environ.get("VOICE_CHAT_MODEL", "opus")  # opus, sonnet, haiku
 CLAUDE_EFFORT = os.environ.get("CLAWMUX_EFFORT", "high")  # low, medium, high
+DEFAULT_BACKEND = "claude-code"  # default backend for new sessions
 TMUX_SESSION_PREFIX = "voice"
 WHISPER_URL = "http://127.0.0.1:2022"
 KOKORO_URL = "http://127.0.0.1:8880"

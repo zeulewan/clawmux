@@ -12,6 +12,7 @@ from pathlib import Path
 
 from hub_config import (
     DATA_DIR,
+    DEFAULT_BACKEND,
     HEALTH_CHECK_INTERVAL_SECONDS,
     HUB_PORT,
     SESSIONS_DIR,
@@ -54,7 +55,7 @@ class Session:
     interjections: list[str] = field(default_factory=list)  # queued user messages sent while agent was busy
     model: str = ""  # per-session Claude model override (opus/sonnet/haiku); empty = use global default
     effort: str = ""  # per-session effort level override (low/medium/high); empty = use global default
-    backend: str = "claude-code"  # backend type: "claude-code", "opencode", "gemini"
+    backend: str = DEFAULT_BACKEND  # backend type (e.g. "claude-code", "opencode", "codex")
     model_id: str = ""  # actual model string, e.g. "claude-opus-4-6", "gpt-5"
     pending_model_restart: bool = False  # True when model was changed and needs restart after current turn
     restarting: bool = False  # True while model restart is in progress (skip health checks)
@@ -64,7 +65,7 @@ class Session:
     unread_count: int = 0  # server-tracked unread message count
     # Per-session bridge state (set by hub after creation)
     playback_done: asyncio.Event | None = field(default=None, repr=False)
-    claude_session_id: str = ""  # Claude Code conversation UUID (for JSONL lookup)
+    conversation_id: str = ""  # conversation UUID for session resume/lookup
     project_slug: str = "default"  # which project this session belongs to
     reinject_attempts: int = 0  # number of voice-mode re-injection attempts
     max_reinject_attempts: int = 3  # max re-injection attempts before giving up
@@ -140,9 +141,9 @@ class SessionManager:
         self.history_store = history_store
         self.project_mgr = project_mgr or ProjectManager()
         self.agents_store = agents_store
-        self.backend = backend  # AgentBackend instance (default/claude-code)
+        self.backend = backend  # AgentBackend instance (default backend)
         self._backends = {
-            "claude-code": backend,
+            DEFAULT_BACKEND: backend,
             "opencode": OpenCodeBackend(),
             "codex": CodexBackend(),
         }
@@ -154,7 +155,7 @@ class SessionManager:
         """Return the backend instance for a given backend type string."""
         backend = self._backends.get(backend_str)
         if backend is None:
-            log.warning("Unknown backend %r — falling back to claude-code", backend_str)
+            log.warning("Unknown backend %r — falling back to default", backend_str)
             return self.backend
         return backend
 
@@ -174,7 +175,7 @@ class SessionManager:
             last_active=session.last_activity,
             model=session.model or "opus",
             effort=session.effort or "",
-            backend=session.backend or "claude-code",
+            backend=session.backend or DEFAULT_BACKEND,
             model_id=session.model_id or "",
             state=session.state.value if hasattr(session.state, 'value') else str(session.state),
         )
@@ -266,12 +267,12 @@ class SessionManager:
                 project_slug=adopt_project,
             )
             session.init_bridge()
-            # Restore Claude session ID for context tracking
+            # Restore conversation ID for context tracking
             if self.history_store:
                 hist_prefix = adopt_project if adopt_project != "default" else None
                 stored_id = self.history_store.get_claude_session_id(voice_id, hist_prefix)
                 if stored_id:
-                    session.claude_session_id = stored_id
+                    session.conversation_id = stored_id
             # Restore project status from agents.json
             session.project = entry.project or ""
             session.project_repo = entry.repo or ""
@@ -297,7 +298,7 @@ class SessionManager:
             # Restore effort from agents.json
             session.effort = getattr(entry, 'effort', '') or ""
             # Restore backend and model_id from agents.json
-            session.backend = getattr(entry, 'backend', 'claude-code') or "claude-code"
+            session.backend = getattr(entry, 'backend', DEFAULT_BACKEND) or DEFAULT_BACKEND
             session.model_id = getattr(entry, 'model_id', '') or ""
             # Restore backend-specific state from disk (e.g. OpenCode port/session maps)
             self._get_backend(session.backend).restore_session(adopt_id, str(work_dir))
@@ -325,10 +326,10 @@ class SessionManager:
             if name not in known_tmux and name in our_session_ids and "-monitor" not in name:
                 log.warning("Killing unadoptable orphaned tmux session: %s", name)
                 # Determine backend from agents.json if available, else default
-                orphan_backend = "claude-code"
+                orphan_backend = DEFAULT_BACKEND
                 for e in all_agents.values():
                     if e.session_id == name:
-                        orphan_backend = getattr(e, 'backend', 'claude-code') or "claude-code"
+                        orphan_backend = getattr(e, 'backend', DEFAULT_BACKEND) or DEFAULT_BACKEND
                         break
                 await self._get_backend(orphan_backend).terminate(name)
 
@@ -367,8 +368,8 @@ class SessionManager:
         return project_voices[idx]
 
     async def spawn_session(self, label: str = "", voice: str = "", project: str | None = None,
-                            backend: str = "claude-code", model_id: str = "") -> Session:
-        """Create a temp dir with session config, tmux session, and start Claude."""
+                            backend: str = DEFAULT_BACKEND, model_id: str = "") -> Session:
+        """Create a work dir with session config and start the agent backend."""
         # Determine which project this session belongs to.
         # If a voice is specified but no project, use the voice's existing folder
         # assignment from workspace.json — only fall back to active_project if unassigned.
@@ -439,32 +440,30 @@ class SessionManager:
             # Write agent state to agents.json (authoritative store)
             await self._sync_agent_store(voice_id, session)
 
-            # Check if we can resume a previous Claude session for this voice
-            claude_session_id = None
+            # Check if we can resume a previous conversation for this voice
+            conversation_id = None
             resuming = False
             hist_prefix = self.project_mgr.get_history_prefix(project_slug)
             if self.history_store:
                 stored_id = self.history_store.get_claude_session_id(voice_id, hist_prefix)
                 if stored_id:
-                    # Verify the session file exists in the project dir matching this work_dir
-                    # Claude maps /tmp/foo/bar → ~/.claude/projects/-tmp-foo-bar/
+                    # Verify the transcript file exists on disk
                     claude_project_dir = Path.home() / ".claude" / "projects" / re.sub(r"[^a-zA-Z0-9-]", "-", str(work_dir))
                     found = (claude_project_dir / f"{stored_id}.jsonl").exists()
                     if found:
-                        claude_session_id = stored_id
+                        conversation_id = stored_id
                         resuming = True
-                        log.info("[%s] Resuming Claude session %s", session_id, claude_session_id)
+                        log.info("[%s] Resuming conversation %s", session_id, conversation_id)
                     else:
                         log.info("[%s] Stored session %s not found, starting fresh", session_id, stored_id)
 
-            if not claude_session_id:
-                # Generate a new Claude session UUID for fresh starts
-                claude_session_id = str(uuid.uuid4())
-                log.info("[%s] New Claude session %s", session_id, claude_session_id)
+            if not conversation_id:
+                conversation_id = str(uuid.uuid4())
+                log.info("[%s] New conversation %s", session_id, conversation_id)
                 if self.history_store:
-                    self.history_store.set_claude_session_id(voice_id, claude_session_id, hist_prefix)
+                    self.history_store.set_claude_session_id(voice_id, conversation_id, hist_prefix)
 
-            session.claude_session_id = claude_session_id
+            session.conversation_id = conversation_id
 
             # Write instructions for all backends (CLAUDE.md + INSTRUCTIONS.md + opencode.json)
             if self._template_renderer:
@@ -488,27 +487,21 @@ class SessionManager:
                             instructions_file.write_text(existing + f"\n{context_summary}\n")
                     log.info("[%s] Injected context summary", session_id)
 
-            # Pre-accept workspace trust so Claude Code doesn't prompt on first launch
-            self._accept_workspace_trust(str(work_dir))
+            # Backend-specific workspace preparation (e.g. trust prompts)
+            backend_impl = self._get_backend(backend)
+            backend_impl.prepare_workspace(str(work_dir))
 
-            # Delegate spawning to the backend (tmux, env vars, Claude CLI, init polling)
-            import hub_config
-            if backend == "claude-code":
-                session_model = session.model or hub_config.CLAUDE_MODEL
-                session_effort = session.effort or hub_config.CLAUDE_EFFORT
-                spawn_model = session_model
-            else:
-                # Non-Claude backends: use model_id as the model, don't default to "opus"
-                session_model = session.model_id or session.model or ""
-                session_effort = session.effort or ""
-                spawn_model = session.model_id or ""
+            # Resolve model/effort defaults via the backend
+            session_model, session_effort, spawn_model = backend_impl.resolve_spawn_params(
+                session.model, session.effort, session.model_id
+            )
             session.model = session_model
             session.effort = session_effort
-            await self._get_backend(backend).spawn(
+            await backend_impl.spawn(
                 session_name=tmux_name, work_dir=str(work_dir),
                 session_id=session_id, hub_port=HUB_PORT,
                 voice_id=voice_id, voice_name=voice_name,
-                claude_session_id=claude_session_id,
+                conversation_id=conversation_id,
                 resuming=resuming, model=spawn_model,
                 effort=session_effort,
             )
@@ -521,15 +514,14 @@ class SessionManager:
                     voice_id, cursor_model, project=hist_prefix
                 )
                 if catchup:
-                    await self._get_backend(backend).deliver_message(tmux_name, catchup)
+                    await backend_impl.deliver_message(tmux_name, catchup)
                     log.info("[%s] Delivered catch-up context for model %s", session_id, cursor_model)
                 # Advance cursor to head regardless (this model is now current)
                 msg_count = self.history_store.message_count(voice_id, hist_prefix)
                 self.history_store.set_read_cursor(voice_id, cursor_model, msg_count, hist_prefix)
 
-            # For Claude Code: state stays STARTING until wait WS connects (idle signal)
-            # For other backends: transition to IDLE immediately (no wait WS)
-            if backend != "claude-code":
+            # Backends that signal readiness externally stay STARTING; others go IDLE now
+            if backend_impl.sets_idle_on_spawn:
                 session.set_state(AgentState.IDLE)
             session.status = "ready"  # legacy compat: browser checks this for mic enable
             session.touch()
@@ -559,43 +551,44 @@ class SessionManager:
         await self._sync_agent_store(voice_id)
 
     async def restart_claude_with_model(self, session_id: str) -> None:
-        """Kill and respawn Claude in existing tmux with new model, resuming conversation."""
+        """Kill and respawn the agent with a new model, resuming conversation."""
         session = self.sessions.get(session_id)
         if not session:
             return
         tmux_name = session.tmux_session
-        import hub_config
-        session_model = session.model or hub_config.CLAUDE_MODEL
-        session.model = session_model  # Store effective model
-        session_effort = session.effort or hub_config.CLAUDE_EFFORT
+        backend_impl = self._get_backend(session.backend)
+        session_model, session_effort, _ = backend_impl.resolve_spawn_params(
+            session.model, session.effort, session.model_id
+        )
+        session.model = session_model
         session.effort = session_effort
-        claude_session_id = session.claude_session_id
+        conversation_id = session.conversation_id
 
-        log.info("[%s] Restarting Claude with model %s, effort %s", session_id, session_model, session_effort)
+        log.info("[%s] Restarting with model %s, effort %s", session_id, session_model, session_effort)
         session.pending_model_restart = False
         session.restarting = True
         session.set_state(AgentState.STARTING)
 
-        # Verify the session file exists before resuming
+        # Verify the transcript file exists before resuming
         work_dir = session.work_dir
         resuming = False
-        if claude_session_id:
+        if conversation_id:
             claude_project_dir = Path.home() / ".claude" / "projects" / re.sub(r"[^a-zA-Z0-9-]", "-", work_dir)
-            resuming = (claude_project_dir / f"{claude_session_id}.jsonl").exists()
+            resuming = (claude_project_dir / f"{conversation_id}.jsonl").exists()
             if not resuming:
-                log.info("[%s] Session %s not found on disk, starting fresh", session_id, claude_session_id)
-                claude_session_id = str(uuid.uuid4())
-                session.claude_session_id = claude_session_id
+                log.info("[%s] Session %s not found on disk, starting fresh", session_id, conversation_id)
+                conversation_id = str(uuid.uuid4())
+                session.conversation_id = conversation_id
                 if self.history_store:
                     hist_prefix = self.project_mgr.get_history_prefix(session.project_slug)
-                    self.history_store.set_claude_session_id(session.voice, claude_session_id, hist_prefix)
+                    self.history_store.set_claude_session_id(session.voice, conversation_id, hist_prefix)
 
         # Delegate restart to the backend
-        await self._get_backend(session.backend).restart(
+        await backend_impl.restart(
             session_name=tmux_name, work_dir=work_dir,
             session_id=session_id, hub_port=HUB_PORT,
             voice_id=session.voice, voice_name=session.label,
-            claude_session_id=claude_session_id, model=session_model,
+            conversation_id=conversation_id, model=session_model,
             effort=session_effort,
         )
 
@@ -650,19 +643,4 @@ class SessionManager:
         # State is now managed via agents.json, so no per-agent files to clean up
         pass
 
-    def _accept_workspace_trust(self, work_dir: str) -> None:
-        """Pre-accept Claude Code workspace trust for the session work dir.
-
-        Claude Code stores trust state in ~/.claude.json (not ~/.claude/settings.json).
-        """
-        claude_json_path = Path.home() / ".claude.json"
-        try:
-            settings = json.loads(claude_json_path.read_text()) if claude_json_path.exists() else {}
-            projects = settings.setdefault("projects", {})
-            proj = projects.setdefault(work_dir, {})
-            proj["hasTrustDialogAccepted"] = True
-            claude_json_path.write_text(json.dumps(settings, indent=2))
-            log.info("Workspace trust pre-accepted for %s", work_dir)
-        except Exception as e:
-            log.warning("Could not pre-accept workspace trust: %s", e)
 

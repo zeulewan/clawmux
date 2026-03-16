@@ -40,8 +40,33 @@ class ClaudeCodeBackend(AgentBackend):
         return True
 
     @property
+    def sets_idle_on_spawn(self) -> bool:
+        return False  # Stays STARTING until wait WS connects
+
+    @property
     def idle_delay_after_interrupt(self) -> float:
         return 3.0  # Stop hook may not fire after Escape
+
+    def resolve_spawn_params(self, model: str, effort: str, model_id: str) -> tuple[str, str, str]:
+        from hub_config import CLAUDE_MODEL, CLAUDE_EFFORT
+        session_model = model or CLAUDE_MODEL
+        session_effort = effort or CLAUDE_EFFORT
+        return (session_model, session_effort, session_model)
+
+    def prepare_workspace(self, work_dir: str) -> None:
+        """Pre-accept workspace trust so Claude Code doesn't prompt on first launch."""
+        import json as _json
+        from pathlib import Path
+        claude_json_path = Path.home() / ".claude.json"
+        try:
+            settings = _json.loads(claude_json_path.read_text()) if claude_json_path.exists() else {}
+            projects = settings.setdefault("projects", {})
+            proj = projects.setdefault(work_dir, {})
+            proj["hasTrustDialogAccepted"] = True
+            claude_json_path.write_text(_json.dumps(settings, indent=2))
+            log.info("Workspace trust pre-accepted for %s", work_dir)
+        except Exception as e:
+            log.warning("Could not pre-accept workspace trust: %s", e)
 
     def role_update_message(self, role: str) -> str:
         return (
@@ -58,7 +83,7 @@ class ClaudeCodeBackend(AgentBackend):
         hub_port: int,
         voice_id: str,
         voice_name: str,
-        claude_session_id: str,
+        conversation_id: str,
         resuming: bool,
         model: str,
         effort: str = "high",
@@ -92,9 +117,9 @@ class ClaudeCodeBackend(AgentBackend):
         effort_flag = f" --effort {effort}" if effort and model != "haiku" else ""
         startup_prompt = "Greet the user as instructed in your CLAUDE.md. Then stop — the hub will deliver messages when they arrive."
         if resuming:
-            claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag}{effort_flag} --resume {claude_session_id} '{startup_prompt}'"
+            claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag}{effort_flag} --resume {conversation_id} '{startup_prompt}'"
         else:
-            claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag}{effort_flag} --session-id {claude_session_id} '{startup_prompt}'"
+            claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag}{effort_flag} --session-id {conversation_id} '{startup_prompt}'"
         await self._run(f'tmux send-keys -t {session_name} "{claude_cmd}" Enter')
 
         # Wait for Claude to initialize (poll for input prompt AFTER marker)
@@ -143,7 +168,7 @@ class ClaudeCodeBackend(AgentBackend):
         hub_port: int,
         voice_id: str,
         voice_name: str,
-        claude_session_id: str,
+        conversation_id: str,
         model: str,
         effort: str = "high",
     ) -> None:
@@ -174,7 +199,7 @@ class ClaudeCodeBackend(AgentBackend):
         model_flag = f" --model {model}" if model != "opus" else ""
         effort_flag = f" --effort {effort}" if effort and model != "haiku" else ""
         startup_prompt = "Greet the user as instructed in your CLAUDE.md. Then stop — the hub will deliver messages when they arrive."
-        claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag}{effort_flag} --resume {claude_session_id} '{startup_prompt}'"
+        claude_cmd = f"{CLAUDE_BASE_COMMAND}{model_flag}{effort_flag} --resume {conversation_id} '{startup_prompt}'"
         await self._run(f'tmux send-keys -t {session_name} "{claude_cmd}" Enter')
 
         await self._wait_for_claude_init(session_name, marker)
@@ -229,14 +254,14 @@ class ClaudeCodeBackend(AgentBackend):
     def get_context_usage(self, session_name: str, session) -> dict | None:
         """Read token usage from Claude Code's JSONL transcript."""
         from pathlib import Path
-        claude_session_id = getattr(session, 'claude_session_id', '')
-        if not claude_session_id:
+        conversation_id = getattr(session, 'conversation_id', '')
+        if not conversation_id:
             return None
         claude_projects = Path.home() / ".claude" / "projects"
         jsonl_path = None
         if claude_projects.exists():
             for p in claude_projects.iterdir():
-                candidate = p / f"{claude_session_id}.jsonl"
+                candidate = p / f"{conversation_id}.jsonl"
                 if candidate.exists():
                     jsonl_path = candidate
                     break

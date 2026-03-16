@@ -51,7 +51,7 @@ class AgentBackend(ABC):
         hub_port: int,
         voice_id: str,
         voice_name: str,
-        claude_session_id: str,
+        conversation_id: str,
         resuming: bool,
         model: str,
         effort: str = "high",
@@ -65,10 +65,10 @@ class AgentBackend(ABC):
             hub_port: Hub HTTP port (for env vars).
             voice_id: Voice identifier (e.g. "af_sky").
             voice_name: Human-readable name (e.g. "Sky").
-            claude_session_id: Conversation UUID (Claude Code resume key).
+            conversation_id: Conversation UUID for session resume/lookup.
             resuming: True if resuming an existing conversation.
-            model: Model identifier (e.g. opus/sonnet/haiku for Claude, or full model_id for other backends).
-            effort: Effort level (low/medium/high). Claude Code only; ignored by other backends.
+            model: Model identifier (backend-specific format).
+            effort: Effort level (backend-specific; ignored by some backends).
         """
 
     @abstractmethod
@@ -111,7 +111,7 @@ class AgentBackend(ABC):
         hub_port: int,
         voice_id: str,
         voice_name: str,
-        claude_session_id: str,
+        conversation_id: str,
         model: str,
         effort: str = "high",
     ) -> None:
@@ -124,7 +124,7 @@ class AgentBackend(ABC):
             hub_port: Hub HTTP port.
             voice_id: Voice identifier.
             voice_name: Human-readable name.
-            claude_session_id: Claude Code conversation UUID to resume.
+            conversation_id: Conversation UUID to resume.
             model: New model to use.
         """
 
@@ -216,6 +216,15 @@ class AgentBackend(ABC):
         return False
 
     @property
+    def sets_idle_on_spawn(self) -> bool:
+        """Whether the session transitions to IDLE immediately after spawn.
+
+        True for backends that don't have a wait-WS connection to signal readiness.
+        False for backends that stay STARTING until an external idle signal arrives.
+        """
+        return True
+
+    @property
     def idle_delay_after_interrupt(self) -> float:
         """Seconds to wait before forcing IDLE after interrupt.
 
@@ -232,6 +241,17 @@ class AgentBackend(ABC):
             "Your role rules file has been rewritten — "
             "the agent will pick up the changes automatically."
         )
+
+    def resolve_spawn_params(self, model: str, effort: str, model_id: str) -> tuple[str, str, str]:
+        """Resolve (session_model, session_effort, spawn_model) for this backend.
+
+        Returns the effective model/effort to store on the session and the model
+        string to pass to the backend's spawn() call.
+        """
+        return (model_id or model or "", effort or "", model_id or "")
+
+    def prepare_workspace(self, work_dir: str) -> None:
+        """Pre-spawn workspace preparation (e.g., trust prompts). Default no-op."""
 
     async def monitor_state(
         self,
