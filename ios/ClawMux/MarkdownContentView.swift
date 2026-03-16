@@ -74,12 +74,18 @@ struct ScrollBottomDetector: ViewModifier {
 struct ScrollPhaseDetector: ViewModifier {
     var isNearBottom: Bool
     @Binding var userScrolledUp: Bool
+    @State private var wasInteracting = false
 
     func body(content: Content) -> some View {
         if #available(iOS 18.0, *) {
             content.onScrollPhaseChange { _, newPhase in
-                if newPhase == .idle && !isNearBottom {
-                    userScrolledUp = true
+                if newPhase == .interacting { wasInteracting = true }
+                if newPhase == .idle && wasInteracting {
+                    wasInteracting = false
+                    // Defer so ScrollBottomDetector geometry update propagates first
+                    DispatchQueue.main.async {
+                        if !isNearBottom { userScrolledUp = true }
+                    }
                 }
             }
         } else {
