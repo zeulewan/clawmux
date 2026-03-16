@@ -84,6 +84,9 @@ class CodexBackend(AgentBackend):
     async def health_check(self, session_name: str) -> bool:
         return await self._cc.health_check(session_name)
 
+    async def interrupt(self, session_name: str) -> bool:
+        return await self._cc.interrupt(session_name)
+
     async def deliver_message(self, session_name: str, text: str) -> None:
         """Type text into Codex TUI and submit with double Enter.
 

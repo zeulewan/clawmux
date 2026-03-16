@@ -120,6 +120,14 @@ class AgentBackend(ABC):
             voice_id: Voice identifier for color lookup.
         """
 
+    async def interrupt(self, session_name: str) -> bool:
+        """Soft-interrupt a running agent.
+
+        Returns True if the interrupt was sent successfully.
+        Default implementation sends Escape via tmux (works for Claude Code and Codex).
+        """
+        return False  # Subclasses override
+
     async def list_live_sessions(self, known_names: set[str]) -> set[str]:
         """Return the subset of known_names that have live runtime sessions.
 

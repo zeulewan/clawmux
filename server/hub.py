@@ -1270,31 +1270,16 @@ async def restart_session(session_id: str):
 
 @app.post("/api/sessions/{session_id}/interrupt")
 async def interrupt_session(session_id: str):
-    """Send Escape to a running agent to soft-interrupt it."""
+    """Soft-interrupt a running agent via the appropriate backend method."""
     session = session_mgr.sessions.get(session_id)
     if not session:
         return JSONResponse({"error": "session not found"}, status_code=404)
-    # OpenCode uses HTTP — Escape via tmux doesn't interrupt the AI process.
-    # Skip for now; a proper cancel API can be added later.
-    if session.backend == "opencode":
-        log.info("[%s] Interrupt skipped for OpenCode backend (no tmux-based cancel)", session_id)
-        return JSONResponse({"status": "skipped", "reason": "opencode does not support tmux interrupt"})
-    # Claude Code and Codex: send Escape via tmux
-    tmux_name = session.tmux_session
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "tmux", "send-keys", "-t", tmux_name, "Escape",
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        _, stderr = await proc.communicate()
-        if proc.returncode != 0:
-            log.warning("Failed to interrupt %s: %s", tmux_name, stderr.decode().strip())
-            return JSONResponse({"error": "tmux send-keys failed"}, status_code=500)
-    except Exception as e:
-        log.error("Interrupt error for %s: %s", tmux_name, e)
-        return JSONResponse({"error": str(e)}, status_code=500)
-    log.info("Interrupted session %s (tmux: %s, backend: %s)", session_id, tmux_name, session.backend)
+    backend = session_mgr._get_backend(session.backend)
+    success = await backend.interrupt(session.tmux_session)
+    if not success:
+        log.warning("Failed to interrupt %s (backend=%s)", session_id, session.backend)
+        return JSONResponse({"error": "interrupt failed"}, status_code=500)
+    log.info("Interrupted session %s (backend=%s)", session_id, session.backend)
 
     # After Escape, Claude Code may not fire its Stop hook — force idle after a delay.
     # Capture interrupt time so we can detect if state changed AFTER the interrupt

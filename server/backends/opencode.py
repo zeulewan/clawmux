@@ -159,6 +159,22 @@ class OpenCodeBackend(AgentBackend):
     async def health_check(self, session_name: str) -> bool:
         return await self._cc.health_check(session_name)
 
+    async def interrupt(self, session_name: str) -> bool:
+        """Abort the active OpenCode session via HTTP."""
+        port = _session_ports.get(session_name)
+        oc_session = _opencode_sessions.get(session_name)
+        if not port or not oc_session:
+            log.warning("[%s] Cannot interrupt — no port/session info", session_name)
+            return False
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                await client.post(f"http://localhost:{port}/session/{oc_session}/abort")
+            log.info("[%s] Sent abort to OpenCode session %s", session_name, oc_session)
+            return True
+        except Exception as e:
+            log.error("[%s] Failed to abort OpenCode session: %s", session_name, e)
+            return False
+
     async def deliver_message(self, session_name: str, text: str) -> None:
         """POST the message to the OpenCode REST API (fire-and-forget)."""
         port = _session_ports.get(session_name)

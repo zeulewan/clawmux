@@ -85,6 +85,20 @@ class ClaudeCodeBackend(AgentBackend):
         await proc.wait()
         return proc.returncode == 0
 
+    async def interrupt(self, session_name: str) -> bool:
+        """Send Escape to the tmux pane to soft-interrupt the agent."""
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "tmux", "send-keys", "-t", session_name, "Escape",
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+                env=_SUBPROCESS_ENV,
+            )
+            await proc.wait()
+            return proc.returncode == 0
+        except Exception:
+            return False
+
     async def deliver_message(self, session_name: str, text: str) -> None:
         # Shield so both send-keys (text + Enter) complete even if the inject
         # task is cancelled mid-flight during hub shutdown.
