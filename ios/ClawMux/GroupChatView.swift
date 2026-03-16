@@ -90,6 +90,7 @@ struct GroupChatScrollView: View {
                     .modifier(ScrollBottomDetector(isAtBottom: $isNearBottom))
                     .onChange(of: isNearBottom) { _, nearBottom in
                         if nearBottom { userScrolledUp = false }
+                        else { userScrolledUp = true }
                     }
                     .onChange(of: vm.groupMessages.count) { _, _ in
                         guard !userScrolledUp else { return }

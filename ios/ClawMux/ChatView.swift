@@ -63,6 +63,7 @@ struct ChatScrollAreaView: View {
                 .modifier(ScrollBottomDetector(isAtBottom: $isNearBottom))
                 .onChange(of: isNearBottom) { _, nearBottom in
                     if nearBottom { userScrolledUp = false }
+                    else { userScrolledUp = true }
                 }
                 .modifier(ScrollTopDetector(
                     isLoadingOlder: $isLoadingOlder,
