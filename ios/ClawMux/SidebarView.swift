@@ -332,9 +332,11 @@ struct SidebarView: View {
             Button(role: .destructive) { resetVoiceId = voice.id; showResetConfirm = true } label: {
                 Label("Reset", systemImage: "arrow.counterclockwise")
             }
-            if let s = session, !s.groupId.isEmpty {
-                Button(role: .destructive) { vm.disbandGroup(s.groupId) } label: {
-                    Label("Disband Group Chat", systemImage: "person.2.slash")
+            if let s = session, !s.groupId.isEmpty, let gName = vm.groupName(for: s.groupId) {
+                Button(role: .destructive) {
+                    vm.toggleGroupChatMember(voiceId: voice.id, groupName: gName, isMember: true)
+                } label: {
+                    Label("Remove from Group Chat", systemImage: "person.badge.minus")
                 }
             }
             if let s = session {
@@ -825,9 +827,11 @@ struct SidebarView: View {
                 } label: {
                     Label("Monitor", systemImage: "terminal")
                 }
-                if !s.groupId.isEmpty {
-                    Button(role: .destructive) { vm.disbandGroup(s.groupId) } label: {
-                        Label("Disband Group Chat", systemImage: "person.2.slash")
+                if !s.groupId.isEmpty, let gName = vm.groupName(for: s.groupId) {
+                    Button(role: .destructive) {
+                        vm.toggleGroupChatMember(voiceId: voice.id, groupName: gName, isMember: true)
+                    } label: {
+                        Label("Remove from Group Chat", systemImage: "person.badge.minus")
                     }
                 }
                 Button(role: .destructive) { vm.terminateSession(s.id) } label: {
