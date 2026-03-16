@@ -273,6 +273,24 @@ final class UserFlowTests: XCTestCase {
         XCTAssertTrue(app.exists, "App should survive round-trip agent switching")
     }
 
+    // MARK: - Navigate To Any Agent By Name
+
+    /// Navigate to a specific agent via expanded sidebar, screenshot the result.
+    func testNavigateToOnyx() throws {
+        let hamburger = app.buttons["HamburgerButton"].firstMatch
+        guard hamburger.waitForExistence(timeout: 8) else { XCTFail("No hamburger"); return }
+        hamburger.tap(); sleep(2)
+        let sidebar = app.scrollViews["SidebarScrollView"].firstMatch
+        guard sidebar.waitForExistence(timeout: 3) else { XCTFail("No sidebar"); return }
+        for _ in 0..<8 {
+            let btn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'Onyx'")).firstMatch
+            if btn.waitForExistence(timeout: 1) { btn.tap(); sleep(3); break }
+            sidebar.swipeUp(); sleep(1)
+        }
+        saveScreenshot("onyx_chat")
+        XCTAssertTrue(app.exists)
+    }
+
     // MARK: - Navigate To Michael (Header Check)
 
     /// Navigate to Michael's chat via expanded sidebar and screenshot the header.
