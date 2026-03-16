@@ -542,7 +542,7 @@ class SessionManager:
                 )
                 if context_summary:
                     # Append context summary to all instruction files
-                    for fname in ("CLAUDE.md", "INSTRUCTIONS.md"):
+                    for fname in ("CLAUDE.md", "INSTRUCTIONS.md", "AGENTS.md"):
                         instructions_file = work_dir / fname
                         if instructions_file.exists():
                             existing = instructions_file.read_text()
