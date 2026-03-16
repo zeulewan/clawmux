@@ -11,6 +11,7 @@ import logging
 import os
 import re
 import subprocess
+import sys
 import socket
 import time
 import uuid
@@ -32,8 +33,9 @@ from hub_state import (
     _load_settings, _save_settings, _label_for_voice,
     _context_cache, _pending_injections, _group_chats, _save_groups,
 )
+from hub_config import HUB_PORT, HUB_START_TIME
 import hub_state
-from message_injection import inject_inbox, inbox_write_and_notify
+from message_injection import inject_inbox, inbox_write_and_notify, _injection_locks
 from monitors import get_fallback_usage, set_last_good_usage, save_usage_sidecar
 
 log = logging.getLogger("hub.routes")
@@ -387,6 +389,32 @@ async def shutdown_hub(request: Request):
 
     asyncio.create_task(do_shutdown())
     return JSONResponse({"status": "shutting_down", "mode": mode})
+
+
+@router.post("/api/reload")
+async def reload_hub_api():
+    """Reload the hub from the browser — spawns a replacement process before exiting."""
+    log.info("Reload requested via browser API")
+
+    async def do_reload():
+        await asyncio.sleep(0.3)  # Let the response send first
+        log.info("Hub reloading — keeping tmux sessions alive")
+        broker.stop()
+        # Spawn replacement hub with a short delay so the current process
+        # can release the port before the new one tries to bind.
+        hub_py = str(Path(__file__).resolve().parent / "hub.py")
+        hub_dir = str(Path(__file__).resolve().parent.parent)
+        with open("/tmp/clawmux.log", "a") as lf:
+            subprocess.Popen(
+                ["bash", "-c", f"sleep 1 && '{sys.executable}' '{hub_py}'"],
+                cwd=hub_dir, stdout=lf, stderr=lf,
+                start_new_session=True,
+            )
+        log.info("Replacement hub process spawned, exiting")
+        os._exit(0)
+
+    asyncio.create_task(do_reload())
+    return JSONResponse({"status": "reloading"})
 
 
 @router.put("/api/sessions/{session_id}/voice")
@@ -1684,106 +1712,7 @@ async def peek_inbox(session_id: str):
     return JSONResponse(result)
 
 
-async def inject_inbox(session, session_id: str) -> None:
-    """Deliver pending inbox messages to an agent via tmux injection.
-
-    Uses a per-session lock to serialize concurrent deliveries. When two messages
-    arrive simultaneously (e.g. from concurrent group sends), the second task waits
-    for the first to complete before acquiring the lock — preventing Enter from one
-    injection firing mid-paste of another.
-    """
-    lock = _injection_locks.setdefault(session_id, asyncio.Lock())
-    async with lock:
-        messages = await asyncio.to_thread(inbox.read_and_clear, session.work_dir)
-        if not messages:
-            return
-
-        # Dedup: drop messages whose IDs were already injected within the last 5 minutes
-        now = time.time()
-        seen = _injected_ids.setdefault(session_id, {})
-        # Prune expired entries
-        expired = [k for k, ts in seen.items() if now - ts > 300]
-        for k in expired:
-            del seen[k]
-        fresh = []
-        for msg in messages:
-            mid = msg.get("id", "")
-            if mid and mid in seen:
-                log.warning("[%s] Skipping duplicate injection of msg %s", session_id, mid)
-                continue
-            if mid:
-                seen[mid] = now
-            fresh.append(msg)
-        if not fresh:
-            return
-        messages = fresh
-
-        lines = []
-        has_user_msg = any(m.get("type") not in ("system", "ack") for m in messages)
-        if session.walking_mode and has_user_msg:
-            lines.append("[SYSTEM] Walking mode active — respond in plain spoken text only. No markdown, no underscores, no special formatting.")
-        for msg in messages:
-            msg_type = msg.get("type", "system")
-            sender = msg.get("from", "unknown")
-            content = msg.get("content", "")
-            msg_id = msg.get("id", "")
-            if msg_type == "agent":
-                lines.append(f"[MSG id:{msg_id} from:{sender}] {content}")
-            elif msg_type in ("voice", "text", "file_upload"):
-                lines.append(f"[VOICE id:{msg_id} from:{sender}] {content}")
-            elif msg_type == "group":
-                group_name = msg.get("group_name", "group")
-                lines.append(f"[GROUP:{group_name} id:{msg_id} from:{sender}] {content}")
-            elif msg_type == "ack":
-                parent_id = msg.get("parent_id", "")
-                lines.append(f"[ACK from:{sender} on:{parent_id}]")
-            else:
-                lines.append(f"[SYSTEM] {content}")
-
-        text = "\n".join(lines)
-        delivered = False
-        try:
-            await session_mgr._get_backend(session.backend).deliver_message(session.tmux_session, text)
-            delivered = True
-            log.info("[%s] Injected %d message(s) via tmux", session_id, len(messages))
-        except Exception as exc:
-            log.error("[%s] tmux injection FAILED: %s — %d message(s) returned to inbox",
-                      session_id, exc, len(messages))
-            for msg in messages:
-                await asyncio.to_thread(inbox.write, session.work_dir, msg)
-
-        if delivered:
-            # Transition to PROCESSING immediately — agent has the message and is reasoning.
-            # This covers the gap between injection and first PreToolUse hook.
-            if session.state == AgentState.IDLE:
-                session.set_state(AgentState.PROCESSING)
-                await send_to_browser(_session_status_msg(session))
-            await send_to_browser({
-                "type": "inbox_update",
-                "session_id": session_id,
-                "count": 0,
-            })
-
-
-async def inbox_write_and_notify(session, msg_dict: dict) -> dict:
-    """Write to inbox and notify browser + wait WS."""
-    written = await asyncio.to_thread(inbox.write, session.work_dir, msg_dict)
-    count = await asyncio.to_thread(inbox.peek, session.work_dir)
-    await send_to_browser({
-        "type": "inbox_update",
-        "session_id": session.session_id,
-        "count": count,
-        "latest": {
-            "from": msg_dict.get("from", ""),
-            "type": msg_dict.get("type", ""),
-            "preview": msg_dict.get("content", "")[:100],
-        },
-    })
-    # Inject immediately. The per-session lock in _inject_inbox serializes concurrent
-    # deliveries — no cancel needed; a queued task will pick up the latest inbox contents.
-    if session.work_dir:
-        task = asyncio.create_task(inject_inbox(session, session.session_id))
-        _pending_injections[session.session_id] = task
+# inject_inbox and inbox_write_and_notify are imported from message_injection.py
     return written
 
 
@@ -2087,8 +2016,8 @@ async def debug_info():
         "hub": {
             "port": HUB_PORT,
             "uptime_seconds": round(_time.time() - HUB_START_TIME),
-            "browser_connected": len(browser_clients) > 0,
-            "client_count": len(browser_clients),
+            "browser_connected": len(hub_state.browser_clients) > 0,
+            "client_count": len(hub_state.browser_clients),
             "session_count": len(session_mgr.sessions),
         },
         "system": system,

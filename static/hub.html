@@ -1810,7 +1810,7 @@ async function reloadHub() {
   const btn = document.getElementById('reload-hub-btn');
   if (btn) { btn.textContent = 'Reloading…'; btn.disabled = true; }
   try {
-    await fetch('/api/shutdown', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({mode:'reload'}) });
+    await fetch('/api/reload', { method: 'POST' });
   } catch (_) {}
   // Page will reconnect via websocket — just restore button after a moment
   setTimeout(() => {
