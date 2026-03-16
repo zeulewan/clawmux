@@ -391,6 +391,8 @@
 				8EBD594CEA424C07342CD79A /* ClawMuxViewModel.swift in Sources */,
 				B1C2D3E4F5061728394A5B6C /* ClawMuxViewModel+Audio.swift in Sources */,
 				B1C2D3E4F5061728394A5B6D /* ClawMuxViewModel+Settings.swift in Sources */,
+				C1D2E3F4A5B607183ACA4D5E /* ClawMuxViewModel+WebSocket.swift in Sources */,
+				C1D2E3F4A5B607183ACA4D5F /* ClawMuxViewModel+Sessions.swift in Sources */,
 				34708E5BA49DCFE09A2770E8 /* ContentView.swift in Sources */,
 				CBA4E6BE8BA5D2F2DA3D0192 /* GroupChatView.swift in Sources */,
 				EF98BD8285F5FAF97C9985E9 /* InputBarView.swift in Sources */,
