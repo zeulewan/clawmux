@@ -1,4 +1,7 @@
 import SwiftUI
+import os
+
+private let scrollLog = Logger(subsystem: "com.zeul.clawmux", category: "scroll")
 
 // MARK: - Scroll Top Detector (auto-load older messages)
 
@@ -24,17 +27,15 @@ struct ScrollTopDetector: ViewModifier {
                 //   → 0 when at top, (contentSize - containerSize) when at bottom
                 geo.contentOffset.y + geo.contentSize.height - geo.containerSize.height
             } action: { _, distanceFromTop in
-                #if DEBUG
                 if distanceFromTop < 500 {
-                    print("[scroll-top] dist=\(Int(distanceFromTop)) loading=\(isLoadingOlder) hasMore=\(hasOlderMessages) sid=\(sessionId ?? "nil") cooldown=\(Date() < cooldownUntil)")
+                    scrollLog.info("dist=\(Int(distanceFromTop)) loading=\(self.isLoadingOlder) hasMore=\(self.hasOlderMessages) sid=\(self.sessionId ?? "nil") cooldown=\(Date() < self.cooldownUntil)")
                 }
-                #endif
                 guard distanceFromTop < 200,
                       !isLoadingOlder,
                       Date() >= cooldownUntil,
                       hasOlderMessages,
                       let sid = sessionId else { return }
-                print("[scroll-top] LOADING triggered for \(sid)")
+                scrollLog.info("LOADING triggered for \(sid)")
                 isLoadingOlder = true
                 load(sid) {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
