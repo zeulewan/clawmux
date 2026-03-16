@@ -615,15 +615,20 @@ async function _fetchOlderHistory(sessionId) {
     chatArea.insertBefore(loadingEl, chatArea.firstChild);
   }
 
-  // Find the oldest message ID in s.messages to use as the before= cursor
+  // Find cursor for pagination: prefer oldest message ID, fall back to oldest timestamp
   let oldestId = null;
+  let oldestTs = null;
   for (let i = 0; i < s.messages.length; i++) {
-    if (s.messages[i].id) { oldestId = s.messages[i].id; break; }
+    if (s.messages[i].id && !oldestId) { oldestId = s.messages[i].id; }
+    if (s.messages[i].ts && (!oldestTs || s.messages[i].ts < oldestTs)) { oldestTs = s.messages[i].ts; }
   }
 
   try {
     const project = typeof currentProject !== 'undefined' ? currentProject : '';
-    const url = `/api/history/${s.voice}?limit=150${oldestId ? '&before=' + encodeURIComponent(oldestId) : ''}${project ? '&project=' + encodeURIComponent(project) : ''}`;
+    let cursor = '';
+    if (oldestId) cursor = '&before=' + encodeURIComponent(oldestId);
+    else if (oldestTs) cursor = '&before_ts=' + oldestTs;
+    const url = `/api/history/${s.voice}?limit=150${cursor}${project ? '&project=' + encodeURIComponent(project) : ''}`;
     const resp = await fetch(url);
     if (!resp.ok) throw new Error('fetch failed: ' + resp.status);
     const hist = await resp.json();
