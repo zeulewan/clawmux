@@ -142,12 +142,12 @@ struct ChatScrollAreaView: View {
                 .onChange(of: vm.showAgentMessages) { _, _ in rebuildMessageGroups() }
                 .onChange(of: vm.verboseMode) { _, _ in rebuildMessageGroups() }
                 .onChange(of: vm.isRecording) { _, recording in
-                    if !recording && isAtBottom && !thinkingJustEnded {
-                        // Waveform left the layout — safeAreaInset shrank ~56pt.
-                        // UIKit clamps contentOffset on inset shrink, so the scroll
-                        // position no longer sits at the true bottom. Re-anchor instantly
-                        // after layout settles to eliminate the visual drift.
-                        // Skip if thinkingJustEnded — MessageListKey handler owns the scroll.
+                    if !recording {
+                        // User was recording → definitionally at the bottom.
+                        // The inset shrink from waveform removal can flip isAtBottom
+                        // to false via ScrollBottomDetector before this handler runs,
+                        // so we force it back and always re-anchor.
+                        isAtBottom = true
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                             proxy.scrollTo("bottom", anchor: .bottom)
                         }
