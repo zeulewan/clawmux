@@ -63,7 +63,7 @@ struct VoiceSession: Identifiable {
     var projectRepo: String = ""
     var model: String = ""
     var effort: String = ""
-    var backend: String = ""     // "claude-code", "opencode", "gemini"
+    var backend: String = ""     // "claude-code", "opencode", "gemini", "codex"
     var modelId: String = ""     // actual model string, e.g. "claude-opus-4-6", "gpt-5"
     var activity: String = ""
     var toolName: String = ""
