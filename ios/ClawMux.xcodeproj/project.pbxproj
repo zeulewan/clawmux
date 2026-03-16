@@ -28,6 +28,7 @@
 		CF4F0E703E3527B992A03CDD /* ClawMuxWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 00A4C7BB4CA3E05A29B0F976 /* ClawMuxWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D123D0FD38CA70DCC2923F69 /* ViewHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25C554BD1E23697D898B05CE /* ViewHelpers.swift */; };
 		D7EC580B303F31471732F946 /* TouchBlockerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 999F598E79709CAC7E4BA9DE /* TouchBlockerTests.swift */; };
+		A1B2C3D4E5F60718293A4B5C /* ScrollStressTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5D /* ScrollStressTests.swift */; };
 		D8A747936F0FDA5E95EA77BB /* ClawMuxApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFF810E4C0B9F68B1E4AA4AD /* ClawMuxApp.swift */; };
 		DCDC60E202EB951E0C20A61E /* ClawMuxWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC5EB4981879BDC3BE644216 /* ClawMuxWidgetBundle.swift */; };
 		DD0B6C41043DEB376B75D6BE /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8850FD7D2AA1753841CA57F /* ChatView.swift */; };
@@ -88,6 +89,7 @@
 		84B700834F3EECA10468DC91 /* MarkdownContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownContentView.swift; sourceTree = "<group>"; };
 		F6E5D4C3B2A109876543210F /* MathView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MathView.swift; sourceTree = "<group>"; };
 		999F598E79709CAC7E4BA9DE /* TouchBlockerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TouchBlockerTests.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A4B5D /* ScrollStressTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollStressTests.swift; sourceTree = "<group>"; };
 		A3DE4F7720F3C77DAED314F6 /* ShapeHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShapeHelpers.swift; sourceTree = "<group>"; };
 		A98C93E4123AFD12DB5663DE /* ClawMux.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ClawMux.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB917084CE6B997C8AA16A44 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -167,6 +169,7 @@
 			isa = PBXGroup;
 			children = (
 				999F598E79709CAC7E4BA9DE /* TouchBlockerTests.swift */,
+				A1B2C3D4E5F60718293A4B5D /* ScrollStressTests.swift */,
 			);
 			path = ClawMuxUITests;
 			sourceTree = "<group>";
@@ -347,6 +350,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D7EC580B303F31471732F946 /* TouchBlockerTests.swift in Sources */,
+				A1B2C3D4E5F60718293A4B5C /* ScrollStressTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
