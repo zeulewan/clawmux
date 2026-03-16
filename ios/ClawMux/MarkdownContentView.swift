@@ -258,11 +258,16 @@ struct MarkdownContentView: View {
                     }
                     let headers = parseRow(trimmedLine)
                     i += 2 // skip header + separator
+                    let colCount = headers.count
                     var rows: [[String]] = []
                     while i < lines.count {
                         let r = lines[i].trimmingCharacters(in: .whitespaces)
                         guard r.hasPrefix("|") && r.hasSuffix("|") else { break }
-                        rows.append(parseRow(r))
+                        var cells = parseRow(r)
+                        // Pad or trim to match header column count
+                        while cells.count < colCount { cells.append("") }
+                        if cells.count > colCount { cells = Array(cells.prefix(colCount)) }
+                        rows.append(cells)
                         i += 1
                     }
                     result.append(.table(headers: headers, rows: rows))

@@ -32,8 +32,9 @@ struct ChatScrollAreaView: View {
                                 .padding(.vertical, 8)
                                 .accessibilityIdentifier("ChatLoadingOlder")
                         }
+                        let ackedIds = Set(vm.activeMessages.filter { $0.isBareAck }.compactMap { $0.parentId })
                         ForEach(cachedMessageGroups) { group in
-                            messageGroupView(group)
+                            messageGroupView(group, ackedIds: ackedIds)
                                 .id(group.id)
                                 .transition(.opacity.animation(.easeIn(duration: 0.15)))
                         }
@@ -203,6 +204,7 @@ struct ChatScrollAreaView: View {
     private func rebuildMessageGroups() {
         let filtered = vm.activeMessages.filter { msg in
             if msg.isBareAck { return false }
+            if msg.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return false }
             if msg.role == "agent" { return vm.showAgentMessages }
             if msg.role == "activity" { return vm.verboseMode }
             return true
@@ -222,9 +224,8 @@ struct ChatScrollAreaView: View {
         cachedMessageGroups = groups
     }
 
-    private func messageGroupView(_ group: MessageGroup) -> some View {
+    private func messageGroupView(_ group: MessageGroup, ackedIds: Set<String>) -> some View {
         let color = vm.activeSession.map { voiceColor($0.voice) } ?? Color.cTextSec
-        let ackedIds = Set(vm.activeMessages.filter { $0.isBareAck }.compactMap { $0.parentId })
         return VStack(alignment: group.role == "user" ? .trailing : .leading, spacing: 3) {
             ForEach(Array(group.messages.enumerated()), id: \.element.id) { idx, msg in
                 VStack(alignment: group.role == "user" ? .trailing : .leading, spacing: 2) {
@@ -252,7 +253,7 @@ struct ChatScrollAreaView: View {
         let color     = vm.activeSession.map { voiceColor($0.voice) } ?? Color.cTextSec
         let isPlaying = vm.ttsPlayingMessageId == msg.id
 
-        let agentMsgPattern = /^\[Agent msg (from|to) ([^\]]+)\] (.*)/
+        let agentMsgPattern = /^\[Agent msg (from|to) ([^\]]+)\] ([\s\S]*)/
         let isExpanded = expandedAgentMsgIds.contains(msg.id)
         if (role == "agent" || role == "system"),
            let m = msg.text.firstMatch(of: agentMsgPattern) {
