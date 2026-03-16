@@ -1414,7 +1414,11 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
 
         case "error":
             let msg = json["message"] as? String ?? "Unknown error"
-            statusText = "Error: \(msg)"
+            if let sid = sessionId {
+                updateStatusText("Error: \(msg)", for: sid)
+            } else {
+                statusText = "Error: \(msg)"
+            }
 
         case "thinking":
             // Legacy event — map to thinking state
@@ -1431,7 +1435,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         case "assistant_text":
             if let sid = sessionId, let t = json["text"] as? String {
                 let fireAndForget = json["fire_and_forget"] as? Bool ?? false
-                stopThinkingSound()
+                if sid == activeSessionId { stopThinkingSound() }
                 addMessage(sid, role: "assistant", text: t, ts: json["ts"] as? Double, msgId: json["msg_id"] as? String)
                 if sid == activeSessionId {
                     isProcessing = false
@@ -1707,6 +1711,10 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
             }
             if let name = json["name"] as? String {
                 knownGroupChats.removeAll { $0.name.lowercased() == name.lowercased() }
+                // Exit deleted group if user is currently viewing it
+                if activeGroupName?.lowercased() == name.lowercased() {
+                    activeGroupName = nil
+                }
             }
 
         case "groupchat_message":
