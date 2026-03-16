@@ -27,14 +27,6 @@ struct InputBarView: View {
             }
         }
         .padding(.leading, 48)
-        .padding(.bottom, 8)
-        .background {
-            if #available(iOS 26, *) {
-                Color.clear.glassEffect(.regular, in: .rect).ignoresSafeArea(edges: .bottom)
-            } else {
-                Color.canvas1.opacity(0.96).ignoresSafeArea(edges: .bottom)
-            }
-        }
     }
 
     // MARK: - Voice Controls
