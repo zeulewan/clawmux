@@ -1023,57 +1023,56 @@ final class UserFlowTests: XCTestCase {
             print("[THINK] \(label): atBottom=\(atBottom) texts=\(textCount)")
         }
 
-        // Go to Liam
-        guard goTo("Liam") else { XCTFail("Can't find Liam"); return }
+        // Liam is at sidebar icon position 0 (topmost). Use tapAgent(at: 0) for quick return.
+        tapAgent(at: 0) // Liam
+        sleep(2)
         checkScroll("01_liam_opened")
 
         // === Round 1: Send, catch thinking, switch to Adam, come back ===
         let s1 = send("Write me a very long detailed essay about the history of lighthouses, at least 5 paragraphs")
-        checkScroll("02_sent_thinking") // should see thinking dots
-        // Immediately switch to a different agent while Liam is thinking
-        tapAgent(at: 0) // tap first sidebar icon (some agent)
-        sleep(2)
-        checkScroll("03_other_agent")
-        // Switch back to Liam
-        guard goTo("Liam") else { XCTFail("Can't return to Liam"); return }
-        sleep(3)
-        checkScroll("04_back_to_liam_during_think")
-        // Wait for response to finish
+        checkScroll("02_sent_thinking")
+        // Switch to Adam (position 1) while Liam thinks
+        tapAgent(at: 1); sleep(2)
+        checkScroll("03_adam_while_liam_thinks")
+        // Return to Liam (position 0)
+        tapAgent(at: 0); sleep(3)
+        checkScroll("04_back_to_liam")
+        // Wait for response
         sleep(15)
         checkScroll("05_liam_response_done")
 
-        // === Round 2: Send another, switch to Lewis, come back ===
+        // === Round 2: Send another, switch to Lewis via sidebar, come back ===
         let s2 = send("Now write about the future of lighthouses in 3 paragraphs")
         checkScroll("06_sent_second")
-        // Switch to Lewis while Liam thinks
+        // Switch to Lewis via expanded sidebar
         if goTo("Lewis") {
             sleep(2)
             checkScroll("07_lewis_while_liam_thinks")
-            // Send Lewis a message too
             let s3 = send("Write a limerick about a lighthouse")
             checkScroll("08_lewis_sent")
-            sleep(2) // don't wait for full response
-            checkScroll("09_lewis_thinking")
+            sleep(5)
+            checkScroll("09_lewis_response")
         }
-        // Back to Liam
-        guard goTo("Liam") else { return }
+        // Return to Liam (position 0)
+        tapAgent(at: 0); sleep(2)
+        checkScroll("10_liam_after_lewis")
         sleep(10)
-        checkScroll("10_liam_second_response")
+        checkScroll("11_liam_second_response")
 
         // === Round 3: Rapid switch during thinking ===
         let s4 = send("One more paragraph about modern lighthouse technology")
-        checkScroll("11_sent_third")
-        // Rapid switch: Liam → agent0 → agent1 → agent2 → Liam
-        tapAgent(at: 0); sleep(1); checkScroll("12_agent0")
-        tapAgent(at: 1); sleep(1); checkScroll("13_agent1")
-        tapAgent(at: 2); sleep(1); checkScroll("14_agent2")
-        guard goTo("Liam") else { return }
+        checkScroll("12_sent_third")
+        tapAgent(at: 1); sleep(1); checkScroll("13_adam")
+        tapAgent(at: 2); sleep(1); checkScroll("14_sarah")
+        tapAgent(at: 3); sleep(1); checkScroll("15_agent3")
+        tapAgent(at: 0); sleep(2) // back to Liam
+        checkScroll("16_liam_after_rapid")
         sleep(10)
-        checkScroll("15_liam_final")
+        checkScroll("17_liam_third_response")
 
-        // === Round 4: Back to Lewis to see if his response arrived ===
+        // === Round 4: Back to Lewis ===
         if goTo("Lewis") {
-            checkScroll("16_lewis_final")
+            checkScroll("18_lewis_final")
         }
 
         XCTAssertTrue(app.exists, "App should survive switch-during-thinking test")
