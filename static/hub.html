@@ -1699,7 +1699,7 @@ function toggleModelPopup(e) {
   let current, models;
   if (backend === 'codex') {
     current = s?.model_id || 'gpt-5.4';
-    models = ['gpt-5.4', 'gpt-5.2', 'o3', 'gpt-5-mini'];
+    models = ['gpt-5.4', 'gpt-5.3-codex', 'gpt-5.3-codex-spark', 'gpt-5.2-codex', 'gpt-5.2'];
   } else {
     current = s?.model || 'opus';
     models = ['opus', 'sonnet', 'haiku'];
