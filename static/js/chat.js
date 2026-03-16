@@ -691,7 +691,9 @@ function _initChatScroll() {
     _updateScrollBottomBtn();
     if (_scrollLoadPending) return;
     // Load more when scrolling near top (local buffer or server pagination)
-    if (chatArea.scrollTop < 100 && activeSessionId) {
+    // Guard: skip if viewport is too small to be meaningfully scrollable
+    // (prevents infinite load loop when scrollHeight ≈ clientHeight)
+    if (chatArea.scrollTop < 100 && activeSessionId && chatArea.scrollHeight > chatArea.clientHeight + 150) {
       const s = sessions.get(activeSessionId);
       const limit = _getChatLimit(activeSessionId);
       if (s) {
@@ -839,7 +841,6 @@ function applyInputMode() {
   // updateLayout() is the single source of truth for controls/textInputBar visibility
   updateLayout();
   if (inputMode === 'typing') {
-    textInput.focus();
     requestAnimationFrame(() => { chatScrollToBottom(true); });
   }
 }
