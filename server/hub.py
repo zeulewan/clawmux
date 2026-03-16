@@ -329,6 +329,56 @@ async def state_monitor_loop() -> None:
                 log.info("[%s] Backend auto-fixed stuck buffer", session_id)
 
 
+# Seconds a session can be stuck in PROCESSING or STARTING before recovery kicks in.
+_RECOVERY_STALE_SECONDS = 600  # 10 minutes
+
+
+async def recovery_monitor_loop() -> None:
+    """Periodically recover sessions stuck in broken states.
+
+    "Broken" means PROCESSING or STARTING for longer than _RECOVERY_STALE_SECONDS
+    with no hook activity.  Each backend's recover() checks runtime health and
+    attempts autonomous fixes (restart serve, clear stuck buffer, etc.).
+    Unrecoverable sessions are marked DEAD so the UI reflects reality.
+    """
+    while True:
+        await asyncio.sleep(30)
+        import time as _time
+        now = _time.monotonic()
+        for session_id in list(session_mgr.sessions):
+            session = session_mgr.sessions.get(session_id)
+            if not session or session.state == AgentState.DEAD:
+                continue
+            if session.restarting:
+                continue
+            # Only act on sessions stuck in PROCESSING or STARTING
+            if session.state not in (AgentState.PROCESSING, AgentState.STARTING):
+                continue
+            if session.last_state_change <= 0:
+                continue
+            elapsed = now - session.last_state_change
+            if elapsed < _RECOVERY_STALE_SECONDS:
+                continue
+
+            backend = session_mgr._get_backend(session.backend)
+            try:
+                result = await backend.recover(session.tmux_session, session.work_dir)
+            except Exception as exc:
+                log.debug("[%s] recover() error: %s", session_id, exc)
+                continue
+
+            if result.healthy:
+                continue
+
+            log.warning("[%s] Recovery (%s): %s", session_id, session.backend, result.message)
+
+            if result.set_dead:
+                session.set_state(AgentState.DEAD)
+                await send_to_browser(_session_status_msg(session))
+            elif result.fixed:
+                log.info("[%s] Recovery auto-fixed: %s", session_id, result.message)
+
+
 # --- TTS / STT (extracted to voice.py) ---
 from voice import router as voice_router, tts, tts_captioned, stt, strip_non_speakable, reload_pronunciation_overrides
 import voice
@@ -476,6 +526,7 @@ async def lifespan(app: FastAPI):
     timeout_task = asyncio.create_task(session_mgr.run_timeout_loop())
     hb_task = asyncio.create_task(heartbeat_loop())
     monitor_task = asyncio.create_task(state_monitor_loop())
+    recovery_task = asyncio.create_task(recovery_monitor_loop())
     context_task = asyncio.create_task(context_poll_loop())
     usage_task = asyncio.create_task(usage_poll_loop())
     # On startup, respect stt_enabled: Whisper is STT (user speech input), independent of TTS
@@ -491,6 +542,7 @@ async def lifespan(app: FastAPI):
         timeout_task.cancel()
         hb_task.cancel()
         compaction_task.cancel()
+        recovery_task.cancel()
         context_task.cancel()
         usage_task.cancel()
         # Kill all ttyd monitor processes and deregister from Tailscale Serve

@@ -12,7 +12,7 @@ import json
 
 import httpx
 
-from .base import AgentBackend
+from .base import AgentBackend, RecoveryResult
 from .claude_code import ClaudeCodeBackend
 
 _PLUGIN_SRC = Path(__file__).parent.parent.parent / "opencode-plugin"
@@ -228,6 +228,83 @@ class OpenCodeBackend(AgentBackend):
 
     async def list_live_sessions(self, known_names: set[str]) -> set[str]:
         return await self._cc.list_live_sessions(known_names)
+
+    async def recover(self, session_name: str, work_dir: str) -> RecoveryResult:
+        """Check tmux, HTTP server, and OC session health — fix what we can."""
+        # 1. Check tmux session
+        alive = await self._cc.health_check(session_name)
+        if not alive:
+            _free_port(session_name)
+            _opencode_sessions.pop(session_name, None)
+            return RecoveryResult(healthy=False, set_dead=True,
+                                  message="tmux session dead")
+
+        # 2. Check HTTP server
+        port = _session_ports.get(session_name)
+        if not port:
+            return RecoveryResult(healthy=False, set_dead=True,
+                                  message="no port allocated — cannot recover")
+
+        server_ok = False
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                r = await client.get(f"http://localhost:{port}/health")
+                server_ok = r.status_code < 500
+        except Exception:
+            pass
+
+        if not server_ok:
+            # Try to restart opencode serve within the existing tmux session
+            log.warning("[%s] OpenCode server dead on port %d — attempting restart",
+                        session_name, port)
+            try:
+                # Kill old process with Ctrl-C
+                proc = await asyncio.create_subprocess_exec(
+                    "tmux", "send-keys", "-t", session_name, "C-c",
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                    env=_SUBPROCESS_ENV,
+                )
+                await proc.communicate()
+                await asyncio.sleep(1)
+
+                # Re-launch opencode serve
+                await self._cc._run(
+                    f'tmux send-keys -t {session_name} "opencode serve --port {port}" Enter'
+                )
+                await self._wait_for_server(session_name, port, timeout=15.0)
+
+                # Recreate OC session
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    r = await client.post(f"http://localhost:{port}/session", json={})
+                    new_id = r.json()["id"]
+                    _opencode_sessions[session_name] = new_id
+                    oc_info = Path(work_dir) / ".clawmux-opencode.json"
+                    oc_info.write_text(json.dumps({"port": port, "session_id": new_id}) + "\n")
+                return RecoveryResult(healthy=False, fixed=True,
+                                      message=f"restarted serve, new session {new_id}")
+            except Exception as e:
+                log.error("[%s] Failed to restart OpenCode serve: %s", session_name, e)
+                return RecoveryResult(healthy=False, set_dead=True,
+                                      message=f"serve restart failed: {e}")
+
+        # 3. Server up — check OC session exists
+        oc_session = _opencode_sessions.get(session_name)
+        if not oc_session:
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    r = await client.post(f"http://localhost:{port}/session", json={})
+                    new_id = r.json()["id"]
+                    _opencode_sessions[session_name] = new_id
+                    oc_info = Path(work_dir) / ".clawmux-opencode.json"
+                    oc_info.write_text(json.dumps({"port": port, "session_id": new_id}) + "\n")
+                return RecoveryResult(healthy=False, fixed=True,
+                                      message=f"recreated OC session {new_id}")
+            except Exception as e:
+                return RecoveryResult(healthy=False, set_dead=True,
+                                      message=f"cannot recreate session: {e}")
+
+        return RecoveryResult()
 
     # --- Internal helpers ---
 

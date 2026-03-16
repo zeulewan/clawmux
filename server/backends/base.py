@@ -10,6 +10,23 @@ from dataclasses import dataclass, field
 
 
 @dataclass
+class RecoveryResult:
+    """Result from a backend recovery attempt.
+
+    healthy:       True if session is fine, no action needed.
+    fixed:         True if a problem was detected and auto-fixed.
+    needs_restart: True if the session needs a full restart (hub handles).
+    set_dead:      True if the session should be marked DEAD (unrecoverable).
+    message:       Human-readable description of what was found/done.
+    """
+    healthy: bool = True
+    fixed: bool = False
+    needs_restart: bool = False
+    set_dead: bool = False
+    message: str = ""
+
+
+@dataclass
 class MonitorResult:
     """Result from periodic backend state monitoring.
 
@@ -237,6 +254,20 @@ class AgentBackend(ABC):
             MonitorResult with state/compaction/stuck info, or None for no action.
         """
         return None
+
+    async def recover(self, session_name: str, work_dir: str) -> RecoveryResult:
+        """Attempt to recover a broken session.
+
+        Called by the hub's recovery monitor for sessions stuck in PROCESSING
+        or STARTING for too long. Each backend checks its own health and tries
+        to fix issues autonomously. Returns a RecoveryResult describing the
+        outcome.
+
+        Args:
+            session_name: The session name passed to spawn().
+            work_dir: Absolute path to the agent's working directory.
+        """
+        return RecoveryResult()  # Default: healthy
 
     async def clear_stuck_buffer(self, session_name: str) -> None:
         """Clear any text stuck in the agent's input buffer.

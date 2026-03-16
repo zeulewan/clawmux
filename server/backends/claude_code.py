@@ -14,7 +14,7 @@ _SUBPROCESS_ENV["PATH"] = _EXTRA_PATH + ":" + _SUBPROCESS_ENV.get("PATH", "")
 
 from hub_config import AGENT_COLORS, CLAUDE_BASE_COMMAND
 from state_machine import AgentState
-from .base import AgentBackend, MonitorResult
+from .base import AgentBackend, MonitorResult, RecoveryResult
 
 log = logging.getLogger("hub.backend.claude_code")
 
@@ -384,6 +384,27 @@ class ClaudeCodeBackend(AgentBackend):
             self._stuck_counts.pop(session_name, None)
 
         return result if result.stuck_fixed else None
+
+    async def recover(self, session_name: str, work_dir: str) -> RecoveryResult:
+        """Check tmux session health, fix stuck buffers, report dead sessions."""
+        alive = await self.health_check(session_name)
+        if not alive:
+            return RecoveryResult(healthy=False, set_dead=True,
+                                  message="tmux session dead")
+
+        # Aggressive stuck buffer check — immediate fix (no 2-strike threshold)
+        try:
+            pane = await self.capture_pane(session_name)
+            last_lines = pane.strip().splitlines()[-10:]
+            snippet = "\n".join(last_lines)
+            if "[Pasted text" in snippet or "[Typed text" in snippet:
+                await self.clear_stuck_buffer(session_name)
+                return RecoveryResult(healthy=False, fixed=True,
+                                      message="cleared stuck buffer")
+        except Exception:
+            pass
+
+        return RecoveryResult()
 
     async def clear_stuck_buffer(self, session_name: str) -> None:
         """Send Enter to flush any text stuck in tmux input buffer."""
