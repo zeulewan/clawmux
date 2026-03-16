@@ -1981,33 +1981,47 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
     // GET /api/groupchats/:name/history → populate groupMessages
     func fetchGroupHistory(groupName: String) {
         guard let baseURL = httpBaseURL() else {
+            #if DEBUG
             print("[group-history] no baseURL, aborting")
+            #endif
             return
         }
         // If passed a raw groupId (e.g. "gc-abc123"), resolve to display name — server looks up by name
         let resolvedName = groupIdToName[groupName] ?? groupName
         let encoded = resolvedName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? resolvedName
         guard let url = URL(string: baseURL.absoluteString + "/api/groupchats/\(encoded)/history") else {
+            #if DEBUG
             print("[group-history] invalid URL for group: \(groupName)")
+            #endif
             return
         }
+        #if DEBUG
         print("[group-history] fetching \(url)")
+        #endif
         URLSession.shared.dataTask(with: url) { [weak self] data, resp, err in
             if let err = err {
+                #if DEBUG
                 print("[group-history] network error: \(err)")
+                #endif
                 return
             }
+            #if DEBUG
             let statusCode = (resp as? HTTPURLResponse)?.statusCode ?? 0
             print("[group-history] status \(statusCode)")
+            #endif
             guard let data,
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let msgs = json["messages"] as? [[String: Any]]
             else {
+                #if DEBUG
                 let raw = data.flatMap { String(data: $0, encoding: .utf8) } ?? "nil"
                 print("[group-history] parse failed: \(raw)")
+                #endif
                 return
             }
+            #if DEBUG
             print("[group-history] got \(msgs.count) messages")
+            #endif
             let parsed = msgs.compactMap { m -> GroupChatMessage? in
                 let isBareAck = m["bare_ack"] as? Bool ?? false
                 guard let text = m["text"] as? String, (!text.isEmpty || isBareAck)
@@ -2027,7 +2041,9 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                     isBareAck: isBareAck
                 )
             }
+            #if DEBUG
             print("[group-history] parsed \(parsed.count) messages")
+            #endif
             Task { @MainActor in
                 self?.groupMessages = parsed
             }
