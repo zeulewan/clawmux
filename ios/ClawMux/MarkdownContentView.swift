@@ -18,28 +18,11 @@ struct ScrollTopDetector: ViewModifier {
             // Use CGFloat so action fires on every scroll event — avoids Bool toggle dead zone
             // where nearTop stays true after a load and action never re-fires.
             content.onScrollGeometryChange(for: CGFloat.self) { geo in
-                // Distance from top — handles two coordinate systems SwiftUI uses with scrollPosition:
-                //
-                // Bottom-anchored (defaultScrollAnchor(.bottom) on iOS 18):
-                //   contentOffset.y = 0 at bottom, negative at top (≤ 0 always)
-                //   → anchored = contentOffset.y + contentSize.height - containerSize.height
-                //   → 0 at top, (C-S) at bottom — correct for this system
-                //
-                // Standard UIKit coords (some iOS configs / no defaultScrollAnchor):
-                //   contentOffset.y = 0 at top, (C-S) at bottom (≥ 0 always)
-                //   → standard = contentOffset.y → 0 at top, large at bottom — correct
-                //
-                // Detection: if y > 0, we're in standard coords (scrolled away from top).
-                //            if y ≤ 0, we're in bottom-anchored coords — use anchored formula.
-                //
-                // The old min(anchored, standard) caused a false positive: in bottom-anchored,
-                // standard = 0 at the bottom, so min(C-S, 0) = 0 < 200 → spurious load trigger.
-                let y = geo.contentOffset.y
-                if y > 0 {
-                    return y  // standard coords: y=0 at top
-                } else {
-                    return y + geo.contentSize.height - geo.containerSize.height  // bottom-anchored: 0 at top
-                }
+                // Distance from top in bottom-anchored coords (defaultScrollAnchor(.bottom)):
+                //   contentOffset.y = 0 at bottom, negative when scrolled up
+                //   → distanceFromTop = y + contentSize - containerSize
+                //   → 0 when at top, (contentSize - containerSize) when at bottom
+                geo.contentOffset.y + geo.contentSize.height - geo.containerSize.height
             } action: { _, distanceFromTop in
                 guard distanceFromTop < 200,
                       !isLoadingOlder,
