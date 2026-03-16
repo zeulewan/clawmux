@@ -40,10 +40,12 @@
   .sidebar-project-header .project-chevron { width: 32px; text-align: center; font-size: 0.7rem; flex-shrink: 0; }
   .sidebar-project-header .project-name,
   .sidebar-project-header .project-agent-count { position: absolute; opacity: 0; pointer-events: none; white-space: nowrap; transition: opacity 0.15s ease; }
+  .sidebar-project-header .project-monitor-btn { display: none; }
   #sidebar.expanded .sidebar-project-header { padding: 5px 8px; gap: 6px; }
   #sidebar.expanded .sidebar-project-header .project-chevron { width: auto; text-align: left; }
   #sidebar.expanded .sidebar-project-header .project-name,
   #sidebar.expanded .sidebar-project-header .project-agent-count { position: static; opacity: 1; pointer-events: auto; }
+  #sidebar.expanded .sidebar-project-header .project-monitor-btn { display: inline-flex; }
   /* Group chat section: collapsed — show only avatars centered, hide text */
   .sidebar-gc-header { justify-content: center; padding: 4px 0; transition: padding 0.25s ease; }
   .sidebar-gc-header span { max-width: 0; overflow: hidden; opacity: 0; white-space: nowrap; transition: max-width 0.25s ease, opacity 0.15s ease; }
