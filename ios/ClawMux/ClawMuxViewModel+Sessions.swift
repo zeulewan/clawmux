@@ -694,13 +694,15 @@ extension ClawMuxViewModel {
     }
 
     func handleOpenURL(_ url: URL) {
-        guard url.scheme == "voicehub" else { return }
+        // Support both voicehub:// (legacy) and clawmux:// schemes
+        guard url.scheme == "voicehub" || url.scheme == "clawmux" else { return }
         switch url.host {
         case "mic":
-            // Tapped mic button in Live Activity - trigger mic action for current session
             if activeSessionId != nil && !pushToTalk {
                 micAction()
             }
+        case "walking-mode":
+            activateWalkingMode()
         default:
             break
         }

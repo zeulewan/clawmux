@@ -33,6 +33,7 @@
             <key>CFBundleURLSchemes</key>
             <array>
                 <string>voicehub</string>
+                <string>clawmux</string>
             </array>
         </dict>
     </array>
