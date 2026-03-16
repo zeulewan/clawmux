@@ -67,6 +67,17 @@ function drawWaveform() {
   const w = rect.width;
   const h = rect.height;
 
+  // Re-size canvas if container dimensions changed (e.g. after max-height transition)
+  const dpr = window.devicePixelRatio || 1;
+  const needW = Math.round(w * dpr);
+  const needH = Math.round(h * dpr);
+  if (w > 0 && h > 0 && (waveCanvas.width !== needW || waveCanvas.height !== needH)) {
+    waveCanvas.width = needW;
+    waveCanvas.height = needH;
+    waveCtx.scale(dpr, dpr);
+  }
+  if (w <= 0 || h <= 0) return; // container still collapsed, skip draw
+
   // Sample audio level at intervals
   if (now - waveLastSample >= WAVE_SAMPLE_INTERVAL) {
     waveLastSample = now;
