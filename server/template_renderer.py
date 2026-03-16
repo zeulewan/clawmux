@@ -1,9 +1,10 @@
 """Template renderer for agent instructions.
 
 Renders instruction templates with agent-specific variables from agents.json.
-Supports multiple backends:
-  - claude-code: writes CLAUDE.md + .claude/rules/role.md
-  - opencode: writes INSTRUCTIONS.md + .opencode/rules/role.md, registers in opencode.json
+Writes ALL formats for every agent so backends can be switched without re-rendering:
+  - claude-code: CLAUDE.md + .claude/rules/role.md
+  - opencode: INSTRUCTIONS.md + .opencode/rules/role.md + opencode.json instructions
+  - codex: AGENTS.md (Codex loads from CWD automatically)
 Role-specific rules are loaded from server/templates/rules/.
 """
 
@@ -131,6 +132,10 @@ class TemplateRenderer:
         # OpenCode: INSTRUCTIONS.md
         (work_dir / "INSTRUCTIONS.md").write_text(content)
         log.info("Rendered INSTRUCTIONS.md for %s at %s", voice_id, work_dir / "INSTRUCTIONS.md")
+
+        # Codex: AGENTS.md
+        (work_dir / "AGENTS.md").write_text(content)
+        log.info("Rendered AGENTS.md for %s at %s", voice_id, work_dir / "AGENTS.md")
 
         # Role rules for all backends
         await self.render_role_to_file(voice_id, work_dir)
