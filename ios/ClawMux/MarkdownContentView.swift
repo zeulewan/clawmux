@@ -486,7 +486,8 @@ private struct ImageBlockView: View {
     private var resolvedURL: URL? {
         if path.hasPrefix("http://") || path.hasPrefix("https://") { return URL(string: path) }
         let base = baseURL.hasSuffix("/") ? String(baseURL.dropLast()) : baseURL
-        return URL(string: base + path)
+        let sep = path.hasPrefix("/") ? "" : "/"
+        return URL(string: base + sep + path)
     }
 
     var body: some View {
