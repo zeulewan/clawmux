@@ -1732,10 +1732,12 @@ function updateEffortLabel() {
   if (!label) return;
   const s = activeSessionId ? sessions.get(activeSessionId) : null;
   const backend = s?.backend || 'claude-code';
-  if (backend !== 'claude-code') { label.style.display = 'none'; return; }
-  const model = s?.model || 'opus';
-  if (model === 'haiku') { label.style.display = 'none'; return; }
-  const effort = s?.effort || 'high';
+  if (backend !== 'claude-code' && backend !== 'codex') { label.style.display = 'none'; return; }
+  if (backend === 'claude-code') {
+    const model = s?.model || 'opus';
+    if (model === 'haiku') { label.style.display = 'none'; return; }
+  }
+  const effort = s?.effort || (backend === 'codex' ? 'default' : 'high');
   label.textContent = effort.charAt(0).toUpperCase() + effort.slice(1) + ' ▾';
   label.style.display = 'inline';
 }
@@ -1743,11 +1745,12 @@ function updateEffortLabel() {
 function toggleEffortPopup(e) {
   e.stopPropagation();
   const s = activeSessionId ? sessions.get(activeSessionId) : null;
-  if ((s?.backend || 'claude-code') !== 'claude-code') return; // effort is Claude-specific
+  const backend = s?.backend || 'claude-code';
+  if (backend !== 'claude-code' && backend !== 'codex') return;
   const popup = document.getElementById('effort-popup');
   if (popup.style.display !== 'none') { popup.style.display = 'none'; return; }
-  const current = s?.effort || 'high';
-  const efforts = ['max', 'high', 'medium', 'low'];
+  const current = s?.effort || (backend === 'codex' ? 'default' : 'high');
+  const efforts = backend === 'codex' ? ['high', 'medium', 'low', 'default'] : ['max', 'high', 'medium', 'low'];
   popup.innerHTML = efforts.map(ef => {
     const sel = ef === current ? 'font-weight:700;color:#4a9eff;' : 'color:#e0e0e0;';
     return `<div style="padding:8px 16px;cursor:pointer;${sel}" onmousedown="selectEffortPopup('${ef}')" ontouchstart="selectEffortPopup('${ef}')">${ef.charAt(0).toUpperCase() + ef.slice(1)}${ef === current ? ' ✓' : ''}</div>`;
