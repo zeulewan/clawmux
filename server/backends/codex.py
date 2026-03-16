@@ -13,7 +13,8 @@ import asyncio
 import logging
 import time
 
-from .base import AgentBackend
+from state_machine import AgentState
+from .base import AgentBackend, MonitorResult
 from .claude_code import ClaudeCodeBackend
 
 log = logging.getLogger("hub.backend.codex")
@@ -26,6 +27,9 @@ class CodexBackend(AgentBackend):
 
     # Reuse ClaudeCodeBackend for tmux management
     _cc = ClaudeCodeBackend()
+
+    def __init__(self) -> None:
+        self._stuck_counts: dict[str, int] = {}  # session_name → consecutive count
 
     async def spawn(
         self,
@@ -147,6 +151,61 @@ class CodexBackend(AgentBackend):
 
     async def list_live_sessions(self, known_names: set[str]) -> set[str]:
         return await self._cc.list_live_sessions(known_names)
+
+    async def monitor_state(
+        self,
+        session_name: str,
+        current_state,
+        context_percent: float | None = None,
+    ) -> MonitorResult | None:
+        """Poll tmux pane for stuck buffer signals.
+
+        Codex has no compaction — only stuck buffer detection.
+        Same two-consecutive-detection threshold as Claude Code.
+        """
+        if current_state in (AgentState.DEAD, AgentState.COMPACTING):
+            self._stuck_counts.pop(session_name, None)
+            return None
+
+        try:
+            pane = await self._cc.capture_pane(session_name)
+        except Exception:
+            return None
+
+        is_processing = current_state == AgentState.PROCESSING
+        last_lines = pane.strip().splitlines()[-10:]
+        snippet = "\n".join(last_lines)
+
+        if is_processing:
+            is_stuck = "[Pasted text" in snippet or "[Typed text" in snippet
+        else:
+            is_stuck = "[Pasted text" in snippet or "[Typed text" in snippet
+
+        if is_stuck:
+            count = self._stuck_counts.get(session_name, 0) + 1
+            self._stuck_counts[session_name] = count
+            if count >= 2:
+                log.warning("[%s] STUCK BUFFER detected (seen %dx) — sending Enter", session_name, count)
+                try:
+                    proc = await asyncio.create_subprocess_exec(
+                        "tmux", "send-keys", "-t", session_name, "Enter",
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL,
+                    )
+                    await proc.communicate()
+                    self._stuck_counts[session_name] = 0
+                    log.info("[%s] Stuck buffer cleared", session_name)
+                    return MonitorResult(stuck_fixed=True)
+                except Exception as exc:
+                    log.error("[%s] Failed to clear stuck buffer: %s", session_name, exc)
+        else:
+            self._stuck_counts.pop(session_name, None)
+
+        return None
+
+    async def clear_stuck_buffer(self, session_name: str) -> None:
+        """Send Enter to flush any text stuck in tmux input buffer."""
+        await self._cc.clear_stuck_buffer(session_name)
 
     # --- Internal helpers ---
 

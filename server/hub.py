@@ -279,115 +279,36 @@ async def heartbeat_loop() -> None:
 
 
 
-async def stuck_buffer_monitor_loop() -> None:
-    """Detect and auto-fix agents with text stuck in their tmux input buffer.
+async def state_monitor_loop() -> None:
+    """Unified monitor loop — delegates state detection to each backend.
 
-    '[Pasted text' appears in the pane when send-keys -l delivered text but
-    Enter was never sent. Poll every 10s; if the pattern persists for two
-    consecutive checks (confirming it's not mid-injection), send Enter and log.
+    Replaces the former stuck_buffer_monitor_loop and compaction_monitor_loop.
+    Each backend's monitor_state() captures its own pane and returns a
+    MonitorResult describing any state transition or auto-fix action.
     """
-    _stuck_seen: dict[str, int] = {}  # session_id -> consecutive-stuck-count
-    while True:
-        await asyncio.sleep(10)
-        for session_id in list(session_mgr.sessions):
-            session = session_mgr.sessions.get(session_id)
-            if not session or session.state in (AgentState.DEAD, AgentState.COMPACTING) or not session.work_dir:
-                _stuck_seen.pop(session_id, None)
-                continue
-            # Only check stuck buffers for tmux-injection backends (not HTTP-delivery ones)
-            if session.backend not in ("claude-code", "codex"):
-                _stuck_seen.pop(session_id, None)
-                continue
-            is_processing = session.state == AgentState.PROCESSING
-            try:
-                result = await asyncio.create_subprocess_exec(
-                    "tmux", "capture-pane", "-t", session.tmux_session, "-p",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.DEVNULL,
-                )
-                stdout, _ = await result.communicate()
-                pane = stdout.decode(errors="replace") if stdout else ""
-            except Exception:
-                continue
-            # Check last 10 lines for stuck input — two patterns:
-            # 1. Long messages: Claude Code compresses as "[Pasted text #N +M lines]"
-            # 2. Short/medium messages: shows as "❯ <content>" with content after the prompt
-            #    Multi-line pastes can span several lines above the status bar.
-            # For PROCESSING sessions, only check patterns 1 (definitive stuck text) —
-            # pattern 2 (❯ with content) can appear mid-injection and must be skipped to
-            # avoid pressing Enter on actively-running-tool sessions.
-            last_lines = pane.strip().splitlines()[-10:]
-            snippet = "\n".join(last_lines)
-            if is_processing:
-                is_stuck = "[Pasted text" in snippet or "[Typed text" in snippet
-            else:
-                is_stuck = (
-                    "[Pasted text" in snippet
-                    or "[Typed text" in snippet
-                    or any(line.startswith('❯') and len(line.rstrip()) > 1 for line in last_lines)
-                )
-            if is_stuck:
-                count = _stuck_seen.get(session_id, 0) + 1
-                _stuck_seen[session_id] = count
-                if count >= 2:
-                    # Confirmed stuck (not mid-injection) — auto-fix and log
-                    log.warning("[%s] STUCK BUFFER detected (seen %dx) — sending Enter to unblock", session_id, count)
-                    try:
-                        proc = await asyncio.create_subprocess_exec(
-                            "tmux", "send-keys", "-t", session.tmux_session, "Enter",
-                            stdout=asyncio.subprocess.DEVNULL,
-                            stderr=asyncio.subprocess.DEVNULL,
-                        )
-                        await proc.communicate()
-                        _stuck_seen[session_id] = 0
-                        log.info("[%s] Stuck buffer cleared", session_id)
-                    except Exception as exc:
-                        log.error("[%s] Failed to clear stuck buffer: %s", session_id, exc)
-            else:
-                _stuck_seen.pop(session_id, None)
-
-
-async def compaction_monitor_loop() -> None:
-    """Poll tmux panes for compaction status when context usage is high (>=80%)."""
     while True:
         await asyncio.sleep(3)
         for session_id in list(session_mgr.sessions):
             session = session_mgr.sessions.get(session_id)
-            if not session or session.state == AgentState.DEAD:
+            if not session or session.state == AgentState.DEAD or not session.work_dir:
                 continue
-            # OpenCode handles compaction via its own plugin hooks — skip tmux polling
-            if session.backend != "claude-code":
-                continue
-            # Check when context usage is >= 80% OR when already compacting
+            backend = session_mgr._get_backend(session.backend)
             usage = _context_cache.get(session_id)
-            if (not usage or usage["percent"] < 80) and session.state != AgentState.COMPACTING:
-                continue
-            # Capture tmux pane and check for compaction text
+            ctx_pct = usage["percent"] if usage else None
             try:
-                result = await asyncio.create_subprocess_exec(
-                    "tmux", "capture-pane", "-t", session.tmux_session, "-p",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
+                mr = await backend.monitor_state(
+                    session.tmux_session,
+                    session.state,
+                    context_percent=ctx_pct,
                 )
-                stdout, _ = await result.communicate()
-                pane_text = stdout.decode(errors="replace") if stdout else ""
             except Exception as exc:
-                log.debug("[%s] compaction tmux capture failed: %s", session_id, exc)
+                log.debug("[%s] monitor_state error: %s", session_id, exc)
                 continue
-            # Check for active compaction by scanning lines bottom-up
-            lines = pane_text.strip().splitlines()
-            is_compacting = False
-            for line in reversed(lines):
-                ll = line.lower().strip()
-                if "compacting" in ll and "compacted" not in ll:
-                    is_compacting = True
-                    break
-                if "compacted" in ll:
-                    # Most recent compaction-related line says "compacted" (done)
-                    break
-            was_compacting = session.state == AgentState.COMPACTING
-            if is_compacting and not was_compacting:
-                # Compaction just started — transition to COMPACTING
+            if mr is None:
+                continue
+
+            # Compaction transitions
+            if mr.compaction_event is True:
                 session.set_state(AgentState.COMPACTING)
                 await send_to_browser({
                     "type": "compaction_status",
@@ -395,11 +316,7 @@ async def compaction_monitor_loop() -> None:
                     "compacting": True,
                 })
                 log.info("[%s] Compaction started", session_id)
-            elif not is_compacting and was_compacting:
-                # Compaction just ended — transition to PROCESSING so this monitor
-                # doesn't keep re-detecting was_compacting=True every 3s and spamming
-                # compaction_status:false events (which cause sidebar flashing).
-                # The stop hook will arrive shortly and transition to IDLE.
+            elif mr.compaction_event is False:
                 session.set_state(AgentState.PROCESSING)
                 await send_to_browser({
                     "type": "compaction_status",
@@ -407,6 +324,9 @@ async def compaction_monitor_loop() -> None:
                     "compacting": False,
                 })
                 log.info("[%s] Compaction finished → PROCESSING (stop hook will set IDLE)", session_id)
+
+            if mr.stuck_fixed:
+                log.info("[%s] Backend auto-fixed stuck buffer", session_id)
 
 
 # --- TTS / STT (extracted to voice.py) ---
@@ -518,21 +438,12 @@ async def lifespan(app: FastAPI):
     await agents_store.load()
     _load_groups()
     await session_mgr.cleanup_stale_sessions()
-    # Send Enter to every adopted session to clear any text that was left in the tmux
-    # input buffer by an injection that was killed mid-way during the previous hub run.
-    # On a clean Claude Code prompt, Enter is a no-op. On a stuck buffer, it submits it.
+    # Clear any text stuck in tmux input buffers from the previous hub run.
+    # Each backend decides whether it needs to flush (tmux backends send Enter).
     for session in list(session_mgr.sessions.values()):
-        # Send Enter to tmux-injection backends (not HTTP-delivery ones like OpenCode)
-        if session.tmux_session and session.backend in ("claude-code", "codex"):
-            try:
-                proc = await asyncio.create_subprocess_exec(
-                    "tmux", "send-keys", "-t", session.tmux_session, "Enter",
-                    stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL,
-                )
-                await proc.communicate()
-            except Exception as _e:
-                log.debug("[%s] Startup Enter failed: %s", session.session_id, _e)
+        if session.tmux_session:
+            backend = session_mgr._get_backend(session.backend)
+            await backend.clear_stuck_buffer(session.tmux_session)
     # Flush any pending interjections (saved across hub restarts) into inbox for delivery.
     # The agent is assumed idle after a hub restart, so we convert interjections to inbox
     # messages and trigger immediate injection rather than waiting for a new voice message.
@@ -564,8 +475,7 @@ async def lifespan(app: FastAPI):
     broker.start()
     timeout_task = asyncio.create_task(session_mgr.run_timeout_loop())
     hb_task = asyncio.create_task(heartbeat_loop())
-    compaction_task = asyncio.create_task(compaction_monitor_loop())
-    stuck_task = asyncio.create_task(stuck_buffer_monitor_loop())
+    monitor_task = asyncio.create_task(state_monitor_loop())
     context_task = asyncio.create_task(context_poll_loop())
     usage_task = asyncio.create_task(usage_poll_loop())
     # On startup, respect stt_enabled: Whisper is STT (user speech input), independent of TTS

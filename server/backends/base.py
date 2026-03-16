@@ -6,6 +6,20 @@ The hub's SessionManager delegates all process operations through this interface
 """
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+
+
+@dataclass
+class MonitorResult:
+    """Result from periodic backend state monitoring.
+
+    new_state:  AgentState to transition to, or None for no change.
+    compaction_event: True = compaction started, False = ended, None = no change.
+    stuck_fixed: True if a stuck buffer was detected and auto-fixed.
+    """
+    new_state: object = None          # AgentState | None (avoids circular import)
+    compaction_event: bool | None = None
+    stuck_fixed: bool = False
 
 
 class AgentBackend(ABC):
@@ -160,3 +174,32 @@ class AgentBackend(ABC):
         percent. Backends that don't track token usage return None.
         """
         return None
+
+    async def monitor_state(
+        self,
+        session_name: str,
+        current_state,
+        context_percent: float | None = None,
+    ) -> MonitorResult | None:
+        """Poll backend-specific signals and return a MonitorResult, or None.
+
+        Called periodically by the hub's unified monitor loop. Backends that use
+        tmux override this to detect compaction, stuck buffers, etc.
+        Hook-driven backends (e.g. OpenCode) leave the default no-op.
+
+        Args:
+            session_name: tmux session name (or equivalent).
+            current_state: Current AgentState of this session.
+            context_percent: Context usage percentage (for compaction threshold).
+
+        Returns:
+            MonitorResult with state/compaction/stuck info, or None for no action.
+        """
+        return None
+
+    async def clear_stuck_buffer(self, session_name: str) -> None:
+        """Clear any text stuck in the agent's input buffer.
+
+        Called once on hub startup for adopted sessions. Tmux backends send
+        Enter to flush; others no-op.
+        """

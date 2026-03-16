@@ -13,13 +13,17 @@ _SUBPROCESS_ENV = os.environ.copy()
 _SUBPROCESS_ENV["PATH"] = _EXTRA_PATH + ":" + _SUBPROCESS_ENV.get("PATH", "")
 
 from hub_config import AGENT_COLORS, CLAUDE_BASE_COMMAND
-from .base import AgentBackend
+from state_machine import AgentState
+from .base import AgentBackend, MonitorResult
 
 log = logging.getLogger("hub.backend.claude_code")
 
 
 class ClaudeCodeBackend(AgentBackend):
     """Runs agents in tmux sessions with Claude Code CLI."""
+
+    def __init__(self) -> None:
+        self._stuck_counts: dict[str, int] = {}  # session_name → consecutive count
 
     async def spawn(
         self,
@@ -262,6 +266,112 @@ class ClaudeCodeBackend(AgentBackend):
         except Exception as e:
             log.warning("Error reading context usage for %s: %s", session_name, e)
             return None
+
+    async def monitor_state(
+        self,
+        session_name: str,
+        current_state,
+        context_percent: float | None = None,
+    ) -> MonitorResult | None:
+        """Poll tmux pane for compaction and stuck buffer signals.
+
+        Compaction: detected when "compacting" (not "compacted") appears in pane.
+        Only checked when context_percent >= 80 or already COMPACTING.
+
+        Stuck buffer: detected when tmux shows "[Pasted text" or content after ❯.
+        Two consecutive detections required before auto-fix (send Enter).
+        """
+        if current_state == AgentState.DEAD:
+            self._stuck_counts.pop(session_name, None)
+            return None
+
+        # Single pane capture for both checks
+        try:
+            pane = await self._run(f"tmux capture-pane -t {session_name} -p")
+        except Exception:
+            return None
+
+        result = MonitorResult()
+
+        # --- Compaction detection ---
+        should_check_compaction = (
+            current_state == AgentState.COMPACTING
+            or (context_percent is not None and context_percent >= 80)
+        )
+        if should_check_compaction:
+            lines = pane.strip().splitlines()
+            is_compacting = False
+            for line in reversed(lines):
+                ll = line.lower().strip()
+                if "compacting" in ll and "compacted" not in ll:
+                    is_compacting = True
+                    break
+                if "compacted" in ll:
+                    break
+
+            was_compacting = current_state == AgentState.COMPACTING
+            if is_compacting and not was_compacting:
+                result.new_state = AgentState.COMPACTING
+                result.compaction_event = True
+                return result
+            elif not is_compacting and was_compacting:
+                result.new_state = AgentState.PROCESSING
+                result.compaction_event = False
+                return result
+
+        # --- Stuck buffer detection ---
+        if current_state == AgentState.COMPACTING:
+            self._stuck_counts.pop(session_name, None)
+            return None
+
+        is_processing = current_state == AgentState.PROCESSING
+        last_lines = pane.strip().splitlines()[-10:]
+        snippet = "\n".join(last_lines)
+
+        if is_processing:
+            is_stuck = "[Pasted text" in snippet or "[Typed text" in snippet
+        else:
+            is_stuck = (
+                "[Pasted text" in snippet
+                or "[Typed text" in snippet
+                or any(line.startswith('❯') and len(line.rstrip()) > 1 for line in last_lines)
+            )
+
+        if is_stuck:
+            count = self._stuck_counts.get(session_name, 0) + 1
+            self._stuck_counts[session_name] = count
+            if count >= 2:
+                log.warning("[%s] STUCK BUFFER detected (seen %dx) — sending Enter", session_name, count)
+                try:
+                    proc = await asyncio.create_subprocess_exec(
+                        "tmux", "send-keys", "-t", session_name, "Enter",
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL,
+                        env=_SUBPROCESS_ENV,
+                    )
+                    await proc.communicate()
+                    self._stuck_counts[session_name] = 0
+                    result.stuck_fixed = True
+                    log.info("[%s] Stuck buffer cleared", session_name)
+                except Exception as exc:
+                    log.error("[%s] Failed to clear stuck buffer: %s", session_name, exc)
+        else:
+            self._stuck_counts.pop(session_name, None)
+
+        return result if result.stuck_fixed else None
+
+    async def clear_stuck_buffer(self, session_name: str) -> None:
+        """Send Enter to flush any text stuck in tmux input buffer."""
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "tmux", "send-keys", "-t", session_name, "Enter",
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+                env=_SUBPROCESS_ENV,
+            )
+            await proc.communicate()
+        except Exception as exc:
+            log.debug("[%s] clear_stuck_buffer failed: %s", session_name, exc)
 
     # --- Internal helpers ---
 
