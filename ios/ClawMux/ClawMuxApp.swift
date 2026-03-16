@@ -38,10 +38,19 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
         completionHandler()
     }
 
-    // Show notifications even when app is in foreground
+    // Show notifications even when app is in foreground — suppress for active session
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        let userInfo = notification.request.content.userInfo
+        if let sessionId = userInfo["sessionId"] as? String,
+           let activeId = UserDefaults.standard.string(forKey: "activeSessionId"),
+           sessionId == activeId
+        {
+            // User is already viewing this session — suppress banner
+            completionHandler([])
+            return
+        }
         completionHandler([.banner, .sound])
     }
 }

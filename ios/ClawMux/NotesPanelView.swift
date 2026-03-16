@@ -11,6 +11,7 @@ struct NotesPanelView: View {
     @State private var laterText: String = ""
     @State private var activeTab: String = "now"
     @State private var saveStatus: String = ""
+    @State private var pendingSave: DispatchWorkItem?
 
     var body: some View {
         NavigationStack {
@@ -67,8 +68,10 @@ struct NotesPanelView: View {
 
     private func scheduleSave() {
         saveStatus = "Saving…"
-        // Debounce — matches web 800ms save timer
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { saveNotes() }
+        pendingSave?.cancel()
+        let work = DispatchWorkItem { saveNotes() }
+        pendingSave = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: work)
     }
 
     private func loadNotes() {
