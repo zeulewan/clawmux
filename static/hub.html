@@ -1750,7 +1750,7 @@ function toggleEffortPopup(e) {
   const popup = document.getElementById('effort-popup');
   if (popup.style.display !== 'none') { popup.style.display = 'none'; return; }
   const current = s?.effort || (backend === 'codex' ? 'medium' : 'high');
-  const efforts = backend === 'codex' ? ['xhigh', 'high', 'medium', 'low', 'none'] : ['max', 'high', 'medium', 'low'];
+  const efforts = backend === 'codex' ? ['xhigh', 'high', 'medium', 'low', 'minimal'] : ['max', 'high', 'medium', 'low'];
   popup.innerHTML = efforts.map(ef => {
     const sel = ef === current ? 'font-weight:700;color:#4a9eff;' : 'color:#e0e0e0;';
     return `<div style="padding:8px 16px;cursor:pointer;${sel}" onmousedown="selectEffortPopup('${ef}')" ontouchstart="selectEffortPopup('${ef}')">${ef.charAt(0).toUpperCase() + ef.slice(1)}${ef === current ? ' ✓' : ''}</div>`;
