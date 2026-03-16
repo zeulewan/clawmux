@@ -81,7 +81,7 @@ class CodexBackend(AgentBackend):
         _claude_models = {"opus", "sonnet", "haiku", ""}
         model_flag = f" --model {model}" if model and model not in _claude_models else ""
         # Codex reasoning effort: -c reasoning_effort=<level>
-        _valid_codex_efforts = {"low", "medium", "high"}
+        _valid_codex_efforts = {"none", "low", "medium", "high", "xhigh"}
         effort_flag = f' -c reasoning_effort="{effort}"' if effort in _valid_codex_efforts else ""
         startup_prompt = "Greet the user as instructed in your AGENTS.md. Then stop — the hub will deliver messages when they arrive."
         codex_cmd = (
