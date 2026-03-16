@@ -138,6 +138,9 @@ struct ChatScrollAreaView: View {
                     scrollPositionID = nil
                     cachedMessageGroups = []
                     isAtBottom = true
+                    isLoadingOlder = false  // stale load from previous session must not block scrollBottom
+                    topAnchorId = nil       // stale anchor from previous session's prepend
+                    thinkingJustEnded = false
                     rebuildMessageGroups()
                     // No proxy.scrollTo needed — .id(vm.activeSessionId) above creates a fresh
                     // ScrollView on switch, so defaultScrollAnchor(.bottom) fires automatically.
