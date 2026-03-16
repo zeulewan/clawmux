@@ -1,7 +1,10 @@
 import Foundation
-import PushToTalk
 import AVFoundation
 import UIKit
+
+#if canImport(PushToTalk)
+import PushToTalk
+#endif
 
 /// Manages the PushToTalk framework integration for walkie-talkie style PTT.
 /// Uses PTChannelManager for Action Button hold-to-talk, lock screen PTT, and
