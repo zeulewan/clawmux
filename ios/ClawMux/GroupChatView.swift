@@ -145,7 +145,7 @@ struct GroupChatScrollView: View {
     private func groupMessageBubble(_ msg: GroupChatMessage, isLast: Bool) -> some View {
         let isUser = msg.role == "user" && msg.sender.isEmpty
         let color = isUser ? Color.clear : voiceColor(msg.sender)
-        let senderLabel = isUser ? nil : (ALL_VOICES.first { $0.id == msg.sender }?.name ?? msg.sender)
+        let senderLabel = isUser ? nil : (VOICE_ID_TO_NAME[msg.sender] ?? msg.sender)
 
         let shape = UnevenRoundedRectangle(
             topLeadingRadius: isUser ? 18 : 4,

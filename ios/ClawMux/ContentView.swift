@@ -154,7 +154,12 @@ struct ContentView: View {
         .background(voiceTintColor.opacity(0.10).ignoresSafeArea())
         .onChange(of: vm.activeSessionId) { _, _ in
             withAnimation(.easeInOut(duration: 0.4)) {
-                voiceTintColor = vm.activeSession.map { voiceColor($0.voice) } ?? .clear
+                voiceTintColor = vm.activeGroupName != nil ? .clear : (vm.activeSession.map { voiceColor($0.voice) } ?? .clear)
+            }
+        }
+        .onChange(of: vm.activeGroupName) { _, name in
+            withAnimation(.easeInOut(duration: 0.4)) {
+                voiceTintColor = name != nil ? .clear : (vm.activeSession.map { voiceColor($0.voice) } ?? .clear)
             }
         }
     }
@@ -418,9 +423,6 @@ struct ContentView: View {
 
     private func cycleInputMode() { vm.inputMode = vm.typingMode ? "auto" : "typing" }
 
-    private func effortIcon(_ e: String) -> String {
-        switch e { case "low": "battery.25"; case "high": "bolt.fill"; default: "gauge.medium" }
-    }
 }
 
 
