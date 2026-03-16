@@ -14,7 +14,7 @@ function toggleNotesPanel() {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ notes_panel_open: isOpen }),
-  }).catch(() => {});
+  }).catch(e => console.warn('notes panel state:', e));
   if (isOpen && !_notesLoaded) {
     loadNotes();
   }
@@ -47,7 +47,7 @@ function switchNotesTab(tab, persist = true) {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ notes_active_tab: tab }),
-    }).catch(() => {});
+    }).catch(e => console.warn('notes tab save:', e));
   }
 }
 

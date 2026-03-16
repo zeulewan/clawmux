@@ -47,7 +47,7 @@ function connect() {
       setToggle('tts_enabled', ttsEnabled);
       sttEnabled = s.stt_enabled !== false;
       setToggle('stt_enabled', sttEnabled);
-    }).catch(() => {});
+    }).catch(e => console.warn('settings reload:', e));
   };
 
   ws.onclose = () => {
@@ -194,7 +194,7 @@ function handleMessage(data) {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ speed: spd }),
-            }).catch(() => {});
+            }).catch(e => console.warn('speed sync:', e));
           }
         }
       }
@@ -463,7 +463,9 @@ function handleMessage(data) {
   } else if (type === 'user_text') {
     if (!data.text || !data.text.trim()) return;  // Skip blank user messages
     addMessage(session_id, 'user', data.text, { id: data.msg_id || null });
-    setSessionState(session_id, 'processing');
+    // Don't set processing here — wait for the agent's hook events (PreToolUse)
+    // to signal actual processing. Setting it here causes false "thinking" state
+    // when messages fail to deliver or the agent hasn't picked them up yet.
   } else if (type === 'audio') {
     setSessionState(session_id, 'speaking');
     if (session_id === activeSessionId) {

@@ -407,7 +407,7 @@ function _wrapTextNodesInKaraokeSpans(container) {
 function toggleVAD() {
   vadEnabled = !vadEnabled;
   setToggle('auto_end', vadEnabled);
-  fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ auto_end: vadEnabled }) }).catch(() => {});
+  fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ auto_end: vadEnabled }) }).catch(e => console.warn('save auto_end:', e));
 }
 
 function startVAD(stream) {
@@ -462,20 +462,20 @@ function startVAD(stream) {
 function toggleAutoInterrupt() {
   autoInterruptEnabled = !autoInterruptEnabled;
   setToggle('auto_interrupt', autoInterruptEnabled);
-  fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ auto_interrupt: autoInterruptEnabled }) }).catch(() => {});
+  fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ auto_interrupt: autoInterruptEnabled }) }).catch(e => console.warn('save auto_interrupt:', e));
 }
 
 function toggleThinkingSounds() {
   thinkingSoundsEnabled = !thinkingSoundsEnabled;
   setToggle('thinking_sounds', thinkingSoundsEnabled);
   if (!thinkingSoundsEnabled) stopThinkingSound();
-  fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ thinking_sounds: thinkingSoundsEnabled }) }).catch(() => {});
+  fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ thinking_sounds: thinkingSoundsEnabled }) }).catch(e => console.warn('save thinking_sounds:', e));
 }
 
 function toggleAudioCues() {
   audioCuesEnabled = !audioCuesEnabled;
   setToggle('audio_cues', audioCuesEnabled);
-  fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ audio_cues: audioCuesEnabled }) }).catch(() => {});
+  fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ audio_cues: audioCuesEnabled }) }).catch(e => console.warn('save audio_cues:', e));
 }
 
 // --- Transport controls (pause/resume, skip) ---
@@ -661,7 +661,7 @@ function stopPlaybackVAD() {
     playbackVadInterval = null;
   }
   if (playbackVadCtx) {
-    playbackVadCtx.close().catch(() => {});
+    playbackVadCtx.close().catch(e => console.warn('playbackVadCtx close:', e));
     playbackVadCtx = null;
   }
   if (_playbackVadStream) { _releaseMicStream(_playbackVadStream); _playbackVadStream = null; }
@@ -730,7 +730,7 @@ function stopThinkingVAD() {
     thinkingVadInterval = null;
   }
   if (thinkingVadCtx) {
-    thinkingVadCtx.close().catch(() => {});
+    thinkingVadCtx.close().catch(e => console.warn('thinkingVadCtx close:', e));
     thinkingVadCtx = null;
   }
   thinkingVadSessionId = null;
@@ -1512,7 +1512,7 @@ if (_isDesktop) {
         _warmStream = s;
         // Start waveform now so it appears at the same moment the OS mic light comes on
         if (!waveAnimFrame) startWaveform(s);
-      }).catch(() => {});
+      }).catch(e => console.warn('mic pre-warm:', e));
     }
   }, { capture: true, passive: true });
 }
@@ -1685,7 +1685,14 @@ function sendAudio(sessionId) {
     setStatus('Error reading audio');
     updateMicUI();
   };
-  reader.readAsDataURL(blob);
+  try {
+    reader.readAsDataURL(blob);
+  } catch (e) {
+    clearTimeout(_processingTimeout);
+    console.warn('readAsDataURL failed:', e);
+    setStatus('Error reading audio');
+    updateMicUI();
+  }
 }
 
 function _flushPendingAudio() {

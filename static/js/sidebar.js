@@ -261,7 +261,7 @@ let _interruptDebounce = false;
 function interruptActiveAgent() {
   if (!activeSessionId || _interruptDebounce) return;
   _interruptDebounce = true;
-  fetch(`/api/sessions/${activeSessionId}/interrupt`, { method: 'POST' }).catch(() => {});
+  fetch(`/api/sessions/${activeSessionId}/interrupt`, { method: 'POST' }).catch(e => console.warn('interrupt:', e));
   // Disable for 2s to prevent double-tap (double Escape triggers exit prompt)
   const btns = document.querySelectorAll('#text-stop, #voice-stop');
   btns.forEach(b => { b.disabled = true; b.style.opacity = '0.3'; });
@@ -284,7 +284,7 @@ function clearSessionUnread(sessionId) {
   if (s.unreadCount === 0) return;
   s.unreadCount = 0;
   // Persist to server
-  fetch(`/api/sessions/${sessionId}/mark-read`, { method: 'POST' }).catch(() => {});
+  fetch(`/api/sessions/${sessionId}/mark-read`, { method: 'POST' }).catch(e => console.warn('mark-read:', e));
   renderSidebar();
 }
 
@@ -750,7 +750,7 @@ async function _moveAgentToProject(voiceId, targetProjectSlug) {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ voices: proj.voices }),
-          }).catch(() => {});
+          }).catch(e => console.warn('voice remove:', e));
         }
       }
       if (targetProject && targetProject.voices) {
@@ -760,7 +760,7 @@ async function _moveAgentToProject(voiceId, targetProjectSlug) {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ voices: targetProject.voices }),
-        }).catch(() => {});
+        }).catch(e => console.warn('voice add:', e));
       }
     }
     renderSidebar();
