@@ -3,10 +3,10 @@
 Codex runs as a TUI in tmux like Claude Code. Message delivery uses tmux
 keystroke injection. Key differences from Claude Code:
 - CLI: `codex` (at /home/zeul/.local/bin/codex)
-- Flags: --no-alt-screen (for tmux), --full-auto, --model
+- Flags: --no-alt-screen (for tmux), --yolo (bypass approvals + sandbox)
 - No effort levels
 - Config: AGENTS.md (not CLAUDE.md)
-- Idle prompt: `>` (not `❯`)
+- Idle prompt: `›` with placeholder text
 """
 
 import asyncio
@@ -14,7 +14,7 @@ import logging
 import time
 
 from .base import AgentBackend
-from .claude_code import ClaudeCodeBackend, _SUBPROCESS_ENV
+from .claude_code import ClaudeCodeBackend
 
 log = logging.getLogger("hub.backend.codex")
 

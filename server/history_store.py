@@ -78,7 +78,14 @@ class HistoryStore:
                     return
                 messages.append(entry)
                 if len(messages) > MAX_MESSAGES:
+                    removed = len(messages) - MAX_MESSAGES
                     messages = messages[-MAX_MESSAGES:]
+                    # Adjust read cursors so they stay valid after truncation
+                    cursors = data.get("read_cursors", {})
+                    if cursors:
+                        for m in cursors:
+                            cursors[m] = max(0, cursors[m] - removed)
+                        data["read_cursors"] = cursors
                 data.update({"voice_id": voice_id, "voice_name": voice_name, "messages": messages})
                 # Auto-advance read cursor for the active model
                 if model_id:
@@ -300,10 +307,10 @@ class HistoryStore:
 
         delta = messages[cursor:]
 
-        # Filter to human-readable conversation only
+        # Filter to human-readable conversation (includes inter-agent system messages)
         chat_messages = [
             m for m in delta
-            if m.get("role") in ("user", "assistant")
+            if m.get("role") in ("user", "assistant", "system")
             and m.get("text", "").strip()
             and not m.get("bare_ack")
         ]
@@ -326,6 +333,8 @@ class HistoryStore:
                 lines.append(f"**User:** {text}")
             elif role == "assistant":
                 lines.append(f"**Assistant:** {text}")
+            elif role == "system":
+                lines.append(f"*System:* {text}")
 
         lines.append("\n---")
         lines.append("Resume where you left off.")

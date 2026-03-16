@@ -7,9 +7,10 @@ import socket
 from pathlib import Path
 import time
 
+import json
+
 import httpx
 
-from hub_config import AGENT_COLORS
 from .base import AgentBackend
 from .claude_code import ClaudeCodeBackend
 
@@ -121,9 +122,9 @@ class OpenCodeBackend(AgentBackend):
                 _opencode_sessions[session_name] = oc_session_id
                 log.info("[%s] Created OpenCode session %s", session_name, oc_session_id)
                 # Write session info for bridge plugin inbox delivery
-                import json as _json
+
                 oc_info_path = Path(work_dir) / ".clawmux-opencode.json"
-                oc_info_path.write_text(_json.dumps({"port": port, "session_id": oc_session_id}) + "\n")
+                oc_info_path.write_text(json.dumps({"port": port, "session_id": oc_session_id}) + "\n")
         except Exception as e:
             log.error("[%s] Failed to create OpenCode session: %s", session_name, e)
 
@@ -137,7 +138,7 @@ class OpenCodeBackend(AgentBackend):
         if not info_path.exists():
             return False
         try:
-            info = _json.loads(info_path.read_text())
+            info = json.loads(info_path.read_text())
             port = info["port"]
             oc_session_id = info["session_id"]
             _session_ports[session_name] = port
@@ -214,8 +215,6 @@ class OpenCodeBackend(AgentBackend):
 
     def _deploy_plugin(self, work_dir: str, model: str = "") -> None:
         """Write opencode.json with bridge plugin and model config."""
-        import json
-
         config_path = Path(work_dir) / "opencode.json"
         config: dict = {}
         if config_path.exists():
