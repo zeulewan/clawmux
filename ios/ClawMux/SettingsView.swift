@@ -301,6 +301,12 @@ struct SettingsView: View {
                 draftTTSURL = vm.ttsURL
                 draftSTTURL = vm.sttURL
             }
+            .onDisappear {
+                let tts = draftTTSURL.trimmingCharacters(in: .whitespaces)
+                let stt = draftSTTURL.trimmingCharacters(in: .whitespaces)
+                if tts != vm.ttsURL { vm.ttsURL = tts }
+                if stt != vm.sttURL { vm.sttURL = stt }
+            }
         }
         .background(Color.clear)
         // iOS 26: system provides liquid glass sheet automatically — no presentationBackground needed
