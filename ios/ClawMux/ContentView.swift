@@ -195,7 +195,6 @@ struct ContentView: View {
                     showFilePicker: $showFilePicker,
                     forceTypingMode: true
                 )
-                .background(Color.canvas1.ignoresSafeArea(edges: .bottom))
             }
     }
 
@@ -420,7 +419,6 @@ struct ContentView: View {
             pttTextFieldFocused: $pttTextFieldFocused,
             showFilePicker: $showFilePicker
         )
-        .background(Color.canvas1.ignoresSafeArea(edges: .bottom))
     }
 
     private func cycleInputMode() { vm.inputMode = vm.typingMode ? "auto" : "typing" }
