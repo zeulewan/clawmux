@@ -125,6 +125,11 @@ let ALL_VOICES: [VoiceInfo] = [
     VoiceInfo(id: "bm_lewis",   name: "Lewis",   project: "Extended"),
 ]
 
+/// O(1) name→id lookup — avoids O(n) linear scan on ALL_VOICES per message in group history parsing.
+private let VOICE_NAME_TO_ID: [String: String] = Dictionary(
+    uniqueKeysWithValues: ALL_VOICES.map { ($0.name.lowercased(), $0.id) }
+)
+
 let SPEED_OPTIONS: [(label: String, value: Double)] = [
     ("0.75x", 0.75), ("1x", 1.0), ("1.25x", 1.25), ("1.5x", 1.5), ("2x", 2.0),
 ]
@@ -649,13 +654,15 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 // Start silence loop if background mode is on and there are sessions
                 if self.backgroundMode && !self.sessions.isEmpty {
                     // Request background execution time to ensure silence loop starts
-                    self.backgroundTaskID = UIApplication.shared.beginBackgroundTask {
+                    self.backgroundTaskID = UIApplication.shared.beginBackgroundTask { [weak self] in
+                        guard let self else { return }
                         UIApplication.shared.endBackgroundTask(self.backgroundTaskID)
                         self.backgroundTaskID = .invalid
                     }
                     self.audio.startSilenceLoop()
                     // End background task after silence is playing
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                        guard let self else { return }
                         if self.backgroundTaskID != .invalid {
                             UIApplication.shared.endBackgroundTask(self.backgroundTaskID)
                             self.backgroundTaskID = .invalid
@@ -1277,9 +1284,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 // Add new sessions; re-sync state and history for existing ones (reconnect)
                 for s in list {
                     if let sid = s["session_id"] as? String {
-                        if sessionIndex(sid) == nil {
-                            addSessionFromDict(s)
-                        } else if let idx = sessionIndex(sid) {
+                        if let idx = sessionIndex(sid) {
                             // Re-sync server-authoritative state (mirrors web session_list reconnect sync)
                             let stateStr = s["state"] as? String ?? ""
                             if let newState = AgentState(rawValue: stateStr) {
@@ -1301,6 +1306,8 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                             if let voice = s["voice"] as? String {
                                 reconnectSyncHistory(voiceId: voice, sessionId: sid)
                             }
+                        } else {
+                            addSessionFromDict(s)
                         }
                     }
                 }
@@ -1697,7 +1704,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 let senderLabel = msgDict["sender"] as? String ?? ""
                 let senderVoice = msgDict["sender_voice"] as? String ?? ""
                 let resolvedSender = !senderVoice.isEmpty ? senderVoice :
-                    (ALL_VOICES.first { $0.name.lowercased() == senderLabel.lowercased() }?.id ?? senderLabel)
+                    (VOICE_NAME_TO_ID[senderLabel.lowercased()] ?? senderLabel)
                 let msg = GroupChatMessage(
                     id: msgId,
                     role: msgDict["role"] as? String ?? "assistant",
@@ -2007,7 +2014,7 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 let senderLabel = m["sender"] as? String ?? ""
                 let senderVoice = m["sender_voice"] as? String ?? ""
                 let resolvedSender = !senderVoice.isEmpty ? senderVoice :
-                    (ALL_VOICES.first { $0.name.lowercased() == senderLabel.lowercased() }?.id ?? senderLabel)
+                    (VOICE_NAME_TO_ID[senderLabel.lowercased()] ?? senderLabel)
                 return GroupChatMessage(
                     id: id,
                     role: m["role"] as? String ?? "assistant",
