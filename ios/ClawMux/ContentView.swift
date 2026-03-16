@@ -382,7 +382,6 @@ struct ContentView: View {
                 Color.canvas1.opacity(0.85).background(.ultraThinMaterial).ignoresSafeArea(edges: .top)
             }
         }
-        .ignoresSafeArea(edges: .top)
     }
 
     private func modelName(_ m: String, modelId: String = "") -> String {
