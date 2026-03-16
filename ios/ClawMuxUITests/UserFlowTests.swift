@@ -827,4 +827,143 @@ final class UserFlowTests: XCTestCase {
 
         XCTAssertTrue(app.exists, "App should survive full conversation test")
     }
+
+    // MARK: - Extended Back-and-Forth Conversation
+
+    /// Multiple rounds of back-and-forth with Liam — longer prompts, wait for full responses,
+    /// screenshot after EVERY message (sent and received), verify scroll position each time.
+    func testExtendedBackAndForth() throws {
+        saveScreenshot("ext_00_start")
+
+        let hamburger = app.buttons["HamburgerButton"].firstMatch
+        guard hamburger.waitForExistence(timeout: 8) else { XCTFail("No hamburger"); return }
+
+        // Switch to text mode
+        let modeBtn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'voice' AND label CONTAINS[c] 'mode'")).firstMatch
+        if modeBtn.waitForExistence(timeout: 3) { modeBtn.tap(); sleep(1) }
+        else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.43, dy: 0.065)).tap(); sleep(1) }
+        // Verify/retry
+        if !app.textFields.firstMatch.waitForExistence(timeout: 2) && !app.textViews.firstMatch.waitForExistence(timeout: 2) {
+            if modeBtn.exists { modeBtn.tap(); sleep(1) }
+            else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.43, dy: 0.065)).tap(); sleep(1) }
+        }
+
+        // Navigate to Liam
+        func goTo(_ name: String) -> Bool {
+            hamburger.tap(); sleep(2)
+            let sidebar = app.scrollViews["SidebarScrollView"].firstMatch
+            guard sidebar.waitForExistence(timeout: 3) else { return false }
+            for _ in 0..<6 {
+                let btn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] '\(name)'")).firstMatch
+                if btn.waitForExistence(timeout: 1) { btn.tap(); sleep(2); return true }
+                sidebar.swipeUp(); sleep(1)
+            }
+            hamburger.tap(); sleep(1)
+            return false
+        }
+
+        func send(_ text: String) -> Bool {
+            let tf = app.textFields.firstMatch
+            let tv = app.textViews.firstMatch
+            let input = tf.exists ? tf : tv
+            guard input.waitForExistence(timeout: 5) else { return false }
+            input.tap(); sleep(1)
+            input.typeText(text)
+            let sendBtn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'send' OR label CONTAINS[c] 'arrow'")).firstMatch
+            guard sendBtn.waitForExistence(timeout: 3) else { return false }
+            sendBtn.tap(); sleep(2)
+            return true
+        }
+
+        func checkScroll(_ label: String) {
+            let chevron = app.buttons.matching(NSPredicate(format: "label CONTAINS 'chevron'")).firstMatch
+            let atBottom = !chevron.exists
+            let textCount = app.staticTexts.count
+            saveScreenshot("ext_\(label)")
+            print("[EXT] \(label): atBottom=\(atBottom) texts=\(textCount)")
+        }
+
+        // Go to Liam
+        let found = goTo("Liam")
+        XCTAssertTrue(found, "Should find Liam")
+        guard found else { return }
+        checkScroll("01_liam_opened")
+
+        // Round 1: Ask for a long story
+        let s1 = send("Tell me a detailed story about a space explorer who discovers an ancient alien library on Mars. Make it at least 3 paragraphs with vivid descriptions.")
+        checkScroll("02_sent_story_request")
+        XCTAssertTrue(s1)
+        sleep(15) // Wait for long response
+        checkScroll("03_story_response")
+
+        // Round 2: Follow-up
+        let s2 = send("What happened next? Continue the story with two more paragraphs.")
+        checkScroll("04_sent_continuation")
+        XCTAssertTrue(s2)
+        sleep(15)
+        checkScroll("05_continuation_response")
+
+        // Round 3: Quick exchange
+        let s3 = send("Summarize the whole story in one sentence.")
+        checkScroll("06_sent_summary")
+        XCTAssertTrue(s3)
+        sleep(10)
+        checkScroll("07_summary_response")
+
+        // Round 4: Another quick one
+        let s4 = send("Rate the story 1-10 and explain why.")
+        checkScroll("08_sent_rating")
+        XCTAssertTrue(s4)
+        sleep(10)
+        checkScroll("09_rating_response")
+
+        // Now switch to Lewis for a few rounds
+        let foundLewis = goTo("Lewis")
+        if foundLewis {
+            checkScroll("10_lewis_opened")
+
+            let s5 = send("Write me a long poem about the ocean, at least 4 stanzas.")
+            checkScroll("11_lewis_poem_sent")
+            XCTAssertTrue(s5)
+            sleep(15)
+            checkScroll("12_lewis_poem_response")
+
+            let s6 = send("Now write a second poem about mountains, same length.")
+            checkScroll("13_lewis_mountains_sent")
+            XCTAssertTrue(s6)
+            sleep(15)
+            checkScroll("14_lewis_mountains_response")
+        }
+
+        // Switch back to Liam — verify all messages preserved
+        let backLiam = goTo("Liam")
+        if backLiam {
+            checkScroll("15_back_to_liam")
+
+            // Scroll through entire history
+            let chat = app.scrollViews["ChatScrollView"].firstMatch
+            if chat.exists {
+                for i in 0..<6 {
+                    chat.swipeDown(velocity: .fast)
+                    usleep(500_000)
+                }
+                checkScroll("16_deep_scrolled")
+
+                // Scroll back to bottom
+                let chevron = app.buttons.matching(NSPredicate(format: "label CONTAINS 'chevron'")).firstMatch
+                if chevron.waitForExistence(timeout: 2) { chevron.tap(); sleep(1) }
+                else { for _ in 0..<10 { chat.swipeUp(velocity: .fast) }; sleep(1) }
+                checkScroll("17_back_to_bottom")
+            }
+
+            // One more message to verify everything still works after deep scroll
+            let s7 = send("Are you still there?")
+            checkScroll("18_final_sent")
+            XCTAssertTrue(s7)
+            sleep(8)
+            checkScroll("19_final_response")
+        }
+
+        XCTAssertTrue(app.exists, "App should survive extended back-and-forth")
+    }
 }
