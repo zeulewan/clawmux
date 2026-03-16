@@ -59,9 +59,9 @@ class CodexBackend(AgentBackend):
         # Kill stale tmux session
         await self._cc._run(f"tmux kill-session -t {session_name} 2>/dev/null || true")
 
-        # Create tmux session in work dir
+        # Create tmux session in work dir (wider than default — Codex status line needs room)
         await self._cc._run(
-            f"tmux new-session -d -s {session_name} -x 200 -y 50 -c {work_dir}"
+            f"tmux new-session -d -s {session_name} -x 250 -y 50 -c {work_dir}"
         )
 
         # Apply colored status bar
@@ -259,7 +259,8 @@ class CodexBackend(AgentBackend):
             lines = pane.splitlines()
             last_line = lines[-1].strip() if lines else ""
             # Match: "model-name effort · N% left · /path"
-            m = re.match(r'^(\S+)\s+(\S+)\s+·\s+(\d+)%\s+left\s+·', last_line)
+            # Truncation-safe: pane may cut off after the number (e.g. "100…")
+            m = re.match(r'^(\S+)\s+(\S+)\s+·\s+(\d+)', last_line)
             if not m:
                 return None
             model_name = m.group(1)
