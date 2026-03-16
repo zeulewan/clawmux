@@ -837,7 +837,7 @@ async def handle_browser_message(data: dict) -> None:
             log.warning("[%s] restart_effort ignored for backend %s", session_id, session.backend)
         else:
             effort = data.get("effort", "")
-            if effort in ("low", "medium", "high"):
+            if effort in ("low", "medium", "high", "max"):
                 session.effort = effort
                 log.info("[%s] Effort restart requested: %s", session_id, effort)
                 asyncio.create_task(session_mgr.restart_claude_with_model(session_id))
@@ -2892,7 +2892,7 @@ async def update_settings(request: Request):
     # Apply model change at runtime
     if "model" in data and data["model"] in ("opus", "sonnet", "haiku"):
         hub_config.CLAUDE_MODEL = data["model"]
-    if "effort" in data and data["effort"] in ("low", "medium", "high"):
+    if "effort" in data and data["effort"] in ("low", "medium", "high", "max"):
         hub_config.CLAUDE_EFFORT = data["effort"]
     if "tts_url" in data and data["tts_url"]:
         hub_config.KOKORO_URL = data["tts_url"].rstrip("/")

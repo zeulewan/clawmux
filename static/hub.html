@@ -145,6 +145,7 @@
   </select>
   <span id="model-label" class="header-label" onclick="toggleModelPopup(event)"></span>
   <select id="session-effort" tabindex="-1" style="display:none;" onchange="setSessionEffort(this.value)">
+    <option value="max">Max</option>
     <option value="high">High</option>
     <option value="medium">Medium</option>
     <option value="low">Low</option>
@@ -351,6 +352,7 @@
       <div class="settings-inline" style="padding:8px 16px;">
         <div class="toggle-info"><span class="toggle-name">Default Effort</span><span class="toggle-desc">Reasoning effort level for new agents</span></div>
         <select id="default-effort-select" onchange="setDefaultEffort(this.value)" style="width:auto; padding:4px 8px; font-size:0.8rem;">
+          <option value="max">Max</option>
           <option value="high">High</option>
           <option value="medium">Medium</option>
           <option value="low">Low</option>
@@ -1745,7 +1747,7 @@ function toggleEffortPopup(e) {
   const popup = document.getElementById('effort-popup');
   if (popup.style.display !== 'none') { popup.style.display = 'none'; return; }
   const current = s?.effort || 'high';
-  const efforts = ['high', 'medium', 'low'];
+  const efforts = ['max', 'high', 'medium', 'low'];
   popup.innerHTML = efforts.map(ef => {
     const sel = ef === current ? 'font-weight:700;color:#4a9eff;' : 'color:#e0e0e0;';
     return `<div style="padding:8px 16px;cursor:pointer;${sel}" onmousedown="selectEffortPopup('${ef}')" ontouchstart="selectEffortPopup('${ef}')">${ef.charAt(0).toUpperCase() + ef.slice(1)}${ef === current ? ' ✓' : ''}</div>`;
