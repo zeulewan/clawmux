@@ -258,67 +258,68 @@ struct WelcomeView: View {
             )
         }
         .buttonStyle(.plain)
-        .contextMenu {
-            Group {
-            if session == nil {
-                Button { vm.spawnSession(voiceId: voice.id) } label: {
-                    Label("Launch Session", systemImage: "play.circle")
+        .contextMenu { agentContextMenu(voice: voice, session: session) }
+    }
+
+    @ViewBuilder
+    private func agentContextMenu(voice: VoiceInfo, session: VoiceSession?) -> some View {
+        if session == nil {
+            Button { vm.spawnSession(voiceId: voice.id) } label: {
+                Label("Launch Session", systemImage: "play.circle")
+            }
+        }
+        if let s = session {
+            if s.unreadCount == 0 {
+                Button { vm.markSessionUnread(s.id) } label: {
+                    Label("Mark as Unread", systemImage: "envelope.badge")
+                }
+            } else {
+                Button { vm.clearSessionUnread(s.id) } label: {
+                    Label("Mark as Read", systemImage: "checkmark.circle")
                 }
             }
-            }
-            if let s = session {
-                if s.unreadCount == 0 {
-                    Button { vm.markSessionUnread(s.id) } label: {
-                        Label("Mark as Unread", systemImage: "envelope.badge")
-                    }
-                } else {
-                    Button { vm.clearSessionUnread(s.id) } label: {
-                        Label("Mark as Read", systemImage: "checkmark.circle")
+            Menu {
+                ForEach(["Manager", "Frontend", "Backend", "Researcher", "Worker"], id: \.self) { role in
+                    Button { vm.setSessionRole(s.id, role: role) } label: {
+                        if s.role.lowercased() == role.lowercased() { Label(role, systemImage: "checkmark") }
+                        else { Text(role) }
                     }
                 }
+            } label: { Label("Set Role", systemImage: "person.badge.key") }
+            if !vm.knownProjects.isEmpty {
                 Menu {
-                    ForEach(["Manager", "Frontend", "Backend", "Researcher", "Worker"], id: \.self) { role in
-                        Button { vm.setSessionRole(s.id, role: role) } label: {
-                            if s.role.lowercased() == role.lowercased() { Label(role, systemImage: "checkmark") }
-                            else { Text(role) }
+                    ForEach(vm.knownProjects, id: \.self) { proj in
+                        Button { vm.moveSessionToProject(s.id, project: proj) } label: {
+                            if s.project == proj { Label(proj, systemImage: "checkmark") }
+                            else { Text(proj) }
                         }
                     }
-                } label: { Label("Set Role", systemImage: "person.badge.key") }
-                if !vm.knownProjects.isEmpty {
-                    Menu {
-                        ForEach(vm.knownProjects, id: \.self) { proj in
-                            Button { vm.moveSessionToProject(s.id, project: proj) } label: {
-                                if s.project == proj { Label(proj, systemImage: "checkmark") }
-                                else { Text(proj) }
-                            }
+                } label: { Label("Move to Project", systemImage: "folder") }
+            }
+            if !vm.knownGroupChats.isEmpty {
+                Menu {
+                    ForEach(vm.knownGroupChats, id: \.name) { gc in
+                        let isMember = gc.voices.contains(voice.id)
+                        Button {
+                            vm.toggleGroupChatMember(voiceId: voice.id, groupName: gc.name, isMember: isMember)
+                        } label: {
+                            if isMember { Label(gc.name, systemImage: "checkmark") }
+                            else { Text(gc.name) }
                         }
-                    } label: { Label("Move to Project", systemImage: "folder") }
-                }
-                if !vm.knownGroupChats.isEmpty {
-                    Menu {
-                        ForEach(vm.knownGroupChats, id: \.name) { gc in
-                            let isMember = gc.voices.contains(voice.id)
-                            Button {
-                                vm.toggleGroupChatMember(voiceId: voice.id, groupName: gc.name, isMember: isMember)
-                            } label: {
-                                if isMember { Label(gc.name, systemImage: "checkmark") }
-                                else { Text(gc.name) }
-                            }
-                        }
-                    } label: { Label("Add to Group Chat", systemImage: "bubble.left.and.bubble.right") }
-                }
-                if !s.groupId.isEmpty {
-                    Button(role: .destructive) { vm.disbandGroup(s.groupId) } label: {
-                        Label("Disband Group Chat", systemImage: "person.2.slash")
                     }
-                }
-                Button(role: .destructive) { vm.terminateSession(s.id) } label: {
-                    Label("Terminate Session", systemImage: "xmark.circle")
+                } label: { Label("Add to Group Chat", systemImage: "bubble.left.and.bubble.right") }
+            }
+            if !s.groupId.isEmpty {
+                Button(role: .destructive) { vm.disbandGroup(s.groupId) } label: {
+                    Label("Disband Group Chat", systemImage: "person.2.slash")
                 }
             }
-            Button(role: .destructive) { resetVoiceId = voice.id; showResetConfirm = true } label: {
-                Label("Reset", systemImage: "arrow.counterclockwise")
+            Button(role: .destructive) { vm.terminateSession(s.id) } label: {
+                Label("Terminate Session", systemImage: "xmark.circle")
             }
+        }
+        Button(role: .destructive) { resetVoiceId = voice.id; showResetConfirm = true } label: {
+            Label("Reset", systemImage: "arrow.counterclockwise")
         }
     }
 
