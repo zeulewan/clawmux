@@ -249,12 +249,11 @@ function setSessionSidebarState(sessionId, newState) {
 }
 
 function updateChatStopButton() {
-  const s = activeSessionId ? sessions.get(activeSessionId) : null;
-  const isWorking = s && (s.sidebarState === 'processing' || s.sidebarState === 'compacting' || s.sidebarState === 'starting');
+  const hasSession = !!(activeSessionId && sessions.has(activeSessionId));
   const textBtn = document.getElementById('text-stop');
   const voiceBtn = document.getElementById('voice-stop');
-  if (textBtn) isWorking ? textBtn.classList.add('btn-visible') : textBtn.classList.remove('btn-visible');
-  if (voiceBtn) isWorking ? voiceBtn.classList.add('btn-visible') : voiceBtn.classList.remove('btn-visible');
+  if (textBtn) hasSession ? textBtn.classList.add('btn-visible') : textBtn.classList.remove('btn-visible');
+  if (voiceBtn) hasSession ? voiceBtn.classList.add('btn-visible') : voiceBtn.classList.remove('btn-visible');
 }
 
 let _interruptDebounce = false;
