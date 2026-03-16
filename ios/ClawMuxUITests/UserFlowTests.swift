@@ -709,10 +709,26 @@ final class UserFlowTests: XCTestCase {
         let hamburger = app.buttons["HamburgerButton"].firstMatch
         guard hamburger.waitForExistence(timeout: 8) else { XCTFail("No hamburger"); return }
 
-        // Switch to text mode
-        let modeBtn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'mode'")).firstMatch
-        if modeBtn.waitForExistence(timeout: 5) { modeBtn.tap(); sleep(1) }
+        // Switch to text mode — try label search first, then coordinate tap as fallback
+        let modeBtn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'voice' AND label CONTAINS[c] 'mode'")).firstMatch
+        if modeBtn.waitForExistence(timeout: 3) {
+            modeBtn.tap()
+            sleep(1)
+        } else {
+            // Coordinate fallback: mode button is in the header ~43% from left, ~6.5% from top
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.43, dy: 0.065)).tap()
+            sleep(1)
+        }
         saveScreenshot("conv_01_text_mode")
+        // Verify text mode — look for text input field
+        let hasTextField = app.textFields.firstMatch.waitForExistence(timeout: 3) ||
+                           app.textViews.firstMatch.waitForExistence(timeout: 3)
+        if !hasTextField {
+            // Try tapping mode button one more time — might have toggled wrong way
+            if modeBtn.exists { modeBtn.tap(); sleep(1) }
+            else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.43, dy: 0.065)).tap(); sleep(1) }
+            saveScreenshot("conv_01b_retry_mode")
+        }
 
         // Navigate to agent by name with aggressive sidebar scrolling
         func goTo(_ name: String) -> Bool {
