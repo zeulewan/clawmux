@@ -591,37 +591,22 @@ async def set_walking_mode(session_id: str, request: Request):
     return JSONResponse({"ok": True, "walking_mode": enabled})
 
 
-# Walking mode saved state (for restoring TTS/STT on deactivation)
-_walking_mode_saved: dict | None = None
-
-
 @router.post("/api/walking-mode")
 async def toggle_walking_mode(request: Request):
     """Activate or deactivate walking mode.
 
     On activate: spawns the walking agent (default: am_puck) if not running,
-    enables TTS and STT, puts the agent in walking mode.
-    On deactivate: turns off walking mode, restores previous TTS/STT settings.
+    puts the agent in walking mode. TTS/STT are force-enabled per-session
+    via the walking_mode flag — no global settings change.
+    On deactivate: turns off walking mode on the agent.
     """
-    global _walking_mode_saved
     data = await request.json()
     enabled = bool(data.get("enabled", True))
     voice_id = data.get("voice", "am_puck")
 
     if enabled:
-        # Save current TTS/STT settings so we can restore on deactivation
-        settings = _load_settings()
-        _walking_mode_saved = {
-            "tts_enabled": settings.get("tts_enabled", True),
-            "stt_enabled": settings.get("stt_enabled", True),
-        }
-
-        # Enable TTS and STT if not already on
-        if not settings.get("tts_enabled", True) or not settings.get("stt_enabled", True):
-            settings["tts_enabled"] = True
-            settings["stt_enabled"] = True
-            _save_settings(settings)
-            log.info("Walking mode: auto-enabled TTS and STT")
+        # TTS/STT are handled per-session via walking_mode flag —
+        # no global settings change needed (avoids affecting the browser).
 
         # Find or spawn the walking agent
         session = None
@@ -682,16 +667,6 @@ async def toggle_walking_mode(request: Request):
                 "type": "system",
                 "content": "Walking mode deactivated. You may use normal formatting again.",
             })
-
-        # Restore previous TTS/STT settings
-        if _walking_mode_saved:
-            settings = _load_settings()
-            settings["tts_enabled"] = _walking_mode_saved["tts_enabled"]
-            settings["stt_enabled"] = _walking_mode_saved["stt_enabled"]
-            _save_settings(settings)
-            log.info("Walking mode: restored TTS=%s STT=%s",
-                     _walking_mode_saved["tts_enabled"], _walking_mode_saved["stt_enabled"])
-            _walking_mode_saved = None
 
         await send_to_browser({
             "type": "walking_mode",
@@ -1712,7 +1687,7 @@ async def speak_to_user(request: Request):
 
     # TTS — strip non-speakable content and play
     settings = _load_settings()
-    skip_tts = sender.text_mode or not settings.get("tts_enabled", True)
+    skip_tts = sender.text_mode or (not settings.get("tts_enabled", True) and not sender.walking_mode)
     if not skip_tts:
         tts_message = strip_non_speakable(content)
         if tts_message.strip():

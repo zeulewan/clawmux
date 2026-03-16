@@ -84,7 +84,7 @@ async def handle_browser_message(data: dict) -> None:
             return
         audio_bytes = base64.b64decode(payload)
         log.info("[%s] Audio from browser: %d bytes", session_id, len(audio_bytes))
-        if not _load_settings().get("stt_enabled", True):
+        if not _load_settings().get("stt_enabled", True) and not getattr(session, "walking_mode", False):
             log.info("[%s] STT disabled, skipping transcription", session_id)
             await send_to_browser({"session_id": session_id, "type": "done", "processing": False})
             return
@@ -131,7 +131,7 @@ async def handle_browser_message(data: dict) -> None:
         elif payload:
             audio_bytes = base64.b64decode(payload)
             log.info("[%s] Audio interjection: %d bytes, transcribing...", session_id, len(audio_bytes))
-            if not _load_settings().get("stt_enabled", True):
+            if not _load_settings().get("stt_enabled", True) and not getattr(session, "walking_mode", False):
                 log.info("[%s] STT disabled, skipping interjection transcription", session_id)
                 return
             await send_to_browser({"session_id": session_id, "type": "status", "text": "Transcribing..."})
