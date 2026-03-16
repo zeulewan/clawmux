@@ -543,6 +543,124 @@ final class UserFlowTests: XCTestCase {
         XCTAssertTrue(app.exists, "App should survive typing mode multi-agent test")
     }
 
+    // MARK: - Exhaustive Send + Switch + Verify
+
+    /// Send messages to Liam and Lewis, screenshot after EVERY action,
+    /// switch between them and other agents, verify chat is never blank.
+    func testExhaustiveSendAndSwitchVerification() throws {
+        saveScreenshot("exh_00_start")
+
+        // Switch to text mode
+        let modeBtn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'mode'")).firstMatch
+        if modeBtn.waitForExistence(timeout: 5) { modeBtn.tap(); sleep(1) }
+
+        let hamburger = app.buttons["HamburgerButton"].firstMatch
+        guard hamburger.waitForExistence(timeout: 5) else { XCTFail("No hamburger"); return }
+
+        // Helper: navigate to agent by name via expanded sidebar
+        func goToAgent(_ name: String, screenshot label: String) {
+            hamburger.tap(); sleep(2)
+            let sidebar = app.scrollViews["SidebarScrollView"].firstMatch
+            if sidebar.waitForExistence(timeout: 3) { sidebar.swipeUp(); sleep(1) }
+            let btn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] '\(name)'")).firstMatch
+            if btn.waitForExistence(timeout: 3) { btn.tap(); sleep(2) }
+            else { hamburger.tap(); sleep(1) } // close sidebar if not found
+            saveScreenshot("exh_\(label)")
+        }
+
+        // Helper: send a message and verify it appears
+        func sendAndVerify(_ text: String, screenshot label: String) -> Bool {
+            let tf = app.textFields.firstMatch
+            let tv = app.textViews.firstMatch
+            let input = tf.exists ? tf : tv
+            guard input.waitForExistence(timeout: 3) else {
+                saveScreenshot("exh_\(label)_no_input")
+                return false
+            }
+            input.tap(); sleep(1)
+            input.typeText(text)
+            let sendBtn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'send' OR label CONTAINS[c] 'arrow'")).firstMatch
+            if sendBtn.waitForExistence(timeout: 3) { sendBtn.tap(); sleep(2) }
+            saveScreenshot("exh_\(label)_sent")
+
+            let visible = app.staticTexts[text].waitForExistence(timeout: 5)
+            let textCount = app.staticTexts.count
+            print("[EXH] \(label): msg visible=\(visible) textCount=\(textCount)")
+            if !visible { saveScreenshot("exh_\(label)_MISSING") }
+            return visible
+        }
+
+        // Helper: verify chat has content (not blank)
+        func verifyChatVisible(_ label: String) -> Bool {
+            let chatScroll = app.scrollViews["ChatScrollView"].firstMatch
+            let exists = chatScroll.waitForExistence(timeout: 3)
+            let textCount = app.staticTexts.count
+            saveScreenshot("exh_\(label)_check")
+            let ok = exists && textCount >= 2
+            if !ok { print("[EXH] BLANK? \(label): scroll=\(exists) texts=\(textCount)") }
+            return ok
+        }
+
+        // === Round 1: Go to Liam, send message ===
+        goToAgent("Liam", screenshot: "01_liam")
+        let m1 = sendAndVerify("Liam test 1 - \(Int.random(in: 1000...9999))", screenshot: "02_liam_msg1")
+
+        // === Switch to Adam (different agent), verify his chat ===
+        tapAgent(at: 0); sleep(2)
+        let c1 = verifyChatVisible("03_adam")
+
+        // === Switch back to Liam, verify message still there ===
+        goToAgent("Liam", screenshot: "04_liam_back")
+        let c2 = verifyChatVisible("05_liam_verify")
+
+        // === Go to Lewis, send message ===
+        goToAgent("Lewis", screenshot: "06_lewis")
+        let m2 = sendAndVerify("Lewis test 1 - \(Int.random(in: 1000...9999))", screenshot: "07_lewis_msg1")
+
+        // === Switch to Liam ===
+        goToAgent("Liam", screenshot: "08_liam_again")
+        let c3 = verifyChatVisible("09_liam_verify2")
+
+        // === Send another message to Liam ===
+        let m3 = sendAndVerify("Liam test 2 - \(Int.random(in: 1000...9999))", screenshot: "10_liam_msg2")
+
+        // === Rapid switch: Liam → agent0 → Lewis → agent1 → Liam ===
+        tapAgent(at: 0); sleep(1)
+        saveScreenshot("exh_11_agent0")
+        let c4 = verifyChatVisible("11_agent0_check")
+
+        goToAgent("Lewis", screenshot: "12_lewis_back")
+        let c5 = verifyChatVisible("13_lewis_verify")
+
+        tapAgent(at: 1); sleep(1)
+        saveScreenshot("exh_14_agent1")
+        let c6 = verifyChatVisible("14_agent1_check")
+
+        goToAgent("Liam", screenshot: "15_liam_final")
+        let c7 = verifyChatVisible("16_liam_final_check")
+
+        // === Send to Lewis one more time ===
+        goToAgent("Lewis", screenshot: "17_lewis_final")
+        let m4 = sendAndVerify("Lewis test 2 - \(Int.random(in: 1000...9999))", screenshot: "18_lewis_msg2")
+        let c8 = verifyChatVisible("19_lewis_final_check")
+
+        // === Back to Liam final verify ===
+        goToAgent("Liam", screenshot: "20_liam_last")
+        let c9 = verifyChatVisible("21_liam_last_check")
+
+        // Report
+        let allMsgs = [m1, m2, m3, m4]
+        let allChecks = [c1, c2, c3, c4, c5, c6, c7, c8, c9]
+        let msgFails = allMsgs.filter { !$0 }.count
+        let checkFails = allChecks.filter { !$0 }.count
+        print("[EXH] Messages sent: \(allMsgs.count), failed: \(msgFails)")
+        print("[EXH] Viewport checks: \(allChecks.count), blank: \(checkFails)")
+
+        XCTAssertEqual(msgFails, 0, "All sent messages should be visible")
+        XCTAssertEqual(checkFails, 0, "No viewport should be blank after switching")
+        XCTAssertTrue(app.exists, "App should survive exhaustive send+switch test")
+    }
+
     // MARK: - Keyboard Open + Switch Agent: Clean Transition
 
     /// Open keyboard in text mode, then tap a different agent.
