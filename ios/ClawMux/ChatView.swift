@@ -102,18 +102,17 @@ struct ChatScrollAreaView: View {
                     // Clear any lingering prepend anchor — new content arrived, anchor is no longer valid.
                     // nil binding = no positional constraint; does NOT change scroll position.
                     scrollPositionID = nil
-                    if thinkingJustEnded {
-                        // Thinking bubble was just removed. Its .easeOut(duration: 0.18) fade-out
-                        // transition keeps the bubble's frame in the UIKit layout while it plays —
-                        // proxy.scrollTo("bottom") fired NOW would target a position below the
-                        // still-present bubble frame. Content then shrinks → scroll stranded past
-                        // the real bottom. Delay until after the transition clears the layout.
-                        thinkingJustEnded = false
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { scrollBottom(proxy) }
-                    } else {
-                        // Delay one layout cycle so the new message view is measured
-                        // before scrollTo resolves the "bottom" anchor position.
-                        DispatchQueue.main.async { scrollBottom(proxy) }
+                    // Defer to next run-loop so all onChange handlers in this frame
+                    // complete first (thinkingJustEnded may be set by isThinking handler).
+                    DispatchQueue.main.async {
+                        if thinkingJustEnded {
+                            // Thinking bubble fade-out (.18s) still in layout —
+                            // delay scroll until after the transition clears.
+                            thinkingJustEnded = false
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { scrollBottom(proxy) }
+                        } else {
+                            scrollBottom(proxy)
+                        }
                     }
                 }
                 .onChange(of: vm.activeSession?.isThinking) { _, thinking in
@@ -143,11 +142,12 @@ struct ChatScrollAreaView: View {
                 .onChange(of: vm.showAgentMessages) { _, _ in rebuildMessageGroups() }
                 .onChange(of: vm.verboseMode) { _, _ in rebuildMessageGroups() }
                 .onChange(of: vm.isRecording) { _, recording in
-                    if !recording && isAtBottom {
+                    if !recording && isAtBottom && !thinkingJustEnded {
                         // Waveform left the layout — safeAreaInset shrank ~56pt.
                         // UIKit clamps contentOffset on inset shrink, so the scroll
                         // position no longer sits at the true bottom. Re-anchor instantly
                         // after layout settles to eliminate the visual drift.
+                        // Skip if thinkingJustEnded — MessageListKey handler owns the scroll.
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                             proxy.scrollTo("bottom", anchor: .bottom)
                         }
