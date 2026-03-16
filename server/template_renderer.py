@@ -161,6 +161,13 @@ class TemplateRenderer:
                 if rf.exists():
                     rf.unlink()
                     log.info("Removed %s for %s (no role)", rf, voice_id)
+            # Codex: re-render AGENTS.md without role rules
+            agents_md = work_dir / "AGENTS.md"
+            if agents_md.exists():
+                base_content = await self.render(voice_id)
+                if base_content:
+                    agents_md.write_text(base_content)
+            self._update_opencode_instructions(work_dir)
             return True
 
         role_rules = self._load_rules(role)
