@@ -140,6 +140,8 @@ function handleMessage(data) {
           existing.speed = s.speed || existing.speed;
           existing.model = s.model || existing.model;
           existing.effort = s.effort || existing.effort;
+          existing.backend = s.backend || existing.backend;
+          existing.model_id = s.model_id || existing.model_id;
           existing.project = s.project || existing.project || '';
           existing.project_repo = s.project_repo || existing.project_repo || '';
           existing.unreadCount = s.unread_count || 0;
