@@ -22,6 +22,7 @@ struct ChatScrollAreaView: View {
     // Set true only by .onScrollPhaseChange (user drag). Cleared by ScrollBottomDetector
     // (user returned to bottom) or session switch. Layout-driven geometry changes never set it.
     @State private var userScrolledUp = false
+    @State private var userHasDragged = false  // true after user touches the scroll view
     @State private var isNearBottom = true  // tracks geometry for chevron visibility
 
     var body: some View {
@@ -58,14 +59,21 @@ struct ChatScrollAreaView: View {
                 .scrollDismissesKeyboard(.immediately)
                 .scrollBounceBehavior(.basedOnSize, axes: .vertical)
                 .accessibilityIdentifier("ChatScrollView")
-                // Geometry-based near-bottom detector.
-                // isNearBottom: drives chevron visibility (direct, no debounce).
-                // userScrolledUp: gates auto-scroll. Set when user scrolls away from bottom.
-                //   Only cleared by: chevron tap, session switch. Never cleared by geometry
-                //   to avoid oscillation during scroll deceleration.
+                // Hybrid scroll detection:
+                // 1. ScrollPhaseDetector sets userHasDragged when user touches the scroll
+                // 2. ScrollBottomDetector tracks geometry (isNearBottom)
+                // 3. userScrolledUp = userHasDragged && !isNearBottom (user deliberately scrolled away)
+                // 4. Cleared when geometry reports near bottom, or on session switch / chevron tap
+                // This prevents layout transitions from false-triggering userScrolledUp.
+                .modifier(ScrollPhaseDetector(isNearBottom: isNearBottom, userScrolledUp: $userHasDragged))
                 .modifier(ScrollBottomDetector(isAtBottom: $isNearBottom))
                 .onChange(of: isNearBottom) { _, nearBottom in
-                    if !nearBottom { userScrolledUp = true }
+                    if nearBottom {
+                        userScrolledUp = false
+                        userHasDragged = false
+                    } else if userHasDragged {
+                        userScrolledUp = true
+                    }
                 }
                 .modifier(ScrollTopDetector(
                     isLoadingOlder: $isLoadingOlder,
