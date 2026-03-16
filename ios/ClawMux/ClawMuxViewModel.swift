@@ -719,6 +719,14 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
                 self.switchToSession(sid)
             }
         }
+        // Handle ControlWidget walking mode activation
+        NotificationCenter.default.addObserver(
+            forName: .activateWalkingMode, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.activateWalkingMode()
+            }
+        }
         // Handle audio session interruptions (e.g. user opens Spotify)
         NotificationCenter.default.addObserver(
             forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
