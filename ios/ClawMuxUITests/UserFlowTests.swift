@@ -698,4 +698,117 @@ final class UserFlowTests: XCTestCase {
 
         XCTAssertTrue(app.exists, "App should survive keyboard-open agent switch")
     }
+
+    // MARK: - Full Conversation with Liam and Lewis
+
+    /// Navigate to Liam and Lewis via expanded sidebar (aggressive scrolling),
+    /// send user messages, wait for responses, scroll through history, switch between them.
+    func testConversationWithLiamAndLewis() throws {
+        saveScreenshot("conv_00_start")
+
+        let hamburger = app.buttons["HamburgerButton"].firstMatch
+        guard hamburger.waitForExistence(timeout: 8) else { XCTFail("No hamburger"); return }
+
+        // Switch to text mode
+        let modeBtn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'mode'")).firstMatch
+        if modeBtn.waitForExistence(timeout: 5) { modeBtn.tap(); sleep(1) }
+        saveScreenshot("conv_01_text_mode")
+
+        // Navigate to agent by name with aggressive sidebar scrolling
+        func goTo(_ name: String) -> Bool {
+            hamburger.tap(); sleep(2)
+            let sidebar = app.scrollViews["SidebarScrollView"].firstMatch
+            guard sidebar.waitForExistence(timeout: 3) else { return false }
+            for _ in 0..<6 {
+                let btn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] '\(name)'")).firstMatch
+                if btn.waitForExistence(timeout: 1) { btn.tap(); sleep(2); return true }
+                sidebar.swipeUp(); sleep(1)
+            }
+            hamburger.tap(); sleep(1)
+            return false
+        }
+
+        // Send user message via text field
+        func send(_ text: String) -> Bool {
+            let tf = app.textFields.firstMatch
+            let tv = app.textViews.firstMatch
+            let input = tf.exists ? tf : tv
+            guard input.waitForExistence(timeout: 5) else { return false }
+            input.tap(); sleep(1)
+            input.typeText(text)
+            let sendBtn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'send' OR label CONTAINS[c] 'arrow'")).firstMatch
+            guard sendBtn.waitForExistence(timeout: 3) else { return false }
+            sendBtn.tap(); sleep(2)
+            return true
+        }
+
+        // === LIAM ===
+        let foundLiam = goTo("Liam")
+        saveScreenshot("conv_02_liam")
+        XCTAssertTrue(foundLiam, "Should find Liam")
+
+        if foundLiam {
+            let s1 = send("Tell me a short story about a robot")
+            saveScreenshot("conv_03_liam_sent")
+            XCTAssertTrue(s1, "Should send to Liam")
+            sleep(10)
+            saveScreenshot("conv_04_liam_response")
+
+            let s2 = send("Now tell me a joke")
+            saveScreenshot("conv_05_liam_joke_sent")
+            sleep(10)
+            saveScreenshot("conv_06_liam_joke_response")
+
+            // Scroll up
+            let chat = app.scrollViews["ChatScrollView"].firstMatch
+            if chat.exists {
+                chat.swipeDown(velocity: .fast)
+                chat.swipeDown(velocity: .fast)
+                sleep(1)
+                saveScreenshot("conv_07_liam_scrolled_up")
+                chat.swipeUp(velocity: .fast)
+                chat.swipeUp(velocity: .fast)
+                chat.swipeUp(velocity: .fast)
+                sleep(1)
+                saveScreenshot("conv_08_liam_back_down")
+            }
+        }
+
+        // === LEWIS ===
+        let foundLewis = goTo("Lewis")
+        saveScreenshot("conv_09_lewis")
+        XCTAssertTrue(foundLewis, "Should find Lewis")
+
+        if foundLewis {
+            let s3 = send("Write me a haiku about testing")
+            saveScreenshot("conv_10_lewis_sent")
+            XCTAssertTrue(s3, "Should send to Lewis")
+            sleep(10)
+            saveScreenshot("conv_11_lewis_response")
+
+            let s4 = send("Now write one about debugging")
+            saveScreenshot("conv_12_lewis_debug_sent")
+            sleep(10)
+            saveScreenshot("conv_13_lewis_debug_response")
+        }
+
+        // === Back to Liam ===
+        let backLiam = goTo("Liam")
+        saveScreenshot("conv_14_back_to_liam")
+        if backLiam {
+            let chat = app.scrollViews["ChatScrollView"].firstMatch
+            if chat.exists {
+                // Deep scroll up
+                for _ in 0..<5 { chat.swipeDown(velocity: .fast); usleep(500_000) }
+                saveScreenshot("conv_15_liam_deep_scroll")
+                // Back to bottom via chevron or scroll
+                let chevron = app.buttons.matching(NSPredicate(format: "label CONTAINS 'chevron'")).firstMatch
+                if chevron.waitForExistence(timeout: 2) { chevron.tap(); sleep(1) }
+                else { for _ in 0..<8 { chat.swipeUp(velocity: .fast) }; sleep(1) }
+                saveScreenshot("conv_16_liam_final")
+            }
+        }
+
+        XCTAssertTrue(app.exists, "App should survive full conversation test")
+    }
 }
