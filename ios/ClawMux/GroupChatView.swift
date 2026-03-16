@@ -86,11 +86,9 @@ struct GroupChatScrollView: View {
                     .id(vm.activeGroupName)
                     .scrollDismissesKeyboard(.immediately)
                     .scrollBounceBehavior(.basedOnSize, axes: .vertical)
-                    .modifier(ScrollPhaseDetector(isNearBottom: isNearBottom, userScrolledUp: $userScrolledUp))
                     .modifier(ScrollBottomDetector(isAtBottom: $isNearBottom))
                     .onChange(of: isNearBottom) { _, nearBottom in
-                        if nearBottom { userScrolledUp = false }
-                        else { userScrolledUp = true }
+                        if !nearBottom { userScrolledUp = true }
                     }
                     .onChange(of: vm.groupMessages.count) { _, _ in
                         guard !userScrolledUp else { return }
@@ -104,7 +102,7 @@ struct GroupChatScrollView: View {
                         if let name = vm.activeGroupName { vm.fetchGroupHistory(groupName: name) }
                     }
 
-                    if userScrolledUp {
+                    if !isNearBottom {
                         Button {
                             userScrolledUp = false
                             withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo("gc-bottom", anchor: .bottom) }
@@ -126,7 +124,7 @@ struct GroupChatScrollView: View {
                         .padding(.trailing, 16)
                         .padding(.bottom, 8)
                         .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .bottomTrailing)))
-                        .animation(.spring(response: 0.25), value: userScrolledUp)
+                        .animation(.spring(response: 0.25), value: isNearBottom)
                     }
                 }
             }

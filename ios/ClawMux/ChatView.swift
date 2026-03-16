@@ -58,12 +58,14 @@ struct ChatScrollAreaView: View {
                 .scrollDismissesKeyboard(.immediately)
                 .scrollBounceBehavior(.basedOnSize, axes: .vertical)
                 .accessibilityIdentifier("ChatScrollView")
-                .modifier(ScrollPhaseDetector(isNearBottom: isNearBottom, userScrolledUp: $userScrolledUp))
-                // Geometry-based near-bottom check — used to CLEAR userScrolledUp and show/hide chevron.
+                // Geometry-based near-bottom detector.
+                // isNearBottom: drives chevron visibility (direct, no debounce).
+                // userScrolledUp: gates auto-scroll. Set when user scrolls away from bottom.
+                //   Only cleared by: chevron tap, session switch. Never cleared by geometry
+                //   to avoid oscillation during scroll deceleration.
                 .modifier(ScrollBottomDetector(isAtBottom: $isNearBottom))
                 .onChange(of: isNearBottom) { _, nearBottom in
-                    if nearBottom { userScrolledUp = false }
-                    else { userScrolledUp = true }
+                    if !nearBottom { userScrolledUp = true }
                 }
                 .modifier(ScrollTopDetector(
                     isLoadingOlder: $isLoadingOlder,
@@ -111,7 +113,7 @@ struct ChatScrollAreaView: View {
                 .onChange(of: vm.showAgentMessages) { _, _ in rebuildMessageGroups() }
                 .onChange(of: vm.verboseMode) { _, _ in rebuildMessageGroups() }
 
-                if userScrolledUp {
+                if !isNearBottom {
                     Button {
                         userScrolledUp = false
                         withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo("bottom", anchor: .bottom) }
@@ -133,7 +135,7 @@ struct ChatScrollAreaView: View {
                     .padding(.trailing, 16)
                     .padding(.bottom, 8)
                     .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .bottomTrailing)))
-                    .animation(.spring(response: 0.25), value: userScrolledUp)
+                    .animation(.spring(response: 0.25), value: isNearBottom)
                 }
             }
         }
