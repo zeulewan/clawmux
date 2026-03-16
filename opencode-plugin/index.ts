@@ -14,7 +14,9 @@
  * Required env vars (set by ClawMux hub at spawn time):
  *   CLAWMUX_PORT        — hub HTTP port
  *   CLAWMUX_SESSION_ID  — session identifier sent in the ClawMux-Session header
- *   OPENCODE_PORT        — local OpenCode HTTP server port (for inbox delivery)
+ *
+ * OpenCode session info for inbox delivery is read from .clawmux-opencode.json
+ * (written by OpenCodeBackend at spawn time).
  */
 
 import type { Plugin } from "@opencode-ai/plugin"
@@ -85,9 +87,10 @@ function formatInboxMessages(messages: InboxMessage[]): string {
 }
 
 /**
- * Read and clear .inbox.jsonl, returning parsed messages.
+ * Read .inbox.jsonl, returning parsed messages. Does NOT clear the file —
+ * caller must call clearInbox() after successful delivery.
  */
-function readAndClearInbox(workDir: string): InboxMessage[] {
+function readInbox(workDir: string): InboxMessage[] {
   const inboxPath = join(workDir, ".inbox.jsonl")
   if (!existsSync(inboxPath)) return []
   let raw: string
@@ -106,19 +109,22 @@ function readAndClearInbox(workDir: string): InboxMessage[] {
       // Skip malformed lines
     }
   }
-  if (messages.length > 0) {
-    try {
-      writeFileSync(inboxPath, "")
-    } catch {
-      // Best effort clear
-    }
-  }
   return messages
 }
 
 /**
+ * Clear .inbox.jsonl. Call only after successful delivery.
+ */
+function clearInbox(workDir: string): void {
+  try {
+    writeFileSync(join(workDir, ".inbox.jsonl"), "")
+  } catch {
+    // Best effort
+  }
+}
+
+/**
  * Load OpenCode session info from .clawmux-opencode.json (written by hub at spawn).
- * Falls back to OPENCODE_PORT env var + discovery if file is missing.
  */
 function loadOpenCodeInfo(workDir: string): OpenCodeInfo | null {
   const infoPath = join(workDir, ".clawmux-opencode.json")
@@ -146,7 +152,7 @@ export default (async ({ directory }) => {
   let ocInfo: OpenCodeInfo | null = null
 
   async function checkAndDeliverInbox(): Promise<void> {
-    const messages = readAndClearInbox(cwd)
+    const messages = readInbox(cwd)
     if (messages.length === 0) return
 
     // Lazy-load OpenCode connection info
@@ -166,9 +172,10 @@ export default (async ({ directory }) => {
           signal: AbortSignal.timeout(TIMEOUT_MS),
         },
       )
+      // Clear inbox only after successful delivery
+      clearInbox(cwd)
     } catch {
-      // Delivery failed — messages are already cleared from inbox.
-      // The hub will re-send if needed via its own delivery path.
+      // Delivery failed — inbox NOT cleared, messages will be retried next hook.
     }
   }
 

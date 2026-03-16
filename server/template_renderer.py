@@ -118,8 +118,8 @@ class TemplateRenderer:
     async def render_to_file(self, voice_id: str, work_dir: Path, **_kw: str) -> bool:
         """Render instructions in ALL formats to the agent's work directory.
 
-        Always writes both Claude Code and OpenCode formats so agents can
-        switch backends without re-rendering.
+        Writes Claude Code, OpenCode, and Codex formats so agents can switch
+        backends without re-rendering.
         """
         content = await self.render(voice_id)
         if content is None:
@@ -127,21 +127,23 @@ class TemplateRenderer:
 
         # Claude Code: CLAUDE.md
         (work_dir / "CLAUDE.md").write_text(content)
-        log.info("Rendered CLAUDE.md for %s at %s", voice_id, work_dir / "CLAUDE.md")
 
         # OpenCode: INSTRUCTIONS.md
         (work_dir / "INSTRUCTIONS.md").write_text(content)
-        log.info("Rendered INSTRUCTIONS.md for %s at %s", voice_id, work_dir / "INSTRUCTIONS.md")
 
-        # Codex: AGENTS.md
-        (work_dir / "AGENTS.md").write_text(content)
-        log.info("Rendered AGENTS.md for %s at %s", voice_id, work_dir / "AGENTS.md")
+        # Codex: AGENTS.md (with role rules appended — Codex has no separate rules file)
+        entry = await self._store.get(voice_id)
+        role = entry.role if entry else ""
+        role_rules = self._load_rules(role) if role else ""
+        codex_content = content
+        if role_rules:
+            codex_content += "\n" + role_rules + "\n"
+        (work_dir / "AGENTS.md").write_text(codex_content)
 
-        # Role rules for all backends
+        # Role rules for Claude Code + OpenCode (separate rule files)
         await self.render_role_to_file(voice_id, work_dir)
 
-        # Register OpenCode instruction files
-        self._update_opencode_instructions(work_dir)
+        log.info("Rendered all instruction formats for %s at %s", voice_id, work_dir)
         return True
 
     async def render_role_to_file(self, voice_id: str, work_dir: Path, **_kw: str) -> bool:
@@ -168,7 +170,7 @@ class TemplateRenderer:
             rf.write_text(content)
         log.info("Rendered role rules (role=%s) for %s", role, voice_id)
 
-        # Update opencode.json instructions array
+        # Update opencode.json instructions array (needed for standalone role changes)
         self._update_opencode_instructions(work_dir)
         return True
 
