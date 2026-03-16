@@ -2139,6 +2139,43 @@ final class ClawMuxViewModel: NSObject, ObservableObject {
         URLSession.shared.dataTask(with: req) { _, _, _ in }.resume()
     }
 
+    func createFolder(name: String) {
+        guard !name.isEmpty, let baseURL = httpBaseURL() else { return }
+        let slug = name.lowercased()
+            .replacingOccurrences(of: "[^a-z0-9]+", with: "-", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        guard !slug.isEmpty else { return }
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/projects"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["slug": slug, "name": name])
+        URLSession.shared.dataTask(with: req) { [weak self] _, _, _ in
+            Task { @MainActor in self?.fetchProjects() }
+        }.resume()
+    }
+
+    func renameFolder(_ slug: String, newName: String) {
+        guard !newName.isEmpty, let baseURL = httpBaseURL() else { return }
+        if let fi = folders.firstIndex(where: { $0.id == slug }) { folders[fi].name = newName }
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/projects/\(slug)"))
+        req.httpMethod = "PUT"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["name": newName])
+        URLSession.shared.dataTask(with: req) { [weak self] _, _, _ in
+            Task { @MainActor in self?.fetchProjects() }
+        }.resume()
+    }
+
+    func deleteFolder(_ slug: String) {
+        guard let baseURL = httpBaseURL() else { return }
+        folders.removeAll { $0.id == slug }
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/projects/\(slug)"))
+        req.httpMethod = "DELETE"
+        URLSession.shared.dataTask(with: req) { [weak self] _, _, _ in
+            Task { @MainActor in self?.fetchProjects() }
+        }.resume()
+    }
+
     // All projects: use server-fetched folders as the authoritative list.
     // session.project is a freeform agent-set display string (may be mixed case),
     // so merging it causes duplicates like "clawmux" + "Clawmux" in the menu.

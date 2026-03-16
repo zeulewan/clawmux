@@ -8,6 +8,13 @@ struct SettingsView: View {
     @State private var draftURL: String = ""
     @State private var draftTTSURL: String = ""
     @State private var draftSTTURL: String = ""
+    @State private var newFolderName: String = ""
+    @State private var showNewFolderField: Bool = false
+    @State private var renamingFolder: ProjectFolder? = nil
+    @State private var renameFolderName: String = ""
+    @State private var deletingFolder: ProjectFolder? = nil
+    @State private var newGroupName: String = ""
+    @State private var showNewGroupField: Bool = false
 
     var urlChanged: Bool { draftURL.trimmingCharacters(in: .whitespaces) != vm.serverURL.trimmingCharacters(in: .whitespaces) }
     var appVersion:  String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—" }
@@ -171,6 +178,94 @@ struct SettingsView: View {
                     }
                 }
                 .onAppear { vm.fetchUsage() }
+
+                // Folders
+                Section("Folders") {
+                    ForEach(vm.folders) { folder in
+                        HStack {
+                            Text(folder.name)
+                            Spacer()
+                            Text("\(folder.voices.count)").font(.caption).foregroundStyle(.secondary)
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            if folder.id != "default" {
+                                Button(role: .destructive) { deletingFolder = folder } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                                Button { renamingFolder = folder; renameFolderName = folder.name } label: {
+                                    Label("Rename", systemImage: "pencil")
+                                }
+                                .tint(.orange)
+                            }
+                        }
+                    }
+                    if showNewFolderField {
+                        HStack {
+                            TextField("Folder name", text: $newFolderName)
+                                .textInputAutocapitalization(.never).autocorrectionDisabled()
+                            Button("Add") {
+                                vm.createFolder(name: newFolderName.trimmingCharacters(in: .whitespaces))
+                                newFolderName = ""; showNewFolderField = false
+                            }
+                            .disabled(newFolderName.trimmingCharacters(in: .whitespaces).isEmpty)
+                            Button("Cancel", role: .cancel) { newFolderName = ""; showNewFolderField = false }
+                        }
+                    } else {
+                        Button { showNewFolderField = true } label: {
+                            Label("New Folder", systemImage: "folder.badge.plus")
+                        }
+                    }
+                }
+                .alert("Rename Folder", isPresented: Binding(
+                    get: { renamingFolder != nil },
+                    set: { if !$0 { renamingFolder = nil } }
+                )) {
+                    TextField("New name", text: $renameFolderName)
+                    Button("Rename") {
+                        if let f = renamingFolder {
+                            vm.renameFolder(f.id, newName: renameFolderName.trimmingCharacters(in: .whitespaces))
+                        }
+                        renamingFolder = nil
+                    }
+                    Button("Cancel", role: .cancel) { renamingFolder = nil }
+                } message: { Text("Enter a new name for \"\(renamingFolder?.name ?? "")\"") }
+                .alert("Delete Folder", isPresented: Binding(
+                    get: { deletingFolder != nil },
+                    set: { if !$0 { deletingFolder = nil } }
+                )) {
+                    Button("Delete", role: .destructive) {
+                        if let f = deletingFolder { vm.deleteFolder(f.id) }
+                        deletingFolder = nil
+                    }
+                    Button("Cancel", role: .cancel) { deletingFolder = nil }
+                } message: { Text("Delete \"\(deletingFolder?.name ?? "")\"? Agents in this folder will be moved to Default.") }
+
+                // Group Chats
+                Section("Group Chats") {
+                    ForEach(vm.knownGroupChats, id: \.name) { gc in
+                        HStack {
+                            Text(gc.name)
+                            Spacer()
+                            Text("\(gc.voices.count) members").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    if showNewGroupField {
+                        HStack {
+                            TextField("Group name", text: $newGroupName)
+                                .textInputAutocapitalization(.never).autocorrectionDisabled()
+                            Button("Create") {
+                                vm.createGroupChat(name: newGroupName.trimmingCharacters(in: .whitespaces))
+                                newGroupName = ""; showNewGroupField = false
+                            }
+                            .disabled(newGroupName.trimmingCharacters(in: .whitespaces).isEmpty)
+                            Button("Cancel", role: .cancel) { newGroupName = ""; showNewGroupField = false }
+                        }
+                    } else {
+                        Button { showNewGroupField = true } label: {
+                            Label("New Group Chat", systemImage: "bubble.left.and.bubble.right")
+                        }
+                    }
+                }
 
                 // Debug
                 Section("Debug") {
