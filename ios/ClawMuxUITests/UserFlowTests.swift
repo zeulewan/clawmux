@@ -273,6 +273,160 @@ final class UserFlowTests: XCTestCase {
         XCTAssertTrue(app.exists, "App should survive round-trip agent switching")
     }
 
+    // MARK: - Navigate To Michael (Header Check)
+
+    /// Navigate to Michael's chat via expanded sidebar and screenshot the header.
+    func testMichaelHeaderNotCutOff() throws {
+        saveScreenshot("michael_00_start")
+
+        let hamburger = app.buttons["HamburgerButton"].firstMatch
+        guard hamburger.waitForExistence(timeout: 8) else { XCTFail("No hamburger"); return }
+        hamburger.tap()
+        sleep(2)
+
+        let sidebar = app.scrollViews["SidebarScrollView"].firstMatch
+        if sidebar.waitForExistence(timeout: 3) {
+            sidebar.swipeUp()
+            sleep(1)
+        }
+
+        let michael = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'Michael'")).firstMatch
+        if michael.waitForExistence(timeout: 3) {
+            michael.tap()
+            sleep(2)
+            saveScreenshot("michael_01_header")
+        } else {
+            saveScreenshot("michael_01_not_found")
+        }
+        XCTAssertTrue(app.exists)
+    }
+
+    // MARK: - Blank Chat Viewport Reproduction
+
+    /// Systematically try UI action combinations to reproduce the blank chat bug:
+    /// open/close sidebar, switch agents, open/close settings, open/close debug,
+    /// switch to group chat and back. After each action, check if chat has content.
+    func testBlankChatViewportReproduction() throws {
+        saveScreenshot("blank_00_start")
+
+        let hamburger = app.buttons["HamburgerButton"].firstMatch
+        guard hamburger.waitForExistence(timeout: 8) else { XCTFail("No hamburger"); return }
+
+        // Start with an agent that has messages
+        tapAgent(at: 0)
+        sleep(2)
+
+        let chatScroll = app.scrollViews["ChatScrollView"].firstMatch
+
+        func checkChatVisible(_ label: String) -> Bool {
+            let exists = chatScroll.waitForExistence(timeout: 3)
+            let textCount = app.staticTexts.count
+            saveScreenshot("blank_\(label)")
+            if exists && textCount < 3 {
+                // Possible blank — very few text elements visible
+                print("[BLANK?] \(label): ChatScrollView exists but only \(textCount) texts")
+                return false
+            }
+            return exists
+        }
+
+        // Action 1: Open and close sidebar
+        hamburger.tap(); sleep(1)
+        hamburger.tap(); sleep(1)
+        let r1 = checkChatVisible("01_sidebar_toggle")
+
+        // Action 2: Switch agent and back
+        tapAgent(at: 1); sleep(1)
+        tapAgent(at: 0); sleep(1)
+        let r2 = checkChatVisible("02_agent_switch_back")
+
+        // Action 3: Open settings, close it
+        hamburger.tap(); sleep(1)
+        let settingsBtn = app.buttons["SidebarSettingsButton"].firstMatch
+        if settingsBtn.waitForExistence(timeout: 3) {
+            settingsBtn.tap()
+            sleep(1)
+            saveScreenshot("blank_03a_settings_open")
+            let doneBtn = app.buttons["Done"].firstMatch
+            if doneBtn.waitForExistence(timeout: 3) { doneBtn.tap() }
+            sleep(1)
+        }
+        hamburger.tap(); sleep(1) // close sidebar
+        let r3 = checkChatVisible("03_after_settings")
+
+        // Action 4: Open notes, close it
+        hamburger.tap(); sleep(1)
+        let notesBtn = app.buttons["SidebarNotesButton"].firstMatch
+        if notesBtn.waitForExistence(timeout: 3) {
+            notesBtn.tap()
+            sleep(1)
+            saveScreenshot("blank_04a_notes_open")
+            // Close notes by tapping outside or back
+            let closeNotes = app.buttons["Done"].firstMatch
+            if closeNotes.waitForExistence(timeout: 2) { closeNotes.tap() }
+            sleep(1)
+        }
+        hamburger.tap(); sleep(1) // close sidebar
+        let r4 = checkChatVisible("04_after_notes")
+
+        // Action 5: Switch to group chat and back
+        hamburger.tap(); sleep(1)
+        let sidebar = app.scrollViews["SidebarScrollView"].firstMatch
+        if sidebar.waitForExistence(timeout: 3) {
+            sidebar.swipeUp(); sleep(1)
+            sidebar.swipeUp(); sleep(1)
+        }
+        let gcCard = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'GroupChatCard-'")).firstMatch
+        if gcCard.waitForExistence(timeout: 3) {
+            gcCard.tap()
+            sleep(2)
+            saveScreenshot("blank_05a_group_chat")
+            // Switch back to agent
+            hamburger.tap(); sleep(1)
+            tapAgent(at: 0); sleep(2)
+        }
+        let r5 = checkChatVisible("05_after_group_switch")
+
+        // Action 6: Rapid mixed sequence
+        for i in 0..<5 {
+            hamburger.tap(); usleep(300_000)
+            hamburger.tap(); usleep(300_000)
+            tapAgent(at: i % 5); usleep(500_000)
+        }
+        sleep(1)
+        let r6 = checkChatVisible("06_rapid_mixed")
+
+        // Action 7: Open debug panel, close it
+        hamburger.tap(); sleep(1)
+        if settingsBtn.waitForExistence(timeout: 3) {
+            settingsBtn.tap()
+            sleep(1)
+            // Look for debug button in settings
+            let debugBtn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'Debug'")).firstMatch
+            if debugBtn.waitForExistence(timeout: 3) {
+                debugBtn.tap()
+                sleep(2)
+                saveScreenshot("blank_07a_debug_open")
+                // Close debug by tapping the debug button again or navigating away
+                tapAgent(at: 0)
+                sleep(2)
+            } else {
+                let doneBtn = app.buttons["Done"].firstMatch
+                if doneBtn.waitForExistence(timeout: 2) { doneBtn.tap() }
+            }
+            sleep(1)
+        }
+        hamburger.tap(); sleep(1) // close sidebar if open
+        let r7 = checkChatVisible("07_after_debug")
+
+        // Report
+        let allPassed = r1 && r2 && r3 && r4 && r5 && r6 && r7
+        if !allPassed {
+            print("[BLANK] Some checks found possible blank viewport — review screenshots")
+        }
+        XCTAssertTrue(app.exists, "App should survive full UI action sequence")
+    }
+
     // MARK: - Keyboard Open + Switch Agent: Clean Transition
 
     /// Open keyboard in text mode, then tap a different agent.
