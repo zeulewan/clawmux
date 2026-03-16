@@ -4,19 +4,17 @@
   /* Global: disable text selection everywhere on mobile (except text input) */
   *, *::before, *::after { -webkit-tap-highlight-color: transparent; -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; }
   input, textarea { -webkit-user-select: text !important; user-select: text !important; }
-  #header { padding: 3px 12px; gap: 6px; flex-wrap: nowrap; min-height: 44px; overflow: hidden; }
+  #header { padding: 3px 8px; gap: 4px; flex-wrap: nowrap; min-height: 44px; }
   #header h1 { display: none; }
   #header-project-status { display: none; }
-  #active-voice { font-size: 1.2rem !important; font-weight: 700 !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-  /* model-label now used on all screen sizes — no mobile override needed */
-  #usage-bar { padding: 4px 8px !important; font-size: 0.72rem !important; gap: 6px !important; }
+  .header-spacer { flex: 1; min-width: 4px; }
+  #active-voice { font-size: 1rem !important; font-weight: 700 !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex-shrink: 1; }
+  .header-label { white-space: nowrap; flex-shrink: 0; font-size: 0.62rem !important; }
+  #usage-bar { padding: 3px 6px !important; font-size: 0.62rem !important; gap: 4px !important; flex-shrink: 0; }
   #settings-link { font-size: 0; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; padding: 0; }
   #settings-link::before { content: '⚙'; font-size: 14px; }
   #conn-label { display: none; }
-  .header-spacer { flex: 1 0 0; min-width: 0; }
-  /* Put connection dot inline with title */
   #header > div:has(#dot) { padding: 2px 6px !important; border-radius: var(--radius-xs); flex-shrink: 0; }
-  #usage-bar { flex-shrink: 0; }
 
   /* Sidebar: icon-only, absolutely positioned, smooth slide */
   #sidebar {
