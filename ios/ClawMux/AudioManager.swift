@@ -461,7 +461,7 @@ final class AudioManager: NSObject {
     }
 
     private func beginRecording() {
-        guard let vm else { return }
+        guard let vm, !vm.isRecording else { return }
         if (vm.isAutoMode && vm.hapticsRecordingAuto) || (vm.pushToTalk && vm.hapticsRecordingPTT) {
             vm.haptic(.medium)
         }
