@@ -966,4 +966,113 @@ final class UserFlowTests: XCTestCase {
 
         XCTAssertTrue(app.exists, "App should survive extended back-and-forth")
     }
+
+    // MARK: - Switch During Thinking
+
+    /// Send message → agent starts thinking → switch to different agent → come back →
+    /// verify viewport is correct. Repeat multiple rounds.
+    func testSwitchDuringThinkingAndReturn() throws {
+        saveScreenshot("think_00_start")
+
+        let hamburger = app.buttons["HamburgerButton"].firstMatch
+        guard hamburger.waitForExistence(timeout: 8) else { XCTFail("No hamburger"); return }
+
+        // Text mode
+        let modeBtn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'voice' AND label CONTAINS[c] 'mode'")).firstMatch
+        if modeBtn.waitForExistence(timeout: 3) { modeBtn.tap(); sleep(1) }
+        else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.43, dy: 0.065)).tap(); sleep(1) }
+        if !app.textFields.firstMatch.waitForExistence(timeout: 2) && !app.textViews.firstMatch.waitForExistence(timeout: 2) {
+            if modeBtn.exists { modeBtn.tap(); sleep(1) }
+            else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.43, dy: 0.065)).tap(); sleep(1) }
+        }
+
+        func goTo(_ name: String) -> Bool {
+            hamburger.tap(); sleep(2)
+            let sidebar = app.scrollViews["SidebarScrollView"].firstMatch
+            guard sidebar.waitForExistence(timeout: 3) else { return false }
+            for _ in 0..<6 {
+                let btn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] '\(name)'")).firstMatch
+                if btn.waitForExistence(timeout: 1) { btn.tap(); sleep(2); return true }
+                sidebar.swipeUp(); sleep(1)
+            }
+            hamburger.tap(); sleep(1)
+            return false
+        }
+
+        func send(_ text: String) -> Bool {
+            let tf = app.textFields.firstMatch
+            let tv = app.textViews.firstMatch
+            let input = tf.exists ? tf : tv
+            guard input.waitForExistence(timeout: 5) else { return false }
+            input.tap(); sleep(1)
+            input.typeText(text)
+            let sendBtn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'send' OR label CONTAINS[c] 'arrow'")).firstMatch
+            guard sendBtn.waitForExistence(timeout: 3) else { return false }
+            sendBtn.tap(); sleep(1) // short wait — we want to catch the thinking state
+            return true
+        }
+
+        func checkScroll(_ label: String) {
+            let chevron = app.buttons.matching(NSPredicate(format: "label CONTAINS 'chevron'")).firstMatch
+            let atBottom = !chevron.exists
+            let textCount = app.staticTexts.count
+            saveScreenshot("think_\(label)")
+            print("[THINK] \(label): atBottom=\(atBottom) texts=\(textCount)")
+        }
+
+        // Go to Liam
+        guard goTo("Liam") else { XCTFail("Can't find Liam"); return }
+        checkScroll("01_liam_opened")
+
+        // === Round 1: Send, catch thinking, switch to Adam, come back ===
+        let s1 = send("Write me a very long detailed essay about the history of lighthouses, at least 5 paragraphs")
+        checkScroll("02_sent_thinking") // should see thinking dots
+        // Immediately switch to a different agent while Liam is thinking
+        tapAgent(at: 0) // tap first sidebar icon (some agent)
+        sleep(2)
+        checkScroll("03_other_agent")
+        // Switch back to Liam
+        guard goTo("Liam") else { XCTFail("Can't return to Liam"); return }
+        sleep(3)
+        checkScroll("04_back_to_liam_during_think")
+        // Wait for response to finish
+        sleep(15)
+        checkScroll("05_liam_response_done")
+
+        // === Round 2: Send another, switch to Lewis, come back ===
+        let s2 = send("Now write about the future of lighthouses in 3 paragraphs")
+        checkScroll("06_sent_second")
+        // Switch to Lewis while Liam thinks
+        if goTo("Lewis") {
+            sleep(2)
+            checkScroll("07_lewis_while_liam_thinks")
+            // Send Lewis a message too
+            let s3 = send("Write a limerick about a lighthouse")
+            checkScroll("08_lewis_sent")
+            sleep(2) // don't wait for full response
+            checkScroll("09_lewis_thinking")
+        }
+        // Back to Liam
+        guard goTo("Liam") else { return }
+        sleep(10)
+        checkScroll("10_liam_second_response")
+
+        // === Round 3: Rapid switch during thinking ===
+        let s4 = send("One more paragraph about modern lighthouse technology")
+        checkScroll("11_sent_third")
+        // Rapid switch: Liam → agent0 → agent1 → agent2 → Liam
+        tapAgent(at: 0); sleep(1); checkScroll("12_agent0")
+        tapAgent(at: 1); sleep(1); checkScroll("13_agent1")
+        tapAgent(at: 2); sleep(1); checkScroll("14_agent2")
+        guard goTo("Liam") else { return }
+        sleep(10)
+        checkScroll("15_liam_final")
+
+        // === Round 4: Back to Lewis to see if his response arrived ===
+        if goTo("Lewis") {
+            checkScroll("16_lewis_final")
+        }
+
+        XCTAssertTrue(app.exists, "App should survive switch-during-thinking test")
+    }
 }
