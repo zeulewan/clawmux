@@ -50,7 +50,6 @@ struct ContentView: View {
             SidebarView(
                 vm: vm,
                 sidebarExpanded: $sidebarExpanded,
-                isPulsing: $isPulsing,
                 collapsedProjects: $collapsedProjects,
                 showResetConfirm: $showResetConfirm,
                 resetVoiceId: $resetVoiceId,
@@ -140,7 +139,6 @@ struct ContentView: View {
             } else {
                 WelcomeView(
                     vm: vm,
-                    isPulsing: $isPulsing,
                     collapsedProjects: $collapsedProjects,
                     sidebarExpanded: $sidebarExpanded,
                     showResetConfirm: $showResetConfirm,
@@ -399,7 +397,6 @@ struct ContentView: View {
             isLoadingOlder: $isLoadingOlder,
             thinkingExpanded: $thinkingExpanded,
             expandedAgentMsgIds: $expandedAgentMsgIds,
-            isPulsing: $isPulsing,
             showCopiedToast: $showCopiedToast
         )
     }

@@ -5,7 +5,7 @@ import SwiftUI
 
 struct WelcomeView: View {
     @ObservedObject var vm: ClawMuxViewModel
-    @Binding var isPulsing: Bool
+    @State private var isPulsing = false
     @Binding var collapsedProjects: Set<String>
     @Binding var sidebarExpanded: Bool
     @Binding var showResetConfirm: Bool
@@ -86,6 +86,7 @@ struct WelcomeView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(.leading, 48)
+        .onAppear { isPulsing = true }
     }
 
     // MARK: - Project Grouping

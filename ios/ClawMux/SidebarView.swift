@@ -6,7 +6,7 @@ import SwiftUI
 struct SidebarView: View {
     @ObservedObject var vm: ClawMuxViewModel
     @Binding var sidebarExpanded: Bool
-    @Binding var isPulsing: Bool
+    @State private var isPulsing = false
     @Binding var collapsedProjects: Set<String>
     @Binding var showResetConfirm: Bool
     @Binding var resetVoiceId: String?
@@ -173,6 +173,7 @@ struct SidebarView: View {
             if !expanded { withAnimation { sidebarProxy.scrollTo("sidebar-top", anchor: .top) } }
         }
         .animation(.easeInOut(duration: 0.25), value: sidebarExpanded)
+        .onAppear { isPulsing = true }
         .sheet(item: $monitorItem) { item in
             MonitorSheet(title: item.title, url: item.url, monitorKey: item.id, vm: vm)
         }

@@ -14,8 +14,8 @@ struct ChatScrollAreaView: View {
     @Binding var isLoadingOlder: Bool
     @Binding var thinkingExpanded: Bool
     @Binding var expandedAgentMsgIds: Set<UUID>
-    @Binding var isPulsing: Bool
     @Binding var showCopiedToast: Bool
+    @State private var isPulsing = false
     @State private var topAnchorId: String? = nil   // first message ID captured before older-message load
     @State private var cachedMessageGroups: [MessageGroup] = []
     @State private var scrollPositionID: String? = nil  // declarative scroll anchor for jitter-free prepend
