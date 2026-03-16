@@ -206,6 +206,7 @@ struct ContentView: View {
             // ChatScrollArea always alive — never destroyed by debug panel toggle
             chatScrollArea
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea(edges: .bottom)
                 .safeAreaInset(edge: .bottom, spacing: 0) { bottomInputArea }
 
             if vm.showDebug {
