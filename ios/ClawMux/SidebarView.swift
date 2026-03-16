@@ -100,7 +100,6 @@ struct SidebarView: View {
                     }
                 }
                 .padding(.vertical, 4)
-                .background(ChatScrollLock())  // clamp horizontal drift
         }
         .accessibilityIdentifier("SidebarScrollView")
         .safeAreaInset(edge: .bottom, spacing: 0) {
