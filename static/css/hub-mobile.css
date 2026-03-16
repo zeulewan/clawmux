@@ -8,7 +8,7 @@
   #header h1 { display: none; }
   #header-project-status { display: none; }
   .header-spacer { display: none; }
-  #active-voice { font-size: 1rem !important; font-weight: 700 !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex-shrink: 1; }
+  #active-voice { font-size: 1.15rem !important; font-weight: 700 !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex-shrink: 1; }
   .header-label { white-space: nowrap; flex-shrink: 0; font-size: 0.65rem !important; padding: 6px 8px; border-radius: 6px; }
   #usage-bar { padding: 3px 6px !important; font-size: 0.62rem !important; gap: 4px !important; flex-shrink: 0; }
   #settings-link { font-size: 0; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; padding: 0; }
