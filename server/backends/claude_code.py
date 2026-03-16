@@ -1,8 +1,10 @@
 """Claude Code backend — manages agents via tmux + Claude Code CLI."""
 
 import asyncio
+import json
 import logging
 import os
+import subprocess
 import time
 
 # Ensure Homebrew and local bin are in PATH for subprocess calls (macOS).
@@ -194,6 +196,72 @@ class ClaudeCodeBackend(AgentBackend):
         except Exception as e:
             log.error("Error listing tmux sessions: %s", e)
         return set()
+
+    def get_context_usage(self, session_name: str, session) -> dict | None:
+        """Read token usage from Claude Code's JSONL transcript."""
+        from pathlib import Path
+        claude_session_id = getattr(session, 'claude_session_id', '')
+        if not claude_session_id:
+            return None
+        claude_projects = Path.home() / ".claude" / "projects"
+        jsonl_path = None
+        if claude_projects.exists():
+            for p in claude_projects.iterdir():
+                candidate = p / f"{claude_session_id}.jsonl"
+                if candidate.exists():
+                    jsonl_path = candidate
+                    break
+        if not jsonl_path:
+            return None
+        try:
+            result = subprocess.run(
+                ["tail", "-50", str(jsonl_path)],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode != 0:
+                return None
+            last_usage = None
+            last_model = None
+            for line in result.stdout.strip().split("\n"):
+                if not line:
+                    continue
+                try:
+                    d = json.loads(line)
+                    usage = None
+                    model = None
+                    if d.get("type") == "assistant" and "message" in d:
+                        msg = d["message"] if isinstance(d["message"], dict) else {}
+                        usage = msg.get("usage") or d.get("usage")
+                        model = msg.get("model")
+                    elif d.get("type") == "assistant" and "usage" in d:
+                        usage = d["usage"]
+                    if usage:
+                        last_usage = usage
+                    if model:
+                        last_model = model
+                except (json.JSONDecodeError, KeyError):
+                    continue
+            if not last_usage:
+                return None
+            input_tokens = last_usage.get("input_tokens", 0)
+            cache_creation = last_usage.get("cache_creation_input_tokens", 0)
+            cache_read = last_usage.get("cache_read_input_tokens", 0)
+            output_tokens = last_usage.get("output_tokens", 0)
+            total_context = input_tokens + cache_creation + cache_read
+            context_limit = 200000
+            if last_model and "opus" in last_model:
+                context_limit = 1000000
+            elif getattr(session, 'model', '') == "opus":
+                context_limit = 1000000
+            return {
+                "total_context_tokens": total_context,
+                "output_tokens": output_tokens,
+                "context_limit": context_limit,
+                "percent": round(total_context / context_limit * 100, 1),
+            }
+        except Exception as e:
+            log.warning("Error reading context usage for %s: %s", session_name, e)
+            return None
 
     # --- Internal helpers ---
 

@@ -299,11 +299,8 @@ class SessionManager:
             # Restore backend and model_id from agents.json
             session.backend = getattr(entry, 'backend', 'claude-code') or "claude-code"
             session.model_id = getattr(entry, 'model_id', '') or ""
-            # Restore OpenCode port/session state from disk so HTTP delivery works after reload
-            if session.backend == "opencode":
-                backend_inst = self._get_backend("opencode")
-                if hasattr(backend_inst, 'restore_session'):
-                    backend_inst.restore_session(adopt_id, str(work_dir))
+            # Restore backend-specific state from disk (e.g. OpenCode port/session maps)
+            self._get_backend(session.backend).restore_session(adopt_id, str(work_dir))
             self.sessions[adopt_id] = session
             self._counter += 1
             adopted += 1
@@ -350,73 +347,11 @@ class SessionManager:
         return [s.to_dict() for s in self.sessions.values()]
 
     def get_context_usage(self, session_id: str) -> dict | None:
-        """Read the latest token usage from the session's JSONL transcript."""
+        """Dispatch context usage to the session's backend."""
         session = self.sessions.get(session_id)
-        if not session or not session.claude_session_id:
+        if not session:
             return None
-        # Find the JSONL file in ~/.claude/projects/
-        claude_projects = Path.home() / ".claude" / "projects"
-        jsonl_path = None
-        if claude_projects.exists():
-            for p in claude_projects.iterdir():
-                candidate = p / f"{session.claude_session_id}.jsonl"
-                if candidate.exists():
-                    jsonl_path = candidate
-                    break
-        if not jsonl_path:
-            return None
-        try:
-            # Read last few lines to find the most recent assistant message with usage
-            import subprocess
-            result = subprocess.run(
-                ["tail", "-50", str(jsonl_path)],
-                capture_output=True, text=True, timeout=5
-            )
-            if result.returncode != 0:
-                return None
-            last_usage = None
-            last_model = None
-            for line in result.stdout.strip().split("\n"):
-                if not line:
-                    continue
-                try:
-                    d = json.loads(line)
-                    usage = None
-                    model = None
-                    if d.get("type") == "assistant" and "message" in d:
-                        msg = d["message"] if isinstance(d["message"], dict) else {}
-                        usage = msg.get("usage") or d.get("usage")
-                        model = msg.get("model")
-                    elif d.get("type") == "assistant" and "usage" in d:
-                        usage = d["usage"]
-                    if usage:
-                        last_usage = usage
-                    if model:
-                        last_model = model
-                except (json.JSONDecodeError, KeyError):
-                    continue
-            if not last_usage:
-                return None
-            input_tokens = last_usage.get("input_tokens", 0)
-            cache_creation = last_usage.get("cache_creation_input_tokens", 0)
-            cache_read = last_usage.get("cache_read_input_tokens", 0)
-            output_tokens = last_usage.get("output_tokens", 0)
-            total_context = input_tokens + cache_creation + cache_read
-            # Determine context limit from model — Opus 4.6 has 1M, others 200K
-            context_limit = 200000
-            if last_model and "opus" in last_model:
-                context_limit = 1000000
-            elif session.model == "opus":
-                context_limit = 1000000
-            return {
-                "total_context_tokens": total_context,
-                "output_tokens": output_tokens,
-                "context_limit": context_limit,
-                "percent": round(total_context / context_limit * 100, 1),
-            }
-        except Exception as e:
-            log.warning("Error reading context usage for %s: %s", session_id, e)
-            return None
+        return self._get_backend(session.backend).get_context_usage(session.tmux_session, session)
 
     def _next_voice(self, project_slug: str | None = None) -> tuple[str, str]:
         """Return the next unused (voice_id, display_name) from the project's voice set."""

@@ -141,3 +141,22 @@ class AgentBackend(ABC):
             Set of names that are currently alive.
         """
         return set()
+
+    def restore_session(self, session_name: str, work_dir: str) -> bool:
+        """Restore backend-specific state after hub reload.
+
+        Called during session adoption when the hub restarts. Backends that
+        maintain in-memory state (e.g. OpenCode port/session maps) override
+        this to reload from disk.
+
+        Returns True if state was restored successfully.
+        """
+        return True  # No-op for backends without persistent state
+
+    def get_context_usage(self, session_name: str, session) -> dict | None:
+        """Return token/context usage for this agent, or None if unavailable.
+
+        Returns a dict with: total_context_tokens, output_tokens, context_limit,
+        percent. Backends that don't track token usage return None.
+        """
+        return None
