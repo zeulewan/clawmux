@@ -377,7 +377,7 @@ struct ContentView: View {
         .padding(.horizontal, 12).padding(.vertical, 5)  // mobile web: padding 3px 12px
         .background {
             if #available(iOS 26, *) {
-                Color.clear.glassEffect(.regular, in: TopOpenRect()).ignoresSafeArea(edges: .top)
+                Color.clear.glassEffect(.regular, in: .rect).ignoresSafeArea(edges: .top)
             } else {
                 Color.canvas1.opacity(0.85).background(.ultraThinMaterial).ignoresSafeArea(edges: .top)
             }
