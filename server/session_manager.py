@@ -71,6 +71,7 @@ class Session:
     max_reinject_attempts: int = 3  # max re-injection attempts before giving up
     walking_mode: bool = False  # user is walking — agent should use plain spoken text only
     last_state_change: float = 0.0  # monotonic time of last set_state() call
+    _lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False, compare=False)
 
 
     def set_state(self, new_state: AgentState) -> None:
@@ -521,10 +522,11 @@ class SessionManager:
                 self.history_store.set_read_cursor(voice_id, cursor_model, msg_count, hist_prefix)
 
             # Backends that signal readiness externally stay STARTING; others go IDLE now
-            if backend_impl.sets_idle_on_spawn:
-                session.set_state(AgentState.IDLE)
-            session.status = "ready"  # legacy compat: browser checks this for mic enable
-            session.touch()
+            async with session._lock:
+                if backend_impl.sets_idle_on_spawn:
+                    session.set_state(AgentState.IDLE)
+                session.status = "ready"  # legacy compat: browser checks this for mic enable
+                session.touch()
             log.info("Session %s ready (backend=%s)", session_id, backend)
             return session
 
@@ -542,9 +544,12 @@ class SessionManager:
             return
 
         log.info("Terminating session %s", session_id)
-        voice_id = session.voice
-        session.set_state(AgentState.DEAD)
-        await self._get_backend(session.backend).terminate(session.tmux_session)
+        async with session._lock:
+            voice_id = session.voice
+            backend_str = session.backend
+            tmux = session.tmux_session
+            session.set_state(AgentState.DEAD)
+        await self._get_backend(backend_str).terminate(tmux)
         self._cleanup_workdir(session)
         del self.sessions[session_id]
         # Dual-write: mark agent as dead in agents.json
@@ -557,17 +562,17 @@ class SessionManager:
             return
         tmux_name = session.tmux_session
         backend_impl = self._get_backend(session.backend)
-        session_model, session_effort, _ = backend_impl.resolve_spawn_params(
-            session.model, session.effort, session.model_id
-        )
-        session.model = session_model
-        session.effort = session_effort
-        conversation_id = session.conversation_id
-
-        log.info("[%s] Restarting with model %s, effort %s", session_id, session_model, session_effort)
-        session.pending_model_restart = False
-        session.restarting = True
-        session.set_state(AgentState.STARTING)
+        async with session._lock:
+            session_model, session_effort, _ = backend_impl.resolve_spawn_params(
+                session.model, session.effort, session.model_id
+            )
+            session.model = session_model
+            session.effort = session_effort
+            conversation_id = session.conversation_id
+            log.info("[%s] Restarting with model %s, effort %s", session_id, session_model, session_effort)
+            session.pending_model_restart = False
+            session.restarting = True
+            session.set_state(AgentState.STARTING)
 
         # Verify the transcript file exists before resuming
         work_dir = session.work_dir
@@ -578,7 +583,8 @@ class SessionManager:
             if not resuming:
                 log.info("[%s] Session %s not found on disk, starting fresh", session_id, conversation_id)
                 conversation_id = str(uuid.uuid4())
-                session.conversation_id = conversation_id
+                async with session._lock:
+                    session.conversation_id = conversation_id
                 if self.history_store:
                     hist_prefix = self.project_mgr.get_history_prefix(session.project_slug)
                     self.history_store.set_claude_session_id(session.voice, conversation_id, hist_prefix)
@@ -592,10 +598,11 @@ class SessionManager:
             effort=session_effort,
         )
 
-        session.restarting = False
-        # State stays STARTING — transitions to IDLE when wait WS connects
-        session.status = "ready"  # legacy compat
-        session.touch()
+        async with session._lock:
+            session.restarting = False
+            # State stays STARTING — transitions to IDLE when wait WS connects
+            session.status = "ready"  # legacy compat
+            session.touch()
         # Persist model/effort to agents.json
         await self._sync_agent_store(session.voice, session)
         log.info("[%s] Model restart complete", session_id)
