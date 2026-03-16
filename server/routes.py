@@ -1,0 +1,2306 @@
+"""HTTP API route handlers.
+
+All REST API endpoints for sessions, agents, projects, groups,
+messaging, history, settings, and monitoring.
+"""
+
+import asyncio
+import base64
+import json
+import logging
+import os
+import re
+import subprocess
+import socket
+import time
+import uuid
+from pathlib import Path
+
+import httpx
+from fastapi import APIRouter, Request, UploadFile
+from fastapi.responses import JSONResponse
+
+import hub_config
+import inbox
+from state_machine import AgentState
+from voice import tts, tts_captioned, strip_non_speakable
+from hub_state import (
+    session_mgr, broker, history, project_mgr, agents_store, template_renderer,
+    send_to_browser, _session_status_msg, _save_activity,
+    _gen_msg_id, _hist_prefix, _active_model_id,
+    _voice_display_name, _resolve_slug, _resolve_session, _resolve_voice_id,
+    _load_settings, _save_settings, _label_for_voice,
+    _context_cache, _pending_injections, _group_chats, _save_groups,
+)
+import hub_state
+from message_injection import inject_inbox, inbox_write_and_notify
+from monitors import get_fallback_usage, set_last_good_usage, save_usage_sidecar
+
+log = logging.getLogger("hub.routes")
+router = APIRouter()
+
+# Active ttyd monitor processes: key -> {type, id, port, proc, url}
+_ttyd_monitors: dict[str, dict] = {}
+_TTYD_PORT_START = 9700
+_TTYD_PORT_END = 9799
+
+
+def _ttyd_free_port() -> int | None:
+    """Find a free port in the ttyd range."""
+    used = {m["port"] for m in _ttyd_monitors.values()}
+    for p in range(_TTYD_PORT_START, _TTYD_PORT_END + 1):
+        if p in used:
+            continue
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("127.0.0.1", p))
+            return p
+        except OSError:
+            continue
+    return None
+
+
+# --- Project Status API ---
+
+@router.post("/api/project-status/{session_id}")
+async def set_project_status(session_id: str, request: Request):
+    """Set project status for a session (used by clawmux project command)."""
+    session = session_mgr.sessions.get(session_id)
+    if not session:
+        return JSONResponse({"error": "session not found"}, status_code=404)
+    data = await request.json()
+    if "project" in data:
+        new_folder = _resolve_slug(data["project"])
+        session.project = data["project"]
+        # Move agent to the specified folder in workspace.json if it exists
+        if new_folder in project_mgr.projects:
+            session.project_slug = new_folder
+            project_mgr.move_voice(session.voice, new_folder)
+    session.project_repo = data.get("repo", data.get("area", session.project_repo))
+    if "role" in data:
+        role_val = data["role"].lower()
+        rules_dir = Path(__file__).parent / "templates" / "rules"
+        valid_roles = {f.stem for f in rules_dir.glob("*.md") if f.is_file()}
+        if valid_roles and role_val not in valid_roles:
+            return JSONResponse(
+                {"error": f"Invalid role '{role_val}'. Valid: {sorted(valid_roles)}"},
+                status_code=400,
+            )
+        session.role = role_val
+    if "task" in data:
+        session.task = data["task"]
+    log.info("[%s] Project status: %s / %s (role=%s, task=%s)",
+             session_id, session.project, session.project_repo, session.role, session.task)
+    await send_to_browser({
+        "type": "project_status",
+        "session_id": session_id,
+        "project": session.project,
+        "repo": session.project_repo,
+        "role": session.role,
+        "task": session.task,
+    })
+    # Persist to agents.json (authoritative store)
+    await session_mgr._sync_agent_store(session.voice, session)
+    # Write role rules to backend-appropriate location
+    if "role" in data and session.work_dir:
+        await template_renderer.render_role_to_file(session.voice, Path(session.work_dir))
+        backend = session_mgr._get_backend(session.backend)
+        await inbox_write_and_notify(session, {
+            "type": "system",
+            "content": backend.role_update_message(session.role),
+        })
+    return JSONResponse({"ok": True})
+
+
+# --- Debug log from browser ---
+_browser_debug_log: list[str] = []
+
+@router.post("/api/debug-log")
+async def debug_log(request: Request):
+    body = await request.json()
+    msg = body.get("msg", "")
+    if msg:
+        _browser_debug_log.append(msg)
+        if len(_browser_debug_log) > 100:
+            _browser_debug_log.pop(0)
+    return JSONResponse({"ok": True})
+
+@router.get("/api/debug-log")
+async def get_debug_log():
+    return JSONResponse({"lines": _browser_debug_log})
+
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
+
+@router.get("/api/debug/status")
+async def debug_status():
+    """Run `clawmux status` and return plain-text output (ANSI stripped)."""
+    try:
+        result = await asyncio.to_thread(
+            subprocess.run,
+            ["clawmux", "status"],
+            capture_output=True, text=True, timeout=5,
+        )
+        raw = result.stdout or result.stderr or "(no output)"
+        clean = _ANSI_RE.sub("", raw)
+        return JSONResponse({"output": clean})
+    except FileNotFoundError:
+        return JSONResponse({"output": "clawmux not found in PATH"})
+    except subprocess.TimeoutExpired:
+        return JSONResponse({"output": "clawmux status timed out"})
+    except Exception as e:
+        return JSONResponse({"output": f"Error: {e}"})
+
+
+# --- Claude Code Hook Endpoint ---
+
+def _session_from_cwd(cwd: str) -> "SessionInfo | None":
+    """Map a working directory path to its ClawMux session.
+
+    Claude Code hooks send the agent's cwd (e.g. ~/.clawmux/sessions/am_echo).
+    We match that against each session's work_dir.
+    """
+    for session in session_mgr.sessions.values():
+        if session.work_dir and cwd.rstrip("/") == session.work_dir.rstrip("/"):
+            return session
+    return None
+
+
+_TOOL_STATUS_MAP = {
+    "Glob": "Finding files",
+    "Agent": "Spawning agent",
+    "WebSearch": "Searching web",
+    "NotebookEdit": "Editing notebook",
+}
+
+
+def _tool_activity_text(tool_name: str, tool_input: dict) -> str:
+    """Convert a tool name + input into a human-readable status string."""
+    if tool_name == "Read":
+        path = tool_input.get("file_path", "")
+        return f"Reading {Path(path).name}" if path else "Reading file"
+    if tool_name == "Write":
+        path = tool_input.get("file_path", "")
+        return f"Writing {Path(path).name}" if path else "Writing file"
+    if tool_name == "Edit":
+        path = tool_input.get("file_path", "")
+        return f"Editing {Path(path).name}" if path else "Editing file"
+    if tool_name == "Bash":
+        cmd = tool_input.get("command", "").strip()
+        desc = tool_input.get("description", "")
+        if desc:
+            return f"Running {desc}"
+        preview = cmd[:60] + ("…" if len(cmd) > 60 else "")
+        return f"Running {preview}" if preview else "Running command"
+    if tool_name == "Grep":
+        pattern = tool_input.get("pattern", "")
+        return f"Searching for {pattern}" if pattern else "Searching"
+    if tool_name == "WebFetch":
+        url = tool_input.get("url", "")
+        try:
+            from urllib.parse import urlparse
+            domain = urlparse(url).netloc
+            return f"Fetching {domain}" if domain else "Fetching URL"
+        except Exception:
+            return "Fetching URL"
+    return _TOOL_STATUS_MAP.get(tool_name, tool_name)
+
+
+
+# --- REST API ---
+
+@router.get("/api/sessions")
+async def list_sessions():
+    return JSONResponse(session_mgr.list_sessions())
+
+
+@router.post("/api/sessions")
+async def spawn_session(request: Request):
+    try:
+        body = await request.json() if request.headers.get("content-type") == "application/json" else {}
+        label = body.get("label", "")
+        voice = body.get("voice", "")
+        project = _resolve_slug(body.get("project")) if body.get("project") else None
+        backend = body.get("backend", "claude-code")
+        model_id = body.get("model_id", "")
+        session = await session_mgr.spawn_session(label, voice, project=project,
+                                                  backend=backend, model_id=model_id)
+        # Notify browser of the new session so the sidebar updates immediately
+        await send_to_browser({"type": "session_spawned", "session": session.to_dict()})
+        # Show thinking indicator while agent boots (state stays STARTING)
+        await send_to_browser({"session_id": session.session_id, "type": "thinking"})
+        return JSONResponse(session.to_dict())
+    except RuntimeError as e:
+        return JSONResponse({"error": str(e)}, status_code=503)
+    except TimeoutError as e:
+        return JSONResponse({"error": str(e)}, status_code=504)
+    except Exception as e:
+        log.error("Spawn failed: %s: %s", type(e).__name__, e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@router.delete("/api/sessions/{session_id}")
+async def terminate_session(session_id: str):
+    await session_mgr.terminate_session(session_id)
+    await send_to_browser({"type": "session_terminated", "session_id": session_id})
+    return JSONResponse({"status": "terminated"})
+
+
+@router.post("/api/sessions/{session_id}/restart")
+async def restart_session(session_id: str):
+    """Kill and respawn an agent session, preserving the voice and project."""
+    session = session_mgr.sessions.get(session_id)
+    if not session:
+        return JSONResponse({"error": "session not found"}, status_code=404)
+    voice = session.voice
+    project_slug = session.project_slug
+    backend = session.backend
+    model_id = session.model_id
+    # Terminate the existing session
+    await session_mgr.terminate_session(session_id)
+    await send_to_browser({"type": "session_terminated", "session_id": session_id})
+    # Respawn with the same voice, project, backend, and model
+    new_session = await session_mgr.spawn_session(voice=voice, project=project_slug,
+                                                  backend=backend, model_id=model_id)
+    await send_to_browser({"type": "session_spawned", "session": new_session.to_dict()})
+    await send_to_browser({"session_id": new_session.session_id, "type": "thinking"})
+    return JSONResponse({"status": "restarted", "session_id": new_session.session_id})
+
+
+@router.post("/api/sessions/{session_id}/interrupt")
+async def interrupt_session(session_id: str):
+    """Soft-interrupt a running agent via the appropriate backend method."""
+    session = session_mgr.sessions.get(session_id)
+    if not session:
+        return JSONResponse({"error": "session not found"}, status_code=404)
+    backend = session_mgr._get_backend(session.backend)
+    success = await backend.interrupt(session.tmux_session)
+    if not success:
+        log.warning("Failed to interrupt %s (backend=%s)", session_id, session.backend)
+        return JSONResponse({"error": "interrupt failed"}, status_code=500)
+    log.info("Interrupted session %s (backend=%s)", session_id, session.backend)
+
+    # Some backends (tmux-based) may not fire their Stop hook after interrupt.
+    # If the backend declares a delay, schedule a fallback IDLE transition.
+    delay = backend.idle_delay_after_interrupt
+    if delay > 0:
+        import time as _itime
+        interrupt_at = _itime.monotonic()
+
+        async def _delayed_idle():
+            await asyncio.sleep(delay)
+            if session.state in (AgentState.IDLE, AgentState.DEAD):
+                return
+            if session.last_state_change > interrupt_at:
+                return
+            session.set_state(AgentState.IDLE)
+            session.activity = ""
+            session.tool_name = ""
+            session.tool_input = {}
+            await send_to_browser({"session_id": session_id, "type": "listening", "state": "idle"})
+            await send_to_browser(_session_status_msg(session))
+        asyncio.create_task(_delayed_idle())
+
+    return JSONResponse({"status": "interrupted"})
+
+
+_MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
+
+@router.post("/api/sessions/{session_id}/upload")
+async def upload_file(session_id: str, file: UploadFile):
+    """Accept a file upload and deliver it to the agent's work directory."""
+    session = session_mgr.sessions.get(session_id)
+    if not session:
+        return JSONResponse({"error": "session not found"}, status_code=404)
+    if not session.work_dir:
+        return JSONResponse({"error": "session has no work directory"}, status_code=400)
+    if not file.filename:
+        return JSONResponse({"error": "no filename"}, status_code=400)
+
+    # Read file with size limit
+    contents = await file.read()
+    if len(contents) > _MAX_UPLOAD_SIZE:
+        return JSONResponse({"error": "file too large (50MB max)"}, status_code=413)
+
+    # Save to uploads/ in the agent's work dir
+    safe_name = Path(file.filename).name  # strip directory components
+    uploads_dir = Path(session.work_dir) / "uploads"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    dest = uploads_dir / safe_name
+    dest.write_bytes(contents)
+
+    # Format size for display
+    size = len(contents)
+    if size >= 1024 * 1024:
+        size_str = f"{size / (1024 * 1024):.1f} MB"
+    elif size >= 1024:
+        size_str = f"{size / 1024:.1f} KB"
+    else:
+        size_str = f"{size} B"
+
+    # Notify the agent via inbox
+    umid = _gen_msg_id()
+    await inbox_write_and_notify(session, {
+        "id": umid,
+        "from": "user",
+        "type": "file_upload",
+        "content": f"User uploaded a file: uploads/{safe_name}",
+    })
+
+    # Show in chat
+    await send_to_browser({
+        "session_id": session_id,
+        "type": "user_text",
+        "text": f"\U0001F4CE Uploaded {safe_name} ({size_str})",
+        "msg_id": umid,
+    })
+    await asyncio.to_thread(history.append, session.voice, session.label, "user",
+                   f"\U0001F4CE Uploaded {safe_name} ({size_str})",
+                   _hist_prefix(session), msg_id=umid)
+
+    log.info("[%s] File uploaded: %s (%s)", session_id, safe_name, size_str)
+    return JSONResponse({"status": "ok", "path": f"uploads/{safe_name}", "size": size_str})
+
+
+@router.post("/api/shutdown")
+async def shutdown_hub(request: Request):
+    """Shut down the hub. Use mode=reload to keep sessions alive."""
+    body = await request.json() if request.headers.get("content-type") == "application/json" else {}
+    mode = body.get("mode", "full")  # "full" or "reload"
+    hub_state._shutdown_mode = mode
+    log.info("Shutdown requested via API (mode=%s)", mode)
+
+    async def do_shutdown():
+        await asyncio.sleep(0.3)  # Let the response send first
+        if mode == "reload":
+            log.info("Hub reloading — keeping tmux sessions alive")
+        else:
+            log.info("Hub shutting down — terminating all sessions")
+            for sid in list(session_mgr.sessions):
+                try:
+                    await session_mgr.terminate_session(sid)
+                except Exception:
+                    pass
+        broker.stop()
+        log.info("Shutdown cleanup done, exiting")
+        os._exit(0)
+
+    asyncio.create_task(do_shutdown())
+    return JSONResponse({"status": "shutting_down", "mode": mode})
+
+
+@router.put("/api/sessions/{session_id}/voice")
+async def set_session_voice(session_id: str, request: Request):
+    data = await request.json()
+    voice = data.get("voice", "af_sky")
+    session = session_mgr.sessions.get(session_id)
+    if not session:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    session.voice = voice
+    log.info("[%s] Voice changed to %s", session_id, voice)
+    return JSONResponse({"voice": voice})
+
+
+@router.put("/api/sessions/{session_id}/speed")
+async def set_session_speed(session_id: str, request: Request):
+    data = await request.json()
+    speed = float(data.get("speed", 1.0))
+    session = session_mgr.sessions.get(session_id)
+    if not session:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    session.speed = speed
+    log.info("[%s] Speed changed to %s", session_id, speed)
+    return JSONResponse({"speed": speed})
+
+
+# --- Agent Metadata (v0.7.3 centralized agents.json) ---
+
+
+@router.get("/api/agents")
+async def list_agents():
+    """Return all agents from agents.json."""
+    agents = await agents_store.all_agents()
+    return JSONResponse({vid: entry.to_dict() for vid, entry in agents.items()})
+
+
+@router.get("/api/agents/{voice_id}")
+async def get_agent(voice_id: str):
+    """Return a single agent's metadata from agents.json."""
+    agent = await agents_store.get(voice_id)
+    if agent is None:
+        return JSONResponse({"error": "Agent not found"}, status_code=404)
+    return JSONResponse(agent.to_dict())
+
+
+@router.put("/api/agents/{voice_id}")
+async def update_agent(voice_id: str, request: Request):
+    """Update an agent's metadata in agents.json."""
+    body = await request.json()
+    updated = await agents_store.update(voice_id, **body)
+    if updated is None:
+        return JSONResponse({"error": "Agent not found"}, status_code=404)
+    log.info("[agents] Updated %s: %s", voice_id, list(body.keys()))
+    return JSONResponse(updated.to_dict())
+
+
+@router.post("/api/agents/{voice_id}/assign")
+async def assign_agent(voice_id: str, request: Request):
+    """Change an agent's project and/or role assignment."""
+    body = await request.json()
+    fields = {k: body[k] for k in ("project", "role", "repo") if k in body}
+    if not fields:
+        return JSONResponse({"error": "No assignment fields provided"}, status_code=400)
+    updated = await agents_store.update(voice_id, **fields)
+    if updated is None:
+        return JSONResponse({"error": "Agent not found"}, status_code=404)
+    log.info("[agents] Assigned %s → project=%s role=%s repo=%s",
+             voice_id, updated.project, updated.role, updated.repo)
+    # Sync projects.json voices list when project changes
+    if "project" in fields:
+        try:
+            project_mgr.move_voice(voice_id, fields["project"])
+        except ValueError as e:
+            log.warning("[agents] move_voice failed: %s", e)
+    # Auto-regenerate CLAUDE.md for the reassigned agent
+    session = next((s for s in session_mgr.sessions.values() if s.voice == voice_id), None)
+    # Update session.project_slug so _sync_projects_from_sessions() doesn't revert the move
+    if session and "project" in fields:
+        session.project_slug = fields["project"]
+    if session and session.work_dir:
+        await template_renderer.render_to_file(voice_id, Path(session.work_dir))
+    return JSONResponse(updated.to_dict())
+
+
+@router.post("/api/agents/regenerate")
+async def regenerate_all_templates():
+    """Regenerate CLAUDE.md for all active agents."""
+    template_renderer.reload_template()
+    count = await template_renderer.render_all(session_mgr.sessions)
+    return JSONResponse({"regenerated": count})
+
+
+@router.post("/api/agents/{voice_id}/regenerate")
+async def regenerate_template(voice_id: str):
+    """Regenerate CLAUDE.md for a single agent."""
+    template_renderer.reload_template()
+    session = next((s for s in session_mgr.sessions.values() if s.voice == voice_id), None)
+    if not session or not session.work_dir:
+        return JSONResponse({"error": "Agent not found or not active"}, status_code=404)
+    ok = await template_renderer.render_to_file(voice_id, Path(session.work_dir))
+    if not ok:
+        return JSONResponse({"error": "Agent not in agents.json"}, status_code=404)
+    return JSONResponse({"regenerated": voice_id})
+
+
+# --- Agent idle/active signals (used by stop hook for tmux-push delivery) ---
+
+@router.post("/api/agents/{session_id}/idle")
+async def agent_idle(session_id: str):
+    """Signal that an agent has finished responding and is now idle.
+
+    Called by the stop hook (stop-check-inbox.sh). Transitions the agent to
+    IDLE state and schedules a tmux injection if inbox has pending messages.
+    """
+    session = session_mgr.sessions.get(session_id)
+    if not session:
+        # Legacy: CLAWMUX_SESSION_ID may be set to voice_id (e.g. "bf_alice") not label ("alice")
+        session = next((s for s in session_mgr.sessions.values() if s.voice == session_id), None)
+    if not session or not session.work_dir:
+        return JSONResponse({"ok": False, "reason": "session not found"})
+
+    session.set_state(AgentState.IDLE)
+    session.activity = ""
+    session.tool_name = ""
+    session.tool_input = {}
+    await _save_activity(session, "Idle")
+    await send_to_browser({"session_id": session_id, "type": "listening", "state": "idle"})
+    await send_to_browser(_session_status_msg(session))
+
+    # Schedule injection if inbox has messages (lock in _inject_inbox serializes delivery)
+    count = await asyncio.to_thread(inbox.peek, session.work_dir)
+    if count > 0:
+        task = asyncio.create_task(inject_inbox(session, session_id))
+        _pending_injections[session_id] = task
+
+    return JSONResponse({"ok": True, "pending": count})
+
+
+@router.post("/api/agents/{session_id}/active")
+async def agent_active(session_id: str):
+    """Cancel any pending tmux injection for a session.
+
+    Called by PreToolUse hook when the agent starts a tool call — injection is
+    no longer needed since the agent is already working.
+    """
+    prev = _pending_injections.pop(session_id, None)
+    if prev and not prev.done():
+        prev.cancel()
+    return JSONResponse({"ok": True})
+
+
+# --- Walking Mode ---
+
+@router.post("/api/agents/{session_id}/walking")
+async def set_walking_mode(session_id: str, request: Request):
+    """Toggle walking mode for a session.
+
+    When walking_mode is on, every tmux injection prepends a reminder for the
+    agent to respond in plain spoken text — no markdown, no special formatting.
+    """
+    session = session_mgr.sessions.get(session_id)
+    if not session:
+        return JSONResponse({"ok": False, "reason": "session not found"})
+    data = await request.json()
+    enabled = bool(data.get("enabled", True))
+    session.walking_mode = enabled
+    log.info("[%s] Walking mode: %s", session_id, "on" if enabled else "off")
+    await send_to_browser(_session_status_msg(session, walking_mode=enabled))
+    note = "on" if enabled else "off"
+    await inbox_write_and_notify(session, {
+        "type": "system",
+        "content": f"Walking mode is now {note}." + (" Respond in plain spoken text only — no markdown, no underscores, no special formatting." if enabled else " You may use normal formatting again."),
+    })
+    return JSONResponse({"ok": True, "walking_mode": enabled})
+
+
+# --- Roles ---
+
+@router.get("/api/roles")
+async def list_roles():
+    """Return available roles derived from template files in server/templates/rules/."""
+    rules_dir = Path(__file__).parent / "templates" / "rules"
+    roles = sorted(
+        f.stem for f in rules_dir.glob("*.md") if f.is_file()
+    )
+    return JSONResponse({"roles": roles})
+
+
+# --- Project Management ---
+
+@router.get("/api/projects")
+async def list_projects():
+    """Return projects in {projects: {slug: {...}}, active_project: slug} format."""
+    # Sync: ensure any project seen in live sessions exists in projects.json
+    # and voices are placed in the right folder per session.project_slug
+    _sync_projects_from_sessions()
+    projects_dict = {}
+    for p in project_mgr.list_projects():
+        slug = p.pop("slug")
+        p.pop("active", None)
+        projects_dict[slug] = p
+    return JSONResponse({
+        "projects": projects_dict,
+        "active_project": project_mgr.active_project,
+    })
+
+
+def _sync_projects_from_sessions():
+    """Ensure projects.json reflects actual session project_slug values.
+
+    - Creates any project that sessions reference but doesn't exist yet
+    - Moves each voice to the project its live session belongs to
+    """
+    # Build desired mapping: voice → project_slug from live sessions
+    voice_to_slug: dict[str, str] = {}
+    for s in session_mgr.sessions.values():
+        if s.voice:
+            slug = getattr(s, "project_slug", None) or "default"
+            voice_to_slug[s.voice] = slug
+
+    if not voice_to_slug:
+        return
+
+    # Only sync voices for folders that actually exist — never auto-create folders
+    # Remap any session pointing at an unknown slug back to default
+    for voice, slug in list(voice_to_slug.items()):
+        if slug not in project_mgr.projects:
+            voice_to_slug[voice] = "default"
+
+    # Rebuild each project's voices list from session truth
+    new_voices: dict[str, list[str]] = {slug: [] for slug in project_mgr.projects}
+    for voice, slug in voice_to_slug.items():
+        if slug in new_voices:
+            new_voices[slug].append(voice)
+
+    # Preserve voices not in any live session (agents that may be offline)
+    all_pool = [v[0] for v in __import__('hub_config').VOICE_POOL]
+    unassigned = [v for v in all_pool if v not in voice_to_slug]
+    # Leave unassigned voices where they currently are in projects.json
+    for slug, proj in project_mgr.projects.items():
+        for v in proj.get("voices", []):
+            if v in unassigned and v not in new_voices.get(slug, []):
+                new_voices.setdefault(slug, []).append(v)
+
+    # Apply changes
+    changed = False
+    for slug, voices in new_voices.items():
+        if slug in project_mgr.projects:
+            current = project_mgr.projects[slug].get("voices", [])
+            if sorted(current) != sorted(voices):
+                project_mgr.reorder_voices(slug, voices)
+                changed = True
+    if changed:
+        import logging
+        logging.getLogger("hub.projects").info("Synced project voices from live sessions")
+
+
+@router.post("/api/projects")
+async def create_project(request: Request):
+    data = await request.json()
+    slug = data.get("slug", "").strip().lower().replace(" ", "-")
+    name = data.get("name", slug)
+    if not slug:
+        return JSONResponse({"error": "slug is required"}, status_code=400)
+    voices = data.get("voices")  # Optional: list of voice IDs to use
+    try:
+        project = project_mgr.create_project(slug, name, voices=voices)
+        # Populate agents.json with project entry and default agent assignments
+        from agents_store import ProjectEntry
+        await agents_store.set_project(slug, ProjectEntry(display_name=name))
+        voice_ids = project.get("voices", [])
+        for vid in voice_ids:
+            agent = await agents_store.get(vid)
+            if agent is None:
+                from agents_store import AgentEntry
+                await agents_store.set(vid, AgentEntry(project=slug))
+            else:
+                # Update project assignment for existing agent
+                await agents_store.update(vid, project=slug)
+        # Regenerate instructions for assigned agents
+        for vid in voice_ids:
+            session = next((s for s in session_mgr.sessions.values() if s.voice == vid), None)
+            if session and session.work_dir:
+                await template_renderer.render_to_file(vid, Path(session.work_dir))
+        await send_to_browser({"type": "project_created", "slug": slug, "name": name})
+        return JSONResponse(project)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@router.post("/api/projects/{slug}/copy-history")
+async def copy_project_history(slug: str, request: Request):
+    """Copy conversation history from one project to another."""
+    data = await request.json()
+    source_slug = data.get("source", "default")
+    if slug not in project_mgr.projects:
+        return JSONResponse({"error": f"Project '{slug}' not found"}, status_code=404)
+    if source_slug not in project_mgr.projects:
+        return JSONResponse({"error": f"Source project '{source_slug}' not found"}, status_code=404)
+    # Copy history for each voice shared between source and target
+    source_voices = project_mgr.projects[source_slug].get("voices", [])
+    target_voices = project_mgr.projects[slug].get("voices", [])
+    src_prefix = project_mgr.get_history_prefix(source_slug)
+    tgt_prefix = project_mgr.get_history_prefix(slug)
+    copied = 0
+    # Copy voices that exist in both projects (same voice IDs)
+    shared = set(source_voices) & set(target_voices)
+    for voice_id in shared:
+        try:
+            history.copy_history(voice_id, src_prefix, tgt_prefix)
+            copied += 1
+        except Exception as e:
+            log.warning("Failed to copy history for %s: %s", voice_id, e)
+    return JSONResponse({"copied": copied, "total": len(source_voices)})
+
+
+@router.post("/api/projects/{slug}/activate")
+async def activate_project(slug: str):
+    try:
+        project_mgr.switch_project(slug)
+        # Notify browser of project switch
+        await send_to_browser({"type": "project_switched", "project": slug})
+        return JSONResponse({"active_project": slug})
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
+
+@router.put("/api/projects/{slug}/voices")
+async def reorder_voices(slug: str, request: Request):
+    data = await request.json()
+    voices = data.get("voices", [])
+    if not voices or not isinstance(voices, list):
+        return JSONResponse({"error": "voices array is required"}, status_code=400)
+    try:
+        project_mgr.reorder_voices(slug, voices)
+        return JSONResponse({"slug": slug, "voices": voices})
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
+
+@router.put("/api/projects/{slug}")
+async def rename_project(slug: str, request: Request):
+    import re as _re
+    data = await request.json()
+    new_name = data.get("name", "").strip()
+    if not new_name:
+        return JSONResponse({"error": "name is required"}, status_code=400)
+    # Derive new slug from new name (folders are purely visual — slug follows name)
+    new_slug = _re.sub(r"[^a-z0-9]+", "-", new_name.lower()).strip("-") or slug
+    if new_slug == slug:
+        new_slug = None  # no slug change
+    try:
+        result = project_mgr.rename_project(slug, new_name, new_slug)
+        actual_slug = result["slug"]
+        # Migrate any live sessions still referencing the old slug
+        if new_slug:
+            for s in session_mgr.sessions.values():
+                if getattr(s, "project_slug", None) == slug:
+                    s.project_slug = actual_slug
+        await send_to_browser({"type": "project_renamed", "old_slug": slug, "slug": actual_slug, "name": new_name})
+        return JSONResponse(result)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@router.delete("/api/projects/{slug}")
+async def delete_project(slug: str):
+    try:
+        was_active = project_mgr.active_project == slug
+        project_mgr.delete_project(slug)
+        # Move any agents that were in this project back to default
+        all_agents = await agents_store.all_agents()
+        for voice_id, entry in all_agents.items():
+            if entry.project == slug:
+                await agents_store.update(voice_id, project="default")
+                session = session_mgr.sessions.get(entry.session_id or "")
+                if session:
+                    session.project_slug = "default"
+                    session.project = ""
+        # Notify browser so sidebar/header refresh immediately
+        await send_to_browser({"type": "project_deleted", "slug": slug})
+        if was_active:
+            await send_to_browser({"type": "project_switched", "project": project_mgr.active_project})
+        return JSONResponse({"status": "deleted", "slug": slug})
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+# ── Group Chat API ────────────────────────────────────────────────────────────
+
+_GROUPS_DIR = hub_config.CLAWMUX_HOME / "groups"
+
+
+def _label_for_voice(voice_id: str) -> str:
+    """Derive display label from voice ID (e.g. 'af_sky' → 'Sky')."""
+    part = voice_id.split("_", 1)[-1] if "_" in voice_id else voice_id
+    return part.capitalize()
+
+
+# Build name→id lookup from the full voice pool
+_voice_name_to_id: dict[str, str] = {
+    name.lower(): vid for vid, name in hub_config.VOICE_POOL
+}
+
+def _resolve_voice_id(voice: str) -> str:
+    """Normalize a voice label or short name to a full voice ID.
+
+    Accepts full IDs ('af_sky'), short names ('sky'), or display names ('Sky').
+    Returns the canonical ID, or the input unchanged if no match is found.
+    """
+    if not voice:
+        return voice
+    pool_ids = {vid for vid, _ in hub_config.VOICE_POOL}
+    if voice in pool_ids:
+        return voice  # already correct
+    resolved = _voice_name_to_id.get(voice.lower())
+    if resolved:
+        return resolved
+    # Also check live sessions (covers dynamic/custom voice labels)
+    for s in session_mgr.sessions.values():
+        if s.label and s.label.lower() == voice.lower():
+            return s.voice
+    return voice
+
+
+def _save_groups() -> None:
+    data = {
+        name: {"id": g["id"], "name": g["name"], "voices": list(g["voices"])}
+        for name, g in _group_chats.items()
+    }
+    project_mgr.save_groups(data)
+
+
+def _load_groups() -> None:
+    try:
+        data = project_mgr.get_groups()
+        for name, g in data.items():
+            raw_voices = g.get("voices", g.get("session_ids", []))
+            # Normalize any stored labels/short names to proper voice IDs
+            normalized = [_resolve_voice_id(v) for v in raw_voices]
+            _group_chats[name] = {
+                "id": g["id"],
+                "name": g["name"],
+                "voices": normalized,
+            }
+        _save_groups()  # persist normalized data
+    except Exception:
+        pass
+
+
+def _group_history_path(group_id: str):
+    d = _GROUPS_DIR / group_id
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "history.json"
+
+
+def _find_group_for_message(msg_id: str) -> dict | None:
+    """Return the group chat dict that contains a message with the given ID, or None."""
+    for g in _group_chats.values():
+        for msg in _load_group_history(g["id"]):
+            if msg.get("id") == msg_id:
+                return g
+    return None
+
+
+def _load_group_history(group_id: str) -> list:
+    p = _group_history_path(group_id)
+    if not p.exists():
+        return []
+    try:
+        return json.loads(p.read_text()).get("messages", [])
+    except Exception:
+        return []
+
+
+def _append_group_history(group_id: str, role: str, text: str, sender: str = "",
+                           msg_id: str | None = None, parent_id: str | None = None,
+                           bare_ack: bool = False, sender_voice: str = "") -> None:
+    import fcntl
+    p = _group_history_path(group_id)
+    try:
+        data = json.loads(p.read_text()) if p.exists() else {}
+    except Exception:
+        data = {}
+    msgs = data.get("messages", [])
+    entry: dict = {"role": role, "text": text, "ts": time.time()}
+    if sender:
+        entry["sender"] = sender
+    if msg_id:
+        entry["id"] = msg_id
+    if parent_id:
+        entry["parent_id"] = parent_id
+    if bare_ack:
+        entry["bare_ack"] = True
+    if sender_voice:
+        entry["sender_voice"] = sender_voice
+    msgs.append(entry)
+    data["messages"] = msgs
+    try:
+        with open(p, "w") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            try:
+                f.write(json.dumps(data, indent=2))
+            finally:
+                fcntl.flock(f, fcntl.LOCK_UN)
+    except Exception as e:
+        log.error("Failed to save group history %s: %s", group_id, e)
+
+
+def _group_to_dict(g: dict) -> dict:
+    """Serialize a group chat dict, resolving voices to member info."""
+    members = []
+    # Build a voice→session lookup for online resolution
+    voice_to_session: dict[str, object] = {}
+    for s in session_mgr.sessions.values():
+        if s.voice and s.voice not in voice_to_session:
+            voice_to_session[s.voice] = s
+    for v in g.get("voices", []):
+        s = voice_to_session.get(v)
+        members.append({
+            "voice": v,
+            "label": s.label if s else _label_for_voice(v),
+            "online": s is not None,
+            "session_id": s.session_id if s else None,
+        })
+    return {"id": g["id"], "name": g["name"], "voices": list(g.get("voices", [])), "members": members}
+
+
+@router.get("/api/groupchats")
+async def list_groupchats():
+    return JSONResponse({"groups": [_group_to_dict(g) for g in _group_chats.values()]})
+
+
+@router.post("/api/groupchats")
+async def create_groupchat(request: Request):
+    data = await request.json()
+    name = (data.get("name") or "").strip()
+    if not name:
+        return JSONResponse({"error": "name is required"}, status_code=400)
+    key = name.lower()
+    if key in _group_chats:
+        return JSONResponse({"error": f"group '{name}' already exists"}, status_code=409)
+    gid = "gc-" + uuid.uuid4().hex[:8]
+    voices = data.get("voices", [])
+    _group_chats[key] = {"id": gid, "name": name, "voices": list(voices)}
+    _save_groups()
+    await send_to_browser({"type": "groupchat_created", "group": _group_to_dict(_group_chats[key])})
+    return JSONResponse(_group_to_dict(_group_chats[key]))
+
+
+@router.delete("/api/groupchats/{name}")
+async def delete_groupchat(name: str):
+    key = name.lower()
+    if key not in _group_chats:
+        return JSONResponse({"error": "group not found"}, status_code=404)
+    g = _group_chats.pop(key)
+    _save_groups()
+    await send_to_browser({"type": "groupchat_deleted", "group_id": g["id"], "name": g["name"]})
+    return JSONResponse({"status": "deleted", "name": g["name"]})
+
+
+@router.post("/api/groupchats/{name}/add")
+async def groupchat_add_member(name: str, request: Request):
+    key = name.lower()
+    if key not in _group_chats:
+        return JSONResponse({"error": "group not found"}, status_code=404)
+    data = await request.json()
+    # Accept voice ID directly; also resolve session_id → voice for backwards compat
+    voice = data.get("voice", "")
+    if not voice:
+        sid = data.get("session_id", "")
+        if sid:
+            s = session_mgr.sessions.get(sid)
+            voice = s.voice if s else ""
+    if not voice:
+        return JSONResponse({"error": "voice is required"}, status_code=400)
+    voice = _resolve_voice_id(voice)
+    g = _group_chats[key]
+    if voice not in g["voices"]:
+        g["voices"].append(voice)
+    _save_groups()
+    await send_to_browser({"type": "groupchat_updated", "group": _group_to_dict(g)})
+    return JSONResponse(_group_to_dict(g))
+
+
+@router.post("/api/groupchats/{name}/remove")
+async def groupchat_remove_member(name: str, request: Request):
+    key = name.lower()
+    if key not in _group_chats:
+        return JSONResponse({"error": "group not found"}, status_code=404)
+    data = await request.json()
+    voice = data.get("voice", "")
+    if not voice:
+        sid = data.get("session_id", "")
+        if sid:
+            s = session_mgr.sessions.get(sid)
+            voice = s.voice if s else ""
+    voice = _resolve_voice_id(voice) if voice else voice
+    g = _group_chats[key]
+    if voice and voice in g["voices"]:
+        g["voices"].remove(voice)
+    _save_groups()
+    await send_to_browser({"type": "groupchat_updated", "group": _group_to_dict(g)})
+    return JSONResponse(_group_to_dict(g))
+
+
+@router.post("/api/groupchats/{name}/message")
+async def groupchat_send_message(name: str, request: Request):
+    """Send a message to all members of a named group chat."""
+    key = name.lower()
+    if key not in _group_chats:
+        return JSONResponse({"error": "group not found"}, status_code=404)
+    data = await request.json()
+    text = data.get("text", "").strip()
+    sender = data.get("sender", "")  # label of sender, or empty for user
+    if not text:
+        return JSONResponse({"error": "text is required"}, status_code=400)
+    g = _group_chats[key]
+    msg_id = _gen_msg_id()
+    role = "user" if not sender else "assistant"
+    # Write to group history
+    await asyncio.to_thread(
+        _append_group_history, g["id"], role, text, sender, msg_id
+    )
+    # Deliver to all online members' inboxes (look up sessions by voice)
+    delivered = []
+    voice_to_session: dict[str, object] = {}
+    for s in session_mgr.sessions.values():
+        if s.voice and s.voice not in voice_to_session:
+            voice_to_session[s.voice] = s
+    for v in g.get("voices", []):
+        session = voice_to_session.get(v)
+        if not session or not session.work_dir:
+            continue
+        # Don't deliver back to the sender
+        if sender and session.label.lower() == sender.lower():
+            continue
+        inbox_msg = {
+            "id": msg_id,
+            "type": "group",
+            "from": sender or "user",
+            "content": text,
+            "group_name": g["name"],
+            "group_id": g["id"],
+        }
+        await inbox_write_and_notify(session, inbox_msg)
+        delivered.append(session.session_id)
+    # Notify browser of new group history message
+    await send_to_browser({
+        "type": "groupchat_message",
+        "group_id": g["id"],
+        "group_name": g["name"],
+        "message": {"id": msg_id, "role": role, "text": text, "sender": sender, "ts": time.time()},
+    })
+    return JSONResponse({"status": "sent", "msg_id": msg_id, "delivered_to": delivered, "group": g["name"]})
+
+
+@router.get("/api/groupchats/{name}/history")
+async def groupchat_history(name: str):
+    key = name.lower()
+    if key not in _group_chats:
+        return JSONResponse({"error": "group not found"}, status_code=404)
+    g = _group_chats[key]
+    messages = await asyncio.to_thread(_load_group_history, g["id"])
+    return JSONResponse({"group_id": g["id"], "name": g["name"], "messages": messages})
+
+
+@router.post("/api/groupchats/{name}/ack")
+async def groupchat_ack_message(name: str, request: Request):
+    """Acknowledge a group chat message (thumbs up)."""
+    key = name.lower()
+    if key not in _group_chats:
+        return JSONResponse({"error": "group not found"}, status_code=404)
+    data = await request.json()
+    msg_id = (data.get("msg_id") or "").strip()
+    if not msg_id:
+        return JSONResponse({"error": "msg_id required"}, status_code=400)
+    g = _group_chats[key]
+    ack_id = _gen_msg_id()
+    await asyncio.to_thread(_append_group_history, g["id"], "user", "",
+                            sender="You", msg_id=ack_id, parent_id=msg_id, bare_ack=True)
+    await send_to_browser({
+        "type": "groupchat_ack",
+        "group_id": g["id"],
+        "msg_id": msg_id,
+        "ack_id": ack_id,
+        "sender": "You",
+        "sender_voice": "",
+    })
+    return JSONResponse({"status": "acked", "ack_id": ack_id})
+
+
+@router.post("/api/groupchats/reorder")
+async def groupchat_reorder(request: Request):
+    """Reorder group chats. Body: {order: [group_id, ...]}"""
+    data = await request.json()
+    order = data.get("order") or []
+    # Build new ordered dict
+    id_to_key = {g["id"]: k for k, g in _group_chats.items()}
+    new_chats: dict = {}
+    seen = set()
+    for gid in order:
+        k = id_to_key.get(gid)
+        if k and k not in seen:
+            new_chats[k] = _group_chats[k]
+            seen.add(k)
+    # Append any not in order list
+    for k, g in _group_chats.items():
+        if k not in seen:
+            new_chats[k] = g
+    _group_chats.clear()
+    _group_chats.update(new_chats)
+    _save_groups()
+    return JSONResponse({"status": "ok"})
+
+
+@router.get("/api/history/{voice_id}")
+async def get_history(voice_id: str, request: Request):
+    # Use project from query param or active project
+    project = request.query_params.get("project", project_mgr.active_project)
+    prefix = project_mgr.get_history_prefix(project)
+    messages = await asyncio.to_thread(history.load, voice_id, prefix)
+    # Cursor-based filtering: return only messages after the given ID (reconnect sync)
+    after_id = request.query_params.get("after")
+    if after_id:
+        idx = None
+        for i, m in enumerate(messages):
+            if m.get("id") == after_id:
+                idx = i
+                break
+        messages = messages[idx + 1:] if idx is not None else []
+        # after= is used by reconnect sync; no limit/before pagination applied in this branch
+        pending_count = 0
+        for s in session_mgr.sessions.values():
+            if s.voice == voice_id and s.interjections:
+                pending_count = len(s.interjections)
+                break
+        return JSONResponse(
+            {"voice_id": voice_id, "messages": messages, "pending_interjections": pending_count},
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
+    # Pagination: before= cursor returns messages before that ID (for loading older pages).
+    # Falls back to before_ts= (timestamp) when the target message has no id — most
+    # activity/assistant messages don't carry ids, so ts-based cursor is more reliable.
+    before_id = request.query_params.get("before")
+    before_ts_str = request.query_params.get("before_ts")
+    if before_id:
+        idx = None
+        for i, m in enumerate(messages):
+            if m.get("id") == before_id:
+                idx = i
+                break
+        if idx is not None:
+            messages = messages[:idx]
+        elif before_ts_str:
+            # ID not found — fall back to timestamp cursor
+            try:
+                before_ts = float(before_ts_str)
+                messages = [m for m in messages if m.get("ts", 0) < before_ts]
+            except (ValueError, TypeError):
+                pass
+    elif before_ts_str:
+        # Timestamp-only cursor (no ID given) — used by iOS infinite scroll
+        try:
+            before_ts = float(before_ts_str)
+            messages = [m for m in messages if m.get("ts", 0) < before_ts]
+        except (ValueError, TypeError):
+            pass
+    # limit= caps the number of returned messages (default 150, max 500)
+    try:
+        limit = min(int(request.query_params.get("limit", 150)), 500)
+    except (ValueError, TypeError):
+        limit = 150
+    has_more = len(messages) > limit
+    # Always return the last N (most recent end of the slice)
+    messages = messages[-limit:] if has_more else messages
+    # Include count of pending interjections so browser can style unseen messages
+    pending_count = 0
+    for s in session_mgr.sessions.values():
+        if s.voice == voice_id and s.interjections:
+            pending_count = len(s.interjections)
+            break
+    return JSONResponse(
+        {"voice_id": voice_id, "messages": messages, "has_more": has_more, "pending_interjections": pending_count},
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
+
+
+@router.delete("/api/history/{voice_id}")
+async def clear_history(voice_id: str, request: Request):
+    project = request.query_params.get("project", project_mgr.active_project)
+    prefix = project_mgr.get_history_prefix(project)
+    await asyncio.to_thread(history.clear, voice_id, prefix)
+    return JSONResponse({"status": "cleared", "voice_id": voice_id})
+
+
+@router.get("/api/search")
+async def search_history(request: Request):
+    """Search across all agent conversation histories."""
+    q = request.query_params.get("q", "")
+    if not q:
+        return JSONResponse({"error": "missing 'q' parameter"}, status_code=400)
+    agent = request.query_params.get("agent")
+    voice_ids = [a.strip() for a in agent.split(",")] if agent else None
+    role = request.query_params.get("role")
+    roles = [r.strip() for r in role.split(",")] if role else None
+    after_ts = float(request.query_params.get("after", 0)) or None
+    before_ts = float(request.query_params.get("before", 0)) or None
+    limit = min(int(request.query_params.get("limit", 50)), 200)
+    context = min(int(request.query_params.get("context", 0)), 20)
+    results = await asyncio.to_thread(
+        history.search, q, voice_ids, roles, after_ts, before_ts, limit, context=context,
+    )
+    return JSONResponse({"query": q, "count": len(results), "results": results})
+
+
+@router.post("/api/sessions/{session_id}/mark-read")
+async def mark_session_read(session_id: str):
+    """Mark a session's unread count as zero."""
+    session = session_mgr.sessions.get(session_id)
+    if not session:
+        return JSONResponse({"error": "session not found"}, status_code=404)
+    session.unread_count = 0
+    return JSONResponse({"session_id": session_id, "unread_count": 0})
+
+
+@router.post("/api/sessions/{session_id}/viewing")
+async def set_viewing_session(session_id: str):
+    """Tell the server which session the browser is currently viewing.
+    The server won't increment unread for the viewed session."""
+    hub_state._browser_viewed_session = session_id
+    # Also clear unread for this session since the user is looking at it
+    session = session_mgr.sessions.get(session_id)
+    if session:
+        session.unread_count = 0
+    return JSONResponse({"viewing": session_id})
+
+
+# ---------------------------------------------------------------------------
+# Messaging API
+# ---------------------------------------------------------------------------
+
+def _resolve_session(name: str):
+    """Resolve a friendly name (sky, alloy) or voice ID to a session."""
+    for s in session_mgr.sessions.values():
+        voice_name = re.sub(r'^[a-z]{2}_', '', s.voice)
+        if (voice_name == name or s.voice == name or
+                s.session_id == name or s.label.lower() == name.lower()):
+            return s
+    return None
+
+
+@router.post("/api/messages/send")
+async def send_message(request: Request):
+    """Send a message from one agent to another via tmux injection."""
+    data = await request.json()
+    sender_id = data.get("sender")
+    recipient_name = data.get("to")
+    content = data.get("message", "")
+    expect_response = data.get("expect_response", False)
+    parent_id = data.get("parent_id", "")
+
+    if not sender_id or not recipient_name or (not content and not parent_id):
+        return JSONResponse({"error": "sender, to, and message are required (or use parent_id for bare ack)"}, status_code=400)
+
+    sender = session_mgr.sessions.get(sender_id)
+    if not sender:
+        return JSONResponse({"error": f"sender session '{sender_id}' not found"}, status_code=404)
+
+    recipient = _resolve_session(recipient_name)
+    if not recipient:
+        return JSONResponse({"error": f"recipient '{recipient_name}' not found"}, status_code=404)
+
+    if not recipient.tmux_session:
+        return JSONResponse({"error": f"recipient has no tmux session"}, status_code=400)
+
+    sender_name = _voice_display_name(sender.voice)
+    recip_name = _voice_display_name(recipient.voice)
+
+    # Send via broker (skip tmux injection for inter-agent messages)
+    msg = await broker.send(
+        sender=sender_id,
+        recipient=recipient.session_id,
+        content=content,
+        recipient_tmux=recipient.tmux_session,
+        sender_name=sender_name,
+        recipient_name=recip_name,
+        expect_response=expect_response,
+        skip_tmux=True,
+        parent_id=parent_id,
+    )
+
+    # Deliver via exactly ONE path to avoid duplicate delivery:
+    # - In wait → inbox + wait queue push (immediate, agent sees it now)
+    # - Not in wait → inbox (hooks deliver via additionalContext)
+    is_bare_ack_msg = bool(parent_id and not content)
+    inbox_msg = {
+        "id": msg.id,
+        "from": sender_name,
+        "type": "ack" if is_bare_ack_msg else "agent",
+        "content": content,
+        "parent_id": parent_id,
+    }
+    if recipient.state == AgentState.IDLE and recipient.work_dir:
+        await inbox_write_and_notify(recipient, inbox_msg)
+        log.info("[%s] Message %s injected via wait queue", recipient.session_id, msg.id)
+    elif recipient.work_dir:
+        await inbox_write_and_notify(recipient, inbox_msg)
+        log.info("[%s] Message %s written to inbox for hook delivery", recipient.session_id, msg.id)
+    else:
+        # Fallback — no inbox, not in wait, queue as interjection
+        recipient.interjections.append(formatted)
+        log.info("[%s] Message %s queued as interjection (fallback)", recipient.session_id, msg.id)
+
+    # Save to history so messages persist across browser reloads
+    is_bare_ack = bool(parent_id and not content)
+    await asyncio.to_thread(history.append, recipient.voice, recipient.label, "system",
+                   f"[Agent msg from {sender_name.capitalize()}] {content}",
+                   _hist_prefix(recipient),
+                   msg_id=msg.id, parent_id=parent_id or None, bare_ack=is_bare_ack,
+                   model_id=_active_model_id(recipient))
+    await asyncio.to_thread(history.append, sender.voice, sender.label, "system",
+                   f"[Agent msg to {recip_name.capitalize()}] {content}",
+                   _hist_prefix(sender),
+                   msg_id=msg.id, parent_id=parent_id or None, bare_ack=is_bare_ack,
+                   model_id=_active_model_id(sender))
+
+    # Notify browser about the message
+    await send_to_browser({
+        "type": "agent_message",
+        "message": msg.to_dict(),
+    })
+
+    return JSONResponse({"id": msg.id, "state": msg.state})
+
+
+@router.post("/api/notify/user")
+async def notify_user(request: Request):
+    """Send a visual notification to the browser (no TTS).
+    Requires X-ClawMux-Token header. Used by external tools (cron, pollers, etc.)
+    to display a toast/banner in the hub UI.
+
+    Body: {"message": "...", "title": "...", "level": "info|warning|error"}
+    """
+    from hub_config import EXTERNAL_TOKEN
+    token = request.headers.get("X-ClawMux-Token", "")
+    if not token or token != EXTERNAL_TOKEN:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    data = await request.json()
+    message = data.get("message", "").strip()
+    title = data.get("title", "").strip()
+    level = data.get("level", "info")
+    if not message:
+        return JSONResponse({"error": "message is required"}, status_code=400)
+
+    await send_to_browser({
+        "type": "user_notification",
+        "message": message,
+        "title": title,
+        "level": level,
+    })
+    log.info("User notification sent: [%s] %s", level, message)
+    return JSONResponse({"ok": True})
+
+
+@router.post("/api/messages/external")
+async def send_external_message(request: Request):
+    """Accept a message from an authorized external system (e.g. OpenClaw).
+    Requires X-ClawMux-Token header matching the hub's external_token."""
+    from hub_config import EXTERNAL_TOKEN
+    token = request.headers.get("X-ClawMux-Token", "")
+    if not token or token != EXTERNAL_TOKEN:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    data = await request.json()
+    sender_name = data.get("sender", "external").strip() or "external"
+    recipient_name = data.get("to", "")
+    content = data.get("message", "")
+    parent_id = data.get("parent_id", "")
+
+    if not recipient_name or (not content and not parent_id):
+        return JSONResponse({"error": "to and message are required"}, status_code=400)
+
+    recipient = _resolve_session(recipient_name)
+    if not recipient:
+        return JSONResponse({"error": f"recipient '{recipient_name}' not found"}, status_code=404)
+
+    if not recipient.tmux_session:
+        return JSONResponse({"error": "recipient has no tmux session"}, status_code=400)
+
+    recip_name = _voice_display_name(recipient.voice)
+    msg = await broker.send(
+        sender=sender_name,
+        recipient=recipient.session_id,
+        content=content,
+        recipient_tmux=recipient.tmux_session,
+        sender_name=sender_name,
+        recipient_name=recip_name,
+        skip_tmux=True,
+        parent_id=parent_id,
+    )
+
+    if recipient.state == AgentState.IDLE and recipient.work_dir:
+        await inbox_write_and_notify(recipient, {
+            "id": msg.id,
+            "from": sender_name,
+            "type": "agent",
+            "content": content,
+        })
+    elif recipient.work_dir:
+        await inbox_write_and_notify(recipient, {
+            "id": msg.id,
+            "from": sender_name,
+            "type": "agent",
+            "content": content,
+        })
+
+    await asyncio.to_thread(history.append, recipient.voice, recipient.label, "system",
+                   f"[Agent msg from {sender_name.capitalize()}] {content}",
+                   _hist_prefix(recipient),
+                   msg_id=msg.id, parent_id=parent_id or None,
+                   model_id=_active_model_id(recipient))
+
+    await send_to_browser({"type": "agent_message", "message": msg.to_dict()})
+    log.info("External message from '%s' to '%s': %s", sender_name, recipient.session_id, msg.id)
+    return JSONResponse({"id": msg.id})
+
+
+@router.post("/api/messages/external/outbound")
+async def log_external_outbound(request: Request):
+    """Log an outbound message from a ClawMux agent to an external system (e.g. OpenClaw).
+    Requires X-ClawMux-Token header. Records in sender's history and broadcasts to browser."""
+    from hub_config import EXTERNAL_TOKEN
+    token = request.headers.get("X-ClawMux-Token", "")
+    if not token or token != EXTERNAL_TOKEN:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    data = await request.json()
+    sender_name = data.get("sender", "").strip()
+    recipient_name = data.get("to", "external").strip() or "external"
+    content = data.get("message", "")
+    parent_id = data.get("parent_id", "")
+
+    if not sender_name or not content:
+        return JSONResponse({"error": "sender and message are required"}, status_code=400)
+
+    sender = _resolve_session(sender_name)
+    if not sender:
+        return JSONResponse({"error": f"sender '{sender_name}' not found"}, status_code=404)
+
+    msg_id = broker.generate_id(sender.session_id, recipient_name)
+    import dataclasses
+    from message_broker import Message, PENDING
+    msg = Message(
+        id=msg_id,
+        sender=sender.session_id,
+        recipient=recipient_name,
+        content=content,
+        sender_name=sender.label,
+        recipient_name=recipient_name.capitalize(),
+        parent_id=parent_id,
+        created_at=time.time(),
+    )
+    broker.messages[msg_id] = msg
+
+    await asyncio.to_thread(history.append, sender.voice, sender.label, "system",
+                   f"[Agent msg to {recipient_name.capitalize()}] {content}",
+                   _hist_prefix(sender),
+                   msg_id=msg_id, parent_id=parent_id or None,
+                   model_id=_active_model_id(sender))
+
+    await send_to_browser({"type": "agent_message", "message": msg.to_dict()})
+    log.info("Outbound external message from '%s' to '%s': %s", sender.session_id, recipient_name, msg_id)
+    return JSONResponse({"id": msg_id})
+
+
+@router.post("/api/messages/image")
+async def agent_post_image(request: Request, file: UploadFile):
+    """Agent posts an image into the chat. Saves to shared uploads dir, renders inline."""
+    sender_id = request.headers.get("X-ClawMux-Session-Id", "")
+    sender = session_mgr.sessions.get(sender_id)
+    if not sender:
+        return JSONResponse({"error": f"sender session '{sender_id}' not found"}, status_code=404)
+
+    contents = await file.read()
+    if len(contents) > _MAX_UPLOAD_SIZE:
+        return JSONResponse({"error": "file too large (50MB max)"}, status_code=413)
+
+    _SHARED_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    safe_name = Path(file.filename or "image.png").name
+    unique_name = f"{_gen_msg_id()}-{safe_name}"
+    (_SHARED_UPLOADS_DIR / unique_name).write_bytes(contents)
+
+    msg_id = _gen_msg_id()
+    url = f"/uploads/{unique_name}"
+    markdown = f"![{safe_name}]({url})"
+
+    await send_to_browser({
+        "session_id": sender_id,
+        "type": "assistant_text",
+        "text": markdown,
+        "msg_id": msg_id,
+        "fire_and_forget": True,
+    })
+    await asyncio.to_thread(
+        history.append, sender.voice, sender.label, "assistant",
+        markdown, _hist_prefix(sender), msg_id=msg_id, model_id=_active_model_id(sender)
+    )
+    log.info("[%s] Agent posted image: %s", sender_id, unique_name)
+    return JSONResponse({"status": "ok", "url": url, "msg_id": msg_id})
+
+
+@router.post("/api/messages/speak")
+async def speak_to_user(request: Request):
+    """Agent speaks to user via TTS — fire and forget."""
+    data = await request.json()
+    sender_id = data.get("sender", "")
+    content = data.get("message", "")
+    parent_id = data.get("parent_id", "")
+
+    sender = session_mgr.sessions.get(sender_id)
+    if not sender:
+        return JSONResponse({"error": f"sender session '{sender_id}' not found"}, status_code=404)
+
+    ack_only = data.get("ack_only", False)
+    if ack_only and parent_id:
+        # Bare ack — check if parent belongs to a group chat message
+        group = await asyncio.to_thread(_find_group_for_message, parent_id)
+        if group:
+            # Route to group chat: only shows in browser group chat view, not delivered to other agents
+            ack_id = _gen_msg_id()
+            sender_label = _voice_display_name(sender.voice)
+            await asyncio.to_thread(_append_group_history, group["id"], "user", "",
+                                    sender=sender_label, msg_id=ack_id, parent_id=parent_id, bare_ack=True,
+                                    sender_voice=sender.voice)
+            await send_to_browser({
+                "type": "groupchat_ack",
+                "group_id": group["id"],
+                "msg_id": parent_id,
+                "ack_id": ack_id,
+                "sender": sender_label,
+                "sender_voice": sender.voice,
+            })
+            return {"id": ack_id, "status": "ack_sent"}
+        # Regular session ack — thumbs up in agent's own chat
+        msg_id = _gen_msg_id()
+        sender_name = _voice_display_name(sender.voice)
+        # Save to history so ack persists across reloads
+        await asyncio.to_thread(history.append, sender.voice, sender.label, "assistant", "",
+                       _hist_prefix(sender), msg_id=msg_id,
+                       parent_id=parent_id, bare_ack=True,
+                       model_id=_active_model_id(sender))
+        await send_to_browser({
+            "type": "agent_message",
+            "message": {
+                "id": msg_id,
+                "sender": sender_id,
+                "sender_name": sender_name,
+                "recipient": sender_id,  # show in sender's chat
+                "recipient_name": "user",
+                "content": "",
+                "parent_id": parent_id,
+                "bare_ack": True,
+            },
+        })
+        return {"id": msg_id, "status": "ack_sent"}
+
+    if not content:
+        return JSONResponse({"error": "message is required"}, status_code=400)
+
+    sender_name = _voice_display_name(sender.voice)
+    msg_id = _gen_msg_id()
+
+    if sender_id != hub_state._browser_viewed_session:
+        sender.unread_count += 1
+
+    # Send text to browser chat FIRST (fire_and_forget prevents auto-record trigger)
+    await send_to_browser({"session_id": sender_id, "type": "assistant_text", "text": content, "msg_id": msg_id, "fire_and_forget": True})
+
+    # Save to history (in thread to avoid blocking event loop)
+    await asyncio.to_thread(history.append, sender.voice, sender.label, "assistant", content, _hist_prefix(sender), msg_id=msg_id, model_id=_active_model_id(sender))
+
+    # TTS — strip non-speakable content and play
+    settings = _load_settings()
+    skip_tts = sender.text_mode or not settings.get("tts_enabled", True)
+    if not skip_tts:
+        tts_message = strip_non_speakable(content)
+        if tts_message.strip():
+            try:
+                audio_b64, word_timestamps = await tts_captioned(tts_message, sender.voice, sender.speed)
+            except Exception as e:
+                log.warning("[%s] Captioned TTS failed (%s), falling back", sender_id, e)
+                mp3 = await tts(tts_message, sender.voice, sender.speed)
+                audio_b64 = base64.b64encode(mp3).decode()
+                word_timestamps = []
+            audio_msg = {"session_id": sender_id, "type": "audio", "data": audio_b64, "msg_id": msg_id}
+            if word_timestamps:
+                audio_msg["words"] = word_timestamps
+            await send_to_browser(audio_msg)
+
+    log.info("[%s] Spoke to user: %s", sender_id, content[:80])
+    return JSONResponse({"id": msg_id, "state": "delivered"})
+
+
+@router.post("/api/messages/{msg_id}/ack")
+async def ack_message(msg_id: str):
+    """Acknowledge receipt of a message."""
+    if not broker.acknowledge(msg_id):
+        return JSONResponse({"error": "message not found or already acknowledged"}, status_code=404)
+
+    msg = broker.get_message(msg_id)
+    await send_to_browser({
+        "type": "agent_message",
+        "message": msg.to_dict(),
+    })
+
+    return JSONResponse({"id": msg_id, "state": "acknowledged"})
+
+
+@router.post("/api/messages/{msg_id}/reply")
+async def reply_to_message(msg_id: str, request: Request):
+    """Reply to a specific message."""
+    data = await request.json()
+    response_text = data.get("message", "")
+    if not response_text:
+        return JSONResponse({"error": "message is required"}, status_code=400)
+
+    if not broker.reply(msg_id, response_text):
+        return JSONResponse({"error": "message not found"}, status_code=404)
+
+    msg = broker.get_message(msg_id)
+    await send_to_browser({
+        "type": "agent_message",
+        "message": msg.to_dict(),
+    })
+
+    return JSONResponse({"id": msg_id, "state": "responded", "response": response_text})
+
+
+@router.get("/api/messages")
+async def list_messages(session_id: str = None):
+    """List messages, optionally filtered by session."""
+    if session_id:
+        msgs = broker.get_messages_for(session_id)
+        return JSONResponse([m.to_dict() for m in msgs])
+    return JSONResponse(broker.list_all())
+
+
+@router.get("/api/messages/{msg_id}")
+async def get_message(msg_id: str):
+    """Get a specific message by ID."""
+    msg = broker.get_message(msg_id)
+    if not msg:
+        return JSONResponse({"error": "message not found"}, status_code=404)
+    return JSONResponse(msg.to_dict())
+
+
+# ---------------------------------------------------------------------------
+# Inbox API
+# ---------------------------------------------------------------------------
+
+@router.get("/api/inbox/{session_id}")
+async def get_inbox(session_id: str):
+    """Read and clear all inbox messages for a session."""
+    session = session_mgr.sessions.get(session_id)
+    if not session or not session.work_dir:
+        return JSONResponse({"messages": []})
+    messages = await asyncio.to_thread(inbox.read_and_clear, session.work_dir)
+    if messages:
+        # Notify browser that inbox was cleared
+        await send_to_browser({
+            "type": "inbox_update",
+            "session_id": session_id,
+            "count": 0,
+        })
+    return JSONResponse({"messages": messages})
+
+
+@router.get("/api/inbox/{session_id}/peek")
+async def peek_inbox(session_id: str):
+    """Check inbox without consuming messages."""
+    session = session_mgr.sessions.get(session_id)
+    if not session or not session.work_dir:
+        return JSONResponse({"count": 0})
+    count = await asyncio.to_thread(inbox.peek, session.work_dir)
+    latest = await asyncio.to_thread(inbox.peek_latest, session.work_dir) if count > 0 else None
+    result = {"count": count}
+    if latest:
+        result["latest"] = {
+            "from": latest.get("from", ""),
+            "type": latest.get("type", ""),
+            "preview": latest.get("content", "")[:100],
+        }
+    return JSONResponse(result)
+
+
+async def inject_inbox(session, session_id: str) -> None:
+    """Deliver pending inbox messages to an agent via tmux injection.
+
+    Uses a per-session lock to serialize concurrent deliveries. When two messages
+    arrive simultaneously (e.g. from concurrent group sends), the second task waits
+    for the first to complete before acquiring the lock — preventing Enter from one
+    injection firing mid-paste of another.
+    """
+    lock = _injection_locks.setdefault(session_id, asyncio.Lock())
+    async with lock:
+        messages = await asyncio.to_thread(inbox.read_and_clear, session.work_dir)
+        if not messages:
+            return
+
+        # Dedup: drop messages whose IDs were already injected within the last 5 minutes
+        now = time.time()
+        seen = _injected_ids.setdefault(session_id, {})
+        # Prune expired entries
+        expired = [k for k, ts in seen.items() if now - ts > 300]
+        for k in expired:
+            del seen[k]
+        fresh = []
+        for msg in messages:
+            mid = msg.get("id", "")
+            if mid and mid in seen:
+                log.warning("[%s] Skipping duplicate injection of msg %s", session_id, mid)
+                continue
+            if mid:
+                seen[mid] = now
+            fresh.append(msg)
+        if not fresh:
+            return
+        messages = fresh
+
+        lines = []
+        has_user_msg = any(m.get("type") not in ("system", "ack") for m in messages)
+        if session.walking_mode and has_user_msg:
+            lines.append("[SYSTEM] Walking mode active — respond in plain spoken text only. No markdown, no underscores, no special formatting.")
+        for msg in messages:
+            msg_type = msg.get("type", "system")
+            sender = msg.get("from", "unknown")
+            content = msg.get("content", "")
+            msg_id = msg.get("id", "")
+            if msg_type == "agent":
+                lines.append(f"[MSG id:{msg_id} from:{sender}] {content}")
+            elif msg_type in ("voice", "text", "file_upload"):
+                lines.append(f"[VOICE id:{msg_id} from:{sender}] {content}")
+            elif msg_type == "group":
+                group_name = msg.get("group_name", "group")
+                lines.append(f"[GROUP:{group_name} id:{msg_id} from:{sender}] {content}")
+            elif msg_type == "ack":
+                parent_id = msg.get("parent_id", "")
+                lines.append(f"[ACK from:{sender} on:{parent_id}]")
+            else:
+                lines.append(f"[SYSTEM] {content}")
+
+        text = "\n".join(lines)
+        delivered = False
+        try:
+            await session_mgr._get_backend(session.backend).deliver_message(session.tmux_session, text)
+            delivered = True
+            log.info("[%s] Injected %d message(s) via tmux", session_id, len(messages))
+        except Exception as exc:
+            log.error("[%s] tmux injection FAILED: %s — %d message(s) returned to inbox",
+                      session_id, exc, len(messages))
+            for msg in messages:
+                await asyncio.to_thread(inbox.write, session.work_dir, msg)
+
+        if delivered:
+            # Transition to PROCESSING immediately — agent has the message and is reasoning.
+            # This covers the gap between injection and first PreToolUse hook.
+            if session.state == AgentState.IDLE:
+                session.set_state(AgentState.PROCESSING)
+                await send_to_browser(_session_status_msg(session))
+            await send_to_browser({
+                "type": "inbox_update",
+                "session_id": session_id,
+                "count": 0,
+            })
+
+
+async def inbox_write_and_notify(session, msg_dict: dict) -> dict:
+    """Write to inbox and notify browser + wait WS."""
+    written = await asyncio.to_thread(inbox.write, session.work_dir, msg_dict)
+    count = await asyncio.to_thread(inbox.peek, session.work_dir)
+    await send_to_browser({
+        "type": "inbox_update",
+        "session_id": session.session_id,
+        "count": count,
+        "latest": {
+            "from": msg_dict.get("from", ""),
+            "type": msg_dict.get("type", ""),
+            "preview": msg_dict.get("content", "")[:100],
+        },
+    })
+    # Inject immediately. The per-session lock in _inject_inbox serializes concurrent
+    # deliveries — no cancel needed; a queued task will pick up the latest inbox contents.
+    if session.work_dir:
+        task = asyncio.create_task(inject_inbox(session, session.session_id))
+        _pending_injections[session.session_id] = task
+    return written
+
+
+# ---------------------------------------------------------------------------
+# Audio API
+# ---------------------------------------------------------------------------
+
+# /api/transcribe, /api/tts, /api/tts-captioned → voice_router
+
+_WHISPER_START_SCRIPT = Path.home() / ".clawmux" / "services" / "whisper" / "bin" / "start-whisper-server.sh"
+_WHISPER_PID_FILE = Path.home() / ".clawmux" / "services" / "whisper" / "whisper.pid"
+
+
+async def _stop_whisper_server() -> None:
+    """Kill the whisper-server process to free GPU/RAM."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "pkill", "-f", "whisper-server",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await asyncio.wait_for(proc.wait(), timeout=5)
+        log.info("Whisper server stopped (offloaded)")
+    except Exception as e:
+        log.warning("Failed to stop whisper server: %s", e)
+
+
+async def _start_whisper_server() -> None:
+    """Start the whisper-server and then load the configured quality model.
+
+    The start script loads 'base' quickly (from VOICEMODE_WHISPER_MODEL or default).
+    Once the server is ready, we use /load to switch to the correct quality model.
+    """
+    if not _WHISPER_START_SCRIPT.exists():
+        log.warning("Whisper start script not found: %s", _WHISPER_START_SCRIPT)
+        return
+    # Stop any existing instance first to avoid duplicates
+    await _stop_whisper_server()
+    await asyncio.sleep(1)
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "bash", str(_WHISPER_START_SCRIPT),
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        _WHISPER_PID_FILE.write_text(str(proc.pid))
+        log.info("Whisper server starting (pid %d)", proc.pid)
+    except Exception as e:
+        log.error("Failed to start whisper server: %s", e)
+        return
+
+    # Poll until the server is ready (up to 60 seconds), then load the quality model
+    async def _wait_and_load():
+        deadline = asyncio.get_event_loop().time() + 60
+        async with httpx.AsyncClient(timeout=2) as client:
+            while asyncio.get_event_loop().time() < deadline:
+                try:
+                    await client.get(hub_config.WHISPER_URL + "/")
+                    break
+                except Exception:
+                    await asyncio.sleep(2)
+            else:
+                log.warning("Whisper server did not become ready within 60s")
+                return
+        model_name = hub_config.QUALITY_MODEL_MAP.get(hub_config.QUALITY_MODE, "base")
+        log.info("Whisper server ready — loading quality model: %s", model_name)
+        await _load_whisper_model(model_name)
+
+    asyncio.create_task(_wait_and_load())
+
+
+async def _load_whisper_model(model_name: str) -> None:
+    """Dynamically load a Whisper model via the server's /load endpoint."""
+    model_path = os.path.join(hub_config.WHISPER_MODEL_DIR, f"ggml-{model_name}.bin")
+    if not os.path.isfile(model_path):
+        log.warning("Whisper model file not found: %s", model_path)
+        return
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                f"{hub_config.WHISPER_URL}/load",
+                files={"model": (None, model_path)},
+            )
+            if resp.status_code == 200:
+                log.info("Whisper model loaded: %s", model_name)
+            else:
+                log.error("Whisper /load failed (%d): %s", resp.status_code, resp.text)
+    except Exception as e:
+        log.error("Whisper model load error: %s", e)
+
+
+@router.get("/api/settings")
+async def get_settings():
+    return JSONResponse(_load_settings())
+
+
+@router.put("/api/settings")
+async def update_settings(request: Request):
+    data = await request.json()
+    settings = _load_settings()
+    settings.update(data)
+    # Apply model change at runtime
+    if "model" in data and data["model"] in ("opus", "sonnet", "haiku"):
+        hub_config.CLAUDE_MODEL = data["model"]
+    if "effort" in data and data["effort"] in ("low", "medium", "high", "max"):
+        hub_config.CLAUDE_EFFORT = data["effort"]
+    if "tts_url" in data and data["tts_url"]:
+        hub_config.KOKORO_URL = data["tts_url"].rstrip("/")
+        log.info("TTS URL changed to: %s", hub_config.KOKORO_URL)
+    if "stt_url" in data and data["stt_url"]:
+        hub_config.WHISPER_URL = data["stt_url"].rstrip("/")
+        log.info("STT URL changed to: %s", hub_config.WHISPER_URL)
+    if "quality_mode" in data and data["quality_mode"] in ("high", "medium", "low"):
+        hub_config.QUALITY_MODE = data["quality_mode"]
+        model_name = hub_config.QUALITY_MODEL_MAP.get(data["quality_mode"], "base")
+        log.info("Quality mode changed to: %s (model: %s)", data["quality_mode"], model_name)
+        # Dynamically load the Whisper model via /load endpoint
+        asyncio.create_task(_load_whisper_model(model_name))
+    if "stt_enabled" in data:
+        # STT (Whisper) is for user speech input — independent of TTS
+        if not data["stt_enabled"]:
+            asyncio.create_task(_stop_whisper_server())
+        else:
+            asyncio.create_task(_start_whisper_server())
+    _save_settings(settings)
+    log.info("Settings updated: %s", data)
+    return JSONResponse(settings)
+
+
+def _load_settings() -> dict:
+    settings = project_mgr.get_settings()
+    # Always inject live URLs in case they've changed at runtime
+    settings.setdefault("tts_url", hub_config.KOKORO_URL)
+    settings.setdefault("stt_url", hub_config.WHISPER_URL)
+    return settings
+
+
+def _save_settings(settings: dict) -> None:
+    project_mgr.save_settings(settings)
+
+
+
+@router.get("/api/notes")
+async def get_notes():
+    notes_path = hub_config.DATA_DIR / "notes.json"
+    if notes_path.exists():
+        try:
+            return JSONResponse(json.loads(notes_path.read_text()))
+        except Exception:
+            pass
+    return JSONResponse({"now": "", "later": ""})
+
+
+@router.put("/api/notes")
+async def update_notes(request: Request):
+    data = await request.json()
+    notes = {"now": data.get("now", ""), "later": data.get("later", "")}
+    notes_path = hub_config.DATA_DIR / "notes.json"
+    notes_path.parent.mkdir(parents=True, exist_ok=True)
+    notes_path.write_text(json.dumps(notes, indent=2))
+    return JSONResponse(notes)
+
+
+
+
+@router.get("/api/services/status")
+async def services_status():
+    tts_ok = False
+    stt_ok = False
+    async with httpx.AsyncClient(timeout=3) as client:
+        try:
+            resp = await client.get(f"{hub_config.KOKORO_URL}/v1/models")
+            tts_ok = resp.status_code == 200
+        except Exception:
+            pass
+        try:
+            resp = await client.get(f"{hub_config.WHISPER_URL}/")
+            stt_ok = resp.status_code == 200
+        except Exception:
+            pass
+    return JSONResponse({"tts": tts_ok, "stt": stt_ok})
+
+
+@router.get("/api/usage")
+async def get_usage():
+    """Return Claude usage stats from local cache."""
+    usage_path = Path.home() / ".claude" / "usage-cache.json"
+    if not usage_path.exists():
+        fallback = get_fallback_usage()
+        if fallback:
+            return JSONResponse(fallback)
+        return JSONResponse({"error": "No usage data"}, status_code=404)
+    try:
+        data = json.loads(usage_path.read_text())
+        if "error" in data or "five_hour" not in data:
+            fallback = get_fallback_usage()
+            if fallback:
+                return JSONResponse(fallback)
+            return JSONResponse({"error": "Usage data unavailable"}, status_code=503)
+        set_last_good_usage(data)
+        save_usage_sidecar(data)
+        return JSONResponse(data)
+    except Exception as e:
+        fallback = get_fallback_usage()
+        if fallback:
+            return JSONResponse(fallback)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@router.get("/api/context")
+async def get_context():
+    """Return cached context window usage for all active sessions."""
+    # Clean out entries for sessions that no longer exist
+    active = set(session_mgr.sessions.keys())
+    return JSONResponse({sid: v for sid, v in _context_cache.items() if sid in active})
+
+
+@router.get("/api/debug")
+async def debug_info():
+    import time as _time
+
+    # System stats
+    system = {}
+    try:
+        import psutil
+        system["cpu_percent"] = psutil.cpu_percent(interval=0.1)
+        mem = psutil.virtual_memory()
+        system["ram_used_gb"] = round(mem.used / 1073741824, 1)
+        system["ram_total_gb"] = round(mem.total / 1073741824, 1)
+        system["ram_percent"] = mem.percent
+    except ImportError:
+        system["cpu_percent"] = None
+        system["ram_percent"] = None
+
+    # GPU stats via nvidia-smi
+    try:
+        gpu_proc = await asyncio.create_subprocess_exec(
+            "nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu",
+            "--format=csv,noheader,nounits",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+        )
+        gpu_out, _ = await gpu_proc.communicate()
+        if gpu_proc.returncode == 0:
+            parts = gpu_out.decode().strip().split(", ")
+            system["gpu_percent"] = int(parts[0])
+            system["vram_used_mb"] = int(parts[1])
+            system["vram_total_mb"] = int(parts[2])
+            system["gpu_temp_c"] = int(parts[3])
+    except Exception:
+        pass
+
+    # Gather tmux sessions
+    tmux_sessions = []
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "tmux", "list-sessions", "-F",
+            "#{session_name}\t#{session_created}\t#{session_windows}\t#{session_attached}",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await proc.communicate()
+        if proc.returncode == 0:
+            for line in stdout.decode().strip().splitlines():
+                parts = line.split("\t")
+                if len(parts) >= 4:
+                    tmux_sessions.append({
+                        "name": parts[0],
+                        "created": int(parts[1]),
+                        "windows": int(parts[2]),
+                        "attached": int(parts[3]) > 0,
+                        "is_voice": parts[0].startswith("voice-"),
+                    })
+    except Exception:
+        pass
+
+    # Check service connectivity
+    services = {}
+    async with httpx.AsyncClient(timeout=3) as client:
+        for name, url, path in [
+            ("whisper", hub_config.WHISPER_URL, "/"),
+            ("kokoro", hub_config.KOKORO_URL, "/v1/models"),
+        ]:
+            try:
+                resp = await client.get(f"{url}{path}")
+                services[name] = {"status": "up", "code": resp.status_code, "url": url}
+            except Exception as e:
+                services[name] = {"status": "down", "error": str(e), "url": url}
+
+    # Hub sessions
+    hub_sessions = []
+    for sid, s in session_mgr.sessions.items():
+        hub_sessions.append({
+            **s.to_dict(),
+            "work_dir": s.work_dir,
+            "idle_seconds": round(_time.time() - s.last_activity),
+            "age_seconds": round(_time.time() - s.created_at),
+        })
+
+    return JSONResponse({
+        "hub": {
+            "port": HUB_PORT,
+            "uptime_seconds": round(_time.time() - HUB_START_TIME),
+            "browser_connected": len(browser_clients) > 0,
+            "client_count": len(browser_clients),
+            "session_count": len(session_mgr.sessions),
+        },
+        "system": system,
+        "sessions": hub_sessions,
+        "context_usage": _context_cache,
+        "projects": session_mgr.project_mgr.projects,
+        "group_chats": [_group_to_dict(g) for g in _group_chats.values()],
+        "tmux_sessions": tmux_sessions,
+        "services": services,
+        "messages": {
+            "total": len(broker.messages),
+            "pending": sum(1 for m in broker.messages.values() if m.state == "pending"),
+            "acknowledged": sum(1 for m in broker.messages.values() if m.state == "acknowledged"),
+            "responded": sum(1 for m in broker.messages.values() if m.state == "responded"),
+            "failed": sum(1 for m in broker.messages.values() if m.state == "failed"),
+        },
+    })
+
+
+@router.get("/api/debug/log")
+async def debug_log():
+    log_path = Path("/tmp/clawmux.log")
+    lines = []
+    try:
+        if log_path.exists():
+            text = log_path.read_text()
+            lines = text.strip().splitlines()[-50:]
+    except Exception:
+        pass
+    return JSONResponse({"lines": lines})
+
+
+# --- ttyd Monitor endpoints ---
+
+@router.get("/api/monitor")
+async def list_monitors():
+    """Return all active ttyd monitor processes."""
+    return JSONResponse([
+        {"key": k, "type": v["type"], "id": v["id"], "port": v["port"], "url": v["url"]}
+        for k, v in _ttyd_monitors.items()
+    ])
+
+
+@router.post("/api/monitor/start")
+async def start_monitor(request: Request):
+    """Start a ttyd monitor for a folder or agent tmux session.
+
+    Body: {type: "folder"|"agent", id: slug_or_voice_id}
+    Returns: {key, port, url}
+    """
+    body = await request.json()
+    mon_type = body.get("type")
+    mon_id = body.get("id", "").strip()
+
+    if mon_type not in ("folder", "agent"):
+        return JSONResponse({"error": "type must be 'folder' or 'agent'"}, status_code=400)
+    if not mon_id:
+        return JSONResponse({"error": "id is required"}, status_code=400)
+
+    key = f"{mon_type}:{mon_id}"
+
+    # Return existing monitor if already running
+    if key in _ttyd_monitors:
+        m = _ttyd_monitors[key]
+        proc = m["proc"]
+        if proc.returncode is None:  # still alive
+            return JSONResponse({"key": key, "port": m["port"], "url": m["url"]})
+        # Process died — clean up and restart
+        del _ttyd_monitors[key]
+
+    port = _ttyd_free_port()
+    if port is None:
+        return JSONResponse({"error": "No free ports in ttyd range 7700-7799"}, status_code=503)
+
+    if mon_type == "folder":
+        # Ensure the monitor tmux session exists (create/update it)
+        slug = mon_id
+        suffix = f"-{slug}" if slug != "default" else ""
+        monitor_session = f"clawmux-monitor{suffix}"
+
+        # Always recreate the monitor session so dead/moved agents are dropped
+        try:
+            create_proc = await asyncio.create_subprocess_exec(
+                "clawmux", "monitor", slug, "--detach", "--restart",
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await asyncio.wait_for(create_proc.wait(), timeout=15)
+        except asyncio.TimeoutError:
+            log.warning("[monitor] clawmux monitor %s --detach timed out", slug)
+        except Exception as e:
+            log.warning("[monitor] Failed to create monitor session for %s: %s", slug, e)
+
+        tmux_target = monitor_session
+
+        # Set a hook so the tiled layout re-distributes when a new client connects/resizes
+        try:
+            await asyncio.create_subprocess_exec(
+                "tmux", "set-hook", "-t", f"={monitor_session}",
+                "client-resized", "select-layout tiled",
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+        except Exception:
+            pass
+
+    else:  # agent
+        voice_id = mon_id
+        # Look up tmux session name from live sessions
+        session = next(
+            (s for s in session_mgr.sessions.values() if s.voice == voice_id),
+            None,
+        )
+        if session is None:
+            return JSONResponse({"error": f"No active session for voice '{voice_id}'"}, status_code=404)
+        tmux_target = session.tmux_session
+
+    # Launch ttyd bound to loopback only (avoids interface conflict with Tailscale Serve).
+    # --writable enables keyboard input so users can type in the tmux session.
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "ttyd", "-W", "-i", "lo", "--port", str(port),
+            "tmux", "attach-session", "-t", f"={tmux_target}",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+    except FileNotFoundError:
+        return JSONResponse({"error": "ttyd not found — run: sudo apt install ttyd"}, status_code=503)
+    except Exception as e:
+        return JSONResponse({"error": f"Failed to start ttyd: {e}"}, status_code=500)
+
+    # Brief pause to let ttyd bind before Tailscale Serve starts proxying
+    await asyncio.sleep(0.5)
+
+    # Register with Tailscale Serve so the browser gets an HTTPS URL (avoids mixed-content block)
+    ts_domain = None
+    try:
+        ts_proc = await asyncio.create_subprocess_exec(
+            "tailscale", "serve", f"--https={port}", "--bg", f"http://localhost:{port}",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await asyncio.wait_for(ts_proc.wait(), timeout=5)
+        if ts_proc.returncode == 0:
+            # Derive Tailscale domain from request host (strip port)
+            req_host = request.headers.get("host", "").split(":")[0]
+            if req_host and ("tailscale" in req_host or req_host.endswith(".ts.net")):
+                ts_domain = req_host
+            else:
+                # Fallback: query tailscale status for domain
+                try:
+                    ts_status = await asyncio.create_subprocess_exec(
+                        "tailscale", "status", "--json",
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.DEVNULL,
+                    )
+                    ts_out, _ = await asyncio.wait_for(ts_status.communicate(), timeout=3)
+                    ts_data = json.loads(ts_out)
+                    ts_domain = ts_data.get("Self", {}).get("DNSName", "").rstrip(".")
+                except Exception:
+                    pass
+    except Exception as e:
+        log.warning("[monitor] Tailscale serve registration failed: %s", e)
+
+    if ts_domain:
+        url = f"https://{ts_domain}:{port}"
+    else:
+        req_host = request.headers.get("host", "localhost").split(":")[0]
+        url = f"http://{req_host}:{port}"
+
+    _ttyd_monitors[key] = {"type": mon_type, "id": mon_id, "port": port, "proc": proc, "url": url}
+    log.info("[monitor] Started ttyd for %s on port %d (tmux: %s) url: %s", key, port, tmux_target, url)
+    return JSONResponse({"key": key, "port": port, "url": url})
+
+
+@router.post("/api/monitor/stop")
+async def stop_monitor(request: Request):
+    """Stop a ttyd monitor process.
+
+    Body: {key: "folder:slug" or "agent:voice_id"}
+    """
+    body = await request.json()
+    key = body.get("key", "").strip()
+    if not key:
+        return JSONResponse({"error": "key is required"}, status_code=400)
+    if key not in _ttyd_monitors:
+        return JSONResponse({"error": "Monitor not found"}, status_code=404)
+
+    mon = _ttyd_monitors.pop(key)
+    proc = mon.get("proc")
+    if proc and proc.returncode is None:
+        try:
+            proc.terminate()
+            await asyncio.wait_for(proc.wait(), timeout=3)
+        except asyncio.TimeoutError:
+            proc.kill()
+        except Exception:
+            pass
+
+    # Deregister from Tailscale Serve
+    port = mon["port"]
+    try:
+        ts_proc = await asyncio.create_subprocess_exec(
+            "tailscale", "serve", f"--https={port}", "off",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await asyncio.wait_for(ts_proc.wait(), timeout=5)
+    except Exception as e:
+        log.warning("[monitor] Tailscale serve deregistration failed for port %d: %s", port, e)
+
+    log.info("[monitor] Stopped ttyd for %s (port %d)", key, port)
+    return JSONResponse({"ok": True})
+
+
