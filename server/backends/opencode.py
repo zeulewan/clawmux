@@ -133,7 +133,6 @@ class OpenCodeBackend(AgentBackend):
 
         Returns True if state was restored successfully.
         """
-        import json as _json
         info_path = Path(work_dir) / ".clawmux-opencode.json"
         if not info_path.exists():
             return False

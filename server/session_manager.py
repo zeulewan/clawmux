@@ -323,7 +323,13 @@ class SessionManager:
         for name in live_tmux:
             if name not in known_tmux and name in our_session_ids and "-monitor" not in name:
                 log.warning("Killing unadoptable orphaned tmux session: %s", name)
-                await self.backend.terminate(name)
+                # Determine backend from agents.json if available, else default
+                orphan_backend = "claude-code"
+                for e in all_agents.values():
+                    if e.session_id == name:
+                        orphan_backend = getattr(e, 'backend', 'claude-code') or "claude-code"
+                        break
+                await self._get_backend(orphan_backend).terminate(name)
 
         known_voice_ids = {v[0] for v in VOICE_POOL}
         project_slugs = set(self.project_mgr.projects.keys())

@@ -34,10 +34,10 @@ class AgentBackend(ABC):
             hub_port: Hub HTTP port (for env vars).
             voice_id: Voice identifier (e.g. "af_sky").
             voice_name: Human-readable name (e.g. "Sky").
-            claude_session_id: Claude Code conversation UUID.
+            claude_session_id: Conversation UUID (Claude Code resume key).
             resuming: True if resuming an existing conversation.
-            model: Model to use (opus/sonnet/haiku).
-            effort: Effort level (low/medium/high).
+            model: Model identifier (e.g. opus/sonnet/haiku for Claude, or full model_id for other backends).
+            effort: Effort level (low/medium/high). Claude Code only; ignored by other backends.
         """
 
     @abstractmethod

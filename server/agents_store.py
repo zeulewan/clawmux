@@ -40,7 +40,7 @@ class AgentEntry:
     repo: str = ""                # repository the agent is working on
     task: str = ""                # current task description (~5 words)
     area: str = ""                # sub-area within the project (e.g. "frontend", "auth")
-    backend: str = "claude-code"  # backend type: "claude-code", "opencode", "gemini"
+    backend: str = "claude-code"  # backend type: "claude-code", "opencode", "gemini", "codex"
     model_id: str = ""            # actual model string, e.g. "claude-opus-4-6", "gpt-5"
     last_active: float = 0.0
     model: str = "opus"
