@@ -591,6 +591,118 @@ async def set_walking_mode(session_id: str, request: Request):
     return JSONResponse({"ok": True, "walking_mode": enabled})
 
 
+# Walking mode saved state (for restoring TTS/STT on deactivation)
+_walking_mode_saved: dict | None = None
+
+
+@router.post("/api/walking-mode")
+async def toggle_walking_mode(request: Request):
+    """Activate or deactivate walking mode.
+
+    On activate: spawns the walking agent (default: am_puck) if not running,
+    enables TTS and STT, puts the agent in walking mode.
+    On deactivate: turns off walking mode, restores previous TTS/STT settings.
+    """
+    global _walking_mode_saved
+    data = await request.json()
+    enabled = bool(data.get("enabled", True))
+    voice_id = data.get("voice", "am_puck")
+
+    if enabled:
+        # Save current TTS/STT settings so we can restore on deactivation
+        settings = _load_settings()
+        _walking_mode_saved = {
+            "tts_enabled": settings.get("tts_enabled", True),
+            "stt_enabled": settings.get("stt_enabled", True),
+        }
+
+        # Enable TTS and STT if not already on
+        if not settings.get("tts_enabled", True) or not settings.get("stt_enabled", True):
+            settings["tts_enabled"] = True
+            settings["stt_enabled"] = True
+            _save_settings(settings)
+            log.info("Walking mode: auto-enabled TTS and STT")
+
+        # Find or spawn the walking agent
+        session = None
+        for s in session_mgr.sessions.values():
+            if s.voice == voice_id:
+                session = s
+                break
+
+        if not session:
+            # Spawn the walking agent
+            pool_map = {v[0]: v[1] for v in hub_config.VOICE_POOL}
+            voice_name = pool_map.get(voice_id, voice_id)
+            try:
+                session = await session_mgr.spawn_session(
+                    voice=voice_id,
+                    project=project_mgr.get_voice_folder(voice_id) or project_mgr.active_project,
+                )
+                await send_to_browser({"type": "session_spawned", "session": session.to_dict()})
+                log.info("Walking mode: spawned %s (%s)", voice_name, voice_id)
+            except Exception as e:
+                return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+        # Enable walking mode on the agent
+        session.walking_mode = True
+        await send_to_browser(_session_status_msg(session, walking_mode=True))
+        await inbox_write_and_notify(session, {
+            "type": "system",
+            "content": "Walking mode activated. You are the user's voice proxy. Respond in plain spoken text only — no markdown, no underscores, no code blocks, no special formatting. Keep responses concise. The user is listening via TTS while walking.",
+        })
+        log.info("Walking mode: activated on %s", session.session_id)
+
+        await send_to_browser({
+            "type": "walking_mode",
+            "enabled": True,
+            "session_id": session.session_id,
+            "voice": voice_id,
+        })
+        return JSONResponse({
+            "ok": True,
+            "enabled": True,
+            "session_id": session.session_id,
+            "voice": voice_id,
+        })
+
+    else:
+        # Deactivate walking mode
+        # Find the walking mode agent
+        session = None
+        for s in session_mgr.sessions.values():
+            if s.voice == voice_id and s.walking_mode:
+                session = s
+                break
+
+        if session:
+            session.walking_mode = False
+            await send_to_browser(_session_status_msg(session, walking_mode=False))
+            await inbox_write_and_notify(session, {
+                "type": "system",
+                "content": "Walking mode deactivated. You may use normal formatting again.",
+            })
+
+        # Restore previous TTS/STT settings
+        if _walking_mode_saved:
+            settings = _load_settings()
+            settings["tts_enabled"] = _walking_mode_saved["tts_enabled"]
+            settings["stt_enabled"] = _walking_mode_saved["stt_enabled"]
+            _save_settings(settings)
+            log.info("Walking mode: restored TTS=%s STT=%s",
+                     _walking_mode_saved["tts_enabled"], _walking_mode_saved["stt_enabled"])
+            _walking_mode_saved = None
+
+        await send_to_browser({
+            "type": "walking_mode",
+            "enabled": False,
+            "session_id": session.session_id if session else "",
+            "voice": voice_id,
+        })
+        log.info("Walking mode: deactivated")
+        return JSONResponse({"ok": True, "enabled": False})
+
+
 # --- Roles ---
 
 @router.get("/api/roles")
