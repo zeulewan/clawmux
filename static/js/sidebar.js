@@ -208,13 +208,13 @@ function exitFocusMode() {
 // --- Sidebar rendering ---
 function toggleSidebarVisibility() {
   const sidebar = document.getElementById('sidebar');
-  const isMobile = window.innerWidth <= 900;
-  if (isMobile) {
-    toggleSidebarExpand();
-    return;
-  }
   sidebar.classList.toggle('sidebar-hidden');
-  // Persist preference
+  // On mobile, also collapse the expanded overlay if open
+  if (sidebar.classList.contains('expanded')) {
+    sidebar.classList.remove('expanded');
+    const overlay = document.getElementById('sidebar-overlay');
+    if (overlay) overlay.classList.remove('visible');
+  }
   localStorage.setItem('sidebar_hidden', sidebar.classList.contains('sidebar-hidden') ? '1' : '');
 }
 

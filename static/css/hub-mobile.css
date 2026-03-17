@@ -353,4 +353,12 @@
   #monitor-panel-header {
     padding: 6px 8px;
   }
+  /* Sidebar fully hidden — reclaim space */
+  #sidebar.sidebar-hidden { width: 0 !important; min-width: 0 !important; opacity: 0; pointer-events: none; border: none; box-shadow: none; }
+  #sidebar.sidebar-hidden ~ #main-content #chat-area { padding-left: 8px !important; }
+  #sidebar.sidebar-hidden ~ #main-content #debug-panel { padding-left: 12px !important; }
+  #sidebar.sidebar-hidden ~ #main-content #welcome-view { padding-left: 8px !important; }
+  #sidebar.sidebar-hidden ~ #main-content #settings-page { left: 0 !important; }
+  #sidebar.sidebar-hidden ~ #main-content #controls,
+  #sidebar.sidebar-hidden ~ #main-content #text-input-bar { left: 50%; width: calc(100% - 16px); }
 }
