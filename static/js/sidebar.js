@@ -206,6 +206,18 @@ function exitFocusMode() {
 }
 
 // --- Sidebar rendering ---
+function toggleSidebarVisibility() {
+  const sidebar = document.getElementById('sidebar');
+  const isMobile = window.innerWidth <= 900;
+  if (isMobile) {
+    toggleSidebarExpand();
+    return;
+  }
+  sidebar.classList.toggle('sidebar-hidden');
+  // Persist preference
+  localStorage.setItem('sidebar_hidden', sidebar.classList.contains('sidebar-hidden') ? '1' : '');
+}
+
 function toggleSidebarExpand() {
   const sidebar = document.getElementById('sidebar');
   const overlay = document.getElementById('sidebar-overlay');

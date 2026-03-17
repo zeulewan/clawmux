@@ -85,6 +85,36 @@ body {
   position: absolute;
   top: 0; bottom: 0; left: 0;
   z-index: 50;
+  transition: width 0.25s ease, min-width 0.25s ease, opacity 0.2s ease;
+}
+#sidebar.sidebar-hidden {
+  width: 0 !important;
+  min-width: 0 !important;
+  opacity: 0;
+  pointer-events: none;
+  border-right: none;
+  box-shadow: none;
+}
+/* Shift content when sidebar is fully hidden */
+#sidebar.sidebar-hidden ~ #main-content #chat-area {
+  padding-left: 24px !important;
+  transition: padding-left 0.25s ease;
+}
+#sidebar.sidebar-hidden ~ #main-content #debug-panel {
+  padding-left: 20px !important;
+  transition: padding-left 0.25s ease;
+}
+#sidebar.sidebar-hidden ~ #main-content #welcome-view {
+  padding-left: 24px;
+  transition: padding-left 0.25s ease;
+}
+#sidebar.sidebar-hidden ~ #main-content #controls,
+#sidebar.sidebar-hidden ~ #main-content #text-input-bar {
+  left: 50%;
+  width: calc(100% - 32px);
+}
+#sidebar.sidebar-hidden ~ #main-content #focus-view {
+  padding-left: 24px;
 }
 #sidebar-list {
   padding: 68px 8px 10px;
