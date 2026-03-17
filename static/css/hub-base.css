@@ -1258,7 +1258,8 @@ body {
 }
 /* interjection styling removed — all user messages look the same */
 .msg.assistant {
-  align-self: flex-start;
+  align-self: stretch;
+  max-width: 100%;
   cursor: pointer;
   background: var(--bg-card);
   color: var(--text);
