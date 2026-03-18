@@ -87,7 +87,7 @@ body {
   z-index: 50;
   transition: width 0.25s ease, min-width 0.25s ease, opacity 0.2s ease;
 }
-#sidebar.sidebar-hidden {
+body.sidebar-hidden #sidebar {
   width: 0 !important;
   min-width: 0 !important;
   opacity: 0;
@@ -96,24 +96,23 @@ body {
   box-shadow: none;
 }
 /* Shift content when sidebar is fully hidden */
-#sidebar.sidebar-hidden ~ #main-content #chat-area {
+body.sidebar-hidden #chat-area {
   padding-left: 24px !important;
   transition: padding-left 0.25s ease;
 }
-#sidebar.sidebar-hidden ~ #main-content #debug-panel {
+body.sidebar-hidden #debug-panel {
   padding-left: 20px !important;
   transition: padding-left 0.25s ease;
 }
-#sidebar.sidebar-hidden ~ #main-content #welcome-view {
+body.sidebar-hidden #welcome-view {
   padding-left: 24px;
-  transition: padding-left 0.25s ease;
 }
-#sidebar.sidebar-hidden ~ #main-content #controls,
-#sidebar.sidebar-hidden ~ #main-content #text-input-bar {
+body.sidebar-hidden #controls,
+body.sidebar-hidden #text-input-bar {
   left: 50%;
   width: calc(100% - 32px);
 }
-#sidebar.sidebar-hidden ~ #main-content #focus-view {
+body.sidebar-hidden #focus-view {
   padding-left: 24px;
 }
 #sidebar-list {
@@ -2021,7 +2020,7 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 .msg.assistant .md-content em { color: var(--text-secondary); }
 /* KaTeX overrides */
 .msg.assistant .md-content .katex { font-size: 0.95em; color: var(--text); }
-.msg.assistant .md-content .katex-display { margin: 0.4em 0; overflow-x: auto; }
+.msg.assistant .md-content .katex-display { margin: 0.4em 0; overflow-x: auto; overflow-y: hidden; }
 
 /* fadeSlideIn — used by sidebar on mobile (extracted from mobile media query) */
 @keyframes fadeSlideIn {

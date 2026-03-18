@@ -207,15 +207,15 @@ function exitFocusMode() {
 
 // --- Sidebar rendering ---
 function toggleSidebarVisibility() {
-  const sidebar = document.getElementById('sidebar');
-  sidebar.classList.toggle('sidebar-hidden');
+  document.body.classList.toggle('sidebar-hidden');
   // On mobile, also collapse the expanded overlay if open
-  if (sidebar.classList.contains('expanded')) {
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar && sidebar.classList.contains('expanded')) {
     sidebar.classList.remove('expanded');
     const overlay = document.getElementById('sidebar-overlay');
     if (overlay) overlay.classList.remove('visible');
   }
-  localStorage.setItem('sidebar_hidden', sidebar.classList.contains('sidebar-hidden') ? '1' : '');
+  localStorage.setItem('sidebar_hidden', document.body.classList.contains('sidebar-hidden') ? '1' : '');
 }
 
 function toggleSidebarExpand() {
