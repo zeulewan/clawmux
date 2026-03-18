@@ -81,12 +81,29 @@ GPU=$(detect_gpu)
 info "OS: $OS"
 info "GPU: $GPU ${GPU_NAME:+($GPU_NAME, ${GPU_VRAM}MB VRAM)}"
 
-# Check Python
-if ! command -v python3 &>/dev/null; then
-    fail "Python 3 is required. Install it first."
+# Check Python — prefer Homebrew/newer python over system python
+PYTHON3=""
+for _p in /opt/homebrew/bin/python3 /usr/local/bin/python3 python3; do
+    if command -v "$_p" &>/dev/null; then
+        _ver=$("$_p" -c "import sys; print(sys.version_info[:2] >= (3,10))" 2>/dev/null)
+        if [ "$_ver" = "True" ]; then
+            PYTHON3="$(command -v "$_p")"
+            break
+        fi
+    fi
+done
+# Fall back to any python3 if no 3.10+ found
+if [ -z "$PYTHON3" ]; then
+    if command -v python3 &>/dev/null; then
+        PYTHON3="$(command -v python3)"
+        warn "Only found Python $($PYTHON3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')") — 3.10+ is required."
+        fail "Install Python 3.10+ (e.g. 'brew install python3') and re-run this script."
+    else
+        fail "Python 3 is required. Install it first."
+    fi
 fi
-PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-info "Python: $PYTHON_VERSION"
+PYTHON_VERSION=$($PYTHON3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+info "Python: $PYTHON_VERSION ($PYTHON3)"
 
 # Check tmux
 if command -v tmux &>/dev/null; then
@@ -155,7 +172,7 @@ fi
 
 if [ ! -d ".venv" ]; then
     info "Creating Python virtual environment..."
-    python3 -m venv .venv
+    "$PYTHON3" -m venv .venv
 fi
 source .venv/bin/activate
 info "Installing Python dependencies..."
