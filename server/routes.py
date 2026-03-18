@@ -2232,7 +2232,7 @@ async def start_monitor(request: Request):
             stderr=asyncio.subprocess.DEVNULL,
         )
     except FileNotFoundError:
-        return JSONResponse({"error": "ttyd not found — run: sudo apt install ttyd"}, status_code=503)
+        return JSONResponse({"error": "ttyd not found — install it: brew install ttyd (macOS) or download from https://github.com/tsl0922/ttyd"}, status_code=503)
     except Exception as e:
         return JSONResponse({"error": f"Failed to start ttyd: {e}"}, status_code=500)
 
