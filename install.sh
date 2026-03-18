@@ -8,7 +8,15 @@
 set -euo pipefail
 
 REPO_URL="https://github.com/zeulewan/clawmux.git"
-INSTALL_DIR="${CLAWMUX_DIR:-$HOME/GIT/clawmux}"
+
+# Auto-detect install dir: use the directory this script lives in if it's a repo,
+# otherwise fall back to CLAWMUX_DIR or clone from GitHub.
+_self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}" 2>/dev/null || echo ".")" && pwd 2>/dev/null)"
+if [ -d "$_self_dir/.git" ]; then
+    INSTALL_DIR="${CLAWMUX_DIR:-$_self_dir}"
+else
+    INSTALL_DIR="${CLAWMUX_DIR:-$HOME/GIT/clawmux}"
+fi
 HUB_PORT="${CLAWMUX_PORT:-3460}"
 WHISPER_PORT=2022
 KOKORO_PORT=8880
@@ -81,15 +89,17 @@ PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.v
 info "Python: $PYTHON_VERSION"
 
 # Check tmux
-if ! command -v tmux &>/dev/null; then
-    warn "tmux not found. Installing..."
-    if [ "$OS" = "linux" ]; then
-        sudo apt-get update && sudo apt-get install -y tmux
-    elif [ "$OS" = "macos" ]; then
+if command -v tmux &>/dev/null; then
+    ok "tmux installed"
+else
+    if [ "$OS" = "macos" ] && command -v brew &>/dev/null; then
+        warn "tmux not found. Installing via Homebrew..."
         brew install tmux
+        ok "tmux installed"
+    else
+        fail "tmux is required but not found. Please install it (e.g. 'apt install tmux' or 'brew install tmux') and re-run this script."
     fi
 fi
-ok "tmux installed"
 
 # Check Claude Code
 if command -v claude &>/dev/null; then
@@ -213,18 +223,31 @@ esac
 # --- Install CLI ---
 
 CLI_SRC="$INSTALL_DIR/clawmux"
-CLI_DEST="/usr/local/bin/clawmux"
+LOCAL_BIN="$HOME/.local/bin"
+CLI_DEST="$LOCAL_BIN/clawmux"
 
 if [ -f "$CLI_SRC" ]; then
     info "Installing clawmux CLI..."
-    sudo cp "$CLI_SRC" "$CLI_DEST" 2>/dev/null || {
-        warn "Could not install to $CLI_DEST (no sudo). Adding to PATH instead."
-        export PATH="$INSTALL_DIR:$PATH"
-    }
-    sudo chmod +x "$CLI_DEST" 2>/dev/null || true
-    # Rewrite shebang to use project venv python
-    sudo sed -i'' -e "1s|.*|#!${INSTALL_DIR}/.venv/bin/python3|" "$CLI_DEST" 2>/dev/null || true
-    ok "clawmux CLI installed"
+    chmod +x "$CLI_SRC"
+    mkdir -p "$LOCAL_BIN"
+    ln -sf "$CLI_SRC" "$CLI_DEST"
+    ok "clawmux CLI installed → $CLI_DEST"
+
+    # Check if ~/.local/bin is on PATH
+    case ":$PATH:" in
+        *":$LOCAL_BIN:"*) ;;
+        *)
+            warn "\$HOME/.local/bin is not on your PATH."
+            SHELL_NAME="$(basename "$SHELL")"
+            case "$SHELL_NAME" in
+                zsh)  RC_FILE="~/.zshrc" ;;
+                bash) RC_FILE="~/.bashrc" ;;
+                fish) RC_FILE="~/.config/fish/config.fish" ;;
+                *)    RC_FILE="your shell rc file" ;;
+            esac
+            info "Add it with:  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> $RC_FILE"
+            ;;
+    esac
 else
     warn "CLI not found at $CLI_SRC — skipping CLI install"
 fi

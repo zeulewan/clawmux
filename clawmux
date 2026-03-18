@@ -1,4 +1,4 @@
-#!/home/zeul/GIT/clawmux/.venv/bin/python3
+#!/usr/bin/env python3
 """ClawMux CLI — voice and inter-agent messaging.
 
 Simple shell commands that any agent runtime can call.
@@ -8,6 +8,13 @@ Env vars:
     CLAWMUX_SESSION_ID — session ID (required for send/wait/ack/reply)
     CLAWMUX_PORT       — hub port (default 3460)
 """
+
+# Auto-activate venv: if we're not running from the project venv, re-exec
+import os as _os, sys as _sys
+_this_dir = _os.path.dirname(_os.path.realpath(__file__))
+_venv_python = _os.path.join(_this_dir, ".venv", "bin", "python3")
+if _os.path.isfile(_venv_python) and _os.path.realpath(_sys.executable) != _os.path.realpath(_venv_python):
+    _os.execv(_venv_python, [_venv_python] + _sys.argv)
 
 import argparse
 import asyncio
@@ -41,11 +48,6 @@ def _find_repo_dir() -> str:
     script_dir = os.path.dirname(os.path.realpath(__file__))
     if os.path.isdir(os.path.join(script_dir, "server")):
         return script_dir
-
-    # 3. Common install paths
-    for candidate in [os.path.expanduser("~/GIT/clawmux"), os.path.expanduser("~/clawmux")]:
-        if os.path.isdir(os.path.join(candidate, "server")):
-            return candidate
 
     die("Cannot find ClawMux repo directory")
     return ""  # unreachable
@@ -105,24 +107,6 @@ def _install_hooks(repo_dir: str) -> None:
     with open(settings_path, "w") as f:
         json.dump(data, f, indent=2)
     print("Hooks configured.")
-
-
-def _rewrite_shebang(filepath: str, python_path: str) -> None:
-    """Rewrite the shebang line of a file (cross-platform, no sed)."""
-    import tempfile
-    try:
-        with open(filepath, "r") as f:
-            lines = f.readlines()
-        if lines:
-            lines[0] = f"#!{python_path}\n"
-        tmp = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".tmp")
-        tmp.writelines(lines)
-        tmp.close()
-        subprocess.run(["sudo", "cp", tmp.name, filepath], capture_output=True)
-        subprocess.run(["sudo", "chmod", "+x", filepath], capture_output=True)
-        os.unlink(tmp.name)
-    except Exception as e:
-        print(f"Warning: could not rewrite shebang: {e}")
 
 
 def http_get(path: str) -> dict:
@@ -1048,20 +1032,17 @@ def cmd_update(args):
     else:
         print("Warning: venv not found, skipping pip install")
 
-    # Reinstall CLI
+    # Reinstall CLI symlink
     cli_src = os.path.join(repo_dir, "clawmux")
-    cli_dest = "/usr/local/bin/clawmux"
+    local_bin = os.path.join(os.path.expanduser("~"), ".local", "bin")
+    cli_dest = os.path.join(local_bin, "clawmux")
     if os.path.exists(cli_src):
-        venv_python = os.path.join(repo_dir, ".venv", "bin", "python3")
-        r = subprocess.run(["sudo", "cp", cli_src, cli_dest], capture_output=True, text=True)
-        if r.returncode == 0:
-            subprocess.run(["sudo", "chmod", "+x", cli_dest], capture_output=True)
-            # Rewrite shebang to venv python
-            if os.path.exists(venv_python):
-                _rewrite_shebang(cli_dest, venv_python)
-            print("CLI updated.")
-        else:
-            print("Warning: could not update CLI (needs sudo)")
+        os.makedirs(local_bin, exist_ok=True)
+        # Remove old symlink/file if exists
+        if os.path.lexists(cli_dest):
+            os.unlink(cli_dest)
+        os.symlink(cli_src, cli_dest)
+        print(f"CLI symlinked: {cli_dest} -> {cli_src}")
 
     # Ensure Claude Code hooks are configured
     _install_hooks(repo_dir)
