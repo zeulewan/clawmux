@@ -100,9 +100,32 @@ def _load_or_create_device_identity() -> dict:
     return _device_identity
 
 
-def _session_key(agent_id: str = "main") -> str:
-    """Build a ClawMux-specific sessionKey that isolates from Telegram/other channels."""
-    return f"agent:{agent_id}:clawmux:direct:hub"
+def _detect_session_key(agent_id: str = "main") -> str:
+    """Auto-detect the active session key for an OpenClaw agent.
+
+    Reads ~/.openclaw/agents/{agent_id}/sessions/sessions.json and picks
+    the first "real" session (telegram or main), skipping hook/cron/clawmux keys.
+    Falls back to agent:{agent_id}:main if nothing is found.
+    """
+    sessions_path = Path.home() / ".openclaw" / "agents" / agent_id / "sessions" / "sessions.json"
+    if sessions_path.exists():
+        try:
+            data = json.loads(sessions_path.read_text())
+            if isinstance(data, dict):
+                prefix = f"agent:{agent_id}:"
+                skip = ("clawmux:", "hook:", "cron:")
+                for key in data:
+                    if not key.startswith(prefix):
+                        continue
+                    rest = key[len(prefix):]
+                    if any(rest.startswith(s) for s in skip):
+                        continue
+                    log.info("Auto-detected session key: %s", key)
+                    return key
+        except Exception as e:
+            log.warning("Failed to read sessions.json for agent %s: %s", agent_id, e)
+    return f"agent:{agent_id}:main"
+
 
 # Per-session state
 _connections: dict[str, object] = {}     # session_name → websocket connection
@@ -110,6 +133,7 @@ _listeners: dict[str, asyncio.Task] = {} # session_name → listener task
 _hub_ports: dict[str, int] = {}          # session_name → hub port (for hook POSTs)
 _work_dirs: dict[str, str] = {}          # session_name → work_dir (for session lookup)
 _agent_ids: dict[str, str] = {}          # session_name → OpenClaw agent ID
+_session_keys: dict[str, str] = {}       # session_name → resolved sessionKey
 
 
 class OpenClawBackend(AgentBackend):
@@ -158,8 +182,27 @@ class OpenClawBackend(AgentBackend):
             if not resp.get("ok"):
                 log.warning("agents.list failed: %s", resp.get("error", {}))
                 return []
-            agents = resp.get("payload", [])
-            return agents if isinstance(agents, list) else []
+            payload = resp.get("payload", {})
+            agents = payload.get("agents", []) if isinstance(payload, dict) else []
+            if not isinstance(agents, list):
+                return []
+            # Enrich with display names from IDENTITY.md if available
+            workspace = hub_config.OPENCLAW_WORKSPACE
+            for agent in agents:
+                if not agent.get("name") and not agent.get("identity", {}).get("name"):
+                    identity_path = workspace / "IDENTITY.md"
+                    if identity_path.exists():
+                        try:
+                            for line in identity_path.read_text().splitlines():
+                                if line.strip().startswith("- **Name:**"):
+                                    name = line.split("**Name:**", 1)[1].strip()
+                                    if name:
+                                        agent.setdefault("identity", {})["name"] = name
+                                        agent["name"] = name
+                                    break
+                        except Exception:
+                            pass
+            return agents
         except Exception as e:
             log.error("Agent discovery failed: %s", e)
             return []
@@ -191,17 +234,22 @@ class OpenClawBackend(AgentBackend):
         model: str,
         effort: str = "high",
         agent_id: str = "main",
+        session_key: str = "",
     ) -> None:
         """Connect to Gateway WS and start listening for agent events.
 
         agent_id: OpenClaw agent ID (e.g. "main", "speedy"). Defaults to "main".
+        session_key: Gateway sessionKey to join. Auto-detected from sessions.json if empty.
         """
         gateway_url = hub_config.OPENCLAW_GATEWAY_URL
         token = hub_config.OPENCLAW_GATEWAY_TOKEN
 
+        resolved_key = session_key or _detect_session_key(agent_id)
         _hub_ports[session_name] = hub_port
         _work_dirs[session_name] = work_dir
         _agent_ids[session_name] = agent_id
+        _session_keys[session_name] = resolved_key
+        log.info("[%s] Using sessionKey: %s", session_name, resolved_key)
 
         try:
             ws = await websockets.connect(
@@ -246,6 +294,7 @@ class OpenClawBackend(AgentBackend):
         _hub_ports.pop(session_name, None)
         _work_dirs.pop(session_name, None)
         _agent_ids.pop(session_name, None)
+        _session_keys.pop(session_name, None)
         log.info("[%s] Disconnected from OpenClaw Gateway", session_name)
 
     async def health_check(self, session_name: str) -> bool:
@@ -264,14 +313,14 @@ class OpenClawBackend(AgentBackend):
             log.error("[%s] No Gateway connection — cannot deliver message", session_name)
             return
 
-        agent_id = _agent_ids.get(session_name, "main")
+        sk = _session_keys.get(session_name, "agent:main:main")
         req_id = f"clawmux-{uuid.uuid4().hex[:8]}"
         request = {
             "type": "req",
             "id": req_id,
             "method": "chat.send",
             "params": {
-                "sessionKey": _session_key(agent_id),
+                "sessionKey": sk,
                 "message": text,
                 "idempotencyKey": req_id,
             },
@@ -297,14 +346,14 @@ class OpenClawBackend(AgentBackend):
         ws = _connections.get(session_name)
         if not ws:
             return False
-        agent_id = _agent_ids.get(session_name, "main")
+        sk = _session_keys.get(session_name, "agent:main:main")
         req_id = f"clawmux-abort-{uuid.uuid4().hex[:8]}"
         try:
             await ws.send(json.dumps({
                 "type": "req",
                 "id": req_id,
                 "method": "chat.abort",
-                "params": {"sessionKey": _session_key(agent_id)},
+                "params": {"sessionKey": sk},
             }))
             log.info("[%s] Sent chat.abort to Gateway", session_name)
             return True
@@ -456,8 +505,7 @@ class OpenClawBackend(AgentBackend):
         """
         hub_port = _hub_ports.get(session_name)
         work_dir = _work_dirs.get(session_name)
-        agent_id = _agent_ids.get(session_name, "main")
-        our_session_key = _session_key(agent_id)
+        our_session_key = _session_keys.get(session_name, "agent:main:main")
         response_buffer: list[str] = []
 
         try:

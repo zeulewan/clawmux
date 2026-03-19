@@ -257,6 +257,7 @@ async def connect_openclaw_agent(request: Request):
     body = await request.json()
     agent_name = body.get("name", "").strip()
     agent_id = body.get("agent_id", "main").strip()
+    session_key = body.get("sessionKey", "").strip()
     project = _resolve_slug(body.get("project")) if body.get("project") else None
 
     if not agent_name:
@@ -265,6 +266,7 @@ async def connect_openclaw_agent(request: Request):
     try:
         session = await session_mgr.spawn_openclaw_session(
             agent_name=agent_name, agent_id=agent_id, project=project,
+            session_key=session_key,
         )
         await send_to_browser({"type": "session_spawned", "session": session.to_dict()})
         return JSONResponse(session.to_dict())

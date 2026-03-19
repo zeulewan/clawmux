@@ -540,7 +540,8 @@ class SessionManager:
             raise
 
     async def spawn_openclaw_session(self, agent_name: str, agent_id: str = "main",
-                                      project: str | None = None) -> Session:
+                                      project: str | None = None,
+                                      session_key: str = "") -> Session:
         """Spawn a session for an external OpenClaw agent (no voice, no tmux).
 
         OpenClaw agents are always-on in the Gateway — we just connect to them.
@@ -580,6 +581,7 @@ class SessionManager:
                 conversation_id=str(uuid.uuid4()),
                 resuming=False, model="", effort="",
                 agent_id=agent_id,
+                session_key=session_key,
             )
 
             async with session._lock:
