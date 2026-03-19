@@ -628,7 +628,9 @@ async function _fetchOlderHistory(sessionId) {
     let cursor = '';
     if (oldestId) cursor = '&before=' + encodeURIComponent(oldestId);
     else if (oldestTs) cursor = '&before_ts=' + oldestTs;
-    const url = `/api/history/${s.voice}?limit=150${cursor}${project ? '&project=' + encodeURIComponent(project) : ''}`;
+    const url = s.backend === 'openclaw'
+      ? `/api/openclaw/history/${sessionId}?limit=150${cursor}`
+      : `/api/history/${s.voice}?limit=150${cursor}${project ? '&project=' + encodeURIComponent(project) : ''}`;
     console.log('[_fetchOlderHistory] fetching:', url, { oldestId, oldestTs });
     const resp = await fetch(url);
     if (!resp.ok) throw new Error('fetch failed: ' + resp.status);

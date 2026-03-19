@@ -806,7 +806,10 @@ async function addSession(data, autoSwitch = false) {
   let serverMessages = [];
   let hasMoreHistory = false;
   try {
-    const resp = await fetch(`/api/history/${data.voice}?limit=150`);
+    const histUrl = data.backend === 'openclaw'
+      ? `/api/openclaw/history/${data.session_id}?limit=150`
+      : `/api/history/${data.voice}?limit=150`;
+    const resp = await fetch(histUrl);
     if (resp.ok) {
       const hist = await resp.json();
       hasMoreHistory = hist.has_more === true;
