@@ -646,11 +646,11 @@ function switchTab(sessionId, manual = false) {
   fetch(`/api/sessions/${sessionId}/viewing`, { method: 'POST' }).catch(() => {});
   fetchUsage(); // refresh context usage for new active session
 
-  // Show voice name in header + tint background
+  // Show voice/agent name in header + tint background
   const activeVoiceEl = document.getElementById('active-voice');
   if (s) {
-    activeVoiceEl.textContent = voiceDisplayName(s.voice);
-    const vc = voiceColor(s.voice);
+    activeVoiceEl.textContent = s.backend === 'openclaw' ? (s.label || s.session_id) : voiceDisplayName(s.voice);
+    const vc = s.backend === 'openclaw' ? '#2ecc71' : voiceColor(s.voice);
     activeVoiceEl.style.color = vc;
     activeVoiceEl.style.display = 'inline';
     document.getElementById('main-content').style.backgroundColor = hexToRgba(vc, 0.10);

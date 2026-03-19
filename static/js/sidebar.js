@@ -1174,15 +1174,19 @@ async function fetchOpenClawAgents() {
     const data = await resp.json();
     const agents = data.agents || [];
     _openclawAgents = agents.map(a => {
+      // Display name: identity.name > name > id
+      const displayName = (a.identity && a.identity.name) || a.name || a.id;
       // Check if this agent has an active session (connected)
+      // OpenClaw session IDs are prefixed: "oc-<name>" (e.g. "oc-speedy")
+      const expectedSid = 'oc-' + displayName.toLowerCase();
       let sessionId = null;
       for (const [sid, s] of sessions) {
-        if (s.backend === 'openclaw' && s.label === a.name) {
+        if (s.backend === 'openclaw' && (sid === expectedSid || s.label === displayName)) {
           sessionId = sid;
           break;
         }
       }
-      return { name: a.name, id: a.id, connected: !!sessionId, sessionId };
+      return { name: displayName, id: a.id, connected: !!sessionId, sessionId };
     });
     renderOpenClawSidebar();
   } catch (e) {
