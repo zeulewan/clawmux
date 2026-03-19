@@ -28,6 +28,16 @@ from cryptography.hazmat.primitives.serialization import (
 import hub_config
 from .base import AgentBackend, MonitorResult, RecoveryResult
 
+# Lazy import to avoid circular dependency (hub_state imports backends.claude_code)
+_send_to_browser = None
+
+def _get_send_to_browser():
+    global _send_to_browser
+    if _send_to_browser is None:
+        from hub_state import send_to_browser
+        _send_to_browser = send_to_browser
+    return _send_to_browser
+
 log = logging.getLogger("hub.backend.openclaw")
 
 _DEVICE_IDENTITY_PATH = hub_config.DATA_DIR / "openclaw-device.json"
@@ -674,6 +684,9 @@ class OpenClawBackend(AgentBackend):
         work_dir = _work_dirs.get(session_name)
         our_session_key = _session_keys.get(session_name, "agent:main:main")
         response_buffer: list[str] = []
+        # Stable msg_id per run — so the browser can replace the streaming message
+        current_run_id: str = ""
+        current_msg_id: str = ""
 
         try:
             async for raw in ws:
@@ -687,23 +700,37 @@ class OpenClawBackend(AgentBackend):
 
                 if msg_type == "event" and event_name == "chat":
                     payload = msg.get("payload", {})
-                    # Only process events for our ClawMux session, not Telegram/other channels
                     if payload.get("sessionKey") != our_session_key:
                         continue
                     state = payload.get("state", "")
+                    run_id = payload.get("runId", "")
+
+                    # New run — generate a stable msg_id for this response
+                    if run_id and run_id != current_run_id:
+                        current_run_id = run_id
+                        current_msg_id = f"oc-{uuid.uuid4().hex[:8]}"
+                        response_buffer.clear()
 
                     if state == "delta":
-                        # Each delta contains the FULL accumulated text so far — replace, don't append
+                        # Each delta contains the FULL accumulated text so far
                         text = self._extract_text(payload.get("message"))
                         if text:
                             response_buffer.clear()
                             response_buffer.append(text)
+                            # Push streaming update to browser
+                            if hub_port:
+                                await self._send_to_hub(hub_port, {
+                                    "type": "assistant_text",
+                                    "session_id": session_name,
+                                    "text": text,
+                                    "msg_id": current_msg_id,
+                                    "fire_and_forget": True,
+                                    "streaming": True,
+                                })
 
                     elif state == "final":
-                        # Final event — may contain the complete text, or buffer has it from last delta
                         final_text = self._extract_text(payload.get("message"))
                         if final_text:
-                            # Final always has the complete text — use it
                             full_text = final_text
                         elif response_buffer:
                             full_text = response_buffer[0]
@@ -711,10 +738,13 @@ class OpenClawBackend(AgentBackend):
                             full_text = ""
                         response_buffer.clear()
                         if full_text and hub_port:
+                            # Send final complete message (replaces streaming version)
                             await self._forward_response(hub_port, session_name, full_text)
                         # Signal idle
                         if hub_port and work_dir:
                             await self._post_hook(hub_port, work_dir, "Stop", {})
+                        current_run_id = ""
+                        current_msg_id = ""
 
                     elif state == "aborted":
                         response_buffer.clear()
@@ -784,6 +814,14 @@ class OpenClawBackend(AgentBackend):
             if isinstance(content, str):
                 return content
         return str(message)
+
+    async def _send_to_hub(self, hub_port: int, data: dict) -> None:
+        """Send a WS event directly to the browser via hub_state.send_to_browser."""
+        try:
+            send_fn = _get_send_to_browser()
+            await send_fn(data)
+        except Exception as e:
+            log.debug("Direct browser send failed: %s", e)
 
     async def _forward_response(self, hub_port: int, session_name: str, text: str) -> None:
         """Forward agent response text to the hub for display."""
