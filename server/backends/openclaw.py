@@ -291,6 +291,10 @@ class OpenClawBackend(AgentBackend):
                 text = self._extract_text(msg)
                 if not text:
                     continue
+                # Filter out Telegram delivery metadata and system context
+                text = self._strip_delivery_metadata(text)
+                if not text:
+                    continue
                 ts_str = record.get("timestamp", "")
                 try:
                     ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).timestamp()
@@ -328,6 +332,10 @@ class OpenClawBackend(AgentBackend):
                 text = content
             else:
                 continue
+            if not text:
+                continue
+            # Filter out Telegram delivery metadata
+            text = OpenClawBackend._strip_delivery_metadata(text)
             if not text:
                 continue
             ts_str = msg.get("timestamp", record.get("timestamp", ""))
@@ -787,6 +795,35 @@ class OpenClawBackend(AgentBackend):
             return
         except Exception as e:
             log.error("[%s] Gateway listener error: %s", session_name, e)
+
+    @staticmethod
+    def _strip_delivery_metadata(text: str) -> str:
+        """Remove Telegram/channel delivery metadata from message text.
+
+        OpenClaw prepends delivery context like:
+        - "Conversation info (untrusted metadata): {...}"
+        - "Sender (untrusted metadata): {...}"
+        - "Replied message (untrusted, for context): {...}"
+        - "[Queued messages while agent was busy]"
+
+        Strips these blocks, returns just the user's actual message.
+        Returns empty string if nothing remains after stripping.
+        """
+        import re as _re
+        # Strip JSON code blocks with untrusted metadata
+        text = _re.sub(
+            r'(?:Conversation info|Sender|Replied message)\s*\(untrusted[^)]*\):?\s*```json\s*\{[^`]*\}?\s*```',
+            '', text, flags=_re.DOTALL,
+        )
+        # Strip queue headers
+        text = _re.sub(r'\[Queued messages while agent was busy\]\s*---\s*', '', text)
+        text = _re.sub(r'Queued #\d+\s*', '', text)
+        # Strip System: notification lines (Telegram reactions, etc.)
+        text = _re.sub(r'System: \[\d{4}-\d{2}-\d{2}[^\]]*\] Telegram [^\n]*\n?', '', text)
+        # Clean up extra whitespace
+        text = text.strip()
+        text = _re.sub(r'\n{3,}', '\n\n', text)
+        return text
 
     @staticmethod
     def _extract_text(message) -> str:
