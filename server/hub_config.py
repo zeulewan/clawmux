@@ -41,7 +41,20 @@ CLAUDE_MODEL = os.environ.get("VOICE_CHAT_MODEL", "opus")  # opus, sonnet, haiku
 CLAUDE_EFFORT = os.environ.get("CLAWMUX_EFFORT", "high")  # low, medium, high
 DEFAULT_BACKEND = "claude-code"  # default backend for new sessions
 OPENCLAW_GATEWAY_URL = os.environ.get("OPENCLAW_GATEWAY_URL", "ws://127.0.0.1:18789")
-OPENCLAW_GATEWAY_TOKEN = os.environ.get("OPENCLAW_GATEWAY_TOKEN", "")
+# Token: env var first, then read from OpenClaw's own config
+def _read_openclaw_token() -> str:
+    env = os.environ.get("OPENCLAW_GATEWAY_TOKEN", "")
+    if env:
+        return env
+    try:
+        import json as _json
+        p = Path.home() / ".openclaw" / "openclaw.json"
+        if p.exists():
+            return _json.loads(p.read_text()).get("gateway", {}).get("auth", {}).get("token", "")
+    except Exception:
+        pass
+    return ""
+OPENCLAW_GATEWAY_TOKEN = _read_openclaw_token()
 TMUX_SESSION_PREFIX = "voice"
 WHISPER_URL = "http://127.0.0.1:2022"
 KOKORO_URL = "http://127.0.0.1:8880"
