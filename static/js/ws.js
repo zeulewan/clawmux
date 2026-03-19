@@ -443,10 +443,43 @@ function handleMessage(data) {
   if (type === 'assistant_text') {
     // Don't call hideTypingIndicator here — addMessage removes it atomically with the new message
     // to prevent a two-step DOM jump (indicator removal + message addition in separate frames)
+    const msgId = data.msg_id || null;
+
+    // Streaming delta (OpenClaw): update message in place
+    if (data.streaming && msgId && data.text) {
+      const s = sessions.get(session_id);
+      if (!s) return;
+      const existing = s.messages.find(m => m.id === msgId);
+      if (existing) {
+        existing.text = data.text;
+        // Update DOM directly if this is the active session
+        if (session_id === activeSessionId) {
+          const el = chatArea.querySelector(`[data-msg-id="${CSS.escape(msgId)}"]`);
+          if (el) {
+            const textEl = el.querySelector('.msg-text') || el;
+            textEl.textContent = data.text;
+          }
+        }
+      } else {
+        s.messages.push({ role: 'assistant', text: data.text, id: msgId, ts: Date.now() / 1000, streaming: true });
+        if (session_id === activeSessionId) renderChat(true);
+      }
+      return;
+    }
+
+    // Non-streaming final: remove any streaming preview for this session
+    const s = sessions.get(session_id);
+    if (s) {
+      const hadStreaming = s.messages.some(m => m.streaming);
+      if (hadStreaming) {
+        s.messages = s.messages.filter(m => !m.streaming);
+      }
+    }
+
     if (data.fire_and_forget) {
       // Fire-and-forget speak: just add message to chat, don't change state
       if (data.text && data.text.trim()) {
-        addMessage(session_id, 'assistant', data.text, { id: data.msg_id || null });
+        addMessage(session_id, 'assistant', data.text, { id: msgId });
       }
       if (session_id !== activeSessionId) {
         markSessionUnread(session_id);
@@ -457,7 +490,7 @@ function handleMessage(data) {
       // Converse-driven response: transition to listening state
       setSessionState(session_id, 'listening');
       if (data.text && data.text.trim()) {
-        addMessage(session_id, 'assistant', data.text, { id: data.msg_id || null });
+        addMessage(session_id, 'assistant', data.text, { id: msgId });
       }
       if (session_id !== activeSessionId) {
         markSessionUnread(session_id);
