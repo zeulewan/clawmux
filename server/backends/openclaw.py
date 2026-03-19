@@ -191,13 +191,13 @@ class OpenClawBackend(AgentBackend):
         log.info("[%s] Disconnected from OpenClaw Gateway", session_name)
 
     async def health_check(self, session_name: str) -> bool:
-        ws = _connections.get(session_name)
-        if not ws:
-            return False
-        try:
-            return ws.open
-        except Exception:
-            return False
+        """OpenClaw agents are always-on in the Gateway.
+
+        Return True even if WS is disconnected — the agent is still alive
+        in the Gateway, we just need to reconnect. The recovery monitor
+        handles reconnection via recover().
+        """
+        return True
 
     async def deliver_message(self, session_name: str, text: str) -> None:
         """Send a message to the OpenClaw agent via Gateway chat.send."""

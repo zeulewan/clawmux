@@ -627,7 +627,7 @@ class SessionManager:
                     continue  # Skip health check during model restart
                 alive = await self.check_health(session)
                 if not alive:
-                    log.warning("Session %s tmux died, cleaning up", session_id)
+                    log.warning("Session %s backend died, cleaning up", session_id)
                     voice_id = session.voice
                     self._cleanup_workdir(session)
                     del self.sessions[session_id]
