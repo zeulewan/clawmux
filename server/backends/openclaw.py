@@ -408,14 +408,6 @@ class OpenClawBackend(AgentBackend):
                 msg_type = msg.get("type")
                 event_name = msg.get("event", "")
 
-                # Debug: log all incoming events
-                if msg_type == "event":
-                    payload = msg.get("payload", {})
-                    log.info("[%s] WS event: %s (payload keys: %s)",
-                             session_name, event_name, list(payload.keys()) if isinstance(payload, dict) else type(payload).__name__)
-                elif msg_type == "res":
-                    log.info("[%s] WS response: ok=%s id=%s", session_name, msg.get("ok"), msg.get("id", "?"))
-
                 if msg_type == "event" and event_name == "chat":
                     payload = msg.get("payload", {})
                     state = payload.get("state", "")
