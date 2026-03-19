@@ -421,22 +421,25 @@ class OpenClawBackend(AgentBackend):
                     state = payload.get("state", "")
 
                     if state == "delta":
-                        # Streaming text chunk — accumulate
+                        # Each delta contains the FULL accumulated text so far — replace, don't append
                         text = self._extract_text(payload.get("message"))
                         if text:
+                            response_buffer.clear()
                             response_buffer.append(text)
 
                     elif state == "final":
-                        # Agent finished — flush accumulated text
+                        # Final event — may contain the complete text, or buffer has it from last delta
                         final_text = self._extract_text(payload.get("message"))
-                        if final_text and not response_buffer:
-                            response_buffer.append(final_text)
-                        if response_buffer and hub_port:
-                            full_text = "".join(response_buffer)
-                            response_buffer.clear()
-                            await self._forward_response(hub_port, session_name, full_text)
+                        if final_text:
+                            # Final always has the complete text — use it
+                            full_text = final_text
                         elif response_buffer:
-                            response_buffer.clear()
+                            full_text = response_buffer[0]
+                        else:
+                            full_text = ""
+                        response_buffer.clear()
+                        if full_text and hub_port:
+                            await self._forward_response(hub_port, session_name, full_text)
                         # Signal idle
                         if hub_port and work_dir:
                             await self._post_hook(hub_port, work_dir, "Stop", {})
