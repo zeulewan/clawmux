@@ -110,31 +110,9 @@ def _load_or_create_device_identity() -> dict:
     return _device_identity
 
 
-def _detect_session_key(agent_id: str = "main") -> str:
-    """Auto-detect the active session key for an OpenClaw agent.
-
-    Reads ~/.openclaw/agents/{agent_id}/sessions/sessions.json and picks
-    the first "real" session (telegram or main), skipping hook/cron/clawmux keys.
-    Falls back to agent:{agent_id}:main if nothing is found.
-    """
-    sessions_path = Path.home() / ".openclaw" / "agents" / agent_id / "sessions" / "sessions.json"
-    if sessions_path.exists():
-        try:
-            data = json.loads(sessions_path.read_text())
-            if isinstance(data, dict):
-                prefix = f"agent:{agent_id}:"
-                skip = ("clawmux:", "hook:", "cron:")
-                for key in data:
-                    if not key.startswith(prefix):
-                        continue
-                    rest = key[len(prefix):]
-                    if any(rest.startswith(s) for s in skip):
-                        continue
-                    log.info("Auto-detected session key: %s", key)
-                    return key
-        except Exception as e:
-            log.warning("Failed to read sessions.json for agent %s: %s", agent_id, e)
-    return f"agent:{agent_id}:main"
+def _clawmux_session_key(agent_id: str = "main") -> str:
+    """Build a ClawMux-specific sessionKey for an OpenClaw agent."""
+    return f"agent:{agent_id}:clawmux:direct:hub"
 
 
 # Per-session state
@@ -220,39 +198,12 @@ class OpenClawBackend(AgentBackend):
             await ws.close()
 
     async def fetch_history(self, session_name: str, limit: int = 30) -> list[dict]:
-        """Fetch chat history from the Gateway via chat.history.
+        """Fetch chat history by reading the session JSONL file directly.
 
         Returns messages in ClawMux history format: [{role, text, ts, id}, ...].
-        Uses the existing WS connection for the session.
+        Reads from disk to avoid conflicting with the _listen() WS recv loop.
         """
-        ws = _connections.get(session_name)
-        sk = _session_keys.get(session_name)
-        if not ws or not sk:
-            # Fallback: read from JSONL file directly
-            return self._read_session_jsonl(session_name, limit)
-
-        req_id = f"clawmux-history-{uuid.uuid4().hex[:8]}"
-        try:
-            await ws.send(json.dumps({
-                "type": "req",
-                "id": req_id,
-                "method": "chat.history",
-                "params": {"sessionKey": sk, "limit": limit},
-            }))
-            # Drain events until we get our response
-            deadline = asyncio.get_event_loop().time() + 10
-            while asyncio.get_event_loop().time() < deadline:
-                raw = await asyncio.wait_for(ws.recv(), timeout=10)
-                resp = json.loads(raw)
-                if resp.get("type") == "res" and resp.get("id") == req_id:
-                    if not resp.get("ok"):
-                        log.warning("[%s] chat.history failed: %s", session_name, resp.get("error"))
-                        return self._read_session_jsonl(session_name, limit)
-                    return self._transform_history(resp.get("payload", []))
-            return self._read_session_jsonl(session_name, limit)
-        except Exception as e:
-            log.warning("[%s] chat.history request failed: %s, falling back to JSONL", session_name, e)
-            return self._read_session_jsonl(session_name, limit)
+        return self._read_session_jsonl(session_name, limit)
 
     def _read_session_jsonl(self, session_name: str, limit: int = 30) -> list[dict]:
         """Fallback: read history directly from the OpenClaw session JSONL file."""
@@ -311,47 +262,6 @@ class OpenClawBackend(AgentBackend):
             log.warning("[%s] Failed to read session JSONL: %s", session_name, e)
             return []
 
-    @staticmethod
-    def _transform_history(payload) -> list[dict]:
-        """Transform Gateway chat.history response to ClawMux format."""
-        if not isinstance(payload, list):
-            payload = payload.get("messages", []) if isinstance(payload, dict) else []
-        messages = []
-        for record in payload:
-            msg = record if isinstance(record, dict) else {}
-            role = msg.get("role", "")
-            if role not in ("user", "assistant"):
-                continue
-            content = msg.get("content", [])
-            if isinstance(content, list):
-                text = "".join(
-                    b.get("text", "") for b in content
-                    if isinstance(b, dict) and b.get("type") == "text"
-                )
-            elif isinstance(content, str):
-                text = content
-            else:
-                continue
-            if not text:
-                continue
-            # Filter out Telegram delivery metadata
-            text = OpenClawBackend._strip_delivery_metadata(text)
-            if not text:
-                continue
-            ts_str = msg.get("timestamp", record.get("timestamp", ""))
-            try:
-                from datetime import datetime
-                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).timestamp()
-            except Exception:
-                ts = 0
-            messages.append({
-                "role": role,
-                "text": text,
-                "ts": ts,
-                "id": msg.get("id", record.get("id", "")),
-            })
-        return messages
-
     # ── Capability declarations ───────────────────────────────────────────
 
     @property
@@ -387,7 +297,7 @@ class OpenClawBackend(AgentBackend):
         gateway_url = hub_config.OPENCLAW_GATEWAY_URL
         token = hub_config.OPENCLAW_GATEWAY_TOKEN
 
-        resolved_key = session_key or _detect_session_key(agent_id)
+        resolved_key = session_key or _clawmux_session_key(agent_id)
         _hub_ports[session_name] = hub_port
         _work_dirs[session_name] = work_dir
         _agent_ids[session_name] = agent_id
