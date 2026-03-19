@@ -9,18 +9,96 @@ to the hub via POST to the local hook endpoint.
 """
 
 import asyncio
+import base64
+import hashlib
 import json
 import logging
+import os
 import time
 import uuid
+from pathlib import Path
 
 import httpx
 import websockets
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import (
+    Encoding, NoEncryption, PrivateFormat, PublicFormat,
+)
 
 import hub_config
 from .base import AgentBackend, MonitorResult, RecoveryResult
 
 log = logging.getLogger("hub.backend.openclaw")
+
+_DEVICE_IDENTITY_PATH = hub_config.DATA_DIR / "openclaw-device.json"
+_device_identity: dict | None = None  # cached after first load
+
+
+def _b64url_encode(data: bytes) -> str:
+    """Base64url encode without padding (RFC 4648)."""
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+
+def _load_or_create_device_identity() -> dict:
+    """Load or generate a persistent Ed25519 device identity.
+
+    Returns dict with: deviceId, publicKeyRaw (bytes), privateKey (Ed25519PrivateKey obj),
+    publicKeyB64url (str for wire format).
+    """
+    global _device_identity
+    if _device_identity:
+        return _device_identity
+
+    if _DEVICE_IDENTITY_PATH.exists():
+        try:
+            stored = json.loads(_DEVICE_IDENTITY_PATH.read_text())
+            priv_bytes = base64.b64decode(stored["privateKeyB64"])
+            priv_key = Ed25519PrivateKey.from_private_bytes(priv_bytes)
+            pub_raw = base64.b64decode(stored["publicKeyRawB64"])
+            device_id = hashlib.sha256(pub_raw).hexdigest()
+            _device_identity = {
+                "deviceId": device_id,
+                "publicKeyRaw": pub_raw,
+                "publicKeyB64url": _b64url_encode(pub_raw),
+                "privateKey": priv_key,
+            }
+            log.info("Loaded OpenClaw device identity: %s", device_id[:16])
+            return _device_identity
+        except Exception as e:
+            log.warning("Failed to load device identity, regenerating: %s", e)
+
+    # Generate new keypair
+    priv_key = Ed25519PrivateKey.generate()
+    pub_key = priv_key.public_key()
+    # Raw 32-byte public key
+    pub_raw = pub_key.public_bytes(Encoding.Raw, PublicFormat.Raw)
+    # Raw 32-byte private key seed
+    priv_raw = priv_key.private_bytes(Encoding.Raw, PrivateFormat.Raw, NoEncryption())
+    device_id = hashlib.sha256(pub_raw).hexdigest()
+
+    # Persist
+    _DEVICE_IDENTITY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    stored = {
+        "version": 1,
+        "deviceId": device_id,
+        "publicKeyRawB64": base64.b64encode(pub_raw).decode(),
+        "privateKeyB64": base64.b64encode(priv_raw).decode(),
+    }
+    _DEVICE_IDENTITY_PATH.write_text(json.dumps(stored, indent=2) + "\n")
+    try:
+        os.chmod(_DEVICE_IDENTITY_PATH, 0o600)
+    except Exception:
+        pass
+
+    _device_identity = {
+        "deviceId": device_id,
+        "publicKeyRaw": pub_raw,
+        "publicKeyB64url": _b64url_encode(pub_raw),
+        "privateKey": priv_key,
+    }
+    log.info("Generated new OpenClaw device identity: %s", device_id[:16])
+    return _device_identity
+
 
 # Per-session state
 _connections: dict[str, object] = {}     # session_name → websocket connection
@@ -216,7 +294,9 @@ class OpenClawBackend(AgentBackend):
     # ── Internal helpers ──────────────────────────────────────────────────
 
     async def _handshake(self, ws, session_name: str, token: str) -> None:
-        """Complete the Gateway connect handshake."""
+        """Complete the Gateway connect handshake with Ed25519 device signing."""
+        identity = _load_or_create_device_identity()
+
         # Wait for connect.challenge event
         challenge_raw = await asyncio.wait_for(ws.recv(), timeout=10)
         challenge = json.loads(challenge_raw)
@@ -225,7 +305,31 @@ class OpenClawBackend(AgentBackend):
 
         nonce = challenge.get("payload", {}).get("nonce", "")
 
-        # Send connect request (simplified — no device signing for Phase 1)
+        # Build v2 signing payload:
+        # v2|deviceId|clientId|clientMode|role|scopes|signedAtMs|token|nonce
+        client_id = f"clawmux-{session_name}"
+        client_mode = "operator"
+        role = "operator"
+        scopes = ["operator.read", "operator.write"]
+        signed_at_ms = int(time.time() * 1000)
+
+        payload_parts = [
+            "v2",
+            identity["deviceId"],
+            client_id,
+            client_mode,
+            role,
+            ",".join(scopes),
+            str(signed_at_ms),
+            token or "",
+            nonce,
+        ]
+        payload_str = "|".join(payload_parts)
+
+        # Sign with Ed25519 private key
+        signature_bytes = identity["privateKey"].sign(payload_str.encode("utf-8"))
+        signature_b64url = _b64url_encode(signature_bytes)
+
         connect_id = f"clawmux-connect-{uuid.uuid4().hex[:8]}"
         connect_req = {
             "type": "req",
@@ -235,19 +339,26 @@ class OpenClawBackend(AgentBackend):
                 "minProtocol": 3,
                 "maxProtocol": 3,
                 "client": {
-                    "id": f"clawmux-{session_name}",
+                    "id": client_id,
                     "version": "0.1.0",
                     "platform": "linux",
-                    "mode": "operator",
+                    "mode": client_mode,
                 },
-                "role": "operator",
-                "scopes": ["operator.read", "operator.write"],
+                "role": role,
+                "scopes": scopes,
                 "caps": [],
                 "commands": [],
                 "permissions": {},
                 "auth": {"token": token} if token else {},
                 "locale": "en-US",
                 "userAgent": f"clawmux/{session_name}",
+                "device": {
+                    "id": identity["deviceId"],
+                    "publicKey": identity["publicKeyB64url"],
+                    "signature": signature_b64url,
+                    "signedAt": signed_at_ms,
+                    "nonce": nonce,
+                },
             },
         }
         await ws.send(json.dumps(connect_req))
@@ -257,7 +368,17 @@ class OpenClawBackend(AgentBackend):
         resp = json.loads(resp_raw)
         if resp.get("type") != "res" or not resp.get("ok"):
             error = resp.get("error", {})
-            raise RuntimeError(f"Gateway rejected connect: {error.get('message', resp)}")
+            details = error.get("details", {})
+            raise RuntimeError(
+                f"Gateway rejected connect: {error.get('message', resp)} "
+                f"(code={details.get('code', '?')})"
+            )
+
+        # Persist device token if returned
+        resp_auth = resp.get("payload", {}).get("auth", {})
+        device_token = resp_auth.get("deviceToken")
+        if device_token:
+            log.info("[%s] Received device token from Gateway", session_name)
 
         log.info("[%s] Gateway handshake complete (protocol=%s)",
                  session_name, resp.get("payload", {}).get("protocol", "?"))
