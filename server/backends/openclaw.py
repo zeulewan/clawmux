@@ -100,14 +100,16 @@ def _load_or_create_device_identity() -> dict:
     return _device_identity
 
 
-# ClawMux-specific session key — isolates from Telegram/other channels
-_CLAWMUX_SESSION_KEY = "agent:main:clawmux:direct:hub"
+def _session_key(agent_id: str = "main") -> str:
+    """Build a ClawMux-specific sessionKey that isolates from Telegram/other channels."""
+    return f"agent:{agent_id}:clawmux:direct:hub"
 
 # Per-session state
 _connections: dict[str, object] = {}     # session_name → websocket connection
 _listeners: dict[str, asyncio.Task] = {} # session_name → listener task
 _hub_ports: dict[str, int] = {}          # session_name → hub port (for hook POSTs)
 _work_dirs: dict[str, str] = {}          # session_name → work_dir (for session lookup)
+_agent_ids: dict[str, str] = {}          # session_name → OpenClaw agent ID
 
 
 class OpenClawBackend(AgentBackend):
@@ -116,6 +118,53 @@ class OpenClawBackend(AgentBackend):
     Phase 1: basic connection, handshake, deliver_message, response forwarding.
     No tmux, no pane capture, no stuck buffer detection.
     """
+
+    # ── Agent discovery ────────────────────────────────────────────────────
+
+    async def list_agents(self) -> list[dict]:
+        """Query the Gateway for available OpenClaw agents.
+
+        Connects temporarily, completes handshake, sends agents.list request,
+        returns list of dicts with id, name, identity fields.
+        """
+        gateway_url = hub_config.OPENCLAW_GATEWAY_URL
+        token = hub_config.OPENCLAW_GATEWAY_TOKEN
+        try:
+            ws = await websockets.connect(
+                gateway_url,
+                additional_headers={"User-Agent": "clawmux/discovery"},
+                ping_interval=15,
+                close_timeout=5,
+            )
+        except Exception as e:
+            log.error("Failed to connect to Gateway for agent discovery: %s", e)
+            return []
+
+        try:
+            await self._handshake(ws, "__discovery__", token)
+            req_id = f"clawmux-agents-{uuid.uuid4().hex[:8]}"
+            await ws.send(json.dumps({
+                "type": "req",
+                "id": req_id,
+                "method": "agents.list",
+                "params": {},
+            }))
+            resp_raw = await asyncio.wait_for(ws.recv(), timeout=10)
+            resp = json.loads(resp_raw)
+            # May get intervening events before the response — drain until we get our res
+            while resp.get("type") != "res" or resp.get("id") != req_id:
+                resp_raw = await asyncio.wait_for(ws.recv(), timeout=10)
+                resp = json.loads(resp_raw)
+            if not resp.get("ok"):
+                log.warning("agents.list failed: %s", resp.get("error", {}))
+                return []
+            agents = resp.get("payload", [])
+            return agents if isinstance(agents, list) else []
+        except Exception as e:
+            log.error("Agent discovery failed: %s", e)
+            return []
+        finally:
+            await ws.close()
 
     # ── Capability declarations ───────────────────────────────────────────
 
@@ -141,13 +190,18 @@ class OpenClawBackend(AgentBackend):
         resuming: bool,
         model: str,
         effort: str = "high",
+        agent_id: str = "main",
     ) -> None:
-        """Connect to Gateway WS and start listening for agent events."""
+        """Connect to Gateway WS and start listening for agent events.
+
+        agent_id: OpenClaw agent ID (e.g. "main", "speedy"). Defaults to "main".
+        """
         gateway_url = hub_config.OPENCLAW_GATEWAY_URL
         token = hub_config.OPENCLAW_GATEWAY_TOKEN
 
         _hub_ports[session_name] = hub_port
         _work_dirs[session_name] = work_dir
+        _agent_ids[session_name] = agent_id
 
         try:
             ws = await websockets.connect(
@@ -191,6 +245,7 @@ class OpenClawBackend(AgentBackend):
                 pass
         _hub_ports.pop(session_name, None)
         _work_dirs.pop(session_name, None)
+        _agent_ids.pop(session_name, None)
         log.info("[%s] Disconnected from OpenClaw Gateway", session_name)
 
     async def health_check(self, session_name: str) -> bool:
@@ -209,13 +264,14 @@ class OpenClawBackend(AgentBackend):
             log.error("[%s] No Gateway connection — cannot deliver message", session_name)
             return
 
+        agent_id = _agent_ids.get(session_name, "main")
         req_id = f"clawmux-{uuid.uuid4().hex[:8]}"
         request = {
             "type": "req",
             "id": req_id,
             "method": "chat.send",
             "params": {
-                "sessionKey": _CLAWMUX_SESSION_KEY,
+                "sessionKey": _session_key(agent_id),
                 "message": text,
                 "idempotencyKey": req_id,
             },
@@ -241,13 +297,14 @@ class OpenClawBackend(AgentBackend):
         ws = _connections.get(session_name)
         if not ws:
             return False
+        agent_id = _agent_ids.get(session_name, "main")
         req_id = f"clawmux-abort-{uuid.uuid4().hex[:8]}"
         try:
             await ws.send(json.dumps({
                 "type": "req",
                 "id": req_id,
                 "method": "chat.abort",
-                "params": {"sessionKey": _CLAWMUX_SESSION_KEY},
+                "params": {"sessionKey": _session_key(agent_id)},
             }))
             log.info("[%s] Sent chat.abort to Gateway", session_name)
             return True
@@ -399,6 +456,8 @@ class OpenClawBackend(AgentBackend):
         """
         hub_port = _hub_ports.get(session_name)
         work_dir = _work_dirs.get(session_name)
+        agent_id = _agent_ids.get(session_name, "main")
+        our_session_key = _session_key(agent_id)
         response_buffer: list[str] = []
 
         try:
@@ -414,7 +473,7 @@ class OpenClawBackend(AgentBackend):
                 if msg_type == "event" and event_name == "chat":
                     payload = msg.get("payload", {})
                     # Only process events for our ClawMux session, not Telegram/other channels
-                    if payload.get("sessionKey") != _CLAWMUX_SESSION_KEY:
+                    if payload.get("sessionKey") != our_session_key:
                         continue
                     state = payload.get("state", "")
 
@@ -457,7 +516,7 @@ class OpenClawBackend(AgentBackend):
 
                 elif msg_type == "event" and event_name == "agent":
                     payload = msg.get("payload", {})
-                    if payload.get("sessionKey") != _CLAWMUX_SESSION_KEY:
+                    if payload.get("sessionKey") != our_session_key:
                         continue
                     stream = payload.get("stream", "")
                     if stream == "tool_call" and hub_port and work_dir:

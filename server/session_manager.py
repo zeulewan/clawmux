@@ -539,6 +539,62 @@ class SessionManager:
             del self.sessions[session_id]
             raise
 
+    async def spawn_openclaw_session(self, agent_name: str, agent_id: str = "main",
+                                      project: str | None = None) -> Session:
+        """Spawn a session for an external OpenClaw agent (no voice, no tmux).
+
+        OpenClaw agents are always-on in the Gateway — we just connect to them.
+        The session uses the agent's real name as both session_id and label.
+        """
+        session_id = agent_name.lower()
+        project_slug = project or self.project_mgr.active_project
+
+        # Reject duplicate
+        if session_id in self.sessions:
+            raise RuntimeError(f"OpenClaw agent '{agent_name}' already has an active session")
+
+        session = Session(
+            session_id=session_id,
+            tmux_session=session_id,  # placeholder — no real tmux
+            label=agent_name,
+            voice="",  # no voice for OpenClaw agents
+            project_slug=project_slug,
+            backend="openclaw",
+        )
+        session.init_bridge()
+        self.sessions[session_id] = session
+
+        try:
+            work_dir = self.project_mgr.get_session_dir(f"openclaw_{agent_id}", project_slug)
+            work_dir.mkdir(parents=True, exist_ok=True)
+            session.work_dir = str(work_dir)
+
+            if self._template_renderer:
+                await self._template_renderer.render_to_file(f"openclaw_{agent_id}", work_dir)
+
+            backend_impl = self._get_backend("openclaw")
+            await backend_impl.spawn(
+                session_name=session_id, work_dir=str(work_dir),
+                session_id=session_id, hub_port=HUB_PORT,
+                voice_id="", voice_name=agent_name,
+                conversation_id=str(uuid.uuid4()),
+                resuming=False, model="", effort="",
+                agent_id=agent_id,
+            )
+
+            async with session._lock:
+                session.set_state(AgentState.IDLE)
+                session.status = "ready"
+                session.touch()
+            log.info("OpenClaw session %s ready (agent=%s)", session_id, agent_id)
+            return session
+
+        except Exception as e:
+            log.error("Failed to spawn OpenClaw session %s: %s", session_id, e)
+            await self._get_backend("openclaw").terminate(session_id)
+            del self.sessions[session_id]
+            raise
+
     async def terminate_session(self, session_id: str) -> None:
         session = self.sessions.get(session_id)
         if not session:

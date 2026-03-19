@@ -241,6 +241,40 @@ async def spawn_session(request: Request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+# ── OpenClaw agent endpoints ─────────────────────────────────────────────────
+
+@router.get("/api/openclaw/agents")
+async def list_openclaw_agents():
+    """Query the Gateway for available OpenClaw agents."""
+    backend = session_mgr._get_backend("openclaw")
+    agents = await backend.list_agents()
+    return JSONResponse({"agents": agents})
+
+
+@router.post("/api/openclaw/connect")
+async def connect_openclaw_agent(request: Request):
+    """Connect to an OpenClaw agent by name/id."""
+    body = await request.json()
+    agent_name = body.get("name", "").strip()
+    agent_id = body.get("agent_id", "main").strip()
+    project = _resolve_slug(body.get("project")) if body.get("project") else None
+
+    if not agent_name:
+        return JSONResponse({"error": "name is required"}, status_code=400)
+
+    try:
+        session = await session_mgr.spawn_openclaw_session(
+            agent_name=agent_name, agent_id=agent_id, project=project,
+        )
+        await send_to_browser({"type": "session_spawned", "session": session.to_dict()})
+        return JSONResponse(session.to_dict())
+    except RuntimeError as e:
+        return JSONResponse({"error": str(e)}, status_code=503)
+    except Exception as e:
+        log.error("OpenClaw connect failed: %s: %s", type(e).__name__, e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @router.delete("/api/sessions/{session_id}")
 async def terminate_session(session_id: str):
     await session_mgr.terminate_session(session_id)
@@ -362,6 +396,46 @@ async def upload_file(session_id: str, file: UploadFile):
 
     log.info("[%s] File uploaded: %s (%s)", session_id, safe_name, size_str)
     return JSONResponse({"status": "ok", "path": f"uploads/{safe_name}", "size": size_str})
+
+
+@router.post("/api/messages/image")
+async def upload_image(request: Request):
+    """Upload an image file and post it inline in a session's chat."""
+    session_id = request.headers.get("X-ClawMux-Session-Id", "")
+    session = session_mgr.sessions.get(session_id)
+    if not session:
+        return JSONResponse({"error": "session not found"}, status_code=404)
+
+    form = await request.form()
+    upload = form.get("file")
+    if not upload:
+        return JSONResponse({"error": "no file uploaded"}, status_code=400)
+
+    uploads_dir = hub_config.DATA_DIR / "uploads"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    ext = Path(upload.filename).suffix or ".png"
+    fname = f"{uuid.uuid4().hex[:12]}{ext}"
+    dest = uploads_dir / fname
+    content = await upload.read()
+    dest.write_bytes(content)
+
+    image_url = f"/uploads/{fname}"
+    msg_id = _gen_msg_id()
+
+    await asyncio.to_thread(
+        history.append, session.voice, session.label,
+        "assistant", f"![image]({image_url})",
+        _hist_prefix(session), msg_id=msg_id,
+    )
+    await send_to_browser({
+        "session_id": session_id,
+        "type": "assistant_message",
+        "text": f"![image]({image_url})",
+        "msg_id": msg_id,
+        "voice": session.voice,
+    })
+
+    return JSONResponse({"ok": True, "msg_id": msg_id, "url": image_url})
 
 
 @router.post("/api/shutdown")
