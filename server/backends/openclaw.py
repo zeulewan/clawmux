@@ -100,6 +100,9 @@ def _load_or_create_device_identity() -> dict:
     return _device_identity
 
 
+# ClawMux-specific session key — isolates from Telegram/other channels
+_CLAWMUX_SESSION_KEY = "agent:main:clawmux:direct:hub"
+
 # Per-session state
 _connections: dict[str, object] = {}     # session_name → websocket connection
 _listeners: dict[str, asyncio.Task] = {} # session_name → listener task
@@ -212,7 +215,7 @@ class OpenClawBackend(AgentBackend):
             "id": req_id,
             "method": "chat.send",
             "params": {
-                "sessionKey": "main",
+                "sessionKey": _CLAWMUX_SESSION_KEY,
                 "message": text,
                 "idempotencyKey": req_id,
             },
@@ -244,7 +247,7 @@ class OpenClawBackend(AgentBackend):
                 "type": "req",
                 "id": req_id,
                 "method": "chat.abort",
-                "params": {"sessionKey": "main"},
+                "params": {"sessionKey": _CLAWMUX_SESSION_KEY},
             }))
             log.info("[%s] Sent chat.abort to Gateway", session_name)
             return True
@@ -410,6 +413,9 @@ class OpenClawBackend(AgentBackend):
 
                 if msg_type == "event" and event_name == "chat":
                     payload = msg.get("payload", {})
+                    # Only process events for our ClawMux session, not Telegram/other channels
+                    if payload.get("sessionKey") != _CLAWMUX_SESSION_KEY:
+                        continue
                     state = payload.get("state", "")
 
                     if state == "delta":
@@ -450,8 +456,9 @@ class OpenClawBackend(AgentBackend):
                             await self._post_hook(hub_port, work_dir, "Stop", {})
 
                 elif msg_type == "event" and event_name == "agent":
-                    # Agent tool calls / results — log for debugging
                     payload = msg.get("payload", {})
+                    if payload.get("sessionKey") != _CLAWMUX_SESSION_KEY:
+                        continue
                     stream = payload.get("stream", "")
                     if stream == "tool_call" and hub_port and work_dir:
                         tool_data = payload.get("data", {})
