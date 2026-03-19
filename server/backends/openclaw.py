@@ -212,8 +212,9 @@ class OpenClawBackend(AgentBackend):
             "id": req_id,
             "method": "chat.send",
             "params": {
+                "sessionKey": "main",
                 "message": text,
-                "agentId": "main",
+                "idempotencyKey": req_id,
             },
         }
 
@@ -243,7 +244,7 @@ class OpenClawBackend(AgentBackend):
                 "type": "req",
                 "id": req_id,
                 "method": "chat.abort",
-                "params": {},
+                "params": {"sessionKey": "main"},
             }))
             log.info("[%s] Sent chat.abort to Gateway", session_name)
             return True
