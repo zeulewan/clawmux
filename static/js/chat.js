@@ -487,7 +487,7 @@ function renderChat(forceScroll = false) {
   chatArea.innerHTML = '';
   const s = sessions.get(activeSessionId);
   if (!s) return;
-  const vc = voiceColor(s.voice);
+  const vc = s.backend === 'openclaw' ? '#2ecc71' : voiceColor(s.voice);
   const limit = _getChatLimit(activeSessionId);
   const { slice: displayMessages, hasMore } = _getDisplaySlice(s.messages, limit);
 
@@ -766,7 +766,7 @@ function addMessage(sessionId, role, text, opts = {}) {
     // For threaded messages, insert inline under the parent
     if (opts.parentId) {
       const wasNearBottom = chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150;
-      const vc = voiceColor(s.voice);
+      const vc = s.backend === 'openclaw' ? '#2ecc71' : voiceColor(s.voice);
       const parentEl = chatArea.querySelector(`[data-msg-id="${CSS.escape(opts.parentId)}"]`);
       if (parentEl) {
         if (opts.isBareAck) {

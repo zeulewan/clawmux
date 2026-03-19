@@ -460,12 +460,13 @@ function handleMessage(data) {
       const existing = s.messages.find(m => m.id === msgId);
       if (existing) {
         existing.text = data.text;
-        // Update DOM directly if this is the active session
+        // Replace DOM element with properly rendered version (markdown, styling)
         if (session_id === activeSessionId) {
           const el = chatArea.querySelector(`[data-msg-id="${CSS.escape(msgId)}"]`);
           if (el) {
-            const textEl = el.querySelector('.msg-text') || el;
-            textEl.textContent = data.text;
+            const vc = s.backend === 'openclaw' ? '#2ecc71' : voiceColor(s.voice);
+            const newEl = createMsgEl('assistant', data.text, vc, s.voice, existing);
+            el.replaceWith(newEl);
           }
         }
       } else {
