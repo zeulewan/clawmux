@@ -1156,3 +1156,53 @@ async function reorderSidebarVoice(fromVoice, toVoice) {
 // Legacy compatibility
 function renderVoiceGrid() { renderSidebar(); }
 function renderVoiceGridIfActive() { renderSidebar(); }
+
+// --- OpenClaw Agents Sidebar ---
+let _openclawAgents = [];  // [{name, id, connected}]
+let _openclawCollapsed = false;
+
+function _toggleOpenClawCollapse() {
+  _openclawCollapsed = !_openclawCollapsed;
+  renderOpenClawSidebar();
+}
+
+function renderOpenClawSidebar() {
+  const section = document.getElementById('openclaw-section');
+  const container = document.getElementById('openclaw-agents');
+  const chevron = document.getElementById('openclaw-chevron');
+  const countEl = document.getElementById('openclaw-count');
+  if (!section || !container) return;
+
+  if (_openclawAgents.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+  const connected = _openclawAgents.filter(a => a.connected).length;
+  countEl.textContent = connected + '/' + _openclawAgents.length;
+  chevron.textContent = _openclawCollapsed ? '\u25B6' : '\u25BC';
+
+  if (_openclawCollapsed) {
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = '';
+
+  container.innerHTML = _openclawAgents.map(agent => {
+    const dotClass = agent.connected ? 'openclaw-dot' : 'openclaw-dot disconnected';
+    const status = agent.connected ? 'connected' : 'offline';
+    const selected = activeSessionId === agent.id ? ' selected' : '';
+    return `<div class="openclaw-card${selected}" data-openclaw-id="${agent.id}" onclick="switchToOpenClawAgent('${agent.id}')">
+      <span class="${dotClass}"></span>
+      <span class="openclaw-name">${agent.name}</span>
+      <span class="openclaw-status">${status}</span>
+    </div>`;
+  }).join('');
+}
+
+function switchToOpenClawAgent(agentId) {
+  // Delegates to switchTab — OpenClaw sessions use the same tab system
+  if (sessions.has(agentId)) {
+    switchTab(agentId);
+  }
+}

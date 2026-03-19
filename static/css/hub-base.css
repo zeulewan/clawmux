@@ -413,6 +413,57 @@ body.sidebar-hidden #focus-view {
 }
 .sidebar-gc-new-btn:hover { opacity: 1; }
 
+/* OpenClaw sidebar section */
+#openclaw-section {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.openclaw-header {
+  color: var(--text-tertiary);
+}
+.openclaw-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  user-select: none;
+  position: relative;
+}
+.openclaw-card:hover {
+  background: var(--hover-bg);
+}
+.openclaw-card.selected {
+  background: var(--active-bg);
+}
+.openclaw-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2ecc71;
+  flex-shrink: 0;
+}
+.openclaw-dot.disconnected {
+  background: #7f8c8d;
+}
+.openclaw-name {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.openclaw-status {
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 /* Group chat sidebar cards */
 .sidebar-gc-card {
   display: flex;
