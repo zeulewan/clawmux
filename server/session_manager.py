@@ -24,6 +24,7 @@ from hub_config import (
 from agents_store import AgentEntry, AgentsStore
 from backends.codex import CodexBackend
 from backends.opencode import OpenCodeBackend
+from backends.openclaw import OpenClawBackend
 from project_manager import ProjectManager
 from state_machine import AgentState
 from template_renderer import TemplateRenderer
@@ -147,6 +148,7 @@ class SessionManager:
             DEFAULT_BACKEND: backend,
             "opencode": OpenCodeBackend(),
             "codex": CodexBackend(),
+            "openclaw": OpenClawBackend(),
         }
         self._on_session_death = on_session_death  # async callback(session_id)
         self._template_renderer = TemplateRenderer(agents_store) if agents_store else None
