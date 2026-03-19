@@ -682,17 +682,22 @@ class OpenClawBackend(AgentBackend):
                     if payload.get("sessionKey") != our_session_key:
                         continue
                     stream = payload.get("stream", "")
-                    if stream == "tool_call" and hub_port and work_dir:
-                        tool_data = payload.get("data", {})
-                        await self._post_hook(hub_port, work_dir, "PreToolUse", {
-                            "tool_name": tool_data.get("name", "tool"),
-                            "tool_input": tool_data.get("input", {}),
-                        })
-                    elif stream == "tool_result" and hub_port and work_dir:
-                        await self._post_hook(hub_port, work_dir, "PostToolUse", {
-                            "tool_name": payload.get("data", {}).get("name", "tool"),
-                            "tool_input": {},
-                        })
+                    data = payload.get("data", {})
+                    if stream == "tool" and hub_port and work_dir:
+                        phase = data.get("phase", "")
+                        tool_name = data.get("name", "tool")
+                        if phase == "start":
+                            # Map OpenClaw tool names to human-readable descriptions
+                            tool_input = {"command": data.get("input", "")} if "input" in data else {}
+                            await self._post_hook(hub_port, work_dir, "PreToolUse", {
+                                "tool_name": self._map_tool_name(tool_name),
+                                "tool_input": tool_input,
+                            })
+                        elif phase == "result":
+                            await self._post_hook(hub_port, work_dir, "PostToolUse", {
+                                "tool_name": self._map_tool_name(tool_name),
+                                "tool_input": {},
+                            })
 
                 elif msg_type == "res":
                     if not msg.get("ok"):
@@ -705,6 +710,24 @@ class OpenClawBackend(AgentBackend):
             return
         except Exception as e:
             log.error("[%s] Gateway listener error: %s", session_name, e)
+
+    # OpenClaw tool name → ClawMux tool name mapping
+    _TOOL_MAP = {
+        "exec": "Bash",
+        "read": "Read",
+        "write": "Write",
+        "edit": "Edit",
+        "fetch": "WebFetch",
+        "browser": "WebFetch",
+        "glob": "Glob",
+        "grep": "Grep",
+        "search": "Grep",
+    }
+
+    @staticmethod
+    def _map_tool_name(name: str) -> str:
+        """Map an OpenClaw tool name to a ClawMux-equivalent name for display."""
+        return OpenClawBackend._TOOL_MAP.get(name.lower(), name.capitalize())
 
     @staticmethod
     def _strip_delivery_metadata(text: str) -> str:
