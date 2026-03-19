@@ -209,6 +209,129 @@ class OpenClawBackend(AgentBackend):
         finally:
             await ws.close()
 
+    async def fetch_history(self, session_name: str, limit: int = 30) -> list[dict]:
+        """Fetch chat history from the Gateway via chat.history.
+
+        Returns messages in ClawMux history format: [{role, text, ts, id}, ...].
+        Uses the existing WS connection for the session.
+        """
+        ws = _connections.get(session_name)
+        sk = _session_keys.get(session_name)
+        if not ws or not sk:
+            # Fallback: read from JSONL file directly
+            return self._read_session_jsonl(session_name, limit)
+
+        req_id = f"clawmux-history-{uuid.uuid4().hex[:8]}"
+        try:
+            await ws.send(json.dumps({
+                "type": "req",
+                "id": req_id,
+                "method": "chat.history",
+                "params": {"sessionKey": sk, "limit": limit},
+            }))
+            # Drain events until we get our response
+            deadline = asyncio.get_event_loop().time() + 10
+            while asyncio.get_event_loop().time() < deadline:
+                raw = await asyncio.wait_for(ws.recv(), timeout=10)
+                resp = json.loads(raw)
+                if resp.get("type") == "res" and resp.get("id") == req_id:
+                    if not resp.get("ok"):
+                        log.warning("[%s] chat.history failed: %s", session_name, resp.get("error"))
+                        return self._read_session_jsonl(session_name, limit)
+                    return self._transform_history(resp.get("payload", []))
+            return self._read_session_jsonl(session_name, limit)
+        except Exception as e:
+            log.warning("[%s] chat.history request failed: %s, falling back to JSONL", session_name, e)
+            return self._read_session_jsonl(session_name, limit)
+
+    def _read_session_jsonl(self, session_name: str, limit: int = 30) -> list[dict]:
+        """Fallback: read history directly from the OpenClaw session JSONL file."""
+        agent_id = _agent_ids.get(session_name, "main")
+        sk = _session_keys.get(session_name, "")
+        sessions_path = Path.home() / ".openclaw" / "agents" / agent_id / "sessions" / "sessions.json"
+        try:
+            sessions = json.loads(sessions_path.read_text())
+            session_data = sessions.get(sk, {})
+            jsonl_path = session_data.get("sessionFile", "")
+            if not jsonl_path or not Path(jsonl_path).exists():
+                return []
+            # Read last N*3 lines (messages + metadata) to get enough actual messages
+            import subprocess as _sp
+            result = _sp.run(
+                ["tail", str(limit * 3), jsonl_path],
+                capture_output=True, text=True, timeout=5,
+            )
+            messages = []
+            for line in result.stdout.strip().splitlines():
+                if not line:
+                    continue
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if record.get("type") != "message":
+                    continue
+                msg = record.get("message", {})
+                role = msg.get("role", "")
+                if role not in ("user", "assistant"):
+                    continue
+                text = self._extract_text(msg)
+                if not text:
+                    continue
+                ts_str = record.get("timestamp", "")
+                try:
+                    from datetime import datetime
+                    ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).timestamp()
+                except Exception:
+                    ts = 0
+                messages.append({
+                    "role": role,
+                    "text": text,
+                    "ts": ts,
+                    "id": record.get("id", ""),
+                })
+            return messages[-limit:]
+        except Exception as e:
+            log.warning("[%s] Failed to read session JSONL: %s", session_name, e)
+            return []
+
+    @staticmethod
+    def _transform_history(payload) -> list[dict]:
+        """Transform Gateway chat.history response to ClawMux format."""
+        if not isinstance(payload, list):
+            payload = payload.get("messages", []) if isinstance(payload, dict) else []
+        messages = []
+        for record in payload:
+            msg = record if isinstance(record, dict) else {}
+            role = msg.get("role", "")
+            if role not in ("user", "assistant"):
+                continue
+            content = msg.get("content", [])
+            if isinstance(content, list):
+                text = "".join(
+                    b.get("text", "") for b in content
+                    if isinstance(b, dict) and b.get("type") == "text"
+                )
+            elif isinstance(content, str):
+                text = content
+            else:
+                continue
+            if not text:
+                continue
+            ts_str = msg.get("timestamp", record.get("timestamp", ""))
+            try:
+                from datetime import datetime
+                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).timestamp()
+            except Exception:
+                ts = 0
+            messages.append({
+                "role": role,
+                "text": text,
+                "ts": ts,
+                "id": msg.get("id", record.get("id", "")),
+            })
+        return messages
+
     # ── Capability declarations ───────────────────────────────────────────
 
     @property

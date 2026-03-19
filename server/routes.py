@@ -277,6 +277,18 @@ async def connect_openclaw_agent(request: Request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@router.get("/api/openclaw/history/{session_id}")
+async def get_openclaw_history(session_id: str, request: Request):
+    """Fetch chat history for an OpenClaw agent session."""
+    session = session_mgr.sessions.get(session_id)
+    if not session or session.backend != "openclaw":
+        return JSONResponse({"error": "OpenClaw session not found"}, status_code=404)
+    limit = min(int(request.query_params.get("limit", 30)), 200)
+    backend = session_mgr._get_backend("openclaw")
+    messages = await backend.fetch_history(session_id, limit=limit)
+    return JSONResponse({"voice_id": session_id, "messages": messages})
+
+
 @router.delete("/api/sessions/{session_id}")
 async def terminate_session(session_id: str):
     await session_mgr.terminate_session(session_id)
