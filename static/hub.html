@@ -634,10 +634,14 @@ function switchTab(sessionId, manual = false) {
   }
   activeSessionId = sessionId;
 
-  // Persist active voice for reconnection
+  // Persist active session for reconnection
   const sv = sessions.get(sessionId);
   if (sv) {
-    try { localStorage.setItem('hub_active_voice', sv.voice); } catch(e) {}
+    if (sv.backend === 'openclaw') {
+      try { localStorage.setItem('hub_active_session', sessionId); localStorage.removeItem('hub_active_voice'); } catch(e) {}
+    } else {
+      try { localStorage.setItem('hub_active_voice', sv.voice); localStorage.removeItem('hub_active_session'); } catch(e) {}
+    }
   }
 
   const s = sessions.get(sessionId);
@@ -660,6 +664,7 @@ function switchTab(sessionId, manual = false) {
 
   // Render chat messages (force scroll — switching sessions)
   renderChat(true);
+  renderOpenClawSidebar();
   updateLayout();
   updateChatStopButton();
   updateHeaderProjectStatus();
@@ -841,7 +846,7 @@ async function addSession(data, autoSwitch = false) {
   sessions.set(data.session_id, {
     ...data,
     tmux_session: data.tmux_session || data.session_id,
-    voice: data.voice || 'af_sky',
+    voice: data.voice || (data.backend === 'openclaw' ? '' : 'af_sky'),
     backend: data.backend || 'claude-code',
     model_id: data.model_id || '',
     speed: _initSpeed,

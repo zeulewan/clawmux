@@ -202,12 +202,20 @@ function handleMessage(data) {
       // Auto-restore previously active session on reconnect (skip if a group chat is active)
       if (!activeSessionId && !activeGroupId) {
         try {
-          const savedVoice = (() => { try { return localStorage.getItem('hub_active_voice'); } catch(e) { return null; } })();
-          if (savedVoice) {
-            for (const [sid, s] of sessions) {
-              if (s.voice === savedVoice) {
-                switchTab(sid);
-                break;
+          // Try direct session ID first (OpenClaw sessions)
+          const savedSession = (() => { try { return localStorage.getItem('hub_active_session'); } catch(e) { return null; } })();
+          if (savedSession && sessions.has(savedSession)) {
+            switchTab(savedSession);
+          }
+          // Then try voice lookup (voice agents)
+          if (!activeSessionId) {
+            const savedVoice = (() => { try { return localStorage.getItem('hub_active_voice'); } catch(e) { return null; } })();
+            if (savedVoice) {
+              for (const [sid, s] of sessions) {
+                if (s.voice === savedVoice) {
+                  switchTab(sid);
+                  break;
+                }
               }
             }
           }
