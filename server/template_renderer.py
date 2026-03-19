@@ -5,6 +5,7 @@ Writes ALL formats for every agent so backends can be switched without re-render
   - claude-code: CLAUDE.md + .claude/rules/role.md
   - opencode: INSTRUCTIONS.md + .opencode/rules/role.md + opencode.json instructions
   - codex: AGENTS.md (Codex loads from CWD automatically)
+  - openclaw: AGENTS.md (shared with Codex) + IDENTITY.md + SOUL.md
 Role-specific rules are loaded from server/templates/rules/.
 """
 
@@ -131,14 +132,19 @@ class TemplateRenderer:
         # OpenCode: INSTRUCTIONS.md
         (work_dir / "INSTRUCTIONS.md").write_text(content)
 
-        # Codex: AGENTS.md (with role rules appended — Codex has no separate rules file)
+        # Codex + OpenClaw: AGENTS.md (role rules appended inline — no separate rules file)
         entry = await self._store.get(voice_id)
         role = entry.role if entry else ""
         role_rules = self._load_rules(role) if role else ""
-        codex_content = content
+        agents_content = content
         if role_rules:
-            codex_content += "\n" + role_rules + "\n"
-        (work_dir / "AGENTS.md").write_text(codex_content)
+            agents_content += "\n" + role_rules + "\n"
+        (work_dir / "AGENTS.md").write_text(agents_content)
+
+        # OpenClaw: IDENTITY.md + SOUL.md (auto-injected into context each turn)
+        name = voice_id_to_name(voice_id)
+        self._write_openclaw_identity(work_dir, name, voice_id)
+        self._write_openclaw_soul(work_dir, name, role)
 
         # Role rules for Claude Code + OpenCode (separate rule files)
         await self.render_role_to_file(voice_id, work_dir)
@@ -156,17 +162,21 @@ class TemplateRenderer:
         claude_role = work_dir / ".claude" / "rules" / "role.md"
         opencode_role = work_dir / ".opencode" / "rules" / "role.md"
 
+        name = voice_id_to_name(voice_id)
+
         if not role:
             for rf in (claude_role, opencode_role):
                 if rf.exists():
                     rf.unlink()
                     log.info("Removed %s for %s (no role)", rf, voice_id)
-            # Codex: re-render AGENTS.md without role rules
+            # Codex + OpenClaw: re-render AGENTS.md without role rules
             agents_md = work_dir / "AGENTS.md"
             if agents_md.exists():
                 base_content = await self.render(voice_id)
                 if base_content:
                     agents_md.write_text(base_content)
+            # OpenClaw: update SOUL.md (role removed)
+            self._write_openclaw_soul(work_dir, name, "")
             self._update_opencode_instructions(work_dir)
             return True
 
@@ -177,16 +187,18 @@ class TemplateRenderer:
             rf.write_text(content)
         log.info("Rendered role rules (role=%s) for %s", role, voice_id)
 
-        # Codex: re-render AGENTS.md with updated role rules appended inline
+        # Codex + OpenClaw: re-render AGENTS.md with updated role rules appended inline
         agents_md = work_dir / "AGENTS.md"
         if agents_md.exists():
             base_content = await self.render(voice_id)
             if base_content:
-                codex_content = base_content
+                agents_content = base_content
                 if content:
-                    codex_content += "\n" + content
-                agents_md.write_text(codex_content)
+                    agents_content += "\n" + content
+                agents_md.write_text(agents_content)
 
+        # OpenClaw: update SOUL.md (role changed)
+        self._write_openclaw_soul(work_dir, name, role)
         # Update opencode.json instructions array (needed for standalone role changes)
         self._update_opencode_instructions(work_dir)
         return True
@@ -215,6 +227,21 @@ class TemplateRenderer:
 
         log.info("Rendered %d instruction sets", count)
         return count
+
+    def _write_openclaw_identity(self, work_dir: Path, name: str, voice_id: str) -> None:
+        """Write IDENTITY.md for OpenClaw — agent name and voice."""
+        identity = f"# Identity\n\nName: {name}\nVoice: {voice_id}\n"
+        (work_dir / "IDENTITY.md").write_text(identity)
+
+    def _write_openclaw_soul(self, work_dir: Path, name: str, role: str) -> None:
+        """Write SOUL.md for OpenClaw — minimal persona description."""
+        soul = (
+            f"# Soul\n\n"
+            f"{name} is a ClawMux agent"
+            f"{f' in the {role} role' if role else ''}.\n"
+            f"Communicate via `clawmux send`. Follow instructions in AGENTS.md.\n"
+        )
+        (work_dir / "SOUL.md").write_text(soul)
 
     def _update_opencode_instructions(self, work_dir: Path) -> None:
         """Merge instruction file paths into opencode.json."""
