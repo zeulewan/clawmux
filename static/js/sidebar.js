@@ -1223,8 +1223,8 @@ function renderOpenClawSidebar() {
   container.style.display = '';
 
   container.innerHTML = _openclawAgents.map(agent => {
-    const dotClass = agent.connected ? 'openclaw-dot' : 'openclaw-dot disconnected';
-    const status = agent.connected ? 'connected' : 'offline';
+    const dotClass = 'openclaw-dot';
+    const status = agent.connected ? 'connected' : 'online';
     const sid = agent.sessionId || agent.id;
     const selected = activeSessionId === sid ? ' selected' : '';
     return `<div class="openclaw-card${selected}" data-openclaw-id="${agent.id}" data-openclaw-name="${agent.name}" onclick="switchToOpenClawAgent('${agent.id}', '${agent.name}')">
