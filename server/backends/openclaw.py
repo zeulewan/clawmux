@@ -422,16 +422,15 @@ class OpenClawBackend(AgentBackend):
 
                     if state == "delta":
                         # Streaming text chunk — accumulate
-                        text = payload.get("message")
+                        text = self._extract_text(payload.get("message"))
                         if text:
-                            response_buffer.append(str(text))
+                            response_buffer.append(text)
 
                     elif state == "final":
                         # Agent finished — flush accumulated text
-                        # Final may also contain the complete message
-                        final_text = payload.get("message")
+                        final_text = self._extract_text(payload.get("message"))
                         if final_text and not response_buffer:
-                            response_buffer.append(str(final_text))
+                            response_buffer.append(final_text)
                         if response_buffer and hub_port:
                             full_text = "".join(response_buffer)
                             response_buffer.clear()
@@ -482,6 +481,33 @@ class OpenClawBackend(AgentBackend):
             return
         except Exception as e:
             log.error("[%s] Gateway listener error: %s", session_name, e)
+
+    @staticmethod
+    def _extract_text(message) -> str:
+        """Extract plain text from a Gateway chat message.
+
+        The message field can be:
+        - A plain string
+        - A dict like {"role": "assistant", "content": [{"type": "text", "text": "..."}]}
+        - None
+        """
+        if not message:
+            return ""
+        if isinstance(message, str):
+            return message
+        if isinstance(message, dict):
+            content = message.get("content", [])
+            if isinstance(content, list):
+                parts = []
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        parts.append(block.get("text", ""))
+                    elif isinstance(block, str):
+                        parts.append(block)
+                return "".join(parts)
+            if isinstance(content, str):
+                return content
+        return str(message)
 
     async def _forward_response(self, hub_port: int, session_name: str, text: str) -> None:
         """Forward agent response text to the hub for display."""
