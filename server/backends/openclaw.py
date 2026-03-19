@@ -246,6 +246,7 @@ class OpenClawBackend(AgentBackend):
 
     def _read_session_jsonl(self, session_name: str, limit: int = 30) -> list[dict]:
         """Fallback: read history directly from the OpenClaw session JSONL file."""
+        from datetime import datetime
         agent_id = _agent_ids.get(session_name, "main")
         sk = _session_keys.get(session_name, "")
         sessions_path = Path.home() / ".openclaw" / "agents" / agent_id / "sessions" / "sessions.json"
@@ -255,10 +256,11 @@ class OpenClawBackend(AgentBackend):
             jsonl_path = session_data.get("sessionFile", "")
             if not jsonl_path or not Path(jsonl_path).exists():
                 return []
-            # Read last N*3 lines (messages + metadata) to get enough actual messages
+            # Read from the end — enough lines to get limit user/assistant text messages.
+            # Typical ratio: ~60% of "message" records have displayable text.
             import subprocess as _sp
             result = _sp.run(
-                ["tail", str(limit * 3), jsonl_path],
+                ["tail", "-n", str(limit * 10), jsonl_path],
                 capture_output=True, text=True, timeout=5,
             )
             messages = []
@@ -275,12 +277,12 @@ class OpenClawBackend(AgentBackend):
                 role = msg.get("role", "")
                 if role not in ("user", "assistant"):
                     continue
+                # Extract text from content array, skipping toolCall-only messages
                 text = self._extract_text(msg)
                 if not text:
                     continue
                 ts_str = record.get("timestamp", "")
                 try:
-                    from datetime import datetime
                     ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).timestamp()
                 except Exception:
                     ts = 0
