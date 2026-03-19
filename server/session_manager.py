@@ -546,7 +546,7 @@ class SessionManager:
         OpenClaw agents are always-on in the Gateway — we just connect to them.
         The session uses the agent's real name as both session_id and label.
         """
-        session_id = agent_name.lower()
+        session_id = f"oc-{agent_name.lower()}"
         project_slug = project or self.project_mgr.active_project
 
         # Reject duplicate
