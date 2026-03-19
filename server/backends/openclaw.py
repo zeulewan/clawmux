@@ -233,22 +233,22 @@ class OpenClawBackend(AgentBackend):
             })
 
     async def interrupt(self, session_name: str) -> bool:
-        """Send cancel to the Gateway."""
+        """Abort the active agent run via Gateway."""
         ws = _connections.get(session_name)
         if not ws:
             return False
-        req_id = f"clawmux-cancel-{uuid.uuid4().hex[:8]}"
+        req_id = f"clawmux-abort-{uuid.uuid4().hex[:8]}"
         try:
             await ws.send(json.dumps({
                 "type": "req",
                 "id": req_id,
-                "method": "chat.cancel",
-                "params": {"agentId": "main"},
+                "method": "chat.abort",
+                "params": {},
             }))
-            log.info("[%s] Sent cancel to Gateway", session_name)
+            log.info("[%s] Sent chat.abort to Gateway", session_name)
             return True
         except Exception as e:
-            log.error("[%s] Failed to cancel: %s", session_name, e)
+            log.error("[%s] Failed to abort: %s", session_name, e)
             return False
 
     async def restart(
@@ -384,7 +384,13 @@ class OpenClawBackend(AgentBackend):
                  session_name, resp.get("payload", {}).get("protocol", "?"))
 
     async def _listen(self, ws, session_name: str) -> None:
-        """Background task: receive Gateway events and forward to hub."""
+        """Background task: receive Gateway events and forward to hub.
+
+        Gateway emits two event types for agent responses:
+        - "chat" events with state: delta|final|aborted|error
+          (delta = streaming text chunk, final = done, message field has text)
+        - "agent" events with stream field for tool calls/results/thinking
+        """
         hub_port = _hub_ports.get(session_name)
         work_dir = _work_dirs.get(session_name)
         response_buffer: list[str] = []
@@ -397,37 +403,64 @@ class OpenClawBackend(AgentBackend):
                     continue
 
                 msg_type = msg.get("type")
-                event = msg.get("event", "")
+                event_name = msg.get("event", "")
 
-                if msg_type == "event" and event.startswith("agent"):
+                if msg_type == "event" and event_name == "chat":
                     payload = msg.get("payload", {})
-                    event_type = payload.get("type", event)
+                    state = payload.get("state", "")
 
-                    if event_type in ("text", "text-delta", "agent.text"):
-                        # Streaming text chunk from agent
-                        delta = payload.get("delta", "") or payload.get("text", "")
-                        if delta:
-                            response_buffer.append(delta)
+                    if state == "delta":
+                        # Streaming text chunk — accumulate
+                        text = payload.get("message")
+                        if text:
+                            response_buffer.append(str(text))
 
-                    elif event_type in ("done", "agent.done", "agent.stop"):
-                        # Agent finished responding — flush buffer
+                    elif state == "final":
+                        # Agent finished — flush accumulated text
+                        # Final may also contain the complete message
+                        final_text = payload.get("message")
+                        if final_text and not response_buffer:
+                            response_buffer.append(str(final_text))
                         if response_buffer and hub_port:
                             full_text = "".join(response_buffer)
                             response_buffer.clear()
                             await self._forward_response(hub_port, session_name, full_text)
-
+                        elif response_buffer:
+                            response_buffer.clear()
                         # Signal idle
                         if hub_port and work_dir:
                             await self._post_hook(hub_port, work_dir, "Stop", {})
 
-                    elif event_type in ("error", "agent.error"):
-                        error_msg = payload.get("message", str(payload))
+                    elif state == "aborted":
+                        response_buffer.clear()
+                        log.info("[%s] Agent run aborted", session_name)
+                        if hub_port and work_dir:
+                            await self._post_hook(hub_port, work_dir, "Stop", {})
+
+                    elif state == "error":
+                        response_buffer.clear()
+                        error_msg = payload.get("errorMessage", str(payload))
                         log.error("[%s] Agent error: %s", session_name, error_msg)
                         if hub_port and work_dir:
                             await self._post_hook(hub_port, work_dir, "Stop", {})
 
+                elif msg_type == "event" and event_name == "agent":
+                    # Agent tool calls / results — log for debugging
+                    payload = msg.get("payload", {})
+                    stream = payload.get("stream", "")
+                    if stream == "tool_call" and hub_port and work_dir:
+                        tool_data = payload.get("data", {})
+                        await self._post_hook(hub_port, work_dir, "PreToolUse", {
+                            "tool_name": tool_data.get("name", "tool"),
+                            "tool_input": tool_data.get("input", {}),
+                        })
+                    elif stream == "tool_result" and hub_port and work_dir:
+                        await self._post_hook(hub_port, work_dir, "PostToolUse", {
+                            "tool_name": payload.get("data", {}).get("name", "tool"),
+                            "tool_input": {},
+                        })
+
                 elif msg_type == "res":
-                    # Response to a request (chat.send, etc.)
                     if not msg.get("ok"):
                         error = msg.get("error", {})
                         log.warning("[%s] Request failed: %s", session_name, error.get("message", error))
