@@ -399,6 +399,9 @@ class OpenClawBackend(AgentBackend):
             log.error("[%s] Gateway handshake failed: %s", session_name, e)
             raise RuntimeError(f"OpenClaw handshake failed: {e}")
 
+        # Write env vars so OpenClaw's exec commands can use `clawmux send`
+        self._write_clawmux_env(session_name, session_id, hub_port, work_dir)
+
         # Start background listener for agent events
         listener = asyncio.create_task(self._listen(ws, session_name))
         _listeners[session_name] = listener
@@ -527,6 +530,45 @@ class OpenClawBackend(AgentBackend):
         return RecoveryResult()
 
     # ── Internal helpers ──────────────────────────────────────────────────
+
+    @staticmethod
+    def _write_clawmux_env(session_name: str, session_id: str, hub_port: int, work_dir: str) -> None:
+        """Write ClawMux env vars into the OpenClaw workspace .env file.
+
+        OpenClaw loads ~/.openclaw/workspace/.env via dotenv on startup and
+        inherits these into exec commands. This lets the agent use `clawmux send`
+        without manual setup.
+
+        Also writes a global fallback at ~/.openclaw/.env (loaded when CWD
+        isn't the workspace).
+        """
+        env_lines = [
+            f"CLAWMUX_SESSION_ID={session_id}",
+            f"CLAWMUX_PORT={hub_port}",
+            f"CLAWMUX_WORK_DIR={work_dir}",
+        ]
+        env_content = "\n".join(env_lines) + "\n"
+
+        for env_path in (
+            hub_config.OPENCLAW_WORKSPACE / ".env",
+            Path.home() / ".openclaw" / ".env",
+        ):
+            try:
+                # Merge: preserve existing vars, update ClawMux ones
+                existing = {}
+                if env_path.exists():
+                    for line in env_path.read_text().splitlines():
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            key = line.split("=", 1)[0]
+                            if not key.startswith("CLAWMUX_"):
+                                existing[key] = line
+                merged = list(existing.values()) + env_lines
+                env_path.parent.mkdir(parents=True, exist_ok=True)
+                env_path.write_text("\n".join(merged) + "\n")
+                log.info("[%s] Wrote ClawMux env to %s", session_name, env_path)
+            except Exception as e:
+                log.warning("[%s] Failed to write env to %s: %s", session_name, env_path, e)
 
     async def _handshake(self, ws, session_name: str, token: str) -> None:
         """Complete the Gateway connect handshake with Ed25519 device signing."""
