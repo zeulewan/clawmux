@@ -307,8 +307,9 @@ class OpenClawBackend(AgentBackend):
 
         # Build v2 signing payload:
         # v2|deviceId|clientId|clientMode|role|scopes|signedAtMs|token|nonce
-        client_id = f"clawmux-{session_name}"
-        client_mode = "operator"
+        # client.id and client.mode must be from the Gateway's enum allowlist
+        client_id = "cli"
+        client_mode = "cli"
         role = "operator"
         scopes = ["operator.read", "operator.write"]
         signed_at_ms = int(time.time() * 1000)
@@ -343,6 +344,7 @@ class OpenClawBackend(AgentBackend):
                     "version": "0.1.0",
                     "platform": "linux",
                     "mode": client_mode,
+                    "instanceId": session_name,
                 },
                 "role": role,
                 "scopes": scopes,
