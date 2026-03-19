@@ -183,6 +183,7 @@ function handleMessage(data) {
       _flushMessageBuffer();
       renderVoiceGridIfActive();
       renderSidebar();
+      startOpenClawPolling();
       // Push saved speed from localStorage to server for all sessions
       const savedSpd = localStorage.getItem('hub_speed');
       if (savedSpd) {
@@ -228,12 +229,16 @@ function handleMessage(data) {
   }
   if (type === 'session_spawned') {
     if (!sessions.has(data.session.session_id)) {
-      addSession(data.session, false).then(() => renderVoiceGridIfActive());
+      addSession(data.session, false).then(() => {
+        renderVoiceGridIfActive();
+        if (data.session.backend === 'openclaw') fetchOpenClawAgents();
+      });
     }
     return;
   }
   if (type === 'session_terminated') {
     removeSession(data.session_id);
+    fetchOpenClawAgents();
     return;
   }
   if (type === 'user_notification') {

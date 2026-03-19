@@ -1158,12 +1158,42 @@ function renderVoiceGrid() { renderSidebar(); }
 function renderVoiceGridIfActive() { renderSidebar(); }
 
 // --- OpenClaw Agents Sidebar ---
-let _openclawAgents = [];  // [{name, id, connected}]
+let _openclawAgents = [];  // [{name, id, connected, sessionId}]
 let _openclawCollapsed = false;
+let _openclawFetchTimer = null;
 
 function _toggleOpenClawCollapse() {
   _openclawCollapsed = !_openclawCollapsed;
   renderOpenClawSidebar();
+}
+
+async function fetchOpenClawAgents() {
+  try {
+    const resp = await fetch('/api/openclaw/agents');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const agents = data.agents || [];
+    _openclawAgents = agents.map(a => {
+      // Check if this agent has an active session (connected)
+      let sessionId = null;
+      for (const [sid, s] of sessions) {
+        if (s.backend === 'openclaw' && s.label === a.name) {
+          sessionId = sid;
+          break;
+        }
+      }
+      return { name: a.name, id: a.id, connected: !!sessionId, sessionId };
+    });
+    renderOpenClawSidebar();
+  } catch (e) {
+    console.warn('Failed to fetch OpenClaw agents:', e);
+  }
+}
+
+function startOpenClawPolling() {
+  if (_openclawFetchTimer) return;
+  fetchOpenClawAgents();
+  _openclawFetchTimer = setInterval(fetchOpenClawAgents, 30000);
 }
 
 function renderOpenClawSidebar() {
@@ -1191,8 +1221,9 @@ function renderOpenClawSidebar() {
   container.innerHTML = _openclawAgents.map(agent => {
     const dotClass = agent.connected ? 'openclaw-dot' : 'openclaw-dot disconnected';
     const status = agent.connected ? 'connected' : 'offline';
-    const selected = activeSessionId === agent.id ? ' selected' : '';
-    return `<div class="openclaw-card${selected}" data-openclaw-id="${agent.id}" onclick="switchToOpenClawAgent('${agent.id}')">
+    const sid = agent.sessionId || agent.id;
+    const selected = activeSessionId === sid ? ' selected' : '';
+    return `<div class="openclaw-card${selected}" data-openclaw-id="${agent.id}" data-openclaw-name="${agent.name}" onclick="switchToOpenClawAgent('${agent.id}', '${agent.name}')">
       <span class="${dotClass}"></span>
       <span class="openclaw-name">${agent.name}</span>
       <span class="openclaw-status">${status}</span>
@@ -1200,9 +1231,37 @@ function renderOpenClawSidebar() {
   }).join('');
 }
 
-function switchToOpenClawAgent(agentId) {
-  // Delegates to switchTab — OpenClaw sessions use the same tab system
-  if (sessions.has(agentId)) {
-    switchTab(agentId);
+async function switchToOpenClawAgent(agentId, agentName) {
+  // If already connected, switch to existing session
+  const agent = _openclawAgents.find(a => a.id === agentId);
+  if (agent && agent.sessionId && sessions.has(agent.sessionId)) {
+    switchTab(agent.sessionId);
+    return;
+  }
+  // Connect via API — creates session in hub
+  try {
+    const resp = await fetch('/api/openclaw/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: agentName, agent_id: agentId }),
+    });
+    if (!resp.ok) {
+      console.error('OpenClaw connect failed:', await resp.text());
+      return;
+    }
+    const data = await resp.json();
+    const sessionId = data.session_id;
+    // Session will appear via WS session_spawned event — wait briefly then switch
+    const waitForSession = () => {
+      if (sessions.has(sessionId)) {
+        switchTab(sessionId);
+        fetchOpenClawAgents();  // refresh connected state
+      } else {
+        setTimeout(waitForSession, 200);
+      }
+    };
+    waitForSession();
+  } catch (e) {
+    console.error('OpenClaw connect error:', e);
   }
 }
