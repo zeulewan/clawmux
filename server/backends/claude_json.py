@@ -35,6 +35,8 @@ _processes: dict[str, asyncio.subprocess.Process] = {}
 _listeners: dict[str, asyncio.Task] = {}
 _hub_ports: dict[str, int] = {}
 _work_dirs: dict[str, str] = {}
+_compacting: dict[str, bool] = {}       # session currently compacting
+_last_usage: dict[str, dict] = {}       # last token usage from result event
 
 _EXTRA_PATH = "/opt/homebrew/bin:/usr/local/bin"
 _SUBPROCESS_ENV = os.environ.copy()
@@ -158,6 +160,8 @@ class ClaudeJsonBackend(AgentBackend):
                 pass
         _hub_ports.pop(session_name, None)
         _work_dirs.pop(session_name, None)
+        _compacting.pop(session_name, None)
+        _last_usage.pop(session_name, None)
         log.info("[%s] Claude JSON subprocess terminated", session_name)
 
     async def health_check(self, session_name: str) -> bool:
@@ -213,6 +217,27 @@ class ClaudeJsonBackend(AgentBackend):
     async def apply_status_bar(self, session_name: str, label: str, voice_id: str) -> None:
         pass  # No tmux
 
+    async def monitor_state(
+        self,
+        session_name: str,
+        current_state,
+        context_percent: float | None = None,
+    ) -> MonitorResult | None:
+        """Return compaction state changes based on JSON events."""
+        is_compacting = _compacting.get(session_name, False)
+        was_compacting = current_state == AgentState.COMPACTING
+        if is_compacting and not was_compacting:
+            return MonitorResult(
+                new_state=AgentState.COMPACTING,
+                compaction_event=True,
+            )
+        elif not is_compacting and was_compacting:
+            return MonitorResult(
+                new_state=AgentState.PROCESSING,
+                compaction_event=False,
+            )
+        return None
+
     async def recover(self, session_name: str, work_dir: str) -> RecoveryResult:
         proc = _processes.get(session_name)
         if not proc or proc.returncode is not None:
@@ -221,71 +246,25 @@ class ClaudeJsonBackend(AgentBackend):
         return RecoveryResult()
 
     def get_context_usage(self, session_name: str, session) -> dict | None:
-        """Read token usage from Claude Code's JSONL transcript (same as tmux backend)."""
-        from pathlib import Path
-        import subprocess as _sp
-        conversation_id = getattr(session, 'conversation_id', '')
-        if not conversation_id:
+        """Return token usage from last result event (no file I/O needed)."""
+        usage = _last_usage.get(session_name)
+        if not usage:
             return None
-        claude_projects = Path.home() / ".claude" / "projects"
-        jsonl_path = None
-        if claude_projects.exists():
-            for p in claude_projects.iterdir():
-                candidate = p / f"{conversation_id}.jsonl"
-                if candidate.exists():
-                    jsonl_path = candidate
-                    break
-        if not jsonl_path:
-            return None
-        try:
-            result = _sp.run(
-                ["tail", "-n", "50", str(jsonl_path)],
-                capture_output=True, text=True, timeout=5
-            )
-            if result.returncode != 0:
-                return None
-            last_usage = None
-            last_model = None
-            for line in result.stdout.strip().split("\n"):
-                if not line:
-                    continue
-                try:
-                    d = json.loads(line)
-                    usage = None
-                    model = None
-                    if d.get("type") == "assistant" and "message" in d:
-                        msg = d["message"] if isinstance(d["message"], dict) else {}
-                        usage = msg.get("usage") or d.get("usage")
-                        model = msg.get("model")
-                    elif d.get("type") == "assistant" and "usage" in d:
-                        usage = d["usage"]
-                    if usage:
-                        last_usage = usage
-                    if model:
-                        last_model = model
-                except (json.JSONDecodeError, KeyError):
-                    continue
-            if not last_usage:
-                return None
-            input_tokens = last_usage.get("input_tokens", 0)
-            cache_creation = last_usage.get("cache_creation_input_tokens", 0)
-            cache_read = last_usage.get("cache_read_input_tokens", 0)
-            output_tokens = last_usage.get("output_tokens", 0)
-            total_context = input_tokens + cache_creation + cache_read
-            context_limit = 200000
-            if last_model and "opus" in last_model:
-                context_limit = 1000000
-            elif getattr(session, 'model', '') == "opus":
-                context_limit = 1000000
-            return {
-                "total_context_tokens": total_context,
-                "output_tokens": output_tokens,
-                "context_limit": context_limit,
-                "percent": round(total_context / context_limit * 100, 1),
-            }
-        except Exception as e:
-            log.warning("Error reading context usage for %s: %s", session_name, e)
-            return None
+        input_tokens = usage.get("input_tokens", 0)
+        cache_creation = usage.get("cache_creation_input_tokens", 0)
+        cache_read = usage.get("cache_read_input_tokens", 0)
+        output_tokens = usage.get("output_tokens", 0)
+        total_context = input_tokens + cache_creation + cache_read
+        context_limit = 200000
+        model = getattr(session, 'model', '') or getattr(session, 'model_id', '')
+        if model and "opus" in model.lower():
+            context_limit = 1000000
+        return {
+            "total_context_tokens": total_context,
+            "output_tokens": output_tokens,
+            "context_limit": context_limit,
+            "percent": round(total_context / context_limit * 100, 1),
+        }
 
     # ── Internal helpers ──────────────────────────────────────────────────
 
@@ -324,8 +303,6 @@ class ClaudeJsonBackend(AgentBackend):
         hub_port = _hub_ports.get(session_name)
         work_dir = _work_dirs.get(session_name)
         send_fn = _get_send_to_browser()
-        # Track current streaming text per message
-        current_msg_id = ""
         text_buffer: list[str] = []
 
         try:
@@ -346,15 +323,38 @@ class ClaudeJsonBackend(AgentBackend):
 
                 event_type = data.get("type", "")
 
-                if event_type == "stream_event":
+                # --- system events ---
+                if event_type == "system":
+                    subtype = data.get("subtype", "")
+                    if subtype == "compact_boundary":
+                        await self._handle_compact_boundary(session_name, hub_port, work_dir)
+                    elif subtype == "api_retry":
+                        log.info(
+                            "[%s] API retry attempt=%s: %s",
+                            session_name,
+                            data.get("attempt", "?"),
+                            data.get("error", ""),
+                        )
+                    elif subtype == "init":
+                        log.debug("[%s] Received init event (already handled)", session_name)
+
+                # --- keep_alive ---
+                elif event_type == "keep_alive":
+                    pass
+
+                # --- permission request ---
+                elif event_type == "control_request":
+                    await self._handle_control_request(proc, session_name, data)
+
+                # --- streaming partial events ---
+                elif event_type == "stream_event":
                     event = data.get("event", {})
                     await self._handle_stream_event(
-                        event, session_name, hub_port, work_dir, send_fn,
-                        text_buffer,
+                        event, session_name, hub_port, work_dir, send_fn, text_buffer,
                     )
 
+                # --- complete assistant message ---
                 elif event_type == "assistant":
-                    # Complete assistant message (tool_use or text)
                     msg = data.get("message", {})
                     content = msg.get("content", [])
                     for block in content:
@@ -370,33 +370,113 @@ class ClaudeJsonBackend(AgentBackend):
                             if text:
                                 text_buffer.clear()
                                 text_buffer.append(text)
+                    # Cache usage from assistant message
+                    usage = msg.get("usage")
+                    if usage:
+                        _last_usage[session_name] = usage
 
+                # --- tool result ---
                 elif event_type == "user":
-                    # Tool result
-                    tool_result = data.get("tool_use_result", {})
                     if hub_port and work_dir:
                         await self._post_hook(hub_port, work_dir, "PostToolUse", {
                             "tool_name": "",
                             "tool_input": {},
                         })
 
+                # --- turn complete ---
                 elif event_type == "result":
-                    # Turn complete — forward any buffered text and signal idle
+                    is_error = data.get("is_error", False)
                     result_text = data.get("result", "")
-                    final_text = result_text or ("".join(text_buffer) if text_buffer else "")
+
+                    # Cache usage if present
+                    usage = data.get("usage", {})
+                    if usage:
+                        _last_usage[session_name] = usage
+
+                    if is_error:
+                        log.warning(
+                            "[%s] Turn ended with error (subtype=%s): %s",
+                            session_name,
+                            data.get("subtype", "?"),
+                            result_text,
+                        )
+                    else:
+                        final_text = result_text or ("".join(text_buffer) if text_buffer else "")
+                        if final_text and hub_port:
+                            await self._forward_response(hub_port, session_name, final_text)
+
                     text_buffer.clear()
-                    if final_text and hub_port:
-                        await self._forward_response(hub_port, session_name, final_text)
+
+                    # Signal turn complete regardless of error
                     if hub_port and work_dir:
                         await self._post_hook(hub_port, work_dir, "Stop", {})
+
+                # --- rate limit ---
+                elif event_type == "rate_limit_event":
+                    pass  # logged elsewhere if needed
+
+                else:
+                    log.debug("[%s] Unknown event type: %s", session_name, event_type)
 
         except asyncio.CancelledError:
             return
         except Exception as e:
-            log.error("[%s] Claude JSON listener error: %s", session_name, e)
+            log.error("[%s] Claude JSON listener error: %s", session_name, e, exc_info=True)
         finally:
             if proc.returncode is None:
-                log.warning("[%s] Claude JSON subprocess still running after listener exit", session_name)
+                log.warning(
+                    "[%s] Claude JSON subprocess still running after listener exit",
+                    session_name,
+                )
+
+    async def _handle_compact_boundary(
+        self,
+        session_name: str,
+        hub_port: int | None,
+        work_dir: str | None,
+    ) -> None:
+        """Handle compact_boundary event — fires twice: start and end."""
+        was_compacting = _compacting.get(session_name, False)
+        if not was_compacting:
+            _compacting[session_name] = True
+            log.info("[%s] Compaction started (JSON event)", session_name)
+        else:
+            _compacting[session_name] = False
+            log.info("[%s] Compaction complete (JSON event)", session_name)
+
+    async def _handle_control_request(
+        self,
+        proc: asyncio.subprocess.Process,
+        session_name: str,
+        data: dict,
+    ) -> None:
+        """Respond to permission/control requests from Claude."""
+        request_id = data.get("request_id", "")
+        request = data.get("request", {})
+        subtype = request.get("subtype", "")
+
+        if subtype == "can_use_tool":
+            tool_use_id = request.get("tool_use_id", "")
+            response = {
+                "type": "control_response",
+                "response": {
+                    "subtype": "success",
+                    "request_id": request_id,
+                    "response": {
+                        "behavior": "allow",
+                        "toolUseID": tool_use_id,
+                    },
+                },
+            }
+            msg = json.dumps(response) + "\n"
+            try:
+                proc.stdin.write(msg.encode())
+                await proc.stdin.drain()
+                log.debug("[%s] Allowed tool: %s", session_name, request.get("tool_name"))
+            except Exception as e:
+                log.error("[%s] Failed to send control response: %s", session_name, e)
+        else:
+            log.warning("[%s] Unhandled control_request subtype: %s", session_name, subtype)
 
     async def _handle_stream_event(
         self, event: dict, session_name: str, hub_port: int | None,
