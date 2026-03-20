@@ -401,6 +401,41 @@ function handleMessage(data) {
     }
     return;
   }
+  if (type === 'structured_event') {
+    const s = sessions.get(data.session_id);
+    if (!s) return;
+    const evType = data.event_type;
+    if (evType === 'tool_use') {
+      const toolName = data.tool_name || 'Tool';
+      const toolData = data.data || {};
+      // Build activity description for sidebar
+      let desc = toolName;
+      if (toolName === 'Bash' && toolData.command) desc = `Running: ${toolData.command.slice(0, 60)}`;
+      else if ((toolName === 'Read' || toolName === 'Write' || toolName === 'Edit') && toolData.file_path) desc = `${toolName}: ${toolData.file_path.split('/').pop()}`;
+      else if (toolName === 'Glob' && toolData.pattern) desc = `Glob: ${toolData.pattern}`;
+      else if (toolName === 'Grep' && toolData.pattern) desc = `Grep: ${toolData.pattern.slice(0, 40)}`;
+      else if (toolName === 'Agent') desc = 'Spawning agent...';
+      s.toolStatusText = desc;
+      s.toolName = toolName;
+      // Show typing indicator with tool info
+      if (typeof showTypingIndicator === 'function') showTypingIndicator(data.session_id);
+      if (typeof updateThinkingLabel === 'function') updateThinkingLabel(data.session_id);
+    } else if (evType === 'tool_result') {
+      // Tool finished — keep processing state, clear specific tool
+      s.toolName = '';
+    } else if (evType === 'thinking') {
+      s.toolStatusText = 'Thinking...';
+      s.toolName = '';
+      if (typeof showTypingIndicator === 'function') showTypingIndicator(data.session_id);
+      if (typeof updateThinkingLabel === 'function') updateThinkingLabel(data.session_id);
+    } else if (evType === 'idle') {
+      s.toolStatusText = '';
+      s.toolName = '';
+      if (typeof hideTypingIndicator === 'function') hideTypingIndicator(data.session_id);
+    }
+    renderSidebar();
+    return;
+  }
   if (type === 'error') {
     alert('Hub error: ' + data.message);
     return;
