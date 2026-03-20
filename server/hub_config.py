@@ -55,6 +55,7 @@ def _read_openclaw_token() -> str:
         pass
     return ""
 OPENCLAW_GATEWAY_TOKEN = _read_openclaw_token()
+OPENCLAW_WORKSPACE = Path.home() / ".openclaw" / "workspace"
 TMUX_SESSION_PREFIX = "voice"
 WHISPER_URL = "http://127.0.0.1:2022"
 KOKORO_URL = "http://127.0.0.1:8880"
