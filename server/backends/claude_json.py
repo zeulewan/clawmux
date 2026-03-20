@@ -127,7 +127,12 @@ class ClaudeJsonBackend(AgentBackend):
 
         _processes[session_name] = proc
 
-        # Wait for init event
+        # With --input-format stream-json, the process needs a stdin message
+        # before it emits the system/init event. Send startup prompt first.
+        startup = "Greet the user as instructed in your CLAUDE.md. Then stop — the hub will deliver messages when they arrive."
+        await self._write_stdin(proc, session_name, startup)
+
+        # Now wait for init event
         try:
             await self._wait_for_init(proc, session_name, timeout=30)
         except Exception as e:
@@ -135,13 +140,9 @@ class ClaudeJsonBackend(AgentBackend):
             _processes.pop(session_name, None)
             raise RuntimeError(f"Claude JSON init failed: {e}")
 
-        # Start background listener
+        # Start background listener (processes all subsequent events)
         listener = asyncio.create_task(self._listen(proc, session_name))
         _listeners[session_name] = listener
-
-        # Send startup prompt
-        startup = "Greet the user as instructed in your CLAUDE.md. Then stop — the hub will deliver messages when they arrive."
-        await self._write_stdin(proc, session_name, startup)
 
         log.info("[%s] Claude JSON subprocess started (pid=%d)", session_name, proc.pid)
 
