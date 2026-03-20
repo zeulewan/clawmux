@@ -37,6 +37,7 @@ _hub_ports: dict[str, int] = {}
 _work_dirs: dict[str, str] = {}
 _compacting: dict[str, bool] = {}       # session currently compacting
 _last_usage: dict[str, dict] = {}       # last token usage from result event
+_models: dict[str, str] = {}            # session → model string from init
 
 _EXTRA_PATH = "/opt/homebrew/bin:/usr/local/bin"
 _SUBPROCESS_ENV = os.environ.copy()
@@ -163,6 +164,7 @@ class ClaudeJsonBackend(AgentBackend):
         _work_dirs.pop(session_name, None)
         _compacting.pop(session_name, None)
         _last_usage.pop(session_name, None)
+        _models.pop(session_name, None)
         log.info("[%s] Claude JSON subprocess terminated", session_name)
 
     async def health_check(self, session_name: str) -> bool:
@@ -257,9 +259,12 @@ class ClaudeJsonBackend(AgentBackend):
         output_tokens = usage.get("output_tokens", 0)
         total_context = input_tokens + cache_creation + cache_read
         context_limit = 200000
-        model = getattr(session, 'model', '') or getattr(session, 'model_id', '')
+        model = _models.get(session_name, '') or getattr(session, 'model', '') or getattr(session, 'model_id', '')
         if model and "opus" in model.lower():
             context_limit = 1000000
+        # Set model_id on session so the top bar displays it
+        if model and hasattr(session, 'model_id') and not session.model_id:
+            session.model_id = model
         return {
             "total_context_tokens": total_context,
             "output_tokens": output_tokens,
@@ -300,6 +305,7 @@ class ClaudeJsonBackend(AgentBackend):
                 data = json.loads(line.decode())
                 if data.get("type") == "system" and data.get("subtype") == "init":
                     model = data.get("model", "")
+                    _models[session_name] = model
                     log.info("[%s] Claude JSON init: model=%s", session_name, model)
                     return
             except asyncio.TimeoutError:
