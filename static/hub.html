@@ -2211,8 +2211,9 @@ function showContextMenu(e, sessionId, voiceId) {
   document.getElementById('ctx-terminate').style.display = (hasSession || voiceId) ? 'block' : 'none';
   document.getElementById('ctx-launch').style.display = hasSession ? 'none' : 'block';
   document.getElementById('ctx-spawn-with').style.display = hasSession ? 'none' : 'block';
-  document.getElementById('ctx-monitor').style.display = (hasSession || voiceId) ? 'block' : 'none';
   const sess = sessionId ? sessions.get(sessionId) : null;
+  const hasTmux = !sess || (sess.backend !== 'claude-json' && sess.backend !== 'openclaw');
+  document.getElementById('ctx-monitor').style.display = ((hasSession || voiceId) && hasTmux) ? 'block' : 'none';
   const hasUnread = sess && (sess.unreadCount || 0) > 0;
   document.getElementById('ctx-mark-unread').style.display = (hasSession && !hasUnread) ? 'block' : 'none';
   document.getElementById('ctx-mark-read').style.display = (hasSession && hasUnread) ? 'block' : 'none';
@@ -2609,10 +2610,11 @@ function formatReset(isoStr) {
   return mins + 'm';
 }
 
-async function fetchUsage() {
+async function fetchUsage(forceRefresh) {
   try {
+    const usageUrl = forceRefresh ? '/api/usage?refresh=1' : '/api/usage';
     const [usageResp, ctxResp] = await Promise.all([
-      fetch('/api/usage'),
+      fetch(usageUrl),
       fetch('/api/context')
     ]);
     const bar = document.getElementById('usage-bar');
@@ -2659,7 +2661,7 @@ async function fetchUsage() {
 }
 
 function toggleUsageDetail() {
-  fetchUsage(); // refresh on click
+  fetchUsage(true); // force refresh from API on click
 }
 
 async function loadUsageForSettings() {
