@@ -777,7 +777,9 @@ async function spawnSession(voiceId = '', backend = 'claude-code', modelId = '')
   }
 
   // Acquire mic permission now while page is focused (avoids background focus issues)
-  try { await getMicStream(); } catch (e) { console.warn('Mic permission denied:', e); }
+  if (sttEnabled) {
+    try { await getMicStream(); } catch (e) { console.warn('Mic permission denied:', e); }
+  }
 
   try {
     const body = { voice: voiceId, project: currentProject, backend };
