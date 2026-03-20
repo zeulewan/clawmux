@@ -19,7 +19,8 @@ from .claude_code import ClaudeCodeBackend
 
 log = logging.getLogger("hub.backend.codex")
 
-CODEX_COMMAND = "/home/zeul/.local/bin/codex"
+import shutil as _shutil
+CODEX_COMMAND = _shutil.which("codex") or "codex"
 
 
 class CodexBackend(AgentBackend):

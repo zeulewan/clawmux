@@ -99,7 +99,11 @@ if [ -z "$PYTHON3" ]; then
         warn "Only found Python $($PYTHON3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')") — 3.10+ is required."
         fail "Install Python 3.10+ (e.g. 'brew install python3') and re-run this script."
     else
-        fail "Python 3 is required. Install it first."
+        if [ "$OS" = "macos" ]; then
+            fail "Python 3 is required. Install it with: brew install python3"
+        else
+            fail "Python 3 is required. Install it with your package manager (e.g. apt install python3)."
+        fi
     fi
 fi
 PYTHON_VERSION=$($PYTHON3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
@@ -206,9 +210,22 @@ install_nvidia_services() {
 
 install_apple_services() {
     info "Setting up TTS/STT for Apple Silicon..."
-    warn "Apple Silicon support requires mlx-audio (TTS) and whisper.cpp (STT)."
-    warn "These need to be installed separately. See the deployment modes docs."
-    # Future: automate mlx-audio and whisper.cpp installation
+    echo ""
+    echo "  Apple Silicon services need manual setup:"
+    echo ""
+    echo "  TTS (Kokoro via mlx-audio):"
+    echo "    pip install mlx-audio"
+    echo "    mlx-audio serve --port 8880"
+    echo ""
+    echo "  STT (Whisper via whisper.cpp):"
+    echo "    brew install whisper-cpp"
+    echo "    # Or build from source: https://github.com/ggerganov/whisper.cpp"
+    echo "    whisper-server --port 2022 --model base"
+    echo ""
+    echo "  Or use remote services: configure TTS/STT URLs in the hub Settings panel."
+    echo ""
+    warn "Automatic Apple Silicon service install is not yet supported."
+    warn "Set up TTS/STT manually, or configure remote URLs in Settings after starting."
 }
 
 case "$GPU" in

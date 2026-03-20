@@ -171,7 +171,7 @@ class HistoryStore:
             if len(text) > 500:
                 text = text[:500] + "..."
             if role == "user":
-                lines.append(f"**User (Zeul):** {text}")
+                lines.append(f"**User:** {text}")
             elif role == "assistant":
                 lines.append(f"**You ({voice_name}):** {text}")
             elif role == "system":
