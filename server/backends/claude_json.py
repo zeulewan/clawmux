@@ -19,15 +19,18 @@ from .base import AgentBackend, MonitorResult, RecoveryResult
 
 log = logging.getLogger("hub.backend.claude_json")
 
-# Lazy import to avoid circular dependency
-_send_to_browser = None
+# Lazy imports to avoid circular dependency (hub_state imports backends.claude_code)
+_hub_refs = {}
 
-def _get_send_to_browser():
-    global _send_to_browser
-    if _send_to_browser is None:
-        from hub_state import send_to_browser
-        _send_to_browser = send_to_browser
-    return _send_to_browser
+def _get_hub():
+    """Lazy-load hub_state references for direct state updates."""
+    if not _hub_refs:
+        from hub_state import send_to_browser, session_mgr, _session_status_msg, _save_activity
+        _hub_refs["send"] = send_to_browser
+        _hub_refs["mgr"] = session_mgr
+        _hub_refs["status_msg"] = _session_status_msg
+        _hub_refs["save_activity"] = _save_activity
+    return _hub_refs
 
 
 # Per-session state
@@ -315,10 +318,14 @@ class ClaudeJsonBackend(AgentBackend):
         raise RuntimeError("Timed out waiting for init event")
 
     async def _listen(self, proc: asyncio.subprocess.Process, session_name: str) -> None:
-        """Background task: read JSON events from stdout and forward to hub."""
+        """Background task: read JSON events from stdout, update state directly.
+
+        No HTTP hook roundtrip — state changes are applied immediately via
+        hub_state imports (session_mgr, send_to_browser, _save_activity).
+        """
         hub_port = _hub_ports.get(session_name)
-        work_dir = _work_dirs.get(session_name)
-        send_fn = _get_send_to_browser()
+        hub = _get_hub()
+        send_fn = hub["send"]
         text_buffer: list[str] = []
 
         try:
@@ -338,21 +345,40 @@ class ClaudeJsonBackend(AgentBackend):
                     continue
 
                 event_type = data.get("type", "")
+                session = hub["mgr"].sessions.get(session_name)
+                if not session:
+                    continue
 
                 # --- system events ---
                 if event_type == "system":
                     subtype = data.get("subtype", "")
                     if subtype == "compact_boundary":
-                        await self._handle_compact_boundary(session_name, hub_port, work_dir)
+                        was = _compacting.get(session_name, False)
+                        _compacting[session_name] = not was
+                        if not was:
+                            session.set_state(AgentState.COMPACTING)
+                            session.activity = "Compacting"
+                            await hub["save_activity"](session, "Compacting")
+                            await send_fn({
+                                "type": "compaction_status",
+                                "session_id": session_name,
+                                "compacting": True,
+                            })
+                            log.info("[%s] Compaction started", session_name)
+                        else:
+                            session.set_state(AgentState.PROCESSING)
+                            await send_fn({
+                                "type": "compaction_status",
+                                "session_id": session_name,
+                                "compacting": False,
+                            })
+                            log.info("[%s] Compaction complete", session_name)
+                        await send_fn(hub["status_msg"](session))
                     elif subtype == "api_retry":
-                        log.info(
-                            "[%s] API retry attempt=%s: %s",
-                            session_name,
-                            data.get("attempt", "?"),
-                            data.get("error", ""),
-                        )
+                        log.info("[%s] API retry attempt=%s: %s",
+                                 session_name, data.get("attempt", "?"), data.get("error", ""))
                     elif subtype == "init":
-                        log.debug("[%s] Received init event (already handled)", session_name)
+                        pass  # already handled in _wait_for_init
 
                 # --- keep_alive ---
                 elif event_type == "keep_alive":
@@ -366,7 +392,7 @@ class ClaudeJsonBackend(AgentBackend):
                 elif event_type == "stream_event":
                     event = data.get("event", {})
                     await self._handle_stream_event(
-                        event, session_name, hub_port, work_dir, send_fn, text_buffer,
+                        event, session_name, hub_port, None, send_fn, text_buffer,
                     )
 
                 # --- complete assistant message ---
@@ -376,10 +402,24 @@ class ClaudeJsonBackend(AgentBackend):
                     for block in content:
                         if not isinstance(block, dict):
                             continue
-                        if block.get("type") == "tool_use" and hub_port and work_dir:
-                            await self._post_hook(hub_port, work_dir, "PreToolUse", {
-                                "tool_name": block.get("name", "tool"),
-                                "tool_input": block.get("input", {}),
+                        if block.get("type") == "tool_use":
+                            tool_name = block.get("name", "tool")
+                            tool_input = block.get("input", {})
+                            # Direct state update: PROCESSING + activity
+                            if session.state == AgentState.IDLE:
+                                session.set_state(AgentState.PROCESSING)
+                            session.tool_name = tool_name
+                            session.tool_input = tool_input
+                            session.activity = self._tool_activity(tool_name, tool_input)
+                            await hub["save_activity"](session, session.activity)
+                            await send_fn(hub["status_msg"](session))
+                            # Structured event for frontend
+                            await send_fn({
+                                "type": "structured_event",
+                                "session_id": session_name,
+                                "event_type": "tool_use",
+                                "tool_name": tool_name,
+                                "data": tool_input,
                             })
                         elif block.get("type") == "text":
                             text = block.get("text", "")
@@ -393,29 +433,30 @@ class ClaudeJsonBackend(AgentBackend):
 
                 # --- tool result ---
                 elif event_type == "user":
-                    if hub_port and work_dir:
-                        await self._post_hook(hub_port, work_dir, "PostToolUse", {
-                            "tool_name": "",
-                            "tool_input": {},
-                        })
+                    session.activity = ""
+                    session.tool_name = ""
+                    session.tool_input = {}
+                    session.set_state(AgentState.PROCESSING)
+                    await hub["save_activity"](session, "Processing")
+                    await send_fn(hub["status_msg"](session))
+                    await send_fn({
+                        "type": "structured_event",
+                        "session_id": session_name,
+                        "event_type": "tool_result",
+                    })
 
                 # --- turn complete ---
                 elif event_type == "result":
                     is_error = data.get("is_error", False)
                     result_text = data.get("result", "")
 
-                    # Cache usage if present
                     usage = data.get("usage", {})
                     if usage:
                         _last_usage[session_name] = usage
 
                     if is_error:
-                        log.warning(
-                            "[%s] Turn ended with error (subtype=%s): %s",
-                            session_name,
-                            data.get("subtype", "?"),
-                            result_text,
-                        )
+                        log.warning("[%s] Turn ended with error (subtype=%s): %s",
+                                    session_name, data.get("subtype", "?"), result_text)
                     else:
                         final_text = result_text or ("".join(text_buffer) if text_buffer else "")
                         if final_text and hub_port:
@@ -423,13 +464,18 @@ class ClaudeJsonBackend(AgentBackend):
 
                     text_buffer.clear()
 
-                    # Signal turn complete regardless of error
-                    if hub_port and work_dir:
-                        await self._post_hook(hub_port, work_dir, "Stop", {})
+                    # Direct IDLE transition
+                    session.set_state(AgentState.IDLE)
+                    session.activity = ""
+                    session.tool_name = ""
+                    session.tool_input = {}
+                    await hub["save_activity"](session, "Idle")
+                    await send_fn({"session_id": session_name, "type": "listening", "state": "idle"})
+                    await send_fn(hub["status_msg"](session))
 
                 # --- rate limit ---
                 elif event_type == "rate_limit_event":
-                    pass  # logged elsewhere if needed
+                    pass
 
                 else:
                     log.debug("[%s] Unknown event type: %s", session_name, event_type)
@@ -440,10 +486,7 @@ class ClaudeJsonBackend(AgentBackend):
             log.error("[%s] Claude JSON listener error: %s", session_name, e, exc_info=True)
         finally:
             if proc.returncode is None:
-                log.warning(
-                    "[%s] Claude JSON subprocess still running after listener exit",
-                    session_name,
-                )
+                log.warning("[%s] Subprocess still running after listener exit", session_name)
 
     async def _handle_compact_boundary(
         self,
@@ -526,6 +569,31 @@ class ClaudeJsonBackend(AgentBackend):
                         })
                     except Exception:
                         pass
+
+    @staticmethod
+    def _tool_activity(tool_name: str, tool_input: dict) -> str:
+        """Generate human-readable activity text for a tool call."""
+        from pathlib import Path
+        if tool_name == "Read":
+            path = tool_input.get("file_path", "")
+            return f"Reading {Path(path).name}" if path else "Reading file"
+        if tool_name == "Write":
+            path = tool_input.get("file_path", "")
+            return f"Writing {Path(path).name}" if path else "Writing file"
+        if tool_name == "Edit":
+            path = tool_input.get("file_path", "")
+            return f"Editing {Path(path).name}" if path else "Editing file"
+        if tool_name == "Bash":
+            desc = tool_input.get("description", "")
+            if desc:
+                return f"Running {desc}"
+            cmd = tool_input.get("command", "").strip()
+            preview = cmd[:60] + ("…" if len(cmd) > 60 else "")
+            return f"Running {preview}" if preview else "Running command"
+        if tool_name == "Grep":
+            pattern = tool_input.get("pattern", "")
+            return f"Searching for {pattern}" if pattern else "Searching"
+        return tool_name
 
     async def _forward_response(self, hub_port: int, session_name: str, text: str) -> None:
         """Forward complete response to the hub via speak endpoint."""
