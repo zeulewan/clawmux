@@ -408,30 +408,36 @@ function handleMessage(data) {
     if (evType === 'tool_use') {
       const toolName = data.tool_name || 'Tool';
       const toolData = data.data || {};
-      // Build activity description for sidebar
+      // Build human-readable activity description
       let desc = toolName;
       if (toolName === 'Bash' && toolData.command) desc = `Running: ${toolData.command.slice(0, 60)}`;
-      else if ((toolName === 'Read' || toolName === 'Write' || toolName === 'Edit') && toolData.file_path) desc = `${toolName}: ${toolData.file_path.split('/').pop()}`;
-      else if (toolName === 'Glob' && toolData.pattern) desc = `Glob: ${toolData.pattern}`;
-      else if (toolName === 'Grep' && toolData.pattern) desc = `Grep: ${toolData.pattern.slice(0, 40)}`;
+      else if (toolName === 'Read' && toolData.file_path) desc = `Reading ${toolData.file_path.split('/').pop()}`;
+      else if (toolName === 'Write' && toolData.file_path) desc = `Writing ${toolData.file_path.split('/').pop()}`;
+      else if (toolName === 'Edit' && toolData.file_path) desc = `Editing ${toolData.file_path.split('/').pop()}`;
+      else if (toolName === 'Glob' && toolData.pattern) desc = `Finding files: ${toolData.pattern}`;
+      else if (toolName === 'Grep' && toolData.pattern) desc = `Searching for: ${toolData.pattern.slice(0, 40)}`;
       else if (toolName === 'Agent') desc = 'Spawning agent...';
       s.toolStatusText = desc;
       s.toolName = toolName;
-      // Show typing indicator with tool info
+      // Show/update typing indicator with activity text
       if (typeof showTypingIndicator === 'function') showTypingIndicator(data.session_id);
-      if (typeof updateThinkingLabel === 'function') updateThinkingLabel(data.session_id);
+      if (typeof _updateTypingIndicatorText === 'function') _updateTypingIndicatorText(data.session_id, desc);
     } else if (evType === 'tool_result') {
-      // Tool finished — keep processing state, clear specific tool
       s.toolName = '';
     } else if (evType === 'thinking') {
       s.toolStatusText = 'Thinking...';
       s.toolName = '';
       if (typeof showTypingIndicator === 'function') showTypingIndicator(data.session_id);
-      if (typeof updateThinkingLabel === 'function') updateThinkingLabel(data.session_id);
+      if (typeof _updateTypingIndicatorText === 'function') _updateTypingIndicatorText(data.session_id, 'Thinking...');
     } else if (evType === 'idle') {
       s.toolStatusText = '';
       s.toolName = '';
       if (typeof hideTypingIndicator === 'function') hideTypingIndicator(data.session_id);
+    } else if (evType === 'compacting') {
+      s.toolStatusText = 'Compacting context...';
+      s.compacting = true;
+      if (typeof showTypingIndicator === 'function') showTypingIndicator(data.session_id);
+      if (typeof _updateTypingIndicatorText === 'function') _updateTypingIndicatorText(data.session_id, 'Compacting context...');
     }
     renderSidebar();
     return;
