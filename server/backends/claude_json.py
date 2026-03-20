@@ -270,8 +270,17 @@ class ClaudeJsonBackend(AgentBackend):
     # ── Internal helpers ──────────────────────────────────────────────────
 
     async def _write_stdin(self, proc: asyncio.subprocess.Process, session_name: str, text: str) -> None:
-        """Write a user message as JSON to the subprocess stdin."""
-        msg = json.dumps({"type": "user", "content": text}) + "\n"
+        """Write a user message as JSON to the subprocess stdin.
+
+        Format: {"type":"user","message":{"role":"user","content":[{"type":"text","text":"..."}]}}
+        """
+        msg = json.dumps({
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": [{"type": "text", "text": text}],
+            },
+        }) + "\n"
         try:
             proc.stdin.write(msg.encode())
             await proc.stdin.drain()
