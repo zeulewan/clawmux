@@ -442,6 +442,7 @@
   <div class="ctx-item ctx-has-submenu" id="ctx-spawn-with">Spawn with ▸
     <div class="ctx-submenu" id="ctx-spawn-backend-list">
       <div class="ctx-sub-item" data-backend="claude-code">Claude Code</div>
+      <div class="ctx-sub-item" data-backend="claude-json">Claude Code (JSON)</div>
       <div class="ctx-sub-item" data-backend="opencode">OpenCode</div>
       <div class="ctx-sub-item" data-backend="codex">Codex</div>
       <div class="ctx-sub-item" data-backend="openclaw">OpenClaw</div>
@@ -682,12 +683,12 @@ function switchTab(sessionId, manual = false) {
     if (voiceSelect) voiceSelect.value = s.voice || 'af_sky';
     speedSelect.value = String(parseFloat(s.speed || 1.0).toFixed(1));
     const sessionModelEl = document.getElementById('session-model');
-    if (sessionModelEl && (!s.backend || s.backend === 'claude-code')) {
+    if (sessionModelEl && (!s.backend || _isClaudeBackend(s.backend))) {
       sessionModelEl.value = s.model || 'opus';
     }
     updateModelLabel();
     const sessionEffortEl = document.getElementById('session-effort');
-    if (sessionEffortEl && (!s.backend || s.backend === 'claude-code')) {
+    if (sessionEffortEl && (!s.backend || _isClaudeBackend(s.backend))) {
       sessionEffortEl.value = s.effort || 'high';
     }
     updateEffortLabel();
@@ -1665,6 +1666,8 @@ async function checkServiceStatus() {
   }
 }
 
+function _isClaudeBackend(b) { return b === 'claude-code' || b === 'claude-json'; }
+
 // --- Per-session model ---
 function setSessionModel(model) {
   if (!activeSessionId || !ws || ws.readyState !== WebSocket.OPEN) return;
@@ -1693,7 +1696,7 @@ function updateModelLabel() {
     label.textContent = (s?.model_id || 'gpt-5.4') + ' ▾';
     label.style.cursor = '';
     label.style.display = 'inline';
-  } else if (backend === 'claude-code') {
+  } else if (_isClaudeBackend(backend)) {
     const model = s?.model || 'opus';
     label.textContent = model.charAt(0).toUpperCase() + model.slice(1) + ' ▾';
     label.style.cursor = '';
@@ -1710,7 +1713,7 @@ function toggleModelPopup(e) {
   e.stopPropagation();
   const s = activeSessionId ? sessions.get(activeSessionId) : null;
   const backend = s?.backend || 'claude-code';
-  if (backend !== 'claude-code' && backend !== 'codex') return;
+  if (!_isClaudeBackend(backend) && backend !== 'codex') return;
   const popup = document.getElementById('model-popup');
   if (popup.style.display !== 'none') { popup.style.display = 'none'; return; }
   let current, models;
@@ -1762,8 +1765,8 @@ function updateEffortLabel() {
   if (!label) return;
   const s = activeSessionId ? sessions.get(activeSessionId) : null;
   const backend = s?.backend || 'claude-code';
-  if (backend !== 'claude-code' && backend !== 'codex') { label.style.display = 'none'; return; }
-  if (backend === 'claude-code') {
+  if (!_isClaudeBackend(backend) && backend !== 'codex') { label.style.display = 'none'; return; }
+  if (_isClaudeBackend(backend)) {
     const model = s?.model || 'opus';
     if (model === 'haiku') { label.style.display = 'none'; return; }
   }
@@ -1776,7 +1779,7 @@ function toggleEffortPopup(e) {
   e.stopPropagation();
   const s = activeSessionId ? sessions.get(activeSessionId) : null;
   const backend = s?.backend || 'claude-code';
-  if (backend !== 'claude-code' && backend !== 'codex') return;
+  if (!_isClaudeBackend(backend) && backend !== 'codex') return;
   const popup = document.getElementById('effort-popup');
   if (popup.style.display !== 'none') { popup.style.display = 'none'; return; }
   const current = s?.effort || (backend === 'codex' ? 'medium' : 'high');
