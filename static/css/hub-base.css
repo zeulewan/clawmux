@@ -2113,3 +2113,164 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   from { opacity: 0; transform: scale(0.97); }
   to { opacity: 1; transform: scale(1); }
 }
+
+/* === Claude JSON: Tool Call Cards === */
+.tool-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin: 4px 0;
+  overflow: hidden;
+  font-size: 0.85em;
+  max-width: min(500px, 90%);
+  align-self: flex-start;
+}
+.tool-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  user-select: none;
+}
+.tool-card-header:hover { background: var(--hover-bg); }
+.tool-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.tool-status-dot.running {
+  background: #f59e0b;
+  animation: tool-blink 1s infinite;
+}
+.tool-status-dot.success { background: #2ecc71; }
+.tool-status-dot.error { background: #e63946; }
+@keyframes tool-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.tool-card-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.tool-card-summary {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.tool-card-chevron {
+  color: var(--text-tertiary);
+  font-size: 0.8em;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+.tool-card.expanded .tool-card-chevron { transform: rotate(90deg); }
+.tool-card-body {
+  border-top: 1px solid var(--border);
+  padding: 6px 10px;
+  display: none;
+}
+.tool-card.expanded .tool-card-body { display: block; }
+.tool-io-label {
+  font-size: 0.7em;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  margin: 4px 0 2px;
+}
+.tool-io-content {
+  font-family: 'SF Mono', Monaco, Consolas, monospace;
+  font-size: 0.82em;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 60px;
+  overflow: hidden;
+  position: relative;
+  color: var(--text-secondary);
+  padding: 2px 0;
+}
+.tool-io-content.clipped::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 20px;
+  background: linear-gradient(transparent, var(--bg-card, #1a1a2e));
+  pointer-events: none;
+}
+.tool-card.expanded .tool-io-content { max-height: none; overflow: visible; }
+.tool-card.expanded .tool-io-content.clipped::after { display: none; }
+
+/* Tool group collapse */
+.tool-group-toggle {
+  font-size: 0.8em;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 4px 14px;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.tool-group-toggle:hover { color: var(--text-secondary); }
+.tool-group-hidden { display: none; }
+.tool-group-toggle .tg-chevron {
+  font-size: 0.7em;
+  transition: transform 0.15s;
+}
+.tool-group-toggle.open .tg-chevron { transform: rotate(90deg); }
+
+/* === Claude JSON: Thinking Decode Animation === */
+.thinking-decode {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  align-self: flex-start;
+  min-width: 120px;
+}
+.thinking-glyph {
+  font-size: 1.1em;
+  width: 1.2em;
+  text-align: center;
+  color: var(--blue);
+}
+.thinking-text {
+  font-size: 0.82em;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  font-family: 'SF Mono', Monaco, Consolas, monospace;
+}
+.thinking-cursor {
+  color: var(--blue);
+  animation: cursor-blink 0.8s step-end infinite;
+}
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Thinking details block */
+.thinking-details {
+  font-size: 0.82em;
+  color: var(--text-tertiary);
+  margin: 4px 0;
+  max-width: min(500px, 90%);
+  align-self: flex-start;
+}
+.thinking-details summary {
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 10px;
+  font-style: italic;
+}
+.thinking-details .thinking-content {
+  padding: 6px 10px;
+  border-left: 2px solid var(--border);
+  margin-left: 10px;
+  white-space: pre-wrap;
+  max-height: 200px;
+  overflow-y: auto;
+}

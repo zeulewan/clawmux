@@ -523,6 +523,11 @@ function renderChat(forceScroll = false) {
       continue;
     }
     if (!showAgentMessages && msg.role === 'system' && /^\[(Agent msg (from|to)|Group msg to) /.test(msg.text)) continue;
+    // Tool call cards (claude-json)
+    if (msg.role === 'tool') {
+      chatArea.appendChild(createToolCardEl(msg));
+      continue;
+    }
     const hasReplies = msg.id && threadReplies.has(msg.id);
     const hasAcksOnly = msg.id && !hasReplies && bareAcks.has(msg.id);
     if (hasReplies) {
@@ -564,9 +569,15 @@ function renderChat(forceScroll = false) {
   if (wasNearBottom) chatArea.scrollTop = chatArea.scrollHeight;
   // Mark all bulk-rendered messages as already-rendered so they don't animate
   chatArea.querySelectorAll('.msg').forEach(el => el.classList.add('rendered'));
-  // Restore typing indicator if session is currently active (e.g. switching back to a busy tab)
-  if (s && s.sessionState === 'processing' && typeof showTypingIndicator === 'function') {
-    showTypingIndicator(activeSessionId);
+  // Group consecutive tool cards (claude-json)
+  if (s && s.backend === 'claude-json') _groupToolCards(chatArea);
+  // Restore typing/thinking indicator if session is currently active
+  if (s && s.sessionState === 'processing') {
+    if (s.backend === 'claude-json' && typeof showThinkingDecode === 'function') {
+      showThinkingDecode(activeSessionId);
+    } else if (typeof showTypingIndicator === 'function') {
+      showTypingIndicator(activeSessionId);
+    }
   }
 }
 
@@ -991,6 +1002,196 @@ function _toggleActivityExpand(el, sessionId) {
     if (_scrollRaf) { cancelAnimationFrame(_scrollRaf); _scrollRaf = null; }
     _easedScrollTo(chatArea);
   }
+}
+
+// === Claude JSON: Tool Card Rendering ===
+const _THINKING_GLYPHS = ['·', '✢', '*', '✶', '✻', '✽'];
+const _THINKING_VERBS = ['Thinking', 'Reasoning', 'Considering', 'Pondering', 'Analyzing', 'Working'];
+let _thinkingInterval = null;
+let _thinkingDecodeInterval = null;
+
+function _toolInputSummary(toolName, data) {
+  if (!data) return '';
+  if (toolName === 'Bash' && data.command) return data.command.length > 80 ? data.command.slice(0, 77) + '...' : data.command;
+  if (toolName === 'Read' && data.file_path) return data.file_path;
+  if (toolName === 'Write' && data.file_path) return data.file_path;
+  if (toolName === 'Edit' && data.file_path) return data.file_path;
+  if (toolName === 'Grep' && data.pattern) return data.pattern;
+  if (toolName === 'Glob' && data.pattern) return data.pattern;
+  if (toolName === 'Agent' && data.prompt) return data.prompt.slice(0, 60) + '...';
+  return '';
+}
+
+function _toolInputFormatted(toolName, data) {
+  if (!data) return '';
+  if (toolName === 'Bash') return data.command || '';
+  if (toolName === 'Read') return data.file_path || '';
+  if (toolName === 'Write') return `${data.file_path || ''}\n${(data.content || '').slice(0, 500)}`;
+  if (toolName === 'Edit') return `${data.file_path || ''}\n- ${(data.old_string || '').slice(0, 200)}\n+ ${(data.new_string || '').slice(0, 200)}`;
+  if (toolName === 'Grep') return `pattern: ${data.pattern || ''}\npath: ${data.path || '.'}`;
+  if (toolName === 'Glob') return `pattern: ${data.pattern || ''}`;
+  return JSON.stringify(data, null, 2).slice(0, 500);
+}
+
+function createToolCardEl(msg) {
+  const card = document.createElement('div');
+  card.className = 'tool-card' + (msg.toolStatus === 'done' ? '' : '');
+  if (msg.id) card.dataset.msgId = msg.id;
+  card.dataset.toolId = msg.toolId || '';
+
+  const header = document.createElement('div');
+  header.className = 'tool-card-header';
+
+  const dot = document.createElement('span');
+  dot.className = 'tool-status-dot ' + (msg.toolStatus === 'done' ? 'success' : (msg.toolStatus === 'error' ? 'error' : 'running'));
+  header.appendChild(dot);
+
+  const name = document.createElement('span');
+  name.className = 'tool-card-name';
+  name.textContent = msg.toolName || 'Tool';
+  header.appendChild(name);
+
+  const summary = document.createElement('span');
+  summary.className = 'tool-card-summary';
+  summary.textContent = _toolInputSummary(msg.toolName, msg.toolData);
+  header.appendChild(summary);
+
+  const chevron = document.createElement('span');
+  chevron.className = 'tool-card-chevron';
+  chevron.textContent = '\u25B8';
+  header.appendChild(chevron);
+
+  card.appendChild(header);
+
+  // Body with IN row
+  const body = document.createElement('div');
+  body.className = 'tool-card-body';
+
+  const inLabel = document.createElement('div');
+  inLabel.className = 'tool-io-label';
+  inLabel.textContent = 'INPUT';
+  body.appendChild(inLabel);
+
+  const inContent = document.createElement('div');
+  inContent.className = 'tool-io-content';
+  const formatted = _toolInputFormatted(msg.toolName, msg.toolData);
+  inContent.textContent = formatted;
+  if (formatted.length > 200 || formatted.split('\n').length > 4) inContent.classList.add('clipped');
+  body.appendChild(inContent);
+
+  card.appendChild(body);
+
+  header.addEventListener('click', () => {
+    card.classList.toggle('expanded');
+  });
+
+  return card;
+}
+
+// Update tool card status dot when result arrives
+function updateToolCardStatus(sessionId, status) {
+  const chatArea = document.getElementById('chat-area');
+  if (!chatArea) return;
+  // Find last running tool card
+  const cards = chatArea.querySelectorAll('.tool-card');
+  for (let i = cards.length - 1; i >= 0; i--) {
+    const dot = cards[i].querySelector('.tool-status-dot.running');
+    if (dot) {
+      dot.className = 'tool-status-dot ' + (status === 'error' ? 'error' : 'success');
+      break;
+    }
+  }
+}
+
+// Group consecutive tool cards behind a toggle
+function _groupToolCards(chatArea) {
+  const children = [...chatArea.children];
+  let groupStart = -1;
+  let count = 0;
+
+  for (let i = 0; i <= children.length; i++) {
+    const isToolCard = i < children.length && children[i].classList.contains('tool-card');
+    if (isToolCard) {
+      if (groupStart < 0) groupStart = i;
+      count++;
+    } else {
+      if (count >= 3) {
+        // Collapse middle cards
+        const toggle = document.createElement('div');
+        toggle.className = 'tool-group-toggle';
+        toggle.innerHTML = '<span class="tg-chevron">\u25B8</span> Explored ' + count + ' tools';
+        // Hide all but first and last
+        for (let j = groupStart + 1; j < groupStart + count - 1; j++) {
+          children[j].classList.add('tool-group-hidden');
+        }
+        chatArea.insertBefore(toggle, children[groupStart]);
+        toggle.addEventListener('click', () => {
+          const isOpen = toggle.classList.toggle('open');
+          for (let j = groupStart + 1; j < groupStart + count - 1; j++) {
+            children[j].classList.toggle('tool-group-hidden', !isOpen);
+          }
+        });
+      }
+      groupStart = -1;
+      count = 0;
+    }
+  }
+}
+
+// Thinking decode animation for claude-json
+function showThinkingDecode(sessionId) {
+  if (sessionId !== activeSessionId) return;
+  const chatArea = document.getElementById('chat-area');
+  if (!chatArea) return;
+  // Don't duplicate
+  if (chatArea.querySelector('.thinking-decode')) return;
+
+  const el = document.createElement('div');
+  el.className = 'msg assistant thinking-decode';
+  el.dataset.typingFor = sessionId;
+
+  const glyphEl = document.createElement('span');
+  glyphEl.className = 'thinking-glyph';
+  glyphEl.textContent = _THINKING_GLYPHS[0];
+  el.appendChild(glyphEl);
+
+  const textEl = document.createElement('span');
+  textEl.className = 'thinking-text';
+  el.appendChild(textEl);
+
+  chatArea.appendChild(el);
+  chatScrollToBottom(false);
+
+  // Glyph cycle
+  let gi = 0;
+  _thinkingInterval = setInterval(() => {
+    gi = (gi + 1) % _THINKING_GLYPHS.length;
+    glyphEl.textContent = _THINKING_GLYPHS[gi];
+  }, 120);
+
+  // Typewriter decode
+  const verb = _THINKING_VERBS[Math.floor(Math.random() * _THINKING_VERBS.length)] + '...';
+  let ci = 0;
+  _thinkingDecodeInterval = setInterval(() => {
+    if (ci < verb.length) {
+      textEl.textContent = verb.slice(0, ci + 1);
+      ci++;
+    } else {
+      textEl.innerHTML = verb + '<span class="thinking-cursor">\u258C</span>';
+      clearInterval(_thinkingDecodeInterval);
+      _thinkingDecodeInterval = null;
+    }
+  }, 40);
+}
+
+function hideThinkingDecode(sessionId) {
+  if (_thinkingInterval) { clearInterval(_thinkingInterval); _thinkingInterval = null; }
+  if (_thinkingDecodeInterval) { clearInterval(_thinkingDecodeInterval); _thinkingDecodeInterval = null; }
+  const chatArea = document.getElementById('chat-area');
+  if (!chatArea) return;
+  chatArea.querySelectorAll('.thinking-decode').forEach(el => {
+    if (!sessionId || el.dataset.typingFor === sessionId) el.remove();
+  });
 }
 
 // Auto-resize textarea

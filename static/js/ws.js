@@ -404,6 +404,7 @@ function handleMessage(data) {
   if (type === 'structured_event') {
     const s = sessions.get(data.session_id);
     if (!s) return;
+    const isJsonBackend = s.backend === 'claude-json';
     const evType = data.event_type;
     if (evType === 'tool_use') {
       const toolName = data.tool_name || 'Tool';
@@ -419,25 +420,59 @@ function handleMessage(data) {
       else if (toolName === 'Agent') desc = 'Spawning agent...';
       s.toolStatusText = desc;
       s.toolName = toolName;
-      // Show/update typing indicator with activity text
-      if (typeof showTypingIndicator === 'function') showTypingIndicator(data.session_id);
-      if (typeof _updateTypingIndicatorText === 'function') _updateTypingIndicatorText(data.session_id, desc);
+      if (isJsonBackend) {
+        // Claude-json: render tool card inline in chat
+        if (typeof hideThinkingDecode === 'function') hideThinkingDecode(data.session_id);
+        const toolId = 'tool-' + Date.now();
+        s.messages.push({ role: 'tool', toolName, toolData, toolStatus: 'running', toolId, ts: Date.now() / 1000 });
+        if (data.session_id === activeSessionId) {
+          const card = createToolCardEl(s.messages[s.messages.length - 1]);
+          chatArea.appendChild(card);
+          chatScrollToBottom(false);
+        }
+      } else {
+        if (typeof showTypingIndicator === 'function') showTypingIndicator(data.session_id);
+        if (typeof _updateTypingIndicatorText === 'function') _updateTypingIndicatorText(data.session_id, desc);
+      }
     } else if (evType === 'tool_result') {
       s.toolName = '';
+      if (isJsonBackend) {
+        // Mark last running tool as done
+        for (let i = s.messages.length - 1; i >= 0; i--) {
+          if (s.messages[i].role === 'tool' && s.messages[i].toolStatus === 'running') {
+            s.messages[i].toolStatus = 'done';
+            break;
+          }
+        }
+        if (typeof updateToolCardStatus === 'function') updateToolCardStatus(data.session_id, 'success');
+      }
     } else if (evType === 'thinking') {
       s.toolStatusText = 'Thinking...';
       s.toolName = '';
-      if (typeof showTypingIndicator === 'function') showTypingIndicator(data.session_id);
-      if (typeof _updateTypingIndicatorText === 'function') _updateTypingIndicatorText(data.session_id, 'Thinking...');
+      if (isJsonBackend) {
+        if (typeof showThinkingDecode === 'function') showThinkingDecode(data.session_id);
+      } else {
+        if (typeof showTypingIndicator === 'function') showTypingIndicator(data.session_id);
+        if (typeof _updateTypingIndicatorText === 'function') _updateTypingIndicatorText(data.session_id, 'Thinking...');
+      }
     } else if (evType === 'idle') {
       s.toolStatusText = '';
       s.toolName = '';
-      if (typeof hideTypingIndicator === 'function') hideTypingIndicator(data.session_id);
+      if (isJsonBackend) {
+        if (typeof hideThinkingDecode === 'function') hideThinkingDecode(data.session_id);
+      } else {
+        if (typeof hideTypingIndicator === 'function') hideTypingIndicator(data.session_id);
+      }
     } else if (evType === 'compacting') {
       s.toolStatusText = 'Compacting context...';
       s.compacting = true;
-      if (typeof showTypingIndicator === 'function') showTypingIndicator(data.session_id);
-      if (typeof _updateTypingIndicatorText === 'function') _updateTypingIndicatorText(data.session_id, 'Compacting context...');
+      if (isJsonBackend) {
+        if (typeof hideThinkingDecode === 'function') hideThinkingDecode(data.session_id);
+        if (typeof showThinkingDecode === 'function') showThinkingDecode(data.session_id);
+      } else {
+        if (typeof showTypingIndicator === 'function') showTypingIndicator(data.session_id);
+        if (typeof _updateTypingIndicatorText === 'function') _updateTypingIndicatorText(data.session_id, 'Compacting context...');
+      }
     }
     renderSidebar();
     return;
