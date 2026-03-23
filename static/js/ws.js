@@ -167,10 +167,13 @@ function handleMessage(data) {
             // Restore typing indicator immediately for the active session (reconnect — switchTab won't be called)
             if (s.session_id === activeSessionId) {
               const indicatorActive = ['processing', 'compacting', 'starting'].includes(serverState);
+              const _rIsJson = (existing && existing.backend === 'claude-json');
               if (indicatorActive) {
-                if (typeof showTypingIndicator === 'function') showTypingIndicator(s.session_id);
+                if (_rIsJson) { if (typeof showThinkingDecode === 'function') showThinkingDecode(s.session_id); }
+                else { if (typeof showTypingIndicator === 'function') showTypingIndicator(s.session_id); }
               } else {
-                if (typeof hideTypingIndicator === 'function') hideTypingIndicator(s.session_id);
+                if (_rIsJson) { if (typeof hideThinkingDecode === 'function') hideThinkingDecode(s.session_id); }
+                else { if (typeof hideTypingIndicator === 'function') hideTypingIndicator(s.session_id); }
               }
             }
           }
@@ -349,18 +352,21 @@ function handleMessage(data) {
       if (serverState) {
         s.compacting = (serverState === 'compacting');
         setSessionSidebarState(data.session_id, serverState);
-        // Typing indicator
+        // Typing indicator — claude-json uses structured_event decode animation instead
+        const _isJson = s.backend === 'claude-json';
         const isActive = ['processing', 'compacting', 'starting'].includes(serverState);
         if (isActive) {
-          if (typeof showTypingIndicator === 'function') showTypingIndicator(data.session_id);
+          if (!_isJson && typeof showTypingIndicator === 'function') showTypingIndicator(data.session_id);
         } else {
-          if (typeof hideTypingIndicator === 'function') hideTypingIndicator(data.session_id);
+          if (_isJson) { if (typeof hideThinkingDecode === 'function') hideThinkingDecode(data.session_id); }
+          else { if (typeof hideTypingIndicator === 'function') hideTypingIndicator(data.session_id); }
         }
       } else if (data.agent_idle) {
         // Legacy fallback: Stop hook without state field
         s.toolStatusText = '';
         setSessionSidebarState(data.session_id, 'idle');
-        if (typeof hideTypingIndicator === 'function') hideTypingIndicator(data.session_id);
+        if (s.backend === 'claude-json') { if (typeof hideThinkingDecode === 'function') hideThinkingDecode(data.session_id); }
+        else { if (typeof hideTypingIndicator === 'function') hideTypingIndicator(data.session_id); }
       }
       // Legacy status field (ready/starting)
       if (data.status === 'ready' && !data.silent) {
