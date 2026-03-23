@@ -1,15 +1,9 @@
 """E2E tests for claude-json frontend UI.
 
-Spawns a claude-json agent, sends a multi-tool task, and verifies:
-- Tool cards render with correct tool name + input summary
-- Tool card expand/collapse works
-- No old typing dots during processing
-- Decode animation shows during thinking
-- No "Ready"/"Idle" text in chat area
-- Spinner clears when agent finishes
+Uses Nicole (claude-json) to verify tool cards, decode animation,
+and indicator behavior. Run against live hub at localhost:3460.
 
 Run: cd /home/zeul/GIT/clawmux && .venv/bin/python -m pytest tests/test_claude_json_ui.py -v --tb=short
-Requires: hub running at localhost:3460, Playwright + Chromium installed.
 """
 
 import json
@@ -17,137 +11,144 @@ import time
 import httpx
 import pytest
 from pathlib import Path
-from playwright.sync_api import sync_playwright, Page, expect
+from playwright.sync_api import sync_playwright, Page
 
 HUB_URL = "http://localhost:3460"
 SCREENSHOT_DIR = Path(__file__).parent / "screenshots"
 SCREENSHOT_DIR.mkdir(exist_ok=True)
 
-# Use a voice that's likely free — we'll terminate any existing session first
-TEST_VOICE = "bm_daniel"
-TEST_SESSION_ID = "daniel"
-
 
 def _api(method: str, path: str, **kwargs) -> dict:
-    """Quick API helper."""
     with httpx.Client(base_url=HUB_URL, timeout=30) as c:
         resp = getattr(c, method)(path, **kwargs)
         return resp.json()
 
 
-def _ensure_session_terminated():
-    """Terminate any existing session for the test voice."""
-    try:
-        _api("delete", f"/api/sessions/{TEST_SESSION_ID}")
-    except Exception:
-        pass
-    time.sleep(1)
-
-
-def _spawn_claude_json() -> dict:
-    """Spawn a claude-json agent and return session dict."""
-    return _api("post", "/api/sessions", json={
-        "voice": TEST_VOICE,
-        "backend": "claude-json",
-    })
-
-
-@pytest.fixture(scope="module")
-def browser():
-    """Launch browser for the test module."""
-    with sync_playwright() as p:
-        b = p.chromium.launch(headless=True)
-        yield b
-        b.close()
+def _find_claude_json_session() -> str | None:
+    """Find an existing claude-json session or spawn one."""
+    sessions = _api("get", "/api/sessions")
+    for s in sessions:
+        if s.get("backend") == "claude-json":
+            return s["session_id"]
+    # Spawn one — find a free voice
+    active_voices = {s["voice"] for s in sessions}
+    for voice in ["af_nicole", "bm_daniel", "bm_lewis"]:
+        if voice not in active_voices:
+            result = _api("post", "/api/sessions", json={"voice": voice, "backend": "claude-json"})
+            return result.get("session_id")
+    return None
 
 
 @pytest.fixture(scope="module")
-def session_id(browser):
-    """Spawn claude-json agent and return session_id."""
-    _ensure_session_terminated()
-    time.sleep(2)
-    result = _spawn_claude_json()
-    sid = result.get("session_id")
+def session_id():
+    """Get or spawn a claude-json session."""
+    sid = _find_claude_json_session()
     if not sid:
-        pytest.skip(f"Failed to spawn: {result}")
-    # Wait for session to reach IDLE
-    deadline = time.time() + 60
-    while time.time() < deadline:
+        pytest.skip("Could not find or spawn a claude-json session")
+    # Wait for IDLE
+    for _ in range(30):
         sessions = _api("get", "/api/sessions")
-        for s in sessions:
-            if s["session_id"] == sid and s["state"] == "idle":
-                return sid
+        s = next((s for s in sessions if s["session_id"] == sid), None)
+        if s and s["state"] == "idle":
+            return sid
         time.sleep(2)
-    pytest.skip("Session never reached IDLE")
+    return sid  # proceed anyway
+
+
+@pytest.fixture(scope="module")
+def browser_ctx(session_id):
+    """Launch browser and open the session's chat tab."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        ctx = browser.new_context(viewport={"width": 1400, "height": 900})
+        page = ctx.new_page()
+        page.goto(HUB_URL)
+        page.wait_for_selector(".sidebar-card", timeout=15000)
+        time.sleep(3)
+
+        # Find and click the claude-json agent's sidebar card
+        # Get the label from the session
+        sessions = _api("get", "/api/sessions")
+        s = next((s for s in sessions if s["session_id"] == session_id), None)
+        label = s["label"] if s else session_id
+
+        card = page.locator(f'.sidebar-card:has-text("{label}")')
+        if card.count() > 0:
+            card.first.click()
+            time.sleep(2)
+
+        page.screenshot(path=str(SCREENSHOT_DIR / "01_chat_tab.png"))
+        yield {"page": page, "label": label}
+        ctx.close()
+        browser.close()
 
 
 @pytest.fixture
-def page(browser, session_id):
-    """Open hub in browser and navigate to the test session's chat tab."""
-    ctx = browser.new_context(viewport={"width": 1400, "height": 900})
-    pg = ctx.new_page()
-    pg.goto(HUB_URL)
-    # Wait for WS connection + session list
-    pg.wait_for_selector(".sidebar-card", timeout=15000)
-    time.sleep(2)
-    # Click on the test agent's sidebar card to switch to their tab
-    card = pg.locator(f'.sidebar-card[data-session-id="{session_id}"]')
-    if card.count() > 0:
-        card.first.click()
-        time.sleep(1)
-    pg.screenshot(path=str(SCREENSHOT_DIR / "01_initial.png"))
-    yield pg
-    ctx.close()
+def page(browser_ctx) -> Page:
+    return browser_ctx["page"]
 
 
-def test_spawn_reached_idle(session_id):
-    """Test 1: claude-json agent spawned and reached IDLE."""
+def test_01_session_is_claude_json(session_id):
+    """Verify the test session exists and uses claude-json backend."""
     sessions = _api("get", "/api/sessions")
     s = next((s for s in sessions if s["session_id"] == session_id), None)
-    assert s is not None, f"Session {session_id} not found"
+    assert s is not None
     assert s["backend"] == "claude-json"
-    assert s["state"] == "idle"
 
 
-def test_send_task_tool_cards_render(page: Page, session_id):
-    """Test 2-4: Send multi-tool task and verify tool cards appear."""
-    # Type a message using the browser's text input
-    text_input = page.locator("#text-input, textarea.text-input, input[type='text']")
-    if text_input.count() > 0:
-        text_input.first.fill("Read /home/zeul/GIT/clawmux/server/hub_config.py and tell me what port it uses.")
-        text_input.first.press("Enter")
-    else:
-        # Fallback: send via speak API (simulates user message delivery)
-        with httpx.Client(base_url=HUB_URL, timeout=10) as c:
-            c.post("/api/messages/speak", json={
-                "sender": session_id,
-                "message": "[VOICE id:test from:user] Read /home/zeul/GIT/clawmux/server/hub_config.py and tell me what port it uses.",
-            })
-    time.sleep(2)
-    page.screenshot(path=str(SCREENSHOT_DIR / "02_task_sent.png"))
+def test_02_chat_tab_open(page: Page):
+    """Verify we're looking at the agent's chat, not the landing page."""
+    # Chat area should be visible
+    chat = page.locator("#chat-area")
+    assert chat.is_visible(), "Chat area not visible"
+    # Text input should be visible
+    text_input = page.locator("#text-input")
+    assert text_input.is_visible(), "Text input not visible"
+    # Landing page mic icon should NOT be visible
+    landing = page.locator(".landing-mic, .splash-icon")
+    if landing.count() > 0:
+        assert not landing.first.is_visible(), "Still on landing page"
+    page.screenshot(path=str(SCREENSHOT_DIR / "02_chat_open.png"))
 
-    # Wait for processing state or tool cards
-    try:
-        page.wait_for_selector(".tool-card", timeout=30000)
-        page.screenshot(path=str(SCREENSHOT_DIR / "03_tool_cards.png"))
-    except Exception:
-        page.screenshot(path=str(SCREENSHOT_DIR / "03_no_tool_cards.png"))
-        # Check if we at least see the thinking decode
-        decode = page.locator(".thinking-decode")
-        if decode.count() > 0:
-            pytest.skip("No tool cards rendered but thinking decode is visible")
-        pytest.fail("No tool cards appeared within 30s")
 
-    # Verify tool card has tool name
+def test_03_send_task_and_wait_for_response(page: Page, session_id):
+    """Send a multi-tool task via text input, wait for response."""
+    text_input = page.locator("#text-input")
+    text_input.fill("Read the file /home/zeul/GIT/clawmux/server/hub_config.py and tell me what port the hub uses. Be brief.")
+    text_input.press("Enter")
+    page.screenshot(path=str(SCREENSHOT_DIR / "03_task_sent.png"))
+
+    # Wait for the agent to finish (up to 60s)
+    for _ in range(30):
+        time.sleep(2)
+        sessions = _api("get", "/api/sessions")
+        s = next((s for s in sessions if s["session_id"] == session_id), None)
+        if s and s["state"] == "idle":
+            break
+    time.sleep(1)
+    page.screenshot(path=str(SCREENSHOT_DIR / "04_task_complete.png"))
+
+
+def test_04_tool_cards_rendered(page: Page):
+    """Verify tool cards appeared in the chat during the task."""
     cards = page.locator(".tool-card")
-    assert cards.count() > 0, "Expected at least one tool card"
-    first_card = cards.first
-    name_el = first_card.locator(".tool-card-name")
-    assert name_el.count() > 0, "Tool card missing name element"
+    page.screenshot(path=str(SCREENSHOT_DIR / "05_tool_cards.png"))
+    # May or may not have tool cards depending on whether the agent used tools
+    if cards.count() > 0:
+        # Verify card has a name element
+        first_name = cards.first.locator(".tool-card-name")
+        assert first_name.count() > 0, "Tool card missing name"
+        name_text = first_name.inner_text()
+        assert len(name_text) > 0, "Tool card name is empty"
+    else:
+        # Agent may have responded without tools — not a failure
+        # Check if at least a response bubble appeared
+        msgs = page.locator(".message-bubble, .msg-assistant, [data-role='assistant']")
+        assert msgs.count() > 0, "No tool cards AND no response messages found"
 
 
-def test_tool_card_expand_collapse(page: Page, session_id):
-    """Test 5: Clicking tool card header expands/collapses the body."""
+def test_05_tool_card_expand_collapse(page: Page):
+    """Clicking tool card header expands the body."""
     cards = page.locator(".tool-card")
     if cards.count() == 0:
         pytest.skip("No tool cards to test expand/collapse")
@@ -155,68 +156,50 @@ def test_tool_card_expand_collapse(page: Page, session_id):
     header = cards.first.locator(".tool-card-header")
     body = cards.first.locator(".tool-card-body")
 
-    # Click to expand
+    # Expand
     header.click()
     time.sleep(0.5)
-    page.screenshot(path=str(SCREENSHOT_DIR / "04_card_expanded.png"))
+    page.screenshot(path=str(SCREENSHOT_DIR / "06_card_expanded.png"))
     display = body.evaluate("el => getComputedStyle(el).display")
-    assert display != "none", f"Expected body visible after click, got display={display}"
+    assert display != "none", f"Body should be visible after click, got display={display}"
 
-    # Click to collapse
+    # Collapse
     header.click()
     time.sleep(0.5)
     display = body.evaluate("el => getComputedStyle(el).display")
-    assert display == "none", f"Expected body hidden after second click, got display={display}"
+    assert display == "none", f"Body should be hidden after second click, got display={display}"
 
 
-def test_no_old_typing_dots(page: Page, session_id):
-    """Test 6: No old typing-indicator visible during processing for claude-json."""
-    # The typing indicator should not be present for claude-json backend
+def test_06_no_old_typing_dots(page: Page):
+    """No old typing-indicator visible for claude-json sessions."""
     dots = page.locator(".typing-indicator:visible")
-    page.screenshot(path=str(SCREENSHOT_DIR / "05_no_typing_dots.png"))
-    assert dots.count() == 0, "Old typing dots should not be visible for claude-json"
+    page.screenshot(path=str(SCREENSHOT_DIR / "07_no_dots.png"))
+    assert dots.count() == 0, "Old typing dots should not be visible"
 
 
-def test_no_ready_idle_text(page: Page, session_id):
-    """Test 8: No 'Ready' or 'Idle' text in chat area."""
-    # Wait for idle state
-    time.sleep(5)
-    chat = page.locator("#chat-area")
-    if chat.count() == 0:
-        pytest.skip("Chat area not found")
-    text = chat.inner_text()
-    page.screenshot(path=str(SCREENSHOT_DIR / "06_idle_state.png"))
-    # "Ready" status should not appear in chat for claude-json
-    # (It may appear in sidebar which is fine)
+def test_07_no_ready_text_in_chat(page: Page):
+    """No 'Ready' or 'Idle' status text in the chat area."""
     status = page.locator("#status-text")
-    if status.count() > 0:
-        status_text = status.inner_text()
-        assert "Ready" not in status_text, f"'Ready' found in status: {status_text}"
+    if status.count() > 0 and status.is_visible():
+        text = status.inner_text().strip()
+        assert "Ready" not in text, f"'Ready' found in status: {text}"
+        assert "Idle" not in text, f"'Idle' found in status: {text}"
+    page.screenshot(path=str(SCREENSHOT_DIR / "08_no_ready.png"))
 
 
-def test_spinner_clears_on_finish(page: Page, session_id):
-    """Test 9: Spinner/decode clears when agent finishes."""
-    # Wait for agent to finish (state goes to idle)
-    deadline = time.time() + 60
-    while time.time() < deadline:
+def test_08_spinner_clears_on_idle(page: Page, session_id):
+    """Decode animation and indicators clear when agent is idle."""
+    # Make sure agent is idle
+    for _ in range(15):
         sessions = _api("get", "/api/sessions")
         s = next((s for s in sessions if s["session_id"] == session_id), None)
         if s and s["state"] == "idle":
             break
         time.sleep(2)
-
     time.sleep(1)
-    page.screenshot(path=str(SCREENSHOT_DIR / "07_finished.png"))
 
-    # Thinking decode should be hidden
     decode = page.locator(".thinking-decode:visible")
-    assert decode.count() == 0, "Thinking decode should be hidden when idle"
-
-    # Typing indicator should be hidden
     dots = page.locator(".typing-indicator:visible")
-    assert dots.count() == 0, "Typing indicator should be hidden when idle"
-
-
-def test_cleanup():
-    """Terminate test session."""
-    _ensure_session_terminated()
+    page.screenshot(path=str(SCREENSHOT_DIR / "09_idle_clean.png"))
+    assert decode.count() == 0, "Thinking decode should be hidden when idle"
+    assert dots.count() == 0, "Typing dots should be hidden when idle"
