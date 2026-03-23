@@ -12,6 +12,12 @@
 // --- Agent message helpers ---
 const _AGENT_MSG_RE = /^\[Agent msg (from|to) (\w+)\] ([\s\S]*)$/;
 const _GROUP_MSG_RE = /^\[Group msg to ([^\]]+)\] ([\s\S]*)$/;
+// Injection prefix patterns (from transcripts)
+const _INJECT_MSG_RE = /^\[MSG id:\S+ from:(\w+)\]\s*([\s\S]*)$/;
+const _INJECT_VOICE_RE = /^\[VOICE id:\S+ from:(\w+)\]\s*([\s\S]*)$/;
+const _INJECT_GROUP_RE = /^\[GROUP:(\S+) id:\S+ from:(\w+)\]\s*([\s\S]*)$/;
+const _INJECT_ACK_RE = /^\[ACK from:(\w+) on:\S+\]$/;
+const _INJECT_SYSTEM_RE = /^\[SYSTEM\]\s*([\s\S]*)$/;
 
 /** Look up a voice color by display name (e.g. "Sky" → "#3A86FF"). */
 function _voiceColorByName(name) {
@@ -250,6 +256,74 @@ function createMsgEl(role, text, voiceColorHex, voiceId, msgObj = null) {
     if (voiceId) div.dataset.voice = voiceId;
     if (text) div.dataset.text = text;
     return div;
+  }
+
+  // --- Injection prefix parsing (from transcripts) ---
+  if (role === 'user') {
+    // [MSG id:xxx from:name] content — inter-agent message received
+    const msgMatch = _INJECT_MSG_RE.exec(text);
+    if (msgMatch) {
+      const [, sender, content] = msgMatch;
+      const color = _voiceColorByName(sender);
+      div.className = 'msg agent-msg';
+      div.style.cssText = 'padding:3px 10px;margin:2px 0;font-size:0.82em;opacity:0.7;cursor:pointer;';
+      const hdr = document.createElement('span');
+      hdr.innerHTML = `<span style="color:${color};font-weight:600">\u2190 ${sender.charAt(0).toUpperCase() + sender.slice(1)}</span>`;
+      div.appendChild(hdr);
+      const body = document.createElement('div');
+      body.className = 'agent-msg-body';
+      const md = (typeof marked !== 'undefined') ? _renderMarkdown(content) : null;
+      body.style.cssText = 'display:none;margin-top:4px;opacity:0.9;font-size:0.95em;' + (md ? '' : 'white-space:pre-wrap;');
+      if (md) body.appendChild(md); else body.textContent = content;
+      div.appendChild(body);
+      div.addEventListener('click', (e) => { if (!e.target.closest('.msg-actions')) { const s = body.style.display !== 'none'; body.style.display = s ? 'none' : 'block'; div.style.opacity = s ? '0.7' : '1'; } });
+      if (voiceId) div.dataset.voice = voiceId;
+      if (text) div.dataset.text = text;
+      return div;
+    }
+    // [VOICE id:xxx from:user] content — user voice/text message (render as normal user bubble)
+    const voiceMatch = _INJECT_VOICE_RE.exec(text);
+    if (voiceMatch) {
+      text = voiceMatch[2]; // strip prefix, render as normal user message
+    }
+    // [GROUP:name id:xxx from:sender] content — group message
+    const groupMatch = _INJECT_GROUP_RE.exec(text);
+    if (groupMatch) {
+      const [, groupName, sender, content] = groupMatch;
+      const color = _voiceColorByName(sender);
+      div.className = 'msg agent-msg';
+      div.style.cssText = 'padding:3px 10px;margin:2px 0;font-size:0.82em;opacity:0.7;cursor:pointer;';
+      const hdr = document.createElement('span');
+      hdr.innerHTML = `<span style="color:#7c9ef0;font-weight:600">\u2295 ${groupName}</span> <span style="color:${color};font-size:0.9em">${sender.charAt(0).toUpperCase() + sender.slice(1)}</span>`;
+      div.appendChild(hdr);
+      const body = document.createElement('div');
+      body.className = 'agent-msg-body';
+      const md = (typeof marked !== 'undefined') ? _renderMarkdown(content) : null;
+      body.style.cssText = 'display:none;margin-top:4px;opacity:0.9;font-size:0.95em;' + (md ? '' : 'white-space:pre-wrap;');
+      if (md) body.appendChild(md); else body.textContent = content;
+      div.appendChild(body);
+      div.addEventListener('click', (e) => { if (!e.target.closest('.msg-actions')) { const s = body.style.display !== 'none'; body.style.display = s ? 'none' : 'block'; div.style.opacity = s ? '0.7' : '1'; } });
+      if (voiceId) div.dataset.voice = voiceId;
+      if (text) div.dataset.text = text;
+      return div;
+    }
+    // [ACK from:name on:xxx] — acknowledgment (subtle one-liner)
+    const ackMatch = _INJECT_ACK_RE.exec(text);
+    if (ackMatch) {
+      const color = _voiceColorByName(ackMatch[1]);
+      div.className = 'msg agent-msg';
+      div.style.cssText = 'padding:2px 10px;margin:1px 0;font-size:0.75em;opacity:0.5;';
+      div.innerHTML = `<span style="color:${color}">\uD83D\uDC4D ${ackMatch[1].charAt(0).toUpperCase() + ackMatch[1].slice(1)}</span>`;
+      if (voiceId) div.dataset.voice = voiceId;
+      return div;
+    }
+    // [SYSTEM] content — system notification
+    const sysMatch = _INJECT_SYSTEM_RE.exec(text);
+    if (sysMatch) {
+      div.className = 'msg system';
+      div.textContent = sysMatch[1];
+      return div;
+    }
   }
 
   if (role === 'assistant') {
