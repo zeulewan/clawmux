@@ -320,12 +320,10 @@ function handleMessage(data) {
   if (type === 'session_status') {
     const s = sessions.get(data.session_id);
     if (s) {
-      // Update activity and tool_name
-      if ('activity' in data) {
-        s.toolStatusText = data.activity || '';
-      }
-      if ('tool_name' in data) {
-        s.toolName = data.tool_name || '';
+      // Update activity and tool_name (claude-json manages these via structured_event)
+      if (s.backend !== 'claude-json') {
+        if ('activity' in data) s.toolStatusText = data.activity || '';
+        if ('tool_name' in data) s.toolName = data.tool_name || '';
       }
       if ('walking_mode' in data) {
         s.walking_mode = data.walking_mode;
@@ -496,6 +494,8 @@ function handleMessage(data) {
   if (!s) return;
 
   if (type === 'activity_text') {
+    // claude-json uses structured_event for activity — skip old activity_text path
+    if (s.backend === 'claude-json') return;
     addMessage(session_id, 'activity', data.text);
     return;
   }
