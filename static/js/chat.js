@@ -838,24 +838,7 @@ function _initChatScroll() {
 
 function _debugBanner(msg) { /* no-op */ }
 
-// Delegated click handler for tool card expand/collapse — survives DOM re-renders
-if (chatArea) {
-  chatArea.addEventListener('click', (e) => {
-    const header = e.target.closest('.tool-card-header');
-    if (!header) return;
-    const card = header.closest('.tool-card');
-    if (!card) return;
-    e.stopPropagation();
-    e.preventDefault();
-    const body = card.querySelector('.tool-card-body');
-    if (!body) return;
-    const isExpanded = body.style.display === 'block';
-    body.style.display = isExpanded ? 'none' : 'block';
-    card.classList.toggle('expanded', !isExpanded);
-    const chevron = header.querySelector('.tool-card-chevron');
-    if (chevron) chevron.textContent = isExpanded ? '\u25B8' : '\u25BE';
-  });
-}
+// Tool card expand/collapse uses native <details>/<summary> — no JS handler needed
 
 function addMessage(sessionId, role, text, opts = {}) {
   const s = sessions.get(sessionId);
@@ -1165,37 +1148,32 @@ function _toolInputFormatted(toolName, data) {
 }
 
 function createToolCardEl(msg) {
-  console.log('[createToolCardEl]', msg.toolName, msg.toolData, msg.toolStatus);
-  const card = document.createElement('div');
-  card.className = 'tool-card';
-  if (msg.id) card.dataset.msgId = msg.id;
-  card.dataset.toolId = msg.toolId || '';
+  // Native <details>/<summary> — no JS click handlers needed, survives any re-render
+  const details = document.createElement('details');
+  details.className = 'tool-card';
+  if (msg.id) details.dataset.msgId = msg.id;
+  details.dataset.toolId = msg.toolId || '';
 
-  const header = document.createElement('div');
-  header.className = 'tool-card-header';
+  const summary = document.createElement('summary');
+  summary.className = 'tool-card-header';
 
   const dot = document.createElement('span');
   dot.className = 'tool-status-dot ' + (msg.toolStatus === 'done' ? 'success' : (msg.toolStatus === 'error' ? 'error' : 'running'));
-  header.appendChild(dot);
+  summary.appendChild(dot);
 
   const name = document.createElement('span');
   name.className = 'tool-card-name';
   name.textContent = msg.toolName || 'Tool';
-  header.appendChild(name);
+  summary.appendChild(name);
 
-  const summary = document.createElement('span');
-  summary.className = 'tool-card-summary';
-  summary.textContent = _toolInputSummary(msg.toolName, msg.toolData);
-  header.appendChild(summary);
+  const summaryText = document.createElement('span');
+  summaryText.className = 'tool-card-summary';
+  summaryText.textContent = _toolInputSummary(msg.toolName, msg.toolData);
+  summary.appendChild(summaryText);
 
-  const chevron = document.createElement('span');
-  chevron.className = 'tool-card-chevron';
-  chevron.textContent = '\u25B8';
-  header.appendChild(chevron);
+  details.appendChild(summary);
 
-  card.appendChild(header);
-
-  // Body with IN row
+  // Body with INPUT content
   const body = document.createElement('div');
   body.className = 'tool-card-body';
 
@@ -1211,9 +1189,9 @@ function createToolCardEl(msg) {
   if (formatted.length > 200 || formatted.split('\n').length > 4) inContent.classList.add('clipped');
   body.appendChild(inContent);
 
-  card.appendChild(body);
+  details.appendChild(body);
 
-  return card;
+  return details;
 }
 
 // Update tool card status dot when result arrives

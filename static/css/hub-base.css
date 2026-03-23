@@ -2169,13 +2169,16 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   flex-shrink: 0;
   transition: transform 0.15s;
 }
-.tool-card.expanded .tool-card-chevron { transform: rotate(90deg); }
+/* tool-card is now a <details> element — expand/collapse is native */
+.tool-card[open] .tool-card-chevron { transform: rotate(90deg); }
 .tool-card-body {
   border-top: 1px solid var(--border);
   padding: 6px 10px;
-  display: none;
 }
-.tool-card.expanded .tool-card-body { display: block; }
+/* Hide default <details> marker */
+.tool-card > summary { list-style: none; }
+.tool-card > summary::-webkit-details-marker { display: none; }
+.tool-card > summary::marker { display: none; content: ''; }
 .tool-io-label {
   font-size: 0.7em;
   font-weight: 700;
