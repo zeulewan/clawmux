@@ -98,8 +98,49 @@ async def inject_inbox(session, session_id: str) -> None:
             })
 
 
+def _format_message(msg: dict, walking_mode: bool = False) -> str:
+    """Format a single inbox message into the text line the agent receives."""
+    msg_type = msg.get("type", "system")
+    sender = msg.get("from", "unknown")
+    content = msg.get("content", "")
+    msg_id = msg.get("id", "")
+    if msg_type == "agent":
+        return f"[MSG id:{msg_id} from:{sender}] {content}"
+    elif msg_type in ("voice", "text", "file_upload"):
+        return f"[VOICE id:{msg_id} from:{sender}] {content}"
+    elif msg_type == "group":
+        group_name = msg.get("group_name", "group")
+        return f"[GROUP:{group_name} id:{msg_id} from:{sender}] {content}"
+    elif msg_type == "ack":
+        parent_id = msg.get("parent_id", "")
+        return f"[ACK from:{sender} on:{parent_id}]"
+    else:
+        return f"[SYSTEM] {content}"
+
+
 async def inbox_write_and_notify(session, msg_dict: dict) -> dict:
-    """Write to inbox and notify browser + wait WS."""
+    """Write to inbox and notify browser + wait WS.
+
+    For claude-json: bypasses inbox file entirely — formats the message
+    and delivers directly to stdin via deliver_message().
+    """
+    # claude-json fast path: deliver directly to stdin, skip inbox file
+    if session.backend == "claude-json":
+        text = _format_message(msg_dict, session.walking_mode)
+        if session.walking_mode and msg_dict.get("type") not in ("system", "ack"):
+            text = "[SYSTEM] Walking mode active — respond in plain spoken text only.\n" + text
+        try:
+            backend = session_mgr._get_backend("claude-json")
+            await backend.deliver_message(session.tmux_session, text)
+            if session.state == AgentState.IDLE:
+                session.set_state(AgentState.PROCESSING)
+                await send_to_browser(_session_status_msg(session))
+            log.info("[%s] Delivered directly to stdin (%d chars)", session.session_id, len(text))
+        except Exception as exc:
+            log.error("[%s] Direct stdin delivery failed: %s", session.session_id, exc)
+        return msg_dict
+
+    # Standard path: write to inbox file + trigger injection
     written = await asyncio.to_thread(inbox.write, session.work_dir, msg_dict)
     count = await asyncio.to_thread(inbox.peek, session.work_dir)
     await send_to_browser({
