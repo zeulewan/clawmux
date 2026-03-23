@@ -170,8 +170,8 @@
   #sidebar-notes-btn:hover,
   #sidebar-settings-btn:hover { background: var(--hover-bg); }
 
-  /* More bottom clearance for the taller mobile pill (80px mic) */
-  #chat-area { padding-bottom: 190px; }
+  /* Bottom clearance adapts to input mode: voice pill is ~140px, text bar is ~55px */
+  #chat-area { padding-bottom: var(--chat-bottom-pad, 200px); }
   /* Toast at top on mobile so it doesn't overlap the voice bar */
   #copy-toast { bottom: auto; top: 60px; transform: translateX(-50%) translateY(-12px) scale(0.94); }
   #copy-toast.visible { transform: translateX(-50%) translateY(0) scale(1); }

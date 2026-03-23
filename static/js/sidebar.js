@@ -147,9 +147,11 @@ function updateLayout() {
     if (typeof inputMode !== 'undefined' && inputMode === 'typing') {
       controls.style.display = 'none';
       textInputBar.classList.add('active');
+      document.documentElement.style.setProperty('--chat-bottom-pad', '90px');
     } else {
       controls.style.display = 'grid';
       textInputBar.classList.remove('active');
+      document.documentElement.style.setProperty('--chat-bottom-pad', '200px');
     }
   } else {
     controls.style.display = 'none';
