@@ -80,10 +80,10 @@ async def inject_inbox(session, session_id: str) -> None:
         try:
             await session_mgr._get_backend(session.backend).deliver_message(session.tmux_session, text)
             delivered = True
-            log.info("[%s] Injected %d message(s) via tmux", session_id, len(messages))
+            log.info("[%s] Injected %d message(s) via %s", session_id, len(messages), session.backend or "unknown")
         except Exception as exc:
-            log.error("[%s] tmux injection FAILED: %s — %d message(s) returned to inbox",
-                      session_id, exc, len(messages))
+            log.error("[%s] %s injection FAILED: %s — %d message(s) returned to inbox",
+                      session_id, session.backend or "unknown", exc, len(messages))
             for msg in messages:
                 await asyncio.to_thread(inbox.write, session.work_dir, msg)
 
