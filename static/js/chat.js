@@ -838,6 +838,25 @@ function _initChatScroll() {
 
 function _debugBanner(msg) { /* no-op */ }
 
+// Delegated click handler for tool card expand/collapse — survives DOM re-renders
+if (chatArea) {
+  chatArea.addEventListener('click', (e) => {
+    const header = e.target.closest('.tool-card-header');
+    if (!header) return;
+    const card = header.closest('.tool-card');
+    if (!card) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const body = card.querySelector('.tool-card-body');
+    if (!body) return;
+    const isExpanded = body.style.display === 'block';
+    body.style.display = isExpanded ? 'none' : 'block';
+    card.classList.toggle('expanded', !isExpanded);
+    const chevron = header.querySelector('.tool-card-chevron');
+    if (chevron) chevron.textContent = isExpanded ? '\u25B8' : '\u25BE';
+  });
+}
+
 function addMessage(sessionId, role, text, opts = {}) {
   const s = sessions.get(sessionId);
   if (!s) return;
@@ -1193,8 +1212,6 @@ function createToolCardEl(msg) {
   body.appendChild(inContent);
 
   card.appendChild(body);
-
-  // Expand/collapse handled by chatArea event delegation (below)
 
   return card;
 }
