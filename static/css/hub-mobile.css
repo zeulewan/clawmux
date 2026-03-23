@@ -360,5 +360,5 @@
   body.sidebar-hidden #welcome-view { padding-left: 8px !important; }
   body.sidebar-hidden #settings-page { left: 0 !important; }
   body.sidebar-hidden #controls,
-  body.sidebar-hidden #text-input-bar { left: 50%; width: calc(100% - 16px); }
+  body.sidebar-hidden #text-input-bar { left: 8px !important; right: 8px !important; }
 }
