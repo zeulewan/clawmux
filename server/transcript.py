@@ -128,6 +128,17 @@ def _parse_jsonl(path: Path, limit: int) -> list[dict]:
             role = msg.get("role", entry_type)
             content = msg.get("content", [])
 
+            # Skip catch-up context injections (internal prompt, not user message)
+            if role == "user" and isinstance(content, list):
+                first_text = next(
+                    (b.get("text", "") for b in content
+                     if isinstance(b, dict) and b.get("type") == "text"), ""
+                )
+                if first_text.startswith("# Messages Since You Were Last Active"):
+                    continue
+                if first_text.startswith("Greet the user as instructed in your CLAUDE.md"):
+                    continue
+
             # Extract text and tool blocks
             text_parts = []
             tool_calls = []

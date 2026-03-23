@@ -513,7 +513,9 @@ class SessionManager:
 
             # Deliver catch-up context if this model missed messages
             if self.history_store:
-                cursor_model = session.model_id or session.model
+                # Normalize model key: prefer model_id, fall back to model shorthand,
+                # default to "default" so the same agent always uses the same cursor key
+                cursor_model = session.model_id or session.model or "default"
                 hist_prefix = self.project_mgr.get_history_prefix(project_slug)
                 catchup = self.history_store.generate_catchup_context(
                     voice_id, cursor_model, project=hist_prefix

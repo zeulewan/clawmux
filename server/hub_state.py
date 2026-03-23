@@ -171,7 +171,13 @@ def _hist_prefix(session) -> str | None:
 
 
 def _active_model_id(session) -> str:
-    return session.model_id or session.model or ""
+    """Return a consistent model key for read cursor tracking.
+
+    Uses model shorthand (opus/sonnet/haiku) as the primary key so the cursor
+    stays stable across respawns even when model_id changes between "" and
+    the full model string (e.g. "claude-opus-4-6[1m]").
+    """
+    return session.model or "default"
 
 
 def _session_status_msg(session, **extra) -> dict:
