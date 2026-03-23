@@ -768,10 +768,11 @@ function setSessionState(sessionId, newState) {
   if (newState === 'idle') {
     stopThinkingSound();
     stopThinkingVAD();
-    showIdleStatus(sessionId);  // renders activity log + idle status indicator
+    hideAgentIndicator(sessionId);
+    if (s.backend !== 'claude-json') showIdleStatus(sessionId);
     setSessionSidebarState(sessionId, 'idle');
     if (sessionId === activeSessionId) {
-      setStatus('Ready', sessionId);
+      if (s.backend !== 'claude-json') setStatus('Ready', sessionId);
       micBtn.disabled = false;
       updateMicUI();
     }
@@ -1738,7 +1739,8 @@ function interruptPlayback(sessionId) {
   _audioPlayQueue.delete(sessionId);
   _audioPlaying = false;
   updateMicUI();
-  setStatus('Ready', sessionId);
+  const _ss = sessions.get(sessionId);
+  if (!_ss || _ss.backend !== 'claude-json') setStatus('Ready', sessionId);
 
   // Send playback_done to notify hub that audio finished (not for group chats)
   if (sessionId !== '__group__' && ws && ws.readyState === WebSocket.OPEN) {

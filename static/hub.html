@@ -683,7 +683,8 @@ function switchTab(sessionId, manual = false) {
   });
 
   if (s) {
-    setStatus(s.statusText || 'Ready');
+    if (s.backend !== 'claude-json') setStatus(s.statusText || 'Ready');
+    else setStatus('');
     micBtn.disabled = s.status !== 'ready' && s.status !== 'active';
     if (voiceSelect) voiceSelect.value = s.voice || 'af_sky';
     speedSelect.value = String(parseFloat(s.speed || 1.0).toFixed(1));
