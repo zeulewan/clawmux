@@ -277,6 +277,35 @@ async def connect_openclaw_agent(request: Request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@router.get("/api/sessions/{session_id}/transcript")
+async def get_session_transcript(session_id: str, request: Request):
+    """Fetch JSONL transcript for a Claude Code session (claude-code or claude-json).
+
+    Parses the Claude Code transcript file, returns messages after the last
+    compact boundary. For openclaw sessions, falls through to the openclaw
+    history endpoint.
+    """
+    session = session_mgr.sessions.get(session_id)
+    if not session:
+        return JSONResponse({"error": "session not found"}, status_code=404)
+
+    # OpenClaw has its own history path
+    if session.backend == "openclaw":
+        return JSONResponse({"error": "use /api/openclaw/history for openclaw sessions"}, status_code=400)
+
+    conversation_id = getattr(session, "conversation_id", "")
+    if not conversation_id:
+        return JSONResponse({"session_id": session_id, "messages": []})
+
+    limit = min(int(request.query_params.get("limit", 50)), 200)
+
+    from transcript import read_transcript
+    messages = await asyncio.to_thread(
+        read_transcript, conversation_id, session.work_dir or "", limit,
+    )
+    return JSONResponse({"session_id": session_id, "messages": messages})
+
+
 @router.get("/api/openclaw/history/{session_id}")
 async def get_openclaw_history(session_id: str, request: Request):
     """Fetch chat history for an OpenClaw agent session."""
