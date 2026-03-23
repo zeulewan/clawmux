@@ -816,37 +816,55 @@ async function spawnSession(voiceId = '', backend = 'claude-code', modelId = '')
 async function addSession(data, autoSwitch = false) {
   const isReady = data.status === 'ready';
 
-  // Fetch persistent history from server (paginated: last 150 messages)
+  // Fetch persistent history from server
   let serverMessages = [];
   let hasMoreHistory = false;
   try {
-    const histUrl = data.backend === 'openclaw'
-      ? `/api/openclaw/history/${data.session_id}?limit=150`
-      : `/api/history/${data.voice}?limit=150`;
+    let histUrl;
+    if (data.backend === 'openclaw') {
+      histUrl = `/api/openclaw/history/${data.session_id}?limit=150`;
+    } else if (_isClaudeBackend(data.backend || 'claude-code')) {
+      // Claude backends: use transcript API for rich history (tool_calls, tool_results)
+      histUrl = `/api/sessions/${data.session_id}/transcript?limit=50`;
+    } else {
+      histUrl = `/api/history/${data.voice}?limit=150`;
+    }
     const resp = await fetch(histUrl);
     if (resp.ok) {
       const hist = await resp.json();
       hasMoreHistory = hist.has_more === true;
       const _seenIds = new Set();
-      serverMessages = (hist.messages || []).reduce((acc, m) => {
-        if (m.id) {
-          if (_seenIds.has(m.id)) return acc;
-          _seenIds.add(m.id);
+      const rawMessages = hist.messages || [];
+      serverMessages = [];
+      for (const m of rawMessages) {
+        if (m.uuid && _seenIds.has(m.uuid)) continue;
+        if (m.uuid) _seenIds.add(m.uuid);
+        if (m.id && _seenIds.has(m.id)) continue;
+        if (m.id) _seenIds.add(m.id);
+        // Render tool_calls as inline tool cards (claude-json history)
+        if (m.tool_calls && m.tool_calls.length > 0 && data.backend === 'claude-json') {
+          for (const tc of m.tool_calls) {
+            serverMessages.push({
+              role: 'tool', toolName: tc.name, toolData: tc.input || {},
+              toolStatus: 'done', toolId: 'hist-' + (tc.id || Date.now()),
+              ts: m.ts || 0,
+            });
+          }
         }
-        const obj = { role: m.role, text: m.text };
-        if (m.id) obj.id = m.id;
+        const obj = { role: m.role, text: m.text || '' };
+        if (m.uuid) obj.id = m.uuid;
+        else if (m.id) obj.id = m.id;
         if (m.ts) obj.ts = m.ts;
         if (m.parent_id) obj.parentId = m.parent_id;
         if (m.bare_ack) obj.isBareAck = true;
-        acc.push(obj);
-        return acc;
-      }, []);
-      console.log(`[addSession] ${data.voice}: loaded ${serverMessages.length} messages, has_more=${hasMoreHistory}`);
+        if (obj.text) serverMessages.push(obj);
+      }
+      console.log(`[addSession] ${data.session_id}: loaded ${serverMessages.length} messages from ${histUrl}`);
     } else {
-      console.warn(`[addSession] ${data.voice}: fetch failed with status ${resp.status}`);
+      console.warn(`[addSession] ${data.session_id}: fetch failed with status ${resp.status}`);
     }
   } catch (e) {
-    console.warn(`[addSession] ${data.voice}: fetch error:`, e);
+    console.warn(`[addSession] ${data.session_id}: fetch error:`, e);
   }
 
   // Apply saved speed from localStorage so new sessions inherit the user's preference
