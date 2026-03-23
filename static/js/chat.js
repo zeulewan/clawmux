@@ -1117,8 +1117,11 @@ function createToolCardEl(msg) {
 
   header.addEventListener('click', (e) => {
     e.stopPropagation();
-    card.classList.toggle('expanded');
-    console.log('[tool-card] toggled expanded:', card.classList.contains('expanded'));
+    e.preventDefault();
+    const isExpanded = card.classList.toggle('expanded');
+    body.style.display = isExpanded ? 'block' : 'none';
+    chevron.textContent = isExpanded ? '\u25BE' : '\u25B8';
+    console.log('[tool-card] expanded:', isExpanded, 'toolName:', msg.toolName);
   });
 
   return card;
