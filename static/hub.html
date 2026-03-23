@@ -573,6 +573,22 @@
 <script>
 // --- DOM refs (loaded before audio.js which references these) ---
 const chatArea = document.getElementById('chat-area');
+
+// Event delegation for tool card expand/collapse (survives DOM rebuilds)
+chatArea.addEventListener('click', (e) => {
+  const header = e.target.closest('.tool-card-header');
+  if (!header) return;
+  e.stopPropagation();
+  const card = header.closest('.tool-card');
+  if (!card) return;
+  const body = card.querySelector('.tool-card-body');
+  const chevron = card.querySelector('.tool-card-chevron');
+  if (!body) return;
+  const isExpanded = card.classList.toggle('expanded');
+  body.style.display = isExpanded ? 'block' : 'none';
+  if (chevron) chevron.textContent = isExpanded ? '\u25BE' : '\u25B8';
+});
+
 let _scrollRaf = null;
 function _easedScrollTo(el) {
   if (_scrollRaf) return; // already running — will reach bottom naturally as content grows

@@ -1120,14 +1120,7 @@ function createToolCardEl(msg) {
 
   card.appendChild(body);
 
-  header.addEventListener('click', (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    const isExpanded = card.classList.toggle('expanded');
-    body.style.display = isExpanded ? 'block' : 'none';
-    chevron.textContent = isExpanded ? '\u25BE' : '\u25B8';
-    console.log('[tool-card] expanded:', isExpanded, 'toolName:', msg.toolName);
-  });
+  // Expand/collapse handled by chatArea event delegation (below)
 
   return card;
 }
