@@ -2222,6 +2222,12 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 }
 .tool-group-toggle:hover { color: var(--text-secondary); }
 .tool-group-hidden { display: none; }
+.tool-group-toggle { cursor: pointer; padding: 4px 12px; font-size: 0.82rem; color: var(--text-secondary); }
+.tool-group-toggle > summary { list-style: none; }
+.tool-group-toggle > summary::-webkit-details-marker { display: none; }
+.tool-group-toggle > summary::marker { display: none; content: ''; }
+.tool-group-toggle > summary::before { content: '\25B8'; margin-right: 6px; transition: transform 0.15s; display: inline-block; }
+.tool-group-toggle[open] > summary::before { transform: rotate(90deg); }
 .tool-group-toggle .tg-chevron {
   font-size: 0.7em;
   transition: transform 0.15s;

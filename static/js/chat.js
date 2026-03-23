@@ -1222,20 +1222,20 @@ function _groupToolCards(chatArea) {
       count++;
     } else {
       if (count >= 3) {
-        // Collapse middle cards
-        const toggle = document.createElement('div');
-        toggle.className = 'tool-group-toggle';
-        toggle.innerHTML = '<span class="tg-chevron">\u25B8</span> Explored ' + count + ' tools';
-        // Hide all but first and last
+        // Collect references to the actual DOM nodes (not indices)
+        const hiddenCards = [];
         for (let j = groupStart + 1; j < groupStart + count - 1; j++) {
+          hiddenCards.push(children[j]);
           children[j].classList.add('tool-group-hidden');
         }
+        const toggle = document.createElement('details');
+        toggle.className = 'tool-group-toggle';
+        const toggleSummary = document.createElement('summary');
+        toggleSummary.textContent = 'Explored ' + count + ' tools';
+        toggle.appendChild(toggleSummary);
         chatArea.insertBefore(toggle, children[groupStart]);
-        toggle.addEventListener('click', () => {
-          const isOpen = toggle.classList.toggle('open');
-          for (let j = groupStart + 1; j < groupStart + count - 1; j++) {
-            children[j].classList.toggle('tool-group-hidden', !isOpen);
-          }
+        toggle.addEventListener('toggle', () => {
+          hiddenCards.forEach(card => card.classList.toggle('tool-group-hidden', !toggle.open));
         });
       }
       groupStart = -1;
