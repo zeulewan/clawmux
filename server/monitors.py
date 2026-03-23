@@ -333,6 +333,11 @@ async def hook_tool_status(request: Request):
         log.warning("[hook] %s: session not found (header=%r, known=%s)", event, clawmux_sid, list(session_mgr.sessions.keys()))
         return JSONResponse({})
 
+    # claude-json backend handles its own state via direct updates in _listen() —
+    # ignore bash hooks that fire from the subprocess (they duplicate state changes)
+    if session.backend == "claude-json":
+        return JSONResponse({})
+
     response_json = {}
 
     if event in ("PostToolUse", "PostToolUseFailure"):

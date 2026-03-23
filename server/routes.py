@@ -624,6 +624,11 @@ async def agent_idle(session_id: str):
     if not session or not session.work_dir:
         return JSONResponse({"ok": False, "reason": "session not found"})
 
+    # claude-json handles its own IDLE transition via direct state updates —
+    # ignore bash hook idle signals that duplicate the transition
+    if session.backend == "claude-json":
+        return JSONResponse({"ok": True, "skipped": "claude-json handles own state"})
+
     session.set_state(AgentState.IDLE)
     session.activity = ""
     session.tool_name = ""
