@@ -786,12 +786,10 @@ function setSessionState(sessionId, newState) {
     }
   } else if (newState === 'processing') {
     showThinking(sessionId);  // reuses status indicator, switches to processing style
-    startThinkingSound(sessionId);
+    startAgentThinkingSound(sessionId);
     setSessionSidebarState(sessionId, 'processing');
     if (sessionId === activeSessionId) {
-      const _isJsonBackend = s.backend === 'claude-json';
-      if (_isJsonBackend) { if (typeof showThinkingDecode === 'function') showThinkingDecode(sessionId); }
-      else { if (typeof showTypingIndicator === 'function') showTypingIndicator(sessionId); }
+      showAgentIndicator(sessionId);
       setStatus(isMobile ? 'Tap to Record' : 'Tap or Hold Space', sessionId);
       startThinkingVAD(sessionId);
     }

@@ -568,8 +568,8 @@
 
 </div><!-- /app-body -->
 
-<script src="/static/js/state.js"></script>
-<script src="/static/js/ws.js"></script>
+<script src="/static/js/state.js?v=2"></script>
+<script src="/static/js/ws.js?v=2"></script>
 <script>
 // --- DOM refs (loaded before audio.js which references these) ---
 const chatArea = document.getElementById('chat-area');
@@ -607,9 +607,9 @@ const dot = document.getElementById('dot');
 const connLabel = document.getElementById('conn-label');
 const textInputBar = document.getElementById('text-input-bar');
 </script>
-<script src="/static/js/audio.js"></script>
-<script src="/static/js/sidebar.js"></script>
-<script src="/static/js/chat.js"></script>
+<script src="/static/js/audio.js?v=2"></script>
+<script src="/static/js/sidebar.js?v=2"></script>
+<script src="/static/js/chat.js?v=2"></script>
 <script src="/static/js/notes.js"></script>
 <script src="/static/js/resize.js"></script>
 <script>
@@ -698,15 +698,11 @@ function switchTab(sessionId, manual = false) {
     }
     updateEffortLabel();
 
-    // Resume thinking sound and typing indicator if this session is already active
+    // Resume thinking sound and indicator if this session is already active
     const ss = s.sidebarState || 'idle';
     if (['processing', 'compacting', 'starting'].includes(ss)) {
-      if (s.backend !== 'claude-json') startThinkingSound(sessionId);
-      if (s.backend === 'claude-json') {
-        if (typeof showThinkingDecode === 'function') showThinkingDecode(sessionId);
-      } else {
-        if (typeof showTypingIndicator === 'function') showTypingIndicator(sessionId);
-      }
+      startAgentThinkingSound(sessionId);
+      showAgentIndicator(sessionId);
     }
 
     // Play buffered audio if any accumulated while tab was inactive
@@ -900,13 +896,9 @@ async function addSession(data, autoSwitch = false) {
     const sess = sessions.get(data.session_id);
     if (sess) { sess.sessionState = 'processing'; sess.sidebarState = serverState; }
     showThinking(data.session_id);
-    if (sess && sess.backend !== 'claude-json') startThinkingSound(data.session_id);
+    startAgentThinkingSound(data.session_id);
     if (data.session_id === activeSessionId) {
-      if (sess && sess.backend === 'claude-json') {
-        if (typeof showThinkingDecode === 'function') showThinkingDecode(data.session_id);
-      } else {
-        if (typeof showTypingIndicator === 'function') showTypingIndicator(data.session_id);
-      }
+      showAgentIndicator(data.session_id);
     }
   } else if (serverState === 'starting') {
     const sess = sessions.get(data.session_id);

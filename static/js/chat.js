@@ -571,13 +571,9 @@ function renderChat(forceScroll = false) {
   chatArea.querySelectorAll('.msg').forEach(el => el.classList.add('rendered'));
   // Group consecutive tool cards (claude-json)
   if (s && s.backend === 'claude-json') _groupToolCards(chatArea);
-  // Restore typing/thinking indicator if session is currently active
+  // Restore indicator if session is currently active
   if (s && s.sessionState === 'processing') {
-    if (s.backend === 'claude-json' && typeof showThinkingDecode === 'function') {
-      showThinkingDecode(activeSessionId);
-    } else if (typeof showTypingIndicator === 'function') {
-      showTypingIndicator(activeSessionId);
-    }
+    showAgentIndicator(activeSessionId);
   }
 }
 
@@ -1002,6 +998,41 @@ function _toggleActivityExpand(el, sessionId) {
     if (_scrollRaf) { cancelAnimationFrame(_scrollRaf); _scrollRaf = null; }
     _easedScrollTo(chatArea);
   }
+}
+
+// === Backend-Aware Indicator Dispatcher ===
+const _indicatorRenderers = {
+  'claude-json': {
+    show(sid, type, data) { showThinkingDecode(sid); },
+    hide(sid) { hideThinkingDecode(sid); },
+    sound(sid) { /* no thinking sound for json backend */ },
+  },
+  'default': {
+    show(sid, type, data) {
+      showTypingIndicator(sid);
+      if (data && data.text) _updateTypingIndicatorText(sid, data.text);
+    },
+    hide(sid) { hideTypingIndicator(sid); },
+    sound(sid) { if (typeof startThinkingSound === 'function') startThinkingSound(sid); },
+  },
+};
+
+function _getIndicatorRenderer(sessionId) {
+  const s = typeof sessions !== 'undefined' ? sessions.get(sessionId) : null;
+  const backend = s ? s.backend : '';
+  return _indicatorRenderers[backend] || _indicatorRenderers['default'];
+}
+
+function showAgentIndicator(sessionId, type, data) {
+  _getIndicatorRenderer(sessionId).show(sessionId, type, data);
+}
+
+function hideAgentIndicator(sessionId) {
+  _getIndicatorRenderer(sessionId).hide(sessionId);
+}
+
+function startAgentThinkingSound(sessionId) {
+  _getIndicatorRenderer(sessionId).sound(sessionId);
 }
 
 // === Claude JSON: Tool Card Rendering ===
