@@ -701,8 +701,12 @@ function switchTab(sessionId, manual = false) {
     // Resume thinking sound and typing indicator if this session is already active
     const ss = s.sidebarState || 'idle';
     if (['processing', 'compacting', 'starting'].includes(ss)) {
-      startThinkingSound(sessionId);
-      if (typeof showTypingIndicator === 'function') showTypingIndicator(sessionId);
+      if (s.backend !== 'claude-json') startThinkingSound(sessionId);
+      if (s.backend === 'claude-json') {
+        if (typeof showThinkingDecode === 'function') showThinkingDecode(sessionId);
+      } else {
+        if (typeof showTypingIndicator === 'function') showTypingIndicator(sessionId);
+      }
     }
 
     // Play buffered audio if any accumulated while tab was inactive
@@ -896,8 +900,14 @@ async function addSession(data, autoSwitch = false) {
     const sess = sessions.get(data.session_id);
     if (sess) { sess.sessionState = 'processing'; sess.sidebarState = serverState; }
     showThinking(data.session_id);
-    startThinkingSound(data.session_id);
-    if (data.session_id === activeSessionId && typeof showTypingIndicator === 'function') showTypingIndicator(data.session_id);
+    if (sess && sess.backend !== 'claude-json') startThinkingSound(data.session_id);
+    if (data.session_id === activeSessionId) {
+      if (sess && sess.backend === 'claude-json') {
+        if (typeof showThinkingDecode === 'function') showThinkingDecode(data.session_id);
+      } else {
+        if (typeof showTypingIndicator === 'function') showTypingIndicator(data.session_id);
+      }
+    }
   } else if (serverState === 'starting') {
     const sess = sessions.get(data.session_id);
     if (sess && !sess.sessionState) { sess.sessionState = 'idle'; sess.sidebarState = 'starting'; }

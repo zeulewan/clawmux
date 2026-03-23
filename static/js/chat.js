@@ -1084,8 +1084,10 @@ function createToolCardEl(msg) {
 
   card.appendChild(body);
 
-  header.addEventListener('click', () => {
+  header.addEventListener('click', (e) => {
+    e.stopPropagation();
     card.classList.toggle('expanded');
+    console.log('[tool-card] toggled expanded:', card.classList.contains('expanded'));
   });
 
   return card;
