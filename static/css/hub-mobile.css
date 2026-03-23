@@ -194,16 +194,14 @@
     right: 8px !important;
     width: auto !important;
     max-width: none !important;
-    transform: none !important;
-    bottom: max(12px, var(--keyboard-h, 0px)) !important;
+    transform: translateY(calc(-1 * var(--keyboard-h, 0px))) !important;
   }
   #text-input-bar {
     left: calc(48px + 8px) !important;
     right: 8px !important;
     width: auto !important;
     max-width: none !important;
-    transform: none !important;
-    bottom: max(12px, var(--keyboard-h, 0px)) !important;
+    transform: translateY(calc(-1 * var(--keyboard-h, 0px))) !important;
   }
   #controls-left, #controls-right { min-height: 80px; }
   #controls-status { padding: 4px 6px 0; }

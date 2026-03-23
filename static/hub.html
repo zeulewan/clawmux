@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>ClawMux</title>
 <meta name="theme-color" content="#06090f">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2861,17 +2861,25 @@ loadDeploymentConfig();
 startUsagePolling();
 startStateSync();
 
-// PWA keyboard handling: keep input bar visible above iOS keyboard
+// iOS PWA keyboard handling — visualViewport is the only API that works on Safari.
+// Safari doesn't resize the layout viewport when the keyboard opens; it shrinks
+// the visual viewport and scrolls. We track that offset and shift fixed elements up.
 if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', () => {
+  let _lastKeyboardH = 0;
+  function _syncKeyboard() {
     const vv = window.visualViewport;
-    const keyboardHeight = window.innerHeight - vv.height;
-    document.documentElement.style.setProperty('--keyboard-h', keyboardHeight + 'px');
+    // Keyboard height = difference between layout viewport and visual viewport
+    const keyboardH = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+    if (keyboardH === _lastKeyboardH) return;
+    _lastKeyboardH = keyboardH;
+    document.documentElement.style.setProperty('--keyboard-h', keyboardH + 'px');
     // Scroll chat to bottom when keyboard opens
-    if (keyboardHeight > 100 && chatArea) {
+    if (keyboardH > 100 && chatArea) {
       requestAnimationFrame(() => chatScrollToBottom(false));
     }
-  });
+  }
+  window.visualViewport.addEventListener('resize', _syncKeyboard);
+  window.visualViewport.addEventListener('scroll', _syncKeyboard);
 }
 </script>
 </body>
