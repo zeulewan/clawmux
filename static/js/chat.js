@@ -1011,14 +1011,16 @@ let _thinkingInterval = null;
 let _thinkingDecodeInterval = null;
 
 function _toolInputSummary(toolName, data) {
-  if (!data) return '';
+  if (!data || typeof data !== 'object') return '';
   if (toolName === 'Bash' && data.command) return data.command.length > 80 ? data.command.slice(0, 77) + '...' : data.command;
-  if (toolName === 'Read' && data.file_path) return data.file_path;
-  if (toolName === 'Write' && data.file_path) return data.file_path;
-  if (toolName === 'Edit' && data.file_path) return data.file_path;
+  if ((toolName === 'Read' || toolName === 'Write' || toolName === 'Edit') && data.file_path) return data.file_path;
   if (toolName === 'Grep' && data.pattern) return data.pattern;
   if (toolName === 'Glob' && data.pattern) return data.pattern;
   if (toolName === 'Agent' && data.prompt) return data.prompt.slice(0, 60) + '...';
+  // Fallback: show first string value from data
+  for (const v of Object.values(data)) {
+    if (typeof v === 'string' && v.length > 0) return v.length > 80 ? v.slice(0, 77) + '...' : v;
+  }
   return '';
 }
 
@@ -1034,8 +1036,9 @@ function _toolInputFormatted(toolName, data) {
 }
 
 function createToolCardEl(msg) {
+  console.log('[createToolCardEl]', msg.toolName, msg.toolData, msg.toolStatus);
   const card = document.createElement('div');
-  card.className = 'tool-card' + (msg.toolStatus === 'done' ? '' : '');
+  card.className = 'tool-card';
   if (msg.id) card.dataset.msgId = msg.id;
   card.dataset.toolId = msg.toolId || '';
 

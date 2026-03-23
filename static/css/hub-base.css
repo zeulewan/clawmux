@@ -2121,8 +2121,10 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   margin: 4px 0;
   overflow: hidden;
   font-size: 0.85em;
-  max-width: min(500px, 90%);
+  max-width: min(500px, 75%);
   align-self: flex-start;
+  background: var(--bg-card, rgba(255,255,255,0.04));
+  min-height: 32px;
 }
 .tool-card-header {
   display: flex;
