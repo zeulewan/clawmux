@@ -79,7 +79,7 @@ _shutdown_mode: str = "full"
 
 _QUEUE_MAX = 100
 _QUEUE_TTL = 30
-_QUEUEABLE_TYPES = {"done", "session_status", "session_ended"}
+_QUEUEABLE_TYPES = {"done", "session_status", "session_ended", "structured_event", "assistant_text"}
 _browser_msg_queue: collections.deque[tuple[float, dict]] = collections.deque(maxlen=_QUEUE_MAX)
 
 

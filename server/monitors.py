@@ -158,7 +158,7 @@ async def context_poll_loop() -> None:
 
 # ── Usage poller ──────────────────────────────────────────────────────────────
 
-_USAGE_POLL_INTERVAL = 1800
+_USAGE_POLL_INTERVAL = 300  # 5 minutes — usage can change fast with many agents
 _USAGE_CACHE_PATH = Path.home() / ".claude" / "usage-cache.json"
 _CREDENTIALS_PATH = Path.home() / ".claude" / ".credentials.json"
 _USAGE_API_URL = "https://api.anthropic.com/api/oauth/usage"
@@ -226,6 +226,19 @@ async def _fetch_usage_from_api() -> dict | None:
     except Exception as e:
         log.warning("Usage poll failed: %s", e)
         return None
+
+
+async def fetch_usage_now() -> dict | None:
+    """Force-fetch fresh usage data from Anthropic API (for on-demand refresh)."""
+    data = await _fetch_usage_from_api()
+    if data:
+        set_last_good_usage(data)
+        try:
+            _USAGE_CACHE_PATH.write_text(json.dumps(data, indent=2))
+        except Exception:
+            pass
+        save_usage_sidecar(data)
+    return data
 
 
 async def usage_poll_loop() -> None:

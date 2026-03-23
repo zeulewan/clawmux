@@ -36,7 +36,7 @@ from hub_state import (
 from hub_config import HUB_PORT, HUB_START_TIME
 import hub_state
 from message_injection import inject_inbox, inbox_write_and_notify, _injection_locks
-from monitors import get_fallback_usage, set_last_good_usage, save_usage_sidecar
+from monitors import get_fallback_usage, set_last_good_usage, save_usage_sidecar, fetch_usage_now
 
 log = logging.getLogger("hub.routes")
 router = APIRouter()
@@ -2073,8 +2073,13 @@ async def services_status():
 
 
 @router.get("/api/usage")
-async def get_usage():
-    """Return Claude usage stats from local cache."""
+async def get_usage(request: Request):
+    """Return Claude usage stats. Pass ?refresh=1 to force-fetch from Anthropic API."""
+    if request.query_params.get("refresh"):
+        fresh = await fetch_usage_now()
+        if fresh:
+            return JSONResponse(fresh)
+
     usage_path = Path.home() / ".claude" / "usage-cache.json"
     if not usage_path.exists():
         fallback = get_fallback_usage()
