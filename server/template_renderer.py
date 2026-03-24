@@ -126,8 +126,12 @@ class TemplateRenderer:
         if content is None:
             return False
 
-        # Claude Code: CLAUDE.md
+        # Claude Code (tmux): CLAUDE.md
         (work_dir / "CLAUDE.md").write_text(content)
+
+        # Claude JSON: CLAUDE.md variant — respond with direct text, not clawmux send
+        json_content = self._adapt_for_claude_json(content)
+        (work_dir / "CLAUDE.json.md").write_text(json_content)
 
         # OpenCode: INSTRUCTIONS.md
         (work_dir / "INSTRUCTIONS.md").write_text(content)
@@ -151,6 +155,49 @@ class TemplateRenderer:
 
         log.info("Rendered all instruction formats for %s at %s", voice_id, work_dir)
         return True
+
+    @staticmethod
+    def _adapt_for_claude_json(content: str) -> str:
+        """Adapt CLAUDE.md content for claude-json backend.
+
+        Replaces the 'clawmux send' communication rules with direct text output
+        instructions. The JSON stream IS the communication channel — the agent
+        should respond naturally instead of wrapping everything in Bash tool calls.
+        """
+        import re
+
+        # Replace the "Important Rules" clawmux send line
+        content = content.replace(
+            "- NEVER print text directly to the terminal chat. ALL communication must go through `clawmux send`. "
+            "The user cannot see your terminal — they only see messages sent via ClawMux.",
+            "- Respond with direct text output. The user sees your text responses in the browser. "
+            "Use `clawmux send` ONLY for inter-agent messaging (--to <agent>), NOT for speaking to the user.",
+        )
+
+        # Replace the footer reminder
+        content = content.replace(
+            "IMPORTANT: Always use `clawmux send --to user` for ALL output to the user. "
+            "Never just print text to the terminal. Text printed directly to Claude Code chat "
+            "is NOT visible to the user in the browser.",
+            "Your text output is streamed directly to the user's browser. "
+            "Use `clawmux send` only for inter-agent messages (--to <agent_name>).",
+        )
+
+        # Replace the Communication header section
+        content = re.sub(
+            r"# Communication \(v[\d.]+\)\nYou are running in CLI mode\. All communication uses the unified `clawmux send` command\.\n\n"
+            r"## Speaking to the user \(TTS\)\n```bash\nclawmux send --to user 'Your message here'\n```\n"
+            r"This triggers TTS and returns immediately\. Do NOT block waiting for a response\.\n\n"
+            r"\*\*IMPORTANT: Always use single quotes\*\*.*?\n",
+            "# Communication\n"
+            "You are running in JSON streaming mode. Your text output is streamed directly to the user's browser.\n\n"
+            "## Speaking to the user\n"
+            "Just write your response as normal text. It will be rendered in the chat with markdown formatting.\n\n",
+            content,
+            flags=re.DOTALL,
+        )
+
+        return content
 
     async def render_role_to_file(self, voice_id: str, work_dir: Path, **_kw: str) -> bool:
         """Write role-specific rules for ALL backends."""
