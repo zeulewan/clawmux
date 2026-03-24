@@ -653,3 +653,29 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
   max-height: 200px;
   overflow-y: auto;
 }
+
+/* === Light Mode Chat Contrast === */
+@media (prefers-color-scheme: light) {
+  .msg.assistant {
+    border: 1px solid rgba(0,0,0,0.08);
+  }
+  .msg.assistant .md-content pre {
+    background: rgba(0,0,0,0.05);
+    border-top-color: rgba(0,0,0,0.08);
+  }
+  .msg.assistant .md-content code:not(pre code) {
+    background: rgba(0,0,0,0.06);
+  }
+  .msg.assistant .md-content pre code {
+    color: #1f1f1f;
+  }
+  .msg.assistant .md-content th {
+    background: rgba(0,0,0,0.04);
+  }
+  .msg.system {
+    color: #555;
+  }
+  .agent-msg {
+    color: #444;
+  }
+}
