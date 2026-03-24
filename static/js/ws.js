@@ -540,6 +540,16 @@ function handleMessage(data) {
       }
     }
 
+    // Content-based dedup: skip if recent messages already contain this exact text
+    // (handles transcript-loaded messages having different IDs than live events)
+    if (s && data.text && data.text.trim()) {
+      const trimmed = data.text.trim();
+      const recent = s.messages.slice(-10);
+      if (recent.some(m => m.role === 'assistant' && m.text && m.text.trim() === trimmed)) {
+        return; // already in store from transcript
+      }
+    }
+
     if (data.fire_and_forget) {
       // Fire-and-forget speak: just add message to chat, don't change state
       if (data.text && data.text.trim()) {
