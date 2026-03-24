@@ -106,6 +106,7 @@ class ClaudeJsonBackend(AgentBackend):
         # Determine permission mode
         perm_mode = _permission_modes.get(session_name, "bypassPermissions")
         _permission_modes[session_name] = perm_mode
+        log.info("[%s] Spawn with permission_mode=%s", session_name, perm_mode)
 
         # Build command — use base claude without --dangerously-skip-permissions
         # when a non-bypass permission mode is active
