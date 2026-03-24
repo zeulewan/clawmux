@@ -548,6 +548,7 @@
 #slash-cmd-btn {
   width: 28px;
   height: 28px;
+  align-self: center;
   border: 1px solid var(--cj-border, rgba(255,255,255,0.15));
   border-radius: 6px;
   background: none;
