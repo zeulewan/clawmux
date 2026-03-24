@@ -46,10 +46,53 @@ function _hideSlashMenu() {
 
 function _selectSlashCommand(cmd) {
   _hideSlashMenu();
-  textInput.value = cmd;
+  textInput.value = '';
   textInput.style.height = 'auto';
-  textSendBtn.disabled = false;
-  sendTextMessage();
+  textSendBtn.disabled = true;
+
+  // Route each command to its action
+  switch (cmd) {
+    case '/effort':
+      if (typeof toggleEffortPopup === 'function') toggleEffortPopup();
+      break;
+    case '/model':
+      if (typeof toggleModelPopup === 'function') toggleModelPopup();
+      break;
+    case '/compact':
+      // Send as text message — deliver_message writes to stdin
+      textInput.value = '/compact';
+      textSendBtn.disabled = false;
+      sendTextMessage();
+      break;
+    case '/clear':
+      { const ca = document.getElementById('chat-area');
+        if (ca) ca.innerHTML = ''; }
+      break;
+    case '/bug':
+      window.open('https://github.com/anthropics/claude-code/issues', '_blank');
+      break;
+    case '/doctor':
+      // Send as text message — deliver_message writes to stdin
+      textInput.value = '/doctor';
+      textSendBtn.disabled = false;
+      sendTextMessage();
+      break;
+    case '/init':
+      if (activeSessionId) {
+        fetch(`/api/sessions/${encodeURIComponent(activeSessionId)}/restart`, {
+          method: 'POST',
+        }).catch(e => console.error('Init failed:', e));
+      }
+      break;
+    case '/config':
+      if (typeof showSettingsPage === 'function') showSettingsPage();
+      break;
+    default:
+      // Unknown command — send as text to agent
+      textInput.value = cmd;
+      textSendBtn.disabled = false;
+      sendTextMessage();
+  }
 }
 
 function _slashMenuNav(dir) {
