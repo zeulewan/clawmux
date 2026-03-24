@@ -181,6 +181,7 @@ function handleMessage(data) {
       renderVoiceGridIfActive();
       renderSidebar();
       startOpenClawPolling();
+      if (typeof updateVerboseToggle === 'function') updateVerboseToggle();
       // Push saved speed from localStorage to server for all sessions
       const savedSpd = localStorage.getItem('hub_speed');
       if (savedSpd) {
