@@ -306,6 +306,61 @@ async def get_session_transcript(session_id: str, request: Request):
     return JSONResponse({"session_id": session_id, "messages": messages})
 
 
+@router.get("/api/sessions/{session_id}/files")
+async def list_session_files(session_id: str, request: Request):
+    """List files in a session's workspace for the @mention file picker."""
+    session = session_mgr.sessions.get(session_id)
+    if not session or not session.work_dir:
+        return JSONResponse({"files": []})
+
+    query = request.query_params.get("query", "").strip().lower()
+    limit = min(int(request.query_params.get("limit", 20)), 50)
+
+    def _scan_files() -> list[dict]:
+        from pathlib import Path
+        skip_dirs = {".git", "node_modules", "__pycache__", ".venv", ".mypy_cache",
+                     ".pytest_cache", ".clawmux", "uploads", ".claude"}
+        root = Path(session.work_dir)
+        results = []
+        try:
+            for p in root.rglob("*"):
+                if p.is_dir():
+                    continue
+                # Skip hidden/build dirs
+                parts = p.relative_to(root).parts
+                if any(part in skip_dirs or part.startswith(".") for part in parts[:-1]):
+                    continue
+                rel = str(p.relative_to(root))
+                name = p.name
+                # Fuzzy filter: query matches anywhere in path or name
+                if query and query not in rel.lower():
+                    continue
+                results.append({"path": rel, "name": name})
+                if len(results) >= limit * 3:  # gather extra for sorting
+                    break
+        except Exception:
+            pass
+        # Sort by relevance: exact name match first, then path contains, then alphabetical
+        if query:
+            def _score(f):
+                n = f["name"].lower()
+                p = f["path"].lower()
+                if n == query:
+                    return (0, p)
+                if n.startswith(query):
+                    return (1, p)
+                if query in n:
+                    return (2, p)
+                return (3, p)
+            results.sort(key=_score)
+        else:
+            results.sort(key=lambda f: f["path"])
+        return results[:limit]
+
+    files = await asyncio.to_thread(_scan_files)
+    return JSONResponse({"files": files})
+
+
 @router.get("/api/openclaw/history/{session_id}")
 async def get_openclaw_history(session_id: str, request: Request):
     """Fetch chat history for an OpenClaw agent session."""
