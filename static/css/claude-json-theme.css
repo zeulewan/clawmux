@@ -391,3 +391,104 @@
   font-size: 0.85em;
   color: var(--cj-secondary-fg, rgba(255,255,255,0.6));
 }
+
+/* === DiffView === */
+.diff-card {
+  border: 1.5px solid var(--cj-border);
+  border-radius: 8px;
+  background: rgba(0,0,0,0.15);
+  padding: 0;
+  margin: 8px 0;
+  max-width: min(700px, 95%);
+  align-self: flex-start;
+  overflow: hidden;
+  animation: cj-fadeIn 0.3s ease;
+}
+.diff-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--cj-border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.diff-tool-badge {
+  font-size: 0.75em;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(217, 119, 87, 0.15);
+  color: #d97757;
+}
+.diff-filename {
+  font-family: var(--cj-mono-font);
+  font-weight: 600;
+  font-size: 0.95em;
+}
+.diff-filepath {
+  padding: 0 14px 8px;
+  font-family: var(--cj-mono-font);
+  font-size: 0.75em;
+  color: var(--cj-secondary-fg);
+  opacity: 0.6;
+}
+.diff-body {
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: var(--cj-mono-font);
+  font-size: 0.82em;
+  line-height: 1.5;
+}
+.diff-line {
+  display: flex;
+  padding: 0 14px 0 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.diff-ln {
+  width: 40px;
+  text-align: right;
+  padding-right: 8px;
+  color: var(--cj-secondary-fg);
+  opacity: 0.4;
+  user-select: none;
+  flex-shrink: 0;
+}
+.diff-code {
+  flex: 1;
+  padding: 0 4px;
+}
+.diff-line.del {
+  background: rgba(199, 78, 57, 0.15);
+  color: #c74e39;
+}
+.diff-line.add {
+  background: rgba(116, 201, 145, 0.15);
+  color: #74c991;
+}
+.diff-line.ctx {
+  color: var(--cj-secondary-fg);
+  opacity: 0.7;
+}
+.diff-actions {
+  padding: 10px 14px;
+  border-top: 1px solid var(--cj-border);
+  display: flex;
+  gap: 8px;
+}
+.diff-result {
+  padding: 8px 14px;
+  font-size: 0.85em;
+  font-weight: 500;
+}
+.diff-card.resolved-accept {
+  border-color: var(--cj-success);
+  opacity: 0.7;
+}
+.diff-card.resolved-accept .diff-body { max-height: 100px; }
+.diff-card.resolved-reject {
+  border-color: var(--cj-failure);
+  opacity: 0.7;
+}
+.diff-card.resolved-reject .diff-body { max-height: 60px; }

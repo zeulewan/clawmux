@@ -1763,6 +1763,106 @@ async function cyclePermissionMode() {
   } catch (e) { console.error('Failed to set permission mode:', e); }
 }
 
+// === DiffView Renderer ===
+function renderDiffView(sessionId, reqData) {
+  if (sessionId !== activeSessionId) return;
+  const chatArea = document.getElementById('chat-area');
+  if (!chatArea) return;
+  const diff = reqData.diff || {};
+  const filePath = diff.file_path || 'unknown';
+  const fileName = filePath.split('/').pop();
+
+  const card = document.createElement('div');
+  card.className = 'diff-card';
+  card.dataset.requestId = reqData.request_id || '';
+
+  // Header
+  const header = document.createElement('div');
+  header.className = 'diff-header';
+  const toolLabel = reqData.tool_name === 'Edit' ? 'Edit' : (diff.is_new_file ? 'New File' : 'Write');
+  header.innerHTML = `<span class="diff-tool-badge">${toolLabel}</span> <span class="diff-filename">${_escHtml(fileName)}</span>`;
+  card.appendChild(header);
+
+  const pathEl = document.createElement('div');
+  pathEl.className = 'diff-filepath';
+  pathEl.textContent = filePath;
+  card.appendChild(pathEl);
+
+  // Diff content
+  const diffBody = document.createElement('div');
+  diffBody.className = 'diff-body';
+  if (reqData.tool_name === 'Edit' && diff.old_string !== undefined) {
+    _renderUnifiedDiff(diffBody, diff.old_string || '', diff.new_string || '');
+  } else {
+    _renderUnifiedDiff(diffBody, diff.old_content || '', diff.new_content || '');
+  }
+  card.appendChild(diffBody);
+
+  // Actions
+  const actions = document.createElement('div');
+  actions.className = 'diff-actions';
+  const acceptBtn = document.createElement('button');
+  acceptBtn.className = 'permission-btn allow';
+  acceptBtn.textContent = 'Accept';
+  acceptBtn.onclick = () => _respondDiff(sessionId, reqData.request_id, true, card);
+  actions.appendChild(acceptBtn);
+  const rejectBtn = document.createElement('button');
+  rejectBtn.className = 'permission-btn deny';
+  rejectBtn.textContent = 'Reject';
+  rejectBtn.onclick = () => _respondDiff(sessionId, reqData.request_id, false, card);
+  actions.appendChild(rejectBtn);
+  card.appendChild(actions);
+
+  chatArea.appendChild(card);
+  chatScrollToBottom(true);
+}
+
+function _renderUnifiedDiff(container, oldText, newText) {
+  const oldLines = oldText.split('\n');
+  const newLines = newText.split('\n');
+  let html = '';
+  let oi = 0, ni = 0;
+  while (oi < oldLines.length || ni < newLines.length) {
+    const ol = oi < oldLines.length ? oldLines[oi] : null;
+    const nl = ni < newLines.length ? newLines[ni] : null;
+    if (ol === nl) {
+      html += `<div class="diff-line ctx"><span class="diff-ln">${oi + 1}</span><span class="diff-code"> ${_escHtml(ol)}</span></div>`;
+      oi++; ni++;
+    } else {
+      if (ol !== null) {
+        html += `<div class="diff-line del"><span class="diff-ln">${oi + 1}</span><span class="diff-code">-${_escHtml(ol)}</span></div>`;
+        oi++;
+      }
+      if (nl !== null && (ol === null || ol !== nl)) {
+        html += `<div class="diff-line add"><span class="diff-ln">${ni + 1}</span><span class="diff-code">+${_escHtml(nl)}</span></div>`;
+        ni++;
+      }
+    }
+    if (oi + ni > 2000) break;
+  }
+  container.innerHTML = html;
+}
+
+function _escHtml(s) {
+  return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+async function _respondDiff(sessionId, requestId, allow, cardEl) {
+  try {
+    await fetch(`/api/sessions/${sessionId}/permission-response`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ request_id: requestId, allow, message: '' }),
+    });
+    cardEl.className = 'diff-card ' + (allow ? 'resolved-accept' : 'resolved-reject');
+    const result = document.createElement('div');
+    result.className = 'diff-result';
+    result.textContent = allow ? '\u2705 Accepted' : '\u274C Rejected';
+    cardEl.querySelector('.diff-actions')?.remove();
+    cardEl.appendChild(result);
+  } catch (e) { console.error('Diff response failed:', e); }
+}
+
 function updatePermissionModeLabel() {
   const el = document.getElementById('permission-mode-label');
   if (!el) return;

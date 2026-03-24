@@ -454,6 +454,11 @@ function handleMessage(data) {
       if (typeof renderPermissionCard === 'function') {
         renderPermissionCard(data.session_id, reqData);
       }
+    } else if (evType === 'diff_request') {
+      const reqData = data.data || {};
+      if (typeof renderDiffView === 'function') {
+        renderDiffView(data.session_id, reqData);
+      }
     }
     renderSidebar();
     return;
