@@ -1838,9 +1838,15 @@ def cmd_monitor(args):
     }
 
     # Launch agent attach in each pane, label it, and set status bar color
+    # Skip backends without tmux sessions (claude-json, openclaw)
+    NO_TMUX_BACKENDS = {"claude-json", "openclaw"}
     for pane_id, agent in pane_map:
-        tmux_run("send-keys", "-t", pane_id,
-                 attach_cmd(agent["tmux_session"]), "Enter")
+        if agent.get("backend") in NO_TMUX_BACKENDS:
+            tmux_run("send-keys", "-t", pane_id,
+                     "echo '[%s] No tmux session (%s)'; read" % (agent.get('label', '?'), agent.get('backend', '?')), "Enter")
+        else:
+            tmux_run("send-keys", "-t", pane_id,
+                     attach_cmd(agent["tmux_session"]), "Enter")
         label = agent.get("label", agent["tmux_session"])
         tmux_run("select-pane", "-t", pane_id, "-T", label)
         tmux_run("set-option", "-p", "-t", pane_id, "@agent-label", label)
@@ -1999,6 +2005,16 @@ def reorder_panes():
 def attach_cmd(session_name):
     return "while true; do TMUX= tmux attach -t " + session_name + " 2>/dev/null || sleep 2; done"
 
+NO_TMUX_BACKENDS = {{"claude-json", "openclaw"}}
+
+def pane_cmd(agent):
+    """Build the command to run in a monitor pane for an agent."""
+    if agent.get("backend") in NO_TMUX_BACKENDS:
+        label = agent.get("label", "?")
+        backend = agent.get("backend", "?")
+        return f"echo '[{{label}}] No tmux session ({{backend}})'; read"
+    return attach_cmd(agent["tmux_session"])
+
 def tmux(*args):
     r = subprocess.run(["tmux"] + list(args), capture_output=True, text=True)
     if r.returncode != 0 and r.stderr.strip():
@@ -2071,7 +2087,7 @@ while True:
                 log("No panes left — recovering with new window")
                 r = subprocess.run(
                     ["tmux", "new-window", "-t", MONITOR, "-P", "-F", "#{{pane_id}}",
-                     attach_cmd(agent["tmux_session"])],
+                     pane_cmd(agent)],
                     capture_output=True, text=True,
                 )
                 if r.returncode != 0:
@@ -2086,7 +2102,7 @@ while True:
             r = subprocess.run(
                 ["tmux", "split-window", "-t", target,
                  "-P", "-F", "#{{pane_id}}",
-                 attach_cmd(agent["tmux_session"])],
+                 pane_cmd(agent)],
                 capture_output=True, text=True,
             )
             if r.returncode == 0:
