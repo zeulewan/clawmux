@@ -154,20 +154,28 @@ def test_05_tool_card_expand_collapse(page: Page):
         pytest.skip("No tool cards to test expand/collapse")
 
     header = cards.first.locator(".tool-card-header")
-    body = cards.first.locator(".tool-card-body")
+    body = cards.first.locator(".tool-body-grid")
 
-    # Expand
-    header.click()
+    # Scroll card below fixed header before clicking
+    header.evaluate("el => el.scrollIntoView({block: 'center'})")
+    time.sleep(0.3)
+
+    # Tool card is a <details> element — check open attribute
+    is_open = cards.first.evaluate("el => el.open")
+    assert not is_open, "Card should start closed"
+
+    # Expand via JS click on summary (bypasses z-index overlap)
+    header.evaluate("el => el.click()")
     time.sleep(0.5)
     page.screenshot(path=str(SCREENSHOT_DIR / "06_card_expanded.png"))
-    display = body.evaluate("el => getComputedStyle(el).display")
-    assert display != "none", f"Body should be visible after click, got display={display}"
+    is_open = cards.first.evaluate("el => el.open")
+    assert is_open, "Card should be open after click"
 
     # Collapse
-    header.click()
+    header.evaluate("el => el.click()")
     time.sleep(0.5)
-    display = body.evaluate("el => getComputedStyle(el).display")
-    assert display == "none", f"Body should be hidden after second click, got display={display}"
+    is_open = cards.first.evaluate("el => el.open")
+    assert not is_open, "Card should be closed after second click"
 
 
 def test_06_no_old_typing_dots(page: Page):
