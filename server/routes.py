@@ -346,6 +346,52 @@ async def restart_session(session_id: str):
     return JSONResponse({"status": "restarted", "session_id": new_session.session_id})
 
 
+@router.post("/api/sessions/{session_id}/permission-mode")
+async def set_permission_mode(session_id: str, request: Request):
+    """Set the permission mode for a claude-json session. Requires restart."""
+    session = session_mgr.sessions.get(session_id)
+    if not session:
+        return JSONResponse({"error": "session not found"}, status_code=404)
+    if session.backend != "claude-json":
+        return JSONResponse({"error": "only claude-json supports permission modes"}, status_code=400)
+    body = await request.json()
+    mode = body.get("mode", "")
+    from backends.claude_json import ClaudeJsonBackend
+    if not ClaudeJsonBackend.set_permission_mode(session_id, mode):
+        return JSONResponse({"error": f"invalid mode: {mode}"}, status_code=400)
+    return JSONResponse({"session_id": session_id, "permission_mode": mode, "restart_required": True})
+
+
+@router.get("/api/sessions/{session_id}/permission-mode")
+async def get_permission_mode(session_id: str):
+    """Get the current permission mode for a claude-json session."""
+    session = session_mgr.sessions.get(session_id)
+    if not session:
+        return JSONResponse({"error": "session not found"}, status_code=404)
+    from backends.claude_json import ClaudeJsonBackend
+    mode = ClaudeJsonBackend.get_permission_mode(session_id)
+    return JSONResponse({"session_id": session_id, "permission_mode": mode})
+
+
+@router.post("/api/sessions/{session_id}/permission-response")
+async def respond_to_permission(session_id: str, request: Request):
+    """Respond to a pending permission request from the browser."""
+    session = session_mgr.sessions.get(session_id)
+    if not session:
+        return JSONResponse({"error": "session not found"}, status_code=404)
+    body = await request.json()
+    request_id = body.get("request_id", "")
+    allow = body.get("allow", False)
+    message = body.get("message", "")
+    if not request_id:
+        return JSONResponse({"error": "request_id is required"}, status_code=400)
+    from backends.claude_json import ClaudeJsonBackend
+    resolved = ClaudeJsonBackend.resolve_permission(session_id, request_id, allow, message)
+    if not resolved:
+        return JSONResponse({"error": "permission request not found or already resolved"}, status_code=404)
+    return JSONResponse({"ok": True, "allowed": allow})
+
+
 @router.post("/api/sessions/{session_id}/interrupt")
 async def interrupt_session(session_id: str):
     """Soft-interrupt a running agent via the appropriate backend method."""

@@ -42,6 +42,10 @@ _compacting: dict[str, bool] = {}       # session currently compacting
 _last_usage: dict[str, dict] = {}       # last token usage from result event
 _models: dict[str, str] = {}            # session → model string from init
 _active_tools: dict[str, dict] = {}    # session → {tool_use_id: {name, input}} for result association
+_permission_modes: dict[str, str] = {} # session → permission mode
+_pending_permissions: dict[str, asyncio.Future] = {}  # request_id → Future for browser response
+
+VALID_PERMISSION_MODES = {"bypassPermissions", "auto", "acceptEdits", "plan", "default", "dontAsk"}
 
 _EXTRA_PATH = "/opt/homebrew/bin:/usr/local/bin"
 _SUBPROCESS_ENV = os.environ.copy()
@@ -99,15 +103,25 @@ class ClaudeJsonBackend(AgentBackend):
         _hub_ports[session_name] = hub_port
         _work_dirs[session_name] = work_dir
 
-        # Build command
+        # Determine permission mode
+        perm_mode = _permission_modes.get(session_name, "bypassPermissions")
+        _permission_modes[session_name] = perm_mode
+
+        # Build command — use base claude without --dangerously-skip-permissions
+        # when a non-bypass permission mode is active
         model_flag = f" --model {model}" if model and model != "opus" else ""
         effort_flag = f" --effort {effort}" if effort and model != "haiku" else ""
         session_flag = f" --session-id {conversation_id}"
         if resuming:
             session_flag = f" --resume {conversation_id}"
 
+        if perm_mode == "bypassPermissions":
+            base_cmd = CLAUDE_BASE_COMMAND  # includes --dangerously-skip-permissions
+        else:
+            base_cmd = "claude --permission-mode " + perm_mode
+
         cmd = (
-            f"{CLAUDE_BASE_COMMAND} -p --output-format stream-json --verbose"
+            f"{base_cmd} -p --output-format stream-json --verbose"
             f" --input-format stream-json --include-partial-messages"
             f"{model_flag}{effort_flag}{session_flag}"
         )
@@ -170,6 +184,12 @@ class ClaudeJsonBackend(AgentBackend):
         _last_usage.pop(session_name, None)
         _models.pop(session_name, None)
         _active_tools.pop(session_name, None)
+        _permission_modes.pop(session_name, None)
+        # Cancel any pending permission requests
+        for req_id, fut in list(_pending_permissions.items()):
+            if req_id.startswith(session_name + ":"):
+                fut.cancel()
+                _pending_permissions.pop(req_id, None)
         log.info("[%s] Claude JSON subprocess terminated", session_name)
 
     async def health_check(self, session_name: str) -> bool:
@@ -566,33 +586,126 @@ class ClaudeJsonBackend(AgentBackend):
         session_name: str,
         data: dict,
     ) -> None:
-        """Respond to permission/control requests from Claude."""
+        """Respond to permission/control requests from Claude.
+
+        In bypass mode: auto-allow everything.
+        In other modes: forward to browser, wait for response.
+        """
         request_id = data.get("request_id", "")
         request = data.get("request", {})
         subtype = request.get("subtype", "")
+        perm_mode = _permission_modes.get(session_name, "bypassPermissions")
 
-        if subtype == "can_use_tool":
-            tool_use_id = request.get("tool_use_id", "")
-            response = {
-                "type": "control_response",
-                "response": {
-                    "subtype": "success",
-                    "request_id": request_id,
-                    "response": {
-                        "behavior": "allow",
-                        "toolUseID": tool_use_id,
-                    },
-                },
-            }
-            msg = json.dumps(response) + "\n"
-            try:
-                proc.stdin.write(msg.encode())
-                await proc.stdin.drain()
-                log.debug("[%s] Allowed tool: %s", session_name, request.get("tool_name"))
-            except Exception as e:
-                log.error("[%s] Failed to send control response: %s", session_name, e)
-        else:
+        if subtype != "can_use_tool":
             log.warning("[%s] Unhandled control_request subtype: %s", session_name, subtype)
+            return
+
+        tool_use_id = request.get("tool_use_id", "")
+        tool_name = request.get("tool_name", "")
+
+        if perm_mode == "bypassPermissions":
+            # Auto-allow in bypass mode
+            await self._send_control_response(proc, session_name, request_id, tool_use_id, "allow")
+            return
+
+        # Forward to browser and wait for response
+        hub = _get_hub()
+        send_fn = hub["send"]
+        await send_fn({
+            "type": "structured_event",
+            "session_id": session_name,
+            "event_type": "permission_request",
+            "data": {
+                "request_id": request_id,
+                "tool_name": tool_name,
+                "tool_use_id": tool_use_id,
+                "input": request.get("input", {}),
+                "title": request.get("title", ""),
+                "description": request.get("description", ""),
+                "display_name": request.get("display_name", tool_name),
+            },
+        })
+
+        # Create a Future and wait for the browser to resolve it
+        perm_key = f"{session_name}:{request_id}"
+        future = asyncio.get_event_loop().create_future()
+        _pending_permissions[perm_key] = future
+
+        try:
+            response = await asyncio.wait_for(future, timeout=300)
+            behavior = response.get("behavior", "deny")
+            message = response.get("message", "")
+        except asyncio.TimeoutError:
+            behavior = "deny"
+            message = "Permission request timed out (5 minutes)"
+            log.warning("[%s] Permission request %s timed out", session_name, request_id)
+        except asyncio.CancelledError:
+            behavior = "deny"
+            message = "Permission request cancelled"
+        finally:
+            _pending_permissions.pop(perm_key, None)
+
+        if behavior == "allow":
+            await self._send_control_response(proc, session_name, request_id, tool_use_id, "allow")
+        else:
+            await self._send_control_response(
+                proc, session_name, request_id, tool_use_id, "deny", message,
+            )
+
+    async def _send_control_response(
+        self, proc, session_name: str, request_id: str,
+        tool_use_id: str, behavior: str, message: str = "",
+    ) -> None:
+        """Write a control_response to the subprocess stdin."""
+        if behavior == "allow":
+            response_data = {"behavior": "allow", "toolUseID": tool_use_id}
+        else:
+            response_data = {"behavior": "deny", "message": message or "Denied by user"}
+
+        response = {
+            "type": "control_response",
+            "response": {
+                "subtype": "success",
+                "request_id": request_id,
+                "response": response_data,
+            },
+        }
+        msg = json.dumps(response) + "\n"
+        try:
+            proc.stdin.write(msg.encode())
+            await proc.stdin.drain()
+            log.info("[%s] Permission %s: %s (%s)", session_name, behavior, request_id, tool_use_id)
+        except Exception as e:
+            log.error("[%s] Failed to send control response: %s", session_name, e)
+
+    @staticmethod
+    def resolve_permission(session_name: str, request_id: str, allow: bool, message: str = "") -> bool:
+        """Resolve a pending permission request from the browser.
+
+        Returns True if the request was found and resolved.
+        """
+        perm_key = f"{session_name}:{request_id}"
+        future = _pending_permissions.get(perm_key)
+        if not future or future.done():
+            return False
+        future.set_result({
+            "behavior": "allow" if allow else "deny",
+            "message": message,
+        })
+        return True
+
+    @staticmethod
+    def set_permission_mode(session_name: str, mode: str) -> bool:
+        """Set the permission mode for a session. Requires restart to take effect."""
+        if mode not in VALID_PERMISSION_MODES:
+            return False
+        _permission_modes[session_name] = mode
+        return True
+
+    @staticmethod
+    def get_permission_mode(session_name: str) -> str:
+        """Get the current permission mode for a session."""
+        return _permission_modes.get(session_name, "bypassPermissions")
 
     async def _handle_stream_event(
         self, event: dict, session_name: str, hub_port: int | None,
