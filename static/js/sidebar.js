@@ -675,16 +675,8 @@ function _createAgentCard(voiceId, name, state) {
     touchStartX = touch.clientX; touchStartY = touch.clientY;
     lpTimer = setTimeout(() => {
       lpTimer = null; lpFired = true;
-      ctxShown = true;
+      // Only show visual feedback while finger is held — menu appears on lift
       card.classList.add('long-press-active');
-      // Position menu above the finger so it's visible while holding
-      const menuY = Math.max(10, touchStartY - 120);
-      const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: touchStartX, clientY: menuY };
-      if (card._voiceSession) { showContextMenu(fakeEvent, card._voiceSession.session_id, voiceId); }
-      else { showContextMenu(fakeEvent, null, voiceId); }
-      // Block interaction on menu while finger is still held — prevents accidental selection
-      const ctxMenu = document.getElementById('context-menu');
-      if (ctxMenu) ctxMenu.style.pointerEvents = 'none';
     }, 500);
   }, { passive: true });
   card.addEventListener('touchmove', (e) => {
@@ -718,16 +710,22 @@ function _createAgentCard(voiceId, name, state) {
   card.addEventListener('touchend', (e) => {
     if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
     card.classList.remove('long-press-active');
-    // Re-enable menu interaction now that finger is lifted
-    const ctxMenu = document.getElementById('context-menu');
-    if (ctxMenu) ctxMenu.style.pointerEvents = '';
     if (touchDragging) {
       e.preventDefault();
       _touchDragEnd(e.changedTouches[0]);
       touchDragging = false; lpFired = false; ctxShown = false; return;
     }
+    if (lpFired && !ctxShown) {
+      // Long-press completed — show context menu now that finger is lifted
+      e.preventDefault();
+      ctxShown = true;
+      const t = e.changedTouches[0];
+      const menuY = Math.max(10, t.clientY - 40);
+      const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: t.clientX, clientY: menuY };
+      if (card._voiceSession) { showContextMenu(fakeEvent, card._voiceSession.session_id, voiceId); }
+      else { showContextMenu(fakeEvent, null, voiceId); }
+    }
     if (ctxShown) {
-      // Prevent synthetic click from immediately closing the context menu
       e.preventDefault();
     }
     lpFired = false; ctxShown = false;
