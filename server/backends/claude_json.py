@@ -162,6 +162,7 @@ class ClaudeJsonBackend(AgentBackend):
                 stderr=asyncio.subprocess.DEVNULL,
                 cwd=work_dir,
                 env=env,
+                start_new_session=True,  # own process group for clean SIGINT
             )
         except Exception as e:
             log.error("[%s] Failed to start Claude JSON subprocess: %s", session_name, e)
@@ -229,14 +230,22 @@ class ClaudeJsonBackend(AgentBackend):
         log.info("[%s] Delivered message (%d chars) via stdin", session_name, len(text))
 
     async def interrupt(self, session_name: str) -> bool:
-        """Send SIGINT to the subprocess to interrupt the current turn."""
+        """Send SIGINT to the subprocess process group.
+
+        Uses os.killpg to signal the entire process group, since
+        create_subprocess_shell spawns a shell wrapper — SIGINT to the
+        shell PID alone may not reach the actual claude child process.
+        """
         proc = _processes.get(session_name)
         if not proc or proc.returncode is not None:
             return False
         try:
-            proc.send_signal(signal.SIGINT)
-            log.info("[%s] Sent SIGINT to Claude JSON subprocess", session_name)
+            os.killpg(os.getpgid(proc.pid), signal.SIGINT)
+            log.info("[%s] Sent SIGINT to process group (pid=%d)", session_name, proc.pid)
             return True
+        except ProcessLookupError:
+            log.warning("[%s] Process group not found (already exited?)", session_name)
+            return False
         except Exception as e:
             log.error("[%s] Failed to interrupt: %s", session_name, e)
             return False
