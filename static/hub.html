@@ -798,7 +798,9 @@ async function confirmSpawn() {
   _spawnVoiceId = '';
 }
 
-async function spawnSession(voiceId = '', backend = 'claude-code', modelId = '') {
+async function spawnSession(voiceId = '', backend = '', modelId = '') {
+  // Default backend from server (set on page load via /api/settings or session_list)
+  if (!backend) backend = window._defaultBackend || 'claude-json';
   if (voiceId && spawningVoices.has(voiceId)) return; // already spawning this voice
 
   // Mark voice as spawning immediately and update grid
