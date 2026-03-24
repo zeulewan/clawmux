@@ -41,6 +41,7 @@ _work_dirs: dict[str, str] = {}
 _compacting: dict[str, bool] = {}       # session currently compacting
 _last_usage: dict[str, dict] = {}       # last token usage from result event
 _models: dict[str, str] = {}            # session → model string from init
+_active_tools: dict[str, dict] = {}    # session → {tool_use_id: {name, input}} for result association
 
 _EXTRA_PATH = "/opt/homebrew/bin:/usr/local/bin"
 _SUBPROCESS_ENV = os.environ.copy()
@@ -168,6 +169,7 @@ class ClaudeJsonBackend(AgentBackend):
         _compacting.pop(session_name, None)
         _last_usage.pop(session_name, None)
         _models.pop(session_name, None)
+        _active_tools.pop(session_name, None)
         log.info("[%s] Claude JSON subprocess terminated", session_name)
 
     async def health_check(self, session_name: str) -> bool:
@@ -402,10 +404,15 @@ class ClaudeJsonBackend(AgentBackend):
                     for block in content:
                         if not isinstance(block, dict):
                             continue
-                        if block.get("type") == "tool_use":
+                        block_type = block.get("type", "")
+                        if block_type == "tool_use":
+                            tool_id = block.get("id", "")
                             tool_name = block.get("name", "tool")
                             tool_input = block.get("input", {})
-                            # Direct state update: PROCESSING + activity
+                            # Track for result association
+                            tools = _active_tools.setdefault(session_name, {})
+                            tools[tool_id] = {"name": tool_name, "input": tool_input}
+                            # Direct state update
                             if session.state == AgentState.IDLE:
                                 session.set_state(AgentState.PROCESSING)
                             session.tool_name = tool_name
@@ -413,37 +420,87 @@ class ClaudeJsonBackend(AgentBackend):
                             session.activity = self._tool_activity(tool_name, tool_input)
                             await hub["save_activity"](session, session.activity)
                             await send_fn(hub["status_msg"](session))
-                            # Structured event for frontend
                             await send_fn({
                                 "type": "structured_event",
                                 "session_id": session_name,
                                 "event_type": "tool_use",
                                 "tool_name": tool_name,
+                                "tool_id": tool_id,
                                 "data": tool_input,
                             })
-                        elif block.get("type") == "text":
+                        elif block_type == "text":
                             text = block.get("text", "")
                             if text:
                                 text_buffer.clear()
                                 text_buffer.append(text)
-                    # Cache usage from assistant message
+                        elif block_type == "thinking":
+                            # Extended thinking block — forward for collapsible display
+                            thinking_text = block.get("thinking", "")
+                            if thinking_text:
+                                await send_fn({
+                                    "type": "structured_event",
+                                    "session_id": session_name,
+                                    "event_type": "thinking",
+                                    "data": {"text": thinking_text[:500]},
+                                })
+                    # Cache usage
                     usage = msg.get("usage")
                     if usage:
                         _last_usage[session_name] = usage
 
                 # --- tool result ---
                 elif event_type == "user":
+                    msg = data.get("message", {})
+                    content = msg.get("content", [])
+                    # Extract tool results and associate with original tool calls
+                    tool_results = []
+                    for block in (content if isinstance(content, list) else []):
+                        if not isinstance(block, dict):
+                            continue
+                        if block.get("type") == "tool_result":
+                            use_id = block.get("tool_use_id", "")
+                            result_content = block.get("content", "")
+                            if isinstance(result_content, list):
+                                result_content = "".join(
+                                    b.get("text", "") for b in result_content
+                                    if isinstance(b, dict) and b.get("type") == "text"
+                                )
+                            # Look up original tool call
+                            tools = _active_tools.get(session_name, {})
+                            original = tools.pop(use_id, {})
+                            tool_results.append({
+                                "tool_use_id": use_id,
+                                "tool_name": original.get("name", ""),
+                                "tool_input": original.get("input", {}),
+                                "content": str(result_content)[:500],
+                                "is_error": block.get("is_error", False),
+                            })
                     session.activity = ""
                     session.tool_name = ""
                     session.tool_input = {}
                     session.set_state(AgentState.PROCESSING)
                     await hub["save_activity"](session, "Processing")
                     await send_fn(hub["status_msg"](session))
-                    await send_fn({
-                        "type": "structured_event",
-                        "session_id": session_name,
-                        "event_type": "tool_result",
-                    })
+                    # Send enriched tool_result event with original call info
+                    for tr in tool_results:
+                        await send_fn({
+                            "type": "structured_event",
+                            "session_id": session_name,
+                            "event_type": "tool_result",
+                            "tool_name": tr["tool_name"],
+                            "tool_id": tr["tool_use_id"],
+                            "data": {
+                                "content": tr["content"],
+                                "input": tr["tool_input"],
+                                "is_error": tr["is_error"],
+                            },
+                        })
+                    if not tool_results:
+                        await send_fn({
+                            "type": "structured_event",
+                            "session_id": session_name,
+                            "event_type": "tool_result",
+                        })
 
                 # --- turn complete ---
                 elif event_type == "result":
@@ -546,8 +603,20 @@ class ClaudeJsonBackend(AgentBackend):
 
         if event_type == "content_block_start":
             block = event.get("content_block", {})
-            if block.get("type") == "text":
+            block_type = block.get("type", "")
+            if block_type == "text":
                 text_buffer.clear()
+            elif block_type == "thinking":
+                # Thinking block started — signal frontend
+                try:
+                    await send_fn({
+                        "type": "structured_event",
+                        "session_id": session_name,
+                        "event_type": "thinking",
+                        "data": {"status": "start"},
+                    })
+                except Exception:
+                    pass
 
         elif event_type == "content_block_delta":
             delta = event.get("delta", {})
