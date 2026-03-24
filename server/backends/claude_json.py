@@ -126,28 +126,33 @@ class ClaudeJsonBackend(AgentBackend):
         _hub_ports[session_name] = hub_port
         _work_dirs[session_name] = work_dir
 
-        # Determine permission mode from session object or module cache
+        # Determine permission mode
         perm_mode = _permission_modes.get(session_name, "bypassPermissions")
         log.info("[%s] Spawn with permission_mode=%s", session_name, perm_mode)
 
-        # Build command — use base claude without --dangerously-skip-permissions
-        # when a non-bypass permission mode is active
-        model_flag = f" --model {model}" if model and model != "opus" else ""
-        effort_flag = f" --effort {effort}" if effort and model != "haiku" else ""
-        session_flag = f" --session-id {conversation_id}"
-        if resuming:
-            session_flag = f" --resume {conversation_id}"
-
+        # Build argv list (no shell wrapper — signals go directly to claude)
+        import shutil
+        claude_bin = shutil.which("claude") or "claude"
+        argv = [claude_bin]
         if perm_mode == "bypassPermissions":
-            base_cmd = CLAUDE_BASE_COMMAND  # includes --dangerously-skip-permissions
+            argv.append("--dangerously-skip-permissions")
         else:
-            base_cmd = "claude --permission-mode " + perm_mode
-
-        cmd = (
-            f"{base_cmd} -p --output-format stream-json --verbose"
-            f" --input-format stream-json --include-partial-messages"
-            f"{model_flag}{effort_flag}{session_flag}"
-        )
+            argv.extend(["--permission-mode", perm_mode])
+        argv.extend([
+            "-p",
+            "--output-format", "stream-json",
+            "--verbose",
+            "--input-format", "stream-json",
+            "--include-partial-messages",
+        ])
+        if model and model != "opus":
+            argv.extend(["--model", model])
+        if effort and model != "haiku":
+            argv.extend(["--effort", effort])
+        if resuming:
+            argv.extend(["--resume", conversation_id])
+        else:
+            argv.extend(["--session-id", conversation_id])
 
         env = _SUBPROCESS_ENV.copy()
         env["CLAWMUX_SESSION_ID"] = session_id
@@ -155,14 +160,13 @@ class ClaudeJsonBackend(AgentBackend):
         env["CLAWMUX_PORT"] = str(hub_port)
 
         try:
-            proc = await asyncio.create_subprocess_shell(
-                cmd,
+            proc = await asyncio.create_subprocess_exec(
+                *argv,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
                 cwd=work_dir,
                 env=env,
-                start_new_session=True,  # own process group for clean SIGINT
             )
         except Exception as e:
             log.error("[%s] Failed to start Claude JSON subprocess: %s", session_name, e)
@@ -230,21 +234,24 @@ class ClaudeJsonBackend(AgentBackend):
         log.info("[%s] Delivered message (%d chars) via stdin", session_name, len(text))
 
     async def interrupt(self, session_name: str) -> bool:
-        """Send SIGINT to the subprocess process group.
+        """Send SIGTERM to the subprocess, SIGKILL after 5s if it doesn't exit.
 
-        Uses os.killpg to signal the entire process group, since
-        create_subprocess_shell spawns a shell wrapper — SIGINT to the
-        shell PID alone may not reach the actual claude child process.
+        No shell wrapper (create_subprocess_exec) — signal goes directly to
+        the claude process. Matches the VS Code extension approach.
         """
         proc = _processes.get(session_name)
         if not proc or proc.returncode is not None:
             return False
         try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGINT)
-            log.info("[%s] Sent SIGINT to process group (pid=%d)", session_name, proc.pid)
+            proc.terminate()  # SIGTERM
+            log.info("[%s] Sent SIGTERM (pid=%d)", session_name, proc.pid)
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                proc.kill()  # SIGKILL
+                log.warning("[%s] SIGTERM timeout, sent SIGKILL", session_name)
             return True
         except ProcessLookupError:
-            log.warning("[%s] Process group not found (already exited?)", session_name)
             return False
         except Exception as e:
             log.error("[%s] Failed to interrupt: %s", session_name, e)
