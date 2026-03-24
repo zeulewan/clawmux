@@ -110,9 +110,11 @@ registerRenderer('claude-code', {
   ..._renderers['default'],
   name: 'claude-code',
 
-  // Claude Code uses transcript API for richer history
+  // Claude Code (tmux): use ClawMux history API — transcript requires
+  // conversation_id which is lost on hub reload for adopted sessions
   historyUrl(session) {
-    return `/api/sessions/${session.session_id}/transcript?limit=50`;
+    const project = typeof currentProject !== 'undefined' ? currentProject : '';
+    return `/api/history/${session.voice}?limit=150${project ? '&project=' + encodeURIComponent(project) : ''}`;
   },
 });
 
