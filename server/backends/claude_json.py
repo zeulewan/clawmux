@@ -577,8 +577,11 @@ class ClaudeJsonBackend(AgentBackend):
                         log.warning("[%s] Turn ended with error (subtype=%s): %s",
                                     session_name, data.get("subtype", "?"), result_text)
                     else:
+                        # Streaming already displayed the text — don't forward again.
+                        # Only forward if there was no streaming (text_buffer empty means
+                        # no stream_event deltas were received).
                         final_text = result_text or ("".join(text_buffer) if text_buffer else "")
-                        if final_text and hub_port:
+                        if final_text and hub_port and not text_buffer:
                             await self._forward_response(hub_port, session_name, final_text)
 
                     text_buffer.clear()
