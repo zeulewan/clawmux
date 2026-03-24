@@ -1788,6 +1788,10 @@ body.tts-disabled .karaoke-word.active { background: transparent; text-shadow: n
 }
 #context-menu .ctx-submenu .ctx-sub-item:hover { background: rgba(128,128,128,0.1); }
 #context-menu .ctx-submenu .ctx-sub-item.active { color: var(--voice-color, #4a9eff); font-weight: 600; }
+/* Locked during touch-hold: no highlights, no clicks */
+#context-menu.touch-locked { pointer-events: none; }
+#context-menu.touch-locked .ctx-item,
+#context-menu.touch-locked .ctx-sub-item { background: none !important; }
 /* Mobile: submenus expand inline below parent row instead of floating to the right */
 @media (max-width: 768px) {
   #context-menu .ctx-submenu {

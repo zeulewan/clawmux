@@ -675,8 +675,15 @@ function _createAgentCard(voiceId, name, state) {
     touchStartX = touch.clientX; touchStartY = touch.clientY;
     lpTimer = setTimeout(() => {
       lpTimer = null; lpFired = true;
-      // Only show visual feedback while finger is held — menu appears on lift
+      ctxShown = true;
       card.classList.add('long-press-active');
+      // Show menu but locked — no item interaction until finger lifts
+      const menuY = Math.max(10, touchStartY - 120);
+      const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: touchStartX, clientY: menuY };
+      if (card._voiceSession) { showContextMenu(fakeEvent, card._voiceSession.session_id, voiceId); }
+      else { showContextMenu(fakeEvent, null, voiceId); }
+      const ctxMenu = document.getElementById('context-menu');
+      if (ctxMenu) ctxMenu.classList.add('touch-locked');
     }, 500);
   }, { passive: true });
   card.addEventListener('touchmove', (e) => {
@@ -710,20 +717,13 @@ function _createAgentCard(voiceId, name, state) {
   card.addEventListener('touchend', (e) => {
     if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
     card.classList.remove('long-press-active');
+    // Unlock menu for interaction now that finger is lifted
+    const ctxMenu = document.getElementById('context-menu');
+    if (ctxMenu) ctxMenu.classList.remove('touch-locked');
     if (touchDragging) {
       e.preventDefault();
       _touchDragEnd(e.changedTouches[0]);
       touchDragging = false; lpFired = false; ctxShown = false; return;
-    }
-    if (lpFired && !ctxShown) {
-      // Long-press completed — show context menu now that finger is lifted
-      e.preventDefault();
-      ctxShown = true;
-      const t = e.changedTouches[0];
-      const menuY = Math.max(10, t.clientY - 40);
-      const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: t.clientX, clientY: menuY };
-      if (card._voiceSession) { showContextMenu(fakeEvent, card._voiceSession.session_id, voiceId); }
-      else { showContextMenu(fakeEvent, null, voiceId); }
     }
     if (ctxShown) {
       e.preventDefault();
