@@ -139,49 +139,40 @@ def _parse_jsonl(path: Path, limit: int) -> list[dict]:
                 if first_text.startswith("Greet the user as instructed in your CLAUDE.md"):
                     continue
 
-            # Extract text and tool blocks
-            text_parts = []
-            tool_calls = []
-            tool_results = []
-
+            # Pass through the full content block structure
+            # Truncate large tool_result content to avoid huge payloads
             if isinstance(content, list):
                 for block in content:
-                    if not isinstance(block, dict):
-                        continue
-                    block_type = block.get("type", "")
-                    if block_type == "text":
-                        text_parts.append(block.get("text", ""))
-                    elif block_type == "tool_use":
-                        tool_calls.append({
-                            "id": block.get("id", ""),
-                            "name": block.get("name", ""),
-                            "input": block.get("input", {}),
-                        })
-                    elif block_type == "tool_result":
-                        result_content = block.get("content", "")
-                        if isinstance(result_content, list):
-                            result_content = "".join(
-                                b.get("text", "") for b in result_content
-                                if isinstance(b, dict) and b.get("type") == "text"
-                            )
-                        tool_results.append({
-                            "tool_use_id": block.get("tool_use_id", ""),
-                            "content": str(result_content)[:500],
-                        })
+                    if isinstance(block, dict) and block.get("type") == "tool_result":
+                        rc = block.get("content", "")
+                        if isinstance(rc, str) and len(rc) > 2000:
+                            block["content"] = rc[:2000] + "…"
+                        elif isinstance(rc, list):
+                            for sub in rc:
+                                if isinstance(sub, dict) and sub.get("type") == "text":
+                                    t = sub.get("text", "")
+                                    if len(t) > 2000:
+                                        sub["text"] = t[:2000] + "…"
+
+            # Extract text for filtering decisions
+            text = ""
+            has_tool_result = False
+            if isinstance(content, list):
+                text = "".join(
+                    b.get("text", "") for b in content
+                    if isinstance(b, dict) and b.get("type") == "text"
+                )
+                has_tool_result = any(
+                    isinstance(b, dict) and b.get("type") == "tool_result"
+                    for b in content
+                )
             elif isinstance(content, str):
-                text_parts.append(content)
+                text = content
 
-            text = "".join(text_parts)
-
-            # Skip user entries that are only tool results with no text
-            if role == "user" and not text and tool_results:
+            # Keep user entries with tool_results (frontend needs them for tool cards)
+            # Skip only if completely empty (no text AND no tool results)
+            if role == "user" and not text and not has_tool_result:
                 continue
-
-            # Skip assistant entries that are only tool calls with no text
-            # (but include them in a summarized form)
-            if role == "assistant" and not text and tool_calls:
-                # Keep as tool-only message
-                pass
 
             # Parse timestamp
             ts_str = entry.get("timestamp", "")
@@ -192,14 +183,17 @@ def _parse_jsonl(path: Path, limit: int) -> list[dict]:
 
             parsed = {
                 "role": role,
-                "text": text,
+                "content": content,  # full Anthropic content block array
                 "ts": ts,
                 "uuid": entry.get("uuid", ""),
             }
-            if tool_calls:
-                parsed["tool_calls"] = tool_calls
-            if tool_results:
-                parsed["tool_results"] = tool_results
+            # Include text as convenience field for simple rendering
+            if text:
+                parsed["text"] = text
+            # Include usage if present
+            usage = msg.get("usage")
+            if usage:
+                parsed["usage"] = usage
 
             entries.append(parsed)
 
