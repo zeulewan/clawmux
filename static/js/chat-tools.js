@@ -37,6 +37,23 @@ function _toolInputFormatted(toolName, data) {
 const _READONLY_TOOLS = new Set(['Read', 'Grep', 'Glob', 'Search', 'WebFetch', 'WebSearch']);
 
 function createToolCardEl(msg) {
+  // Special case: Bash with clawmux send --image → render as inline image
+  if (msg.toolName === 'Bash' && msg.toolData && msg.toolData.command) {
+    const imgMatch = msg.toolData.command.match(/clawmux send\s.*--image\s+(\S+)/);
+    if (imgMatch) {
+      const div = document.createElement('div');
+      div.className = 'msg assistant';
+      const img = document.createElement('img');
+      img.src = imgMatch[1];
+      img.className = 'chat-img-revealed';
+      img.style.maxWidth = '100%';
+      img.style.borderRadius = '8px';
+      img.onerror = () => { img.replaceWith(document.createTextNode('[Image not found]')); };
+      div.appendChild(img);
+      return div;
+    }
+  }
+
   const details = document.createElement('details');
   const statusClass = msg.toolStatus === 'done' ? 'status-success' : (msg.toolStatus === 'error' ? 'status-error' : 'status-running');
   details.className = 'tool-card ' + statusClass;
