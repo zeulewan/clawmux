@@ -39,7 +39,7 @@ HEALTH_CHECK_INTERVAL_SECONDS = 15
 CLAUDE_BASE_COMMAND = "claude --dangerously-skip-permissions"
 CLAUDE_MODEL = os.environ.get("VOICE_CHAT_MODEL", "opus")  # opus, sonnet, haiku
 CLAUDE_EFFORT = os.environ.get("CLAWMUX_EFFORT", "high")  # low, medium, high
-DEFAULT_BACKEND = "claude-code"  # default backend for new sessions
+DEFAULT_BACKEND = "claude-json"  # default backend for new sessions
 OPENCLAW_GATEWAY_URL = os.environ.get("OPENCLAW_GATEWAY_URL", "ws://127.0.0.1:18789")
 # Token: env var first, then read from OpenClaw's own config
 def _read_openclaw_token() -> str:
