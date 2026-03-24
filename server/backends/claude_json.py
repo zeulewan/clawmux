@@ -184,7 +184,7 @@ class ClaudeJsonBackend(AgentBackend):
         _last_usage.pop(session_name, None)
         _models.pop(session_name, None)
         _active_tools.pop(session_name, None)
-        _permission_modes.pop(session_name, None)
+        # Note: _permission_modes NOT cleared — persists across restart
         # Cancel any pending permission requests
         for req_id, fut in list(_pending_permissions.items()):
             if req_id.startswith(session_name + ":"):
