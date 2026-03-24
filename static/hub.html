@@ -855,8 +855,8 @@ async function addSession(data, autoSwitch = false) {
         if (m.uuid) _seenIds.add(m.uuid);
         if (m.id && _seenIds.has(m.id)) continue;
         if (m.id) _seenIds.add(m.id);
-        // Render tool_calls as inline tool cards (from transcript history)
-        if (m.tool_calls && m.tool_calls.length > 0) {
+        // Render tool_calls as inline tool cards (claude-json only — tmux backends show tools in terminal)
+        if (m.tool_calls && m.tool_calls.length > 0 && data.backend === 'claude-json') {
           for (const tc of m.tool_calls) {
             serverMessages.push({
               role: 'tool', toolName: tc.name, toolData: tc.input || {},
