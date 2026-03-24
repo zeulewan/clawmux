@@ -667,28 +667,21 @@ function _createAgentCard(voiceId, name, state) {
     if (card._voiceSession) { showContextMenu(e, card._voiceSession.session_id, voiceId); }
     else { showContextMenu(e, null, voiceId); }
   };
-  let lpTimer = null, lpFired = false, touchDragging = false, ctxShown = false;
+  let lpTimer = null, lpFired = false, touchDragging = false;
   let touchStartX = 0, touchStartY = 0;
   card.addEventListener('touchstart', (e) => {
-    lpFired = false; touchDragging = false; ctxShown = false;
+    lpFired = false; touchDragging = false;
     const touch = e.touches[0];
     touchStartX = touch.clientX; touchStartY = touch.clientY;
     lpTimer = setTimeout(() => {
       lpTimer = null; lpFired = true;
-      ctxShown = true;
+      // Visual feedback only — menu appears on lift
       card.classList.add('long-press-active');
-      // Show menu but locked — no item interaction until finger lifts
-      const menuY = Math.max(10, touchStartY - 120);
-      const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: touchStartX, clientY: menuY };
-      if (card._voiceSession) { showContextMenu(fakeEvent, card._voiceSession.session_id, voiceId); }
-      else { showContextMenu(fakeEvent, null, voiceId); }
-      const ctxMenu = document.getElementById('context-menu');
-      if (ctxMenu) ctxMenu.classList.add('touch-locked');
     }, 500);
   }, { passive: true });
   card.addEventListener('touchmove', (e) => {
     const touch = e.touches[0];
-    if (ctxShown) { e.preventDefault(); return; } // context menu open — ignore movement
+    if (!lpTimer && !lpFired && !touchDragging) return; // not in long-press flow
     if (lpTimer) {
       // Still in grace period — cancel if finger moved too far (scrolling)
       if (Math.hypot(touch.clientX - touchStartX, touch.clientY - touchStartY) > 8) {
@@ -712,23 +705,25 @@ function _createAgentCard(voiceId, name, state) {
     document.querySelectorAll('.drag-above,.drag-below,.drag-over-group').forEach(el =>
       el.classList.remove('drag-above', 'drag-below', 'drag-over-group'));
     card.classList.remove('long-press-active');
-    touchDragging = false; lpFired = false; ctxShown = false;
+    touchDragging = false; lpFired = false;
   };
   card.addEventListener('touchend', (e) => {
     if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
     card.classList.remove('long-press-active');
-    // Unlock menu for interaction now that finger is lifted
-    const ctxMenu = document.getElementById('context-menu');
-    if (ctxMenu) ctxMenu.classList.remove('touch-locked');
     if (touchDragging) {
       e.preventDefault();
       _touchDragEnd(e.changedTouches[0]);
-      touchDragging = false; lpFired = false; ctxShown = false; return;
+      touchDragging = false; lpFired = false; return;
     }
-    if (ctxShown) {
+    if (lpFired) {
+      // Long-press was held — show context menu now that finger is off screen
       e.preventDefault();
+      const t = e.changedTouches[0];
+      const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: t.clientX, clientY: Math.max(10, t.clientY - 40) };
+      if (card._voiceSession) { showContextMenu(fakeEvent, card._voiceSession.session_id, voiceId); }
+      else { showContextMenu(fakeEvent, null, voiceId); }
     }
-    lpFired = false; ctxShown = false;
+    lpFired = false;
   });
   card.addEventListener('touchcancel', _cancelTouchDrag);
   return card;
