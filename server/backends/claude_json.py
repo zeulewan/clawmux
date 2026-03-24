@@ -420,11 +420,11 @@ class ClaudeJsonBackend(AgentBackend):
                         break
                     continue
 
-                # Write pretty-printed JSON to stream log
+                # Write single-line JSON to stream log (one event per line for tail/grep)
                 if stream_log:
                     try:
                         parsed_for_log = json.loads(line.decode(errors="replace"))
-                        stream_log.write(json.dumps(parsed_for_log, indent=2) + "\n")
+                        stream_log.write(json.dumps(parsed_for_log, separators=(',', ':')) + "\n")
                         stream_log.flush()
                     except (json.JSONDecodeError, UnicodeDecodeError):
                         stream_log.write(line.decode(errors="replace"))
