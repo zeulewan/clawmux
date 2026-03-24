@@ -2154,18 +2154,18 @@ async function openStreamLogPanel(sessionId) {
   showDebugPanel();
   const panel = document.getElementById('debug-panel');
   if (!panel) return;
-  panel.innerHTML = '<div style="position:relative;height:100%;display:flex;flex-direction:column;">'
-    + '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.1);">'
-    + '<span style="font-weight:600;font-size:0.85em;color:#ccc;">Stream Log — ' + sessionId + '</span>'
-    + '<button onclick="closeStreamLogPanel()" style="background:none;border:none;color:#888;cursor:pointer;font-size:1.2em;padding:2px 6px;" title="Close">&times;</button>'
+  panel.innerHTML = '<div class="stream-log-panel">'
+    + '<div class="stream-log-header">'
+    + '<span>Stream Log — ' + sessionId + '</span>'
+    + '<button onclick="closeStreamLogPanel()" title="Close">&times;</button>'
     + '</div>'
-    + '<div style="padding:12px;font-family:\'SF Mono\',Monaco,Consolas,monospace;font-size:0.78em;white-space:pre-wrap;word-break:break-all;overflow-y:auto;flex:1;color:#ccc;" id="stream-log-content">Loading...</div>'
+    + '<div class="stream-log-content" id="stream-log-content">Loading...</div>'
     + '</div>';
   const _esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const _syntaxHL = s => _esc(s)
-    .replace(/"([^"\\]|\\.)*"/g, '<span style="color:#ce9178">$&</span>')
-    .replace(/\b(true|false|null)\b/g, '<span style="color:#569cd6">$&</span>')
-    .replace(/\b(\d+\.?\d*)\b/g, '<span style="color:#b5cea8">$&</span>');
+    .replace(/"([^"\\]|\\.)*"/g, '<span class="sl-string">$&</span>')
+    .replace(/\b(true|false|null)\b/g, '<span class="sl-keyword">$&</span>')
+    .replace(/\b(\d+\.?\d*)\b/g, '<span class="sl-number">$&</span>');
   const typeColors = { assistant: '#74c991', user: '#4a9eff', system: '#d97757', result: '#74c991', stream_event: '#e1c08d', progress: '#888' };
   let _knownLineCount = 0;
 
