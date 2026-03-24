@@ -882,16 +882,24 @@ class ClaudeJsonBackend(AgentBackend):
         return tool_name
 
     async def _forward_response(self, hub_port: int, session_name: str, text: str) -> None:
-        """Forward complete response to the hub via speak endpoint."""
-        import httpx
+        """Push response text directly to browser (no history.json save).
+
+        The JSONL transcript is the single source of truth for claude-json.
+        Saving to ClawMux history.json via the speak endpoint would create
+        duplicates when the transcript is loaded on next visit.
+        """
+        hub = _get_hub()
+        msg_id = f"cj-{session_name}-{uuid.uuid4().hex[:8]}"
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                await client.post(
-                    f"http://127.0.0.1:{hub_port}/api/messages/speak",
-                    json={"sender": session_name, "message": text},
-                )
+            await hub["send"]({
+                "type": "assistant_text",
+                "session_id": session_name,
+                "text": text,
+                "msg_id": msg_id,
+                "fire_and_forget": True,
+            })
         except Exception as e:
-            log.error("[%s] Failed to forward response: %s", session_name, e)
+            log.error("[%s] Failed to forward response to browser: %s", session_name, e)
 
     async def _post_hook(self, hub_port: int, work_dir: str, event: str, extra: dict) -> None:
         """POST a hook event to the local hub."""
