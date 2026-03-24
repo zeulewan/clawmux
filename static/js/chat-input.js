@@ -285,6 +285,11 @@ function sendTextMessage() {
   const s = sessions.get(activeSessionId);
   const isInterjection = s && s.sessionState !== 'listening';
   const msgType = isInterjection ? 'interjection' : 'text';
+  // Add user message to chat immediately (before server echo) to ensure correct ordering
+  const localMsgId = 'local-' + Date.now();
+  if (typeof addMessage === 'function') {
+    addMessage(activeSessionId, isInterjection ? 'user interjection' : 'user', text, { id: localMsgId });
+  }
   ws.send(JSON.stringify({ session_id: activeSessionId, type: msgType, text }));
   textInput.value = '';
   textInput.style.height = 'auto';

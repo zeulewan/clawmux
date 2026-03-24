@@ -595,6 +595,18 @@ function handleMessage(data) {
     }
   } else if (type === 'user_text') {
     if (!data.text || !data.text.trim()) return;  // Skip blank user messages
+    // Dedup: skip if we already added this locally on send (same text in recent messages)
+    const _s = sessions.get(session_id);
+    if (_s) {
+      const recent = _s.messages.slice(-5);
+      const trimmed = data.text.trim();
+      const localDup = recent.find(m => (m.role === 'user' || m.role === 'user interjection') && m.id && m.id.startsWith('local-') && m.text && m.text.trim() === trimmed);
+      if (localDup) {
+        // Replace local ID with server ID for proper threading
+        localDup.id = data.msg_id || localDup.id;
+        return;
+      }
+    }
     addMessage(session_id, 'user', data.text, { id: data.msg_id || null });
     // Don't set processing here — wait for the agent's hook events (PreToolUse)
     // to signal actual processing. Setting it here causes false "thinking" state
