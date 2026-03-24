@@ -657,7 +657,9 @@ function _createAgentCard(voiceId, name, state) {
   }
   card._voiceSession = state.session;
   card._voiceSpawning = state.isSpawning;
+  let _lpClickGuard = false;
   card.onclick = () => {
+    if (_lpClickGuard) { _lpClickGuard = false; return; }
     if (card._voiceSpawning) return;
     if (card._voiceSession) { switchTab(card._voiceSession.session_id, true); }
     else { spawnSession(voiceId); }
@@ -718,6 +720,7 @@ function _createAgentCard(voiceId, name, state) {
     if (lpFired) {
       // Long-press was held — show context menu now that finger is off screen
       e.preventDefault();
+      _lpClickGuard = true; // block the synthetic click from also switching tabs
       const t = e.changedTouches[0];
       const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: t.clientX, clientY: Math.max(10, t.clientY - 40) };
       if (card._voiceSession) { showContextMenu(fakeEvent, card._voiceSession.session_id, voiceId); }
