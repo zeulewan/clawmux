@@ -2284,13 +2284,14 @@ function showContextMenu(e, sessionId, voiceId) {
   document.getElementById('ctx-spawn-with').style.display = hasSession ? 'none' : 'block';
   const sess = sessionId ? sessions.get(sessionId) : null;
   const hasTmux = !sess || (sess.backend !== 'claude-json' && sess.backend !== 'openclaw');
+  const isAlive = sess && sess.serverState !== 'dead' && sess.status !== 'dead';
   const monitorEl = document.getElementById('ctx-monitor');
-  if (sess && sess.backend === 'claude-json') {
+  if (sess && sess.backend === 'claude-json' && isAlive) {
     monitorEl.textContent = 'View Stream Log';
     monitorEl.style.display = 'block';
   } else {
     monitorEl.textContent = 'Monitor Terminal';
-    monitorEl.style.display = ((hasSession || voiceId) && hasTmux) ? 'block' : 'none';
+    monitorEl.style.display = ((hasSession || voiceId) && hasTmux && isAlive) ? 'block' : 'none';
   }
   const hasUnread = sess && (sess.unreadCount || 0) > 0;
   document.getElementById('ctx-mark-unread').style.display = (hasSession && !hasUnread) ? 'block' : 'none';
