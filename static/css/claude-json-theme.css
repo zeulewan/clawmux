@@ -1,0 +1,259 @@
+/* ClawMux — VS Code Extension Chat Theme for claude-json agents
+ * Ported from Claude Code VS Code Extension webview-styles.css
+ * Only active when body has .backend-claude-json class
+ */
+
+/* === CSS Custom Properties (matching VS Code extension) === */
+.backend-claude-json {
+  --cj-success: #74c991;
+  --cj-failure: #c74e39;
+  --cj-warning: #e1c08d;
+  --cj-success-bg: #74c99133;
+  --cj-failure-bg: #c74e3933;
+  --cj-mono-font: 'SF Mono', Monaco, Consolas, 'Courier New', monospace;
+  --cj-mono-size: 0.85em;
+  --cj-tool-bg: rgba(255,255,255,0.03);
+  --cj-border: rgba(255,255,255,0.1);
+  --cj-secondary-fg: rgba(255,255,255,0.6);
+  --cj-link: #4a9eff;
+}
+
+/* === Timeline Messages (vertical dot + connector line) === */
+.backend-claude-json .tool-card {
+  position: relative;
+  border: none;
+  border-radius: 0;
+  background: none;
+  min-height: auto;
+  max-width: 100%;
+  padding-left: 30px;
+  margin: 0;
+}
+
+.backend-claude-json .tool-card::before {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  width: 7px;
+  height: 7px;
+  top: 14px;
+  left: 9px;
+  z-index: 1;
+  background-color: var(--cj-secondary-fg);
+}
+
+.backend-claude-json .tool-card::after {
+  content: "";
+  position: absolute;
+  background-color: var(--cj-border);
+  width: 1px;
+  top: 0;
+  bottom: 0;
+  left: 12px;
+}
+
+/* First tool in a sequence — no line above dot */
+.backend-claude-json .tool-card:not(.tool-card + .tool-card)::after {
+  top: 14px;
+}
+
+/* Last tool in a sequence — short line below dot */
+.backend-claude-json .tool-card:not(:has(+ .tool-card))::after {
+  height: 18px;
+}
+
+/* Single tool (no siblings) — no line at all */
+.backend-claude-json .tool-card:not(.tool-card + .tool-card):not(:has(+ .tool-card))::after {
+  display: none;
+}
+
+/* Status dot colors */
+.backend-claude-json .tool-card .tool-status-dot { display: none; }
+.backend-claude-json .tool-card.status-success::before { background-color: var(--cj-success); }
+.backend-claude-json .tool-card.status-error::before { background-color: var(--cj-failure); }
+.backend-claude-json .tool-card.status-running::before { animation: cj-blink 1s linear infinite; }
+
+@keyframes cj-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* === Tool Card Header (VS Code style) === */
+.backend-claude-json .tool-card-header {
+  padding: 4px 0;
+  min-height: auto;
+  gap: 4px;
+  background: none;
+}
+.backend-claude-json .tool-card-header:hover { background: none; }
+
+.backend-claude-json .tool-card-name {
+  font-weight: 700;
+  font-size: 0.9em;
+  margin-right: 4px;
+}
+
+.backend-claude-json .tool-card-summary {
+  font-family: var(--cj-mono-font);
+  color: var(--cj-link);
+  font-size: var(--cj-mono-size);
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  display: -webkit-box;
+  overflow: hidden;
+}
+
+.backend-claude-json .tool-card-chevron {
+  display: none; /* VS Code uses details/summary, not chevron */
+}
+
+/* === Tool Card Body (Grid layout with IN/OUT rows) === */
+.backend-claude-json .tool-card-body {
+  border: 0.5px solid var(--cj-border);
+  background: var(--cj-tool-bg);
+  border-radius: 5px;
+  padding: 0;
+  margin: 8px 0;
+}
+
+/* Hide native details marker */
+.backend-claude-json .tool-card-header { list-style: none; }
+.backend-claude-json .tool-card-header::-webkit-details-marker { display: none; }
+.backend-claude-json .tool-card-header::marker { display: none; content: ''; }
+
+.backend-claude-json .tool-io-label {
+  color: var(--cj-secondary-fg);
+  opacity: 0.5;
+  font-family: var(--cj-mono-font);
+  font-size: var(--cj-mono-size);
+  padding: 4px 8px 4px 4px;
+  text-transform: none;
+  font-weight: 400;
+  letter-spacing: 0;
+  margin: 0;
+  border-top: 0.5px solid var(--cj-border);
+}
+.backend-claude-json .tool-io-label:first-child { border-top: none; }
+
+.backend-claude-json .tool-io-content {
+  font-family: var(--cj-mono-font);
+  font-size: var(--cj-mono-size);
+  padding: 4px;
+  max-height: 60px;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, var(--bg-card, #1a1a2e) 50px, transparent 60px);
+}
+.backend-claude-json .tool-io-content.clipped::after { display: none; } /* use mask instead */
+.backend-claude-json .tool-card[open] .tool-io-content,
+.backend-claude-json .tool-card.expanded .tool-io-content {
+  max-height: none;
+  overflow: visible;
+  mask-image: none;
+}
+
+/* === Tool Annotation Badge (Success/Error) === */
+.backend-claude-json .tool-annotation {
+  display: inline-flex;
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 500;
+  margin: 4px 0;
+}
+.backend-claude-json .tool-annotation.success {
+  color: var(--cj-success);
+  background-color: var(--cj-success-bg);
+}
+.backend-claude-json .tool-annotation.error {
+  color: var(--cj-failure);
+  background-color: var(--cj-failure-bg);
+}
+
+/* === Thinking Decode (spinner row) === */
+.backend-claude-json .thinking-decode {
+  display: flex;
+  animation: cj-fadeIn 0.3s ease-in-out;
+  align-items: center;
+  height: 1.85em;
+  margin-top: 4px;
+  padding: 0;
+  min-width: auto;
+}
+
+.backend-claude-json .thinking-glyph {
+  border: 2px solid var(--cj-border);
+  border-top-color: transparent;
+  border-radius: 50%;
+  width: 14px;
+  height: 14px;
+  animation: cj-spin 1s linear infinite;
+  font-size: 0;
+  color: transparent;
+}
+
+.backend-claude-json .thinking-text {
+  opacity: 0.75;
+  margin: 0 10px;
+  font-weight: 600;
+  font-family: inherit;
+  font-size: 0.9em;
+}
+
+.backend-claude-json .thinking-cursor { display: none; }
+
+@keyframes cj-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes cj-fadeIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+/* === Thinking Details Block === */
+.backend-claude-json .thinking-details summary {
+  cursor: pointer;
+  color: var(--cj-secondary-fg);
+  opacity: 0.8;
+  user-select: none;
+  list-style: none;
+  font-style: italic;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.backend-claude-json .thinking-details summary::-webkit-details-marker { display: none; }
+.backend-claude-json .thinking-details[open] summary { opacity: 1; }
+.backend-claude-json .thinking-details summary:hover { opacity: 1; }
+
+.backend-claude-json .thinking-details .thinking-content {
+  color: var(--cj-secondary-fg);
+  margin-top: 4px;
+  font-weight: 400;
+}
+
+/* === Message Bubbles (assistant) === */
+.backend-claude-json .msg.assistant {
+  background: none;
+  padding: 8px 0;
+  border-radius: 0;
+  max-width: 100%;
+}
+
+/* === Tool group toggle === */
+.backend-claude-json .tool-group-toggle {
+  padding-left: 30px;
+  position: relative;
+}
+.backend-claude-json .tool-group-toggle::after {
+  content: "";
+  position: absolute;
+  background-color: var(--cj-border);
+  width: 1px;
+  top: 0;
+  bottom: 0;
+  left: 12px;
+}

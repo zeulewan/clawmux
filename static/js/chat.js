@@ -1150,7 +1150,8 @@ function _toolInputFormatted(toolName, data) {
 function createToolCardEl(msg) {
   // Native <details>/<summary> — no JS click handlers needed, survives any re-render
   const details = document.createElement('details');
-  details.className = 'tool-card';
+  const statusClass = msg.toolStatus === 'done' ? 'status-success' : (msg.toolStatus === 'error' ? 'status-error' : 'status-running');
+  details.className = 'tool-card ' + statusClass;
   if (msg.id) details.dataset.msgId = msg.id;
   details.dataset.toolId = msg.toolId || '';
 

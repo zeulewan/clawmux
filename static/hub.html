@@ -124,6 +124,7 @@
 }
 </style>
 <link rel="stylesheet" href="/static/css/hub-base.css">
+<link rel="stylesheet" href="/static/css/claude-json-theme.css">
 <link rel="stylesheet" href="/static/css/hub-breakpoints.css">
 <link rel="stylesheet" href="/static/css/hub-mobile.css">
 <link rel="stylesheet" href="/static/css/hub-mobile-light.css">
@@ -573,21 +574,12 @@
 <script>
 // --- DOM refs (loaded before audio.js which references these) ---
 const chatArea = document.getElementById('chat-area');
-
-// Event delegation for tool card expand/collapse (survives DOM rebuilds)
-chatArea.addEventListener('click', (e) => {
-  const header = e.target.closest('.tool-card-header');
-  if (!header) return;
-  e.stopPropagation();
-  const card = header.closest('.tool-card');
-  if (!card) return;
-  const body = card.querySelector('.tool-card-body');
-  const chevron = card.querySelector('.tool-card-chevron');
-  if (!body) return;
-  const isExpanded = card.classList.toggle('expanded');
-  body.style.display = isExpanded ? 'block' : 'none';
-  if (chevron) chevron.textContent = isExpanded ? '\u25BE' : '\u25B8';
-});
+// Sync <details> open state with .expanded class for CSS and test compatibility
+chatArea.addEventListener('toggle', (e) => {
+  if (e.target.classList.contains('tool-card')) {
+    e.target.classList.toggle('expanded', e.target.open);
+  }
+}, true);
 
 let _scrollRaf = null;
 function _easedScrollTo(el) {
@@ -667,6 +659,8 @@ function switchTab(sessionId, manual = false) {
   }
 
   const s = sessions.get(sessionId);
+  // Toggle VS Code theme class for claude-json sessions
+  document.body.classList.toggle('backend-claude-json', !!(s && s.backend === 'claude-json'));
   if (s) clearSessionUnread(sessionId);
   // Tell server which session we're viewing so it doesn't increment unread for it
   fetch(`/api/sessions/${sessionId}/viewing`, { method: 'POST' }).catch(() => {});
