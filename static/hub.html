@@ -2166,13 +2166,20 @@ async function openStreamLogPanel(sessionId) {
       const data = await resp.json();
       const el = document.getElementById('stream-log-content');
       if (!el) return;
+      const _esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const _syntaxHL = s => _esc(s)
+        .replace(/"([^"\\]|\\.)*"/g, '<span style="color:#ce9178">$&</span>')
+        .replace(/\b(true|false|null)\b/g, '<span style="color:#569cd6">$&</span>')
+        .replace(/\b(\d+\.?\d*)\b/g, '<span style="color:#b5cea8">$&</span>');
       const lines = (data.lines || []).map(line => {
         try {
           const obj = JSON.parse(line);
           const t = obj.type || '';
-          const color = t === 'assistant' ? '#74c991' : t === 'user' ? '#4a9eff' : t === 'system' ? '#d97757' : '#888';
-          return `<span style="color:${color}">${t.padEnd(12)}</span> ${line.replace(/</g,'&lt;').replace(/>/g,'&gt;')}`;
-        } catch { return line.replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+          const typeColors = { assistant: '#74c991', user: '#4a9eff', system: '#d97757', result: '#74c991', stream_event: '#e1c08d', progress: '#888' };
+          const color = typeColors[t] || '#888';
+          const pretty = JSON.stringify(obj, null, 2);
+          return `<details style="margin:2px 0;"><summary style="cursor:pointer;list-style:none;"><span style="color:${color};font-weight:600">${_esc(t.padEnd(14))}</span><span style="opacity:0.5">${_esc(JSON.stringify(obj).slice(0, 120))}</span></summary><div style="padding:4px 0 8px 16px;border-left:2px solid ${color}33;margin:4px 0">${_syntaxHL(pretty)}</div></details>`;
+        } catch { return _esc(line); }
       });
       const wasAtBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 30;
       el.innerHTML = lines.join('\n');
