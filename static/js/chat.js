@@ -19,6 +19,28 @@ const _INJECT_GROUP_RE = /^\[GROUP:(\S+) id:\S+ from:(\w+)\]\s*([\s\S]*)$/;
 const _INJECT_ACK_RE = /^\[ACK from:(\w+) on:\S+\]$/;
 const _INJECT_SYSTEM_RE = /^\[SYSTEM\]\s*([\s\S]*)$/;
 
+/** Create a collapsible system message (collapsed by default, click to expand). */
+function _createCollapsibleSystemMsg(div, label, content, color) {
+  div.className = 'msg agent-msg';
+  div.style.cssText = 'padding:3px 10px;margin:2px 0;font-size:0.82em;opacity:0.5;cursor:pointer;';
+  const hdr = document.createElement('span');
+  hdr.style.cssText = `color:${color};font-weight:600;font-size:0.9em;`;
+  hdr.textContent = '\u2139 ' + label;
+  div.appendChild(hdr);
+  const body = document.createElement('div');
+  body.className = 'agent-msg-body';
+  body.style.cssText = 'display:none;margin-top:4px;opacity:0.9;font-size:0.95em;white-space:pre-wrap;max-height:200px;overflow-y:auto;';
+  body.textContent = content;
+  div.appendChild(body);
+  div.addEventListener('click', (e) => {
+    if (e.target.closest('.msg-actions')) return;
+    const showing = body.style.display !== 'none';
+    body.style.display = showing ? 'none' : 'block';
+    div.style.opacity = showing ? '0.5' : '1';
+  });
+  return div;
+}
+
 /** Look up a voice color by display name (e.g. "Sky" → "#3A86FF"). */
 function _voiceColorByName(name) {
   const lower = name.toLowerCase();
@@ -317,12 +339,15 @@ function createMsgEl(role, text, voiceColorHex, voiceId, msgObj = null) {
       if (voiceId) div.dataset.voice = voiceId;
       return div;
     }
-    // [SYSTEM] content — system notification
+    // [SYSTEM] content — system notification (collapsible)
     const sysMatch = _INJECT_SYSTEM_RE.exec(text);
     if (sysMatch) {
-      div.className = 'msg system';
-      div.textContent = sysMatch[1];
-      return div;
+      return _createCollapsibleSystemMsg(div, 'System', sysMatch[1], '#888');
+    }
+    // Catch-up context / startup prompts (collapsible)
+    if (text.startsWith('# Messages Since You Were Last Active') || text.startsWith('Greet the user as instructed')) {
+      const label = text.startsWith('# Messages') ? 'Catch-up Context' : 'Startup Prompt';
+      return _createCollapsibleSystemMsg(div, label, text, '#666');
     }
   }
 
