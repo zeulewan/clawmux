@@ -672,39 +672,47 @@ function _createAgentCard(voiceId, name, state) {
       else { showContextMenu(e, null, voiceId); }
     }
   };
-  // Mobile long-press: 500ms timer, show menu on lift
+  // Mobile long-press: show menu during hold (locked), unlock on lift
   if (isMobile) {
     let _lp = null; // { timer, fired, x, y }
     card.addEventListener('touchstart', (e) => {
       const t = e.touches[0];
-      _lp = { fired: false, x: t.clientX, y: t.clientY,
-        timer: setTimeout(() => { _lp.fired = true; card.classList.add('long-press-active'); }, 500) };
+      _lp = { fired: false, x: t.clientX, y: t.clientY, timer: setTimeout(() => {
+        _lp.fired = true;
+        card.classList.add('long-press-active');
+        // Show menu above finger, locked (no interaction until lift)
+        const menuY = Math.max(10, _lp.y - 120);
+        const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: _lp.x, clientY: menuY };
+        const sid = card._voiceSession ? card._voiceSession.session_id : null;
+        showContextMenu(fakeEvent, sid, voiceId);
+        const menu = document.getElementById('context-menu');
+        if (menu) menu.classList.add('touch-locked');
+      }, 500) };
     }, { passive: true });
     card.addEventListener('touchmove', (e) => {
       if (!_lp) return;
       const t = e.touches[0];
-      const dist = Math.hypot(t.clientX - _lp.x, t.clientY - _lp.y);
-      if (dist > 10) { // allow small finger drift
+      if (Math.hypot(t.clientX - _lp.x, t.clientY - _lp.y) > 10) {
         if (_lp.timer) { clearTimeout(_lp.timer); _lp.timer = null; }
-        if (_lp.fired) { _lp.fired = false; card.classList.remove('long-press-active'); }
+        if (_lp.fired) { _lp.fired = false; card.classList.remove('long-press-active'); hideContextMenu(); }
       }
     }, { passive: true });
     card.addEventListener('touchend', (e) => {
       if (_lp && _lp.timer) { clearTimeout(_lp.timer); }
       card.classList.remove('long-press-active');
+      // Unlock menu for tapping
+      const menu = document.getElementById('context-menu');
+      if (menu) menu.classList.remove('touch-locked');
       if (_lp && _lp.fired) {
         e.preventDefault();
         _blockNextClick = true;
-        const t = e.changedTouches[0];
-        const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: t.clientX, clientY: Math.max(10, t.clientY - 10) };
-        if (card._voiceSession) { showContextMenu(fakeEvent, card._voiceSession.session_id, voiceId); }
-        else { showContextMenu(fakeEvent, null, voiceId); }
       }
       _lp = null;
     });
     card.addEventListener('touchcancel', () => {
       if (_lp && _lp.timer) { clearTimeout(_lp.timer); }
       card.classList.remove('long-press-active');
+      hideContextMenu();
       _lp = null;
     });
   }
