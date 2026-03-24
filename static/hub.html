@@ -2159,6 +2159,34 @@ async function openStreamLogPanel(sessionId) {
     + '</div>'
     + '<div style="padding:12px;font-family:\'SF Mono\',Monaco,Consolas,monospace;font-size:0.78em;white-space:pre-wrap;word-break:break-all;overflow-y:auto;flex:1;color:#ccc;" id="stream-log-content">Loading...</div>'
     + '</div>';
+  const _esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const _syntaxHL = s => _esc(s)
+    .replace(/"([^"\\]|\\.)*"/g, '<span style="color:#ce9178">$&</span>')
+    .replace(/\b(true|false|null)\b/g, '<span style="color:#569cd6">$&</span>')
+    .replace(/\b(\d+\.?\d*)\b/g, '<span style="color:#b5cea8">$&</span>');
+  const typeColors = { assistant: '#74c991', user: '#4a9eff', system: '#d97757', result: '#74c991', stream_event: '#e1c08d', progress: '#888' };
+  let _knownLineCount = 0;
+
+  function _renderLine(line) {
+    try {
+      const obj = JSON.parse(line);
+      const t = obj.type || '';
+      const color = typeColors[t] || '#888';
+      const pretty = JSON.stringify(obj, null, 2);
+      const d = document.createElement('details');
+      d.style.cssText = 'margin:2px 0;';
+      const s = document.createElement('summary');
+      s.style.cssText = 'cursor:pointer;list-style:none;';
+      s.innerHTML = `<span style="color:${color};font-weight:600">${_esc(t.padEnd(14))}</span><span style="opacity:0.5">${_esc(JSON.stringify(obj).slice(0, 120))}</span>`;
+      d.appendChild(s);
+      const body = document.createElement('div');
+      body.style.cssText = `padding:4px 0 8px 16px;border-left:2px solid ${color}33;margin:4px 0`;
+      body.innerHTML = _syntaxHL(pretty);
+      d.appendChild(body);
+      return d;
+    } catch { const sp = document.createElement('div'); sp.textContent = line; return sp; }
+  }
+
   async function refresh() {
     try {
       const resp = await fetch(`/api/sessions/${sessionId}/stream-log?tail=200`);
@@ -2166,31 +2194,26 @@ async function openStreamLogPanel(sessionId) {
       const data = await resp.json();
       const el = document.getElementById('stream-log-content');
       if (!el) return;
-      const _esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      const _syntaxHL = s => _esc(s)
-        .replace(/"([^"\\]|\\.)*"/g, '<span style="color:#ce9178">$&</span>')
-        .replace(/\b(true|false|null)\b/g, '<span style="color:#569cd6">$&</span>')
-        .replace(/\b(\d+\.?\d*)\b/g, '<span style="color:#b5cea8">$&</span>');
-      const lines = (data.lines || []).map(line => {
-        try {
-          const obj = JSON.parse(line);
-          const t = obj.type || '';
-          const typeColors = { assistant: '#74c991', user: '#4a9eff', system: '#d97757', result: '#74c991', stream_event: '#e1c08d', progress: '#888' };
-          const color = typeColors[t] || '#888';
-          const pretty = JSON.stringify(obj, null, 2);
-          return `<details style="margin:2px 0;"><summary style="cursor:pointer;list-style:none;"><span style="color:${color};font-weight:600">${_esc(t.padEnd(14))}</span><span style="opacity:0.5">${_esc(JSON.stringify(obj).slice(0, 120))}</span></summary><div style="padding:4px 0 8px 16px;border-left:2px solid ${color}33;margin:4px 0">${_syntaxHL(pretty)}</div></details>`;
-        } catch { return _esc(line); }
-      });
-      // Save open state of expanded details before DOM rebuild
-      const openSet = new Set();
-      el.querySelectorAll('details[open]').forEach((d, i) => openSet.add(i));
-      const wasAtBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 30;
-      el.innerHTML = lines.join('\n');
-      // Restore open state
-      if (openSet.size > 0) {
-        el.querySelectorAll('details').forEach((d, i) => { if (openSet.has(i)) d.open = true; });
+      const lines = data.lines || [];
+      if (_knownLineCount === 0) {
+        // Initial load: render all lines
+        el.innerHTML = '';
+        for (const line of lines) el.appendChild(_renderLine(line));
+        _knownLineCount = lines.length;
+      } else if (lines.length > _knownLineCount) {
+        // Append only new lines (preserves existing DOM + open state)
+        const wasAtBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 30;
+        const newLines = lines.slice(_knownLineCount);
+        for (const line of newLines) el.appendChild(_renderLine(line));
+        _knownLineCount = lines.length;
+        if (wasAtBottom) el.scrollTop = el.scrollHeight;
       }
-      if (wasAtBottom) el.scrollTop = el.scrollHeight;
+      // If count decreased (log rotated), full rebuild
+      if (lines.length < _knownLineCount) {
+        el.innerHTML = '';
+        for (const line of lines) el.appendChild(_renderLine(line));
+        _knownLineCount = lines.length;
+      }
     } catch (e) { console.warn('Stream log refresh failed:', e); }
   }
   await refresh();
