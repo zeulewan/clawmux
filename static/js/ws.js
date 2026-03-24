@@ -393,7 +393,11 @@ function handleMessage(data) {
   }
   if (type === 'structured_event') {
     const s = sessions.get(data.session_id);
-    if (!s) return;
+    if (!s) {
+      // Session not loaded yet — buffer and retry after addSession completes
+      setTimeout(() => handleMessage(data), 500);
+      return;
+    }
     const isJsonBackend = s.backend === 'claude-json';
     const evType = data.event_type;
     if (evType === 'tool_use') {

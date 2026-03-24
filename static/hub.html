@@ -2159,6 +2159,37 @@ let _monitorPanelKey = null;
 let _monitorFontSize = 100;
 let _monitorPrevSession = null;
 
+let _streamLogTimer = null;
+async function openStreamLogPanel(sessionId) {
+  showDebugPanel();
+  const panel = document.getElementById('debug-panel');
+  if (!panel) return;
+  panel.innerHTML = '<div style="padding:12px;font-family:\'SF Mono\',Monaco,Consolas,monospace;font-size:0.82em;white-space:pre-wrap;overflow-y:auto;height:100%;color:#ccc;" id="stream-log-content">Loading stream log...</div>';
+  async function refresh() {
+    try {
+      const resp = await fetch(`/api/sessions/${sessionId}/stream-log?tail=200`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const el = document.getElementById('stream-log-content');
+      if (!el) return;
+      const lines = (data.lines || []).map(line => {
+        try {
+          const obj = JSON.parse(line);
+          const t = obj.type || '';
+          const color = t === 'assistant' ? '#74c991' : t === 'user' ? '#4a9eff' : t === 'system' ? '#d97757' : '#888';
+          return `<span style="color:${color}">${t.padEnd(12)}</span> ${line.length > 200 ? line.slice(0, 197) + '...' : line}`;
+        } catch { return line; }
+      });
+      const wasAtBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 30;
+      el.innerHTML = lines.join('\n');
+      if (wasAtBottom) el.scrollTop = el.scrollHeight;
+    } catch (e) { console.warn('Stream log refresh failed:', e); }
+  }
+  await refresh();
+  if (_streamLogTimer) clearInterval(_streamLogTimer);
+  _streamLogTimer = setInterval(refresh, 2000);
+}
+
 async function openMonitorPanel(type, id) {
   try {
     const resp = await fetch('/api/monitor/start', {
@@ -2253,7 +2284,14 @@ function showContextMenu(e, sessionId, voiceId) {
   document.getElementById('ctx-spawn-with').style.display = hasSession ? 'none' : 'block';
   const sess = sessionId ? sessions.get(sessionId) : null;
   const hasTmux = !sess || (sess.backend !== 'claude-json' && sess.backend !== 'openclaw');
-  document.getElementById('ctx-monitor').style.display = ((hasSession || voiceId) && hasTmux) ? 'block' : 'none';
+  const monitorEl = document.getElementById('ctx-monitor');
+  if (sess && sess.backend === 'claude-json') {
+    monitorEl.textContent = 'View Stream Log';
+    monitorEl.style.display = 'block';
+  } else {
+    monitorEl.textContent = 'Monitor Terminal';
+    monitorEl.style.display = ((hasSession || voiceId) && hasTmux) ? 'block' : 'none';
+  }
   const hasUnread = sess && (sess.unreadCount || 0) > 0;
   document.getElementById('ctx-mark-unread').style.display = (hasSession && !hasUnread) ? 'block' : 'none';
   document.getElementById('ctx-mark-read').style.display = (hasSession && hasUnread) ? 'block' : 'none';
@@ -2442,6 +2480,14 @@ document.getElementById('ctx-terminate').addEventListener('click', () => {
 });
 
 document.getElementById('ctx-monitor').addEventListener('click', () => {
+  if (contextMenuSessionId) {
+    const sess = sessions.get(contextMenuSessionId);
+    if (sess && sess.backend === 'claude-json') {
+      openStreamLogPanel(contextMenuSessionId);
+      hideContextMenu();
+      return;
+    }
+  }
   if (contextMenuVoiceId) openMonitorPanel('agent', contextMenuVoiceId);
   hideContextMenu();
 });
