@@ -98,15 +98,24 @@ async def inject_inbox(session, session_id: str) -> None:
             })
 
 
-def _format_message(msg: dict, walking_mode: bool = False) -> str:
-    """Format a single inbox message into the text line the agent receives."""
+def _format_message(msg: dict, walking_mode: bool = False, backend: str = "") -> str:
+    """Format a single inbox message into the text line the agent receives.
+
+    For claude-json: user messages (voice/text) are sent as raw text without
+    the [VOICE] prefix — the JSON stream has its own UUIDs. Inter-agent
+    messages keep the [MSG] prefix so the agent knows who sent it.
+    """
     msg_type = msg.get("type", "system")
     sender = msg.get("from", "unknown")
     content = msg.get("content", "")
     msg_id = msg.get("id", "")
     if msg_type == "agent":
+        # Inter-agent: always prefixed (agent needs to know sender)
         return f"[MSG id:{msg_id} from:{sender}] {content}"
     elif msg_type in ("voice", "text", "file_upload"):
+        # User message: raw text for claude-json, prefixed for tmux backends
+        if backend == "claude-json":
+            return content
         return f"[VOICE id:{msg_id} from:{sender}] {content}"
     elif msg_type == "group":
         group_name = msg.get("group_name", "group")
@@ -126,7 +135,7 @@ async def inbox_write_and_notify(session, msg_dict: dict) -> dict:
     """
     # claude-json fast path: deliver directly to stdin, skip inbox file
     if session.backend == "claude-json":
-        text = _format_message(msg_dict, session.walking_mode)
+        text = _format_message(msg_dict, session.walking_mode, backend="claude-json")
         if session.walking_mode and msg_dict.get("type") not in ("system", "ack"):
             text = "[SYSTEM] Walking mode active — respond in plain spoken text only.\n" + text
         try:
