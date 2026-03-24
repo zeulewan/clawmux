@@ -2376,6 +2376,7 @@ function showContextMenu(e, sessionId, voiceId) {
     addGroupItem.style.display = 'none';
   }
   menu.classList.add('visible');
+  if (typeof _contextMenuShownAt !== 'undefined') _contextMenuShownAt = Date.now();
   const mr = menu.getBoundingClientRect();
   let mx = e.clientX;
   let my = e.clientY;
@@ -2538,7 +2539,10 @@ document.getElementById('ctx-reset').addEventListener('click', async () => {
 });
 
 // --- Close menus on outside click / Escape ---
+let _contextMenuShownAt = 0;
 document.addEventListener('click', (e) => {
+  // Skip if context menu was just shown (long-press touchend fires a synthetic click)
+  if (Date.now() - _contextMenuShownAt < 400) return;
   hideContextMenu();
 });
 
