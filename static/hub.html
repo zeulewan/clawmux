@@ -2181,8 +2181,15 @@ async function openStreamLogPanel(sessionId) {
           return `<details style="margin:2px 0;"><summary style="cursor:pointer;list-style:none;"><span style="color:${color};font-weight:600">${_esc(t.padEnd(14))}</span><span style="opacity:0.5">${_esc(JSON.stringify(obj).slice(0, 120))}</span></summary><div style="padding:4px 0 8px 16px;border-left:2px solid ${color}33;margin:4px 0">${_syntaxHL(pretty)}</div></details>`;
         } catch { return _esc(line); }
       });
+      // Save open state of expanded details before DOM rebuild
+      const openSet = new Set();
+      el.querySelectorAll('details[open]').forEach((d, i) => openSet.add(i));
       const wasAtBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 30;
       el.innerHTML = lines.join('\n');
+      // Restore open state
+      if (openSet.size > 0) {
+        el.querySelectorAll('details').forEach((d, i) => { if (openSet.has(i)) d.open = true; });
+      }
       if (wasAtBottom) el.scrollTop = el.scrollHeight;
     } catch (e) { console.warn('Stream log refresh failed:', e); }
   }
