@@ -821,6 +821,8 @@ class ClaudeJsonBackend(AgentBackend):
             block_type = block.get("type", "")
             if block_type == "text":
                 text_buffer.clear()
+                # New unique msg_id per text block (prevents DOM reuse across turns)
+                self._stream_msg_id = f"cj-{session_name}-{uuid.uuid4().hex[:8]}"
                 # Unique stream ID per text block so each turn creates a new DOM element
                 self._stream_msg_id = f"cj-{session_name}-{uuid.uuid4().hex[:8]}"
             elif block_type == "thinking":
@@ -849,7 +851,7 @@ class ClaudeJsonBackend(AgentBackend):
                             "type": "assistant_text",
                             "session_id": session_name,
                             "text": accumulated,
-                            "msg_id": getattr(self, '_stream_msg_id', f"cj-{session_name}-stream"),
+                            "msg_id": getattr(self, '_stream_msg_id', f"cj-{session_name}-{uuid.uuid4().hex[:8]}"),
                             "fire_and_forget": True,
                             "streaming": True,
                         })
