@@ -479,7 +479,8 @@ class SessionManager:
                 (work_dir / "CLAUDE.md").write_text(f"Your name is {voice_name}.\n")
 
             # Inject context summary from previous session history
-            if self.history_store:
+            # Skip for claude-json — --resume already provides full conversation context
+            if self.history_store and backend != "claude-json":
                 hist_prefix = self.project_mgr.get_history_prefix(project_slug)
                 context_summary = self.history_store.generate_context_summary(
                     voice_id, voice_name, hist_prefix
