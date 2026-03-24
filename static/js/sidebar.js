@@ -700,12 +700,14 @@ function _createAgentCard(voiceId, name, state) {
     card.addEventListener('touchend', (e) => {
       if (_lp && _lp.timer) { clearTimeout(_lp.timer); }
       card.classList.remove('long-press-active');
-      // Unlock menu for tapping
-      const menu = document.getElementById('context-menu');
-      if (menu) menu.classList.remove('touch-locked');
       if (_lp && _lp.fired) {
         e.preventDefault();
         _blockNextClick = true;
+        // Delay unlock so the synthetic click lands while menu is still locked
+        setTimeout(() => {
+          const menu = document.getElementById('context-menu');
+          if (menu) menu.classList.remove('touch-locked');
+        }, 100);
       }
       _lp = null;
     });
