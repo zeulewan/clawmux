@@ -244,14 +244,7 @@
   font-weight: 400;
 }
 
-/* === Message Bubbles (assistant) === */
-.backend-claude-json .msg.assistant {
-  background: none;
-  padding: 8px 0;
-  border-radius: 0;
-  max-width: 100%;
-  animation: none;
-}
+/* === Message Bubbles — keep default bubble styling, only disable animation === */
 .backend-claude-json .msg {
   animation: none;
 }

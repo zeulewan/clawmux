@@ -225,8 +225,10 @@ registerRenderer('claude-json', {
     return false;
   },
 
-  // Bubble color: none (full-width, no background)
-  bubbleColor(session) { return 'transparent'; },
+  // Bubble color: same colored bubbles as other agents
+  bubbleColor(session) {
+    return typeof voiceColor === 'function' ? voiceColor(session.voice) : '#4a90ff';
+  },
 
   // Status text on switchTab: empty
   switchTabStatus(session) { return ''; },
