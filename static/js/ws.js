@@ -426,13 +426,16 @@ function handleMessage(data) {
     } else if (evType === 'tool_result') {
       s.toolName = '';
       if (isJsonBackend) {
+        const resultData = data.data || {};
+        const isError = resultData.is_error || false;
         for (let i = s.messages.length - 1; i >= 0; i--) {
           if (s.messages[i].role === 'tool' && s.messages[i].toolStatus === 'running') {
-            s.messages[i].toolStatus = 'done';
+            s.messages[i].toolStatus = isError ? 'error' : 'done';
+            if (resultData.content) s.messages[i].toolOutput = resultData.content;
             break;
           }
         }
-        if (typeof updateToolCardStatus === 'function') updateToolCardStatus(data.session_id, 'success');
+        if (typeof updateToolCardStatus === 'function') updateToolCardStatus(data.session_id, isError ? 'error' : 'success');
       }
     } else if (evType === 'thinking') {
       s.toolStatusText = 'Thinking...';

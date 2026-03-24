@@ -93,62 +93,75 @@
   margin-right: 4px;
 }
 
-.backend-claude-json .tool-card-summary {
+/* Tool summary: 2-line clamp with bold name + monospace secondary */
+.backend-claude-json .tool-card-summary-inner {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-width: 100%;
+}
+.backend-claude-json .tool-card-secondary {
   font-family: var(--cj-mono-font);
   color: var(--cj-link);
   font-size: var(--cj-mono-size);
   word-break: break-all;
   overflow-wrap: anywhere;
-  white-space: normal;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  display: -webkit-box;
-  overflow: hidden;
+  padding-top: 1px;
 }
 
-.backend-claude-json .tool-card-chevron {
-  display: none; /* VS Code uses details/summary, not chevron */
-}
-
-/* === Tool Card Body (Grid layout with IN/OUT rows) === */
-.backend-claude-json .tool-card-body {
-  border: 0.5px solid var(--cj-border);
-  background: var(--cj-tool-bg);
-  border-radius: 5px;
-  padding: 0;
-  margin: 8px 0;
-}
-
-/* Hide native details marker */
+/* Hide native details marker + old elements */
 .backend-claude-json .tool-card-header { list-style: none; }
 .backend-claude-json .tool-card-header::-webkit-details-marker { display: none; }
 .backend-claude-json .tool-card-header::marker { display: none; content: ''; }
+.backend-claude-json .tool-card-chevron,
+.backend-claude-json .tool-card-summary,
+.backend-claude-json .tool-status-dot { display: none; }
 
-.backend-claude-json .tool-io-label {
+/* === Tool Body Grid (matching extension toolBodyGrid) === */
+.backend-claude-json .tool-body-grid {
+  border: 0.5px solid var(--cj-border);
+  background: var(--cj-tool-bg);
+  border-radius: 5px;
+  margin: 8px 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  font-size: 1em;
+}
+.backend-claude-json .tool-body-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  border-top: 0.5px solid var(--cj-border);
+  padding: 4px;
+}
+.backend-claude-json .tool-body-row:first-child { border-top: none; }
+.backend-claude-json .tool-body-label {
+  grid-column: 1;
   color: var(--cj-secondary-fg);
   opacity: 0.5;
   font-family: var(--cj-mono-font);
   font-size: var(--cj-mono-size);
   padding: 4px 8px 4px 4px;
-  text-transform: none;
-  font-weight: 400;
-  letter-spacing: 0;
-  margin: 0;
-  border-top: 0.5px solid var(--cj-border);
+  text-align: left;
 }
-.backend-claude-json .tool-io-label:first-child { border-top: none; }
-
-.backend-claude-json .tool-io-content {
-  font-family: var(--cj-mono-font);
-  font-size: var(--cj-mono-size);
+.backend-claude-json .tool-body-content {
+  grid-column: 2;
+  white-space: pre-wrap;
+  word-break: break-word;
   padding: 4px;
   max-height: 60px;
   overflow: hidden;
-  mask-image: linear-gradient(to bottom, var(--bg-card, #1a1a2e) 50px, transparent 60px);
+  mask-image: linear-gradient(to bottom, black 40px, transparent 60px);
 }
-.backend-claude-json .tool-io-content.clipped::after { display: none; } /* use mask instead */
-.backend-claude-json .tool-card[open] .tool-io-content,
-.backend-claude-json .tool-card.expanded .tool-io-content {
+.backend-claude-json .tool-body-content pre {
+  font-family: var(--cj-mono-font);
+  font-size: var(--cj-mono-size);
+  margin: 0;
+  overflow: hidden;
+}
+.backend-claude-json .tool-card[open] .tool-body-content {
   max-height: none;
   overflow: visible;
   mask-image: none;
@@ -184,14 +197,10 @@
 }
 
 .backend-claude-json .thinking-glyph {
-  border: 2px solid var(--cj-border);
-  border-top-color: transparent;
-  border-radius: 50%;
-  width: 14px;
-  height: 14px;
-  animation: cj-spin 1s linear infinite;
-  font-size: 0;
-  color: transparent;
+  color: #d97757;
+  font-size: 1.1em;
+  width: 1.2em;
+  text-align: center;
 }
 
 .backend-claude-json .thinking-text {

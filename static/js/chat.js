@@ -1147,66 +1147,111 @@ function _toolInputFormatted(toolName, data) {
   return JSON.stringify(data, null, 2).slice(0, 500);
 }
 
+// Read-only tools that qualify for "Explored N" collapsing
+const _READONLY_TOOLS = new Set(['Read', 'Grep', 'Glob', 'Search', 'WebFetch', 'WebSearch']);
+
 function createToolCardEl(msg) {
-  // Native <details>/<summary> — no JS click handlers needed, survives any re-render
   const details = document.createElement('details');
   const statusClass = msg.toolStatus === 'done' ? 'status-success' : (msg.toolStatus === 'error' ? 'status-error' : 'status-running');
   details.className = 'tool-card ' + statusClass;
   if (msg.id) details.dataset.msgId = msg.id;
   details.dataset.toolId = msg.toolId || '';
+  details.dataset.toolName = msg.toolName || '';
 
+  // Summary: tool name (bold) + secondary info (monospace, link color)
   const summary = document.createElement('summary');
   summary.className = 'tool-card-header';
-
-  const dot = document.createElement('span');
-  dot.className = 'tool-status-dot ' + (msg.toolStatus === 'done' ? 'success' : (msg.toolStatus === 'error' ? 'error' : 'running'));
-  summary.appendChild(dot);
-
-  const name = document.createElement('span');
-  name.className = 'tool-card-name';
-  name.textContent = msg.toolName || 'Tool';
-  summary.appendChild(name);
-
-  const summaryText = document.createElement('span');
-  summaryText.className = 'tool-card-summary';
-  summaryText.textContent = _toolInputSummary(msg.toolName, msg.toolData);
-  summary.appendChild(summaryText);
-
+  const summaryInner = document.createElement('div');
+  summaryInner.className = 'tool-card-summary-inner';
+  const nameEl = document.createElement('span');
+  nameEl.className = 'tool-card-name';
+  nameEl.textContent = msg.toolName || 'Tool';
+  summaryInner.appendChild(nameEl);
+  const secondary = _toolInputSummary(msg.toolName, msg.toolData);
+  if (secondary) {
+    const secEl = document.createElement('span');
+    secEl.className = 'tool-card-secondary';
+    secEl.textContent = secondary;
+    summaryInner.appendChild(secEl);
+  }
+  summary.appendChild(summaryInner);
   details.appendChild(summary);
 
-  // Body with INPUT content
-  const body = document.createElement('div');
-  body.className = 'tool-card-body';
+  // Body: grid with IN row (and OUT row if result available)
+  const grid = document.createElement('div');
+  grid.className = 'tool-body-grid';
 
-  const inLabel = document.createElement('div');
-  inLabel.className = 'tool-io-label';
-  inLabel.textContent = 'INPUT';
-  body.appendChild(inLabel);
-
+  // IN row
+  const inRow = document.createElement('div');
+  inRow.className = 'tool-body-row';
+  const inLabel = document.createElement('span');
+  inLabel.className = 'tool-body-label';
+  inLabel.textContent = 'IN';
+  inRow.appendChild(inLabel);
   const inContent = document.createElement('div');
-  inContent.className = 'tool-io-content';
+  inContent.className = 'tool-body-content';
   const formatted = _toolInputFormatted(msg.toolName, msg.toolData);
-  inContent.textContent = formatted;
-  if (formatted.length > 200 || formatted.split('\n').length > 4) inContent.classList.add('clipped');
-  body.appendChild(inContent);
+  const pre = document.createElement('pre');
+  pre.textContent = formatted;
+  inContent.appendChild(pre);
+  inRow.appendChild(inContent);
+  grid.appendChild(inRow);
 
-  details.appendChild(body);
+  // OUT row (if tool result is available)
+  if (msg.toolOutput) {
+    const outRow = document.createElement('div');
+    outRow.className = 'tool-body-row';
+    const outLabel = document.createElement('span');
+    outLabel.className = 'tool-body-label';
+    outLabel.textContent = 'OUT';
+    outRow.appendChild(outLabel);
+    const outContent = document.createElement('div');
+    outContent.className = 'tool-body-content';
+    const outPre = document.createElement('pre');
+    outPre.textContent = typeof msg.toolOutput === 'string' ? msg.toolOutput.slice(0, 2000) : JSON.stringify(msg.toolOutput, null, 2).slice(0, 2000);
+    outContent.appendChild(outPre);
+    outRow.appendChild(outContent);
+    grid.appendChild(outRow);
+  }
 
+  // Annotation badge
+  if (msg.toolStatus === 'done' || msg.toolStatus === 'error') {
+    const badge = document.createElement('span');
+    badge.className = 'tool-annotation ' + (msg.toolStatus === 'error' ? 'error' : 'success');
+    badge.textContent = msg.toolStatus === 'error' ? 'Error' : 'Success';
+    grid.appendChild(badge);
+  }
+
+  details.appendChild(grid);
   return details;
 }
 
-// Update tool card status dot when result arrives
+// Update tool card when result arrives — status class + re-render with output
 function updateToolCardStatus(sessionId, status) {
   const chatArea = document.getElementById('chat-area');
-  if (!chatArea) return;
-  // Find last running tool card
-  const cards = chatArea.querySelectorAll('.tool-card');
+  if (!chatArea || sessionId !== activeSessionId) return;
+  const s = sessions.get(sessionId);
+  if (!s) return;
+  // Find the message that was just updated and its corresponding card
+  const cards = chatArea.querySelectorAll('.tool-card.status-running');
   for (let i = cards.length - 1; i >= 0; i--) {
-    const dot = cards[i].querySelector('.tool-status-dot.running');
-    if (dot) {
-      dot.className = 'tool-status-dot ' + (status === 'error' ? 'error' : 'success');
-      break;
+    const card = cards[i];
+    // Update status class
+    card.classList.remove('status-running');
+    card.classList.add(status === 'error' ? 'status-error' : 'status-success');
+    // Update dot if present
+    const dot = card.querySelector('.tool-status-dot.running');
+    if (dot) dot.className = 'tool-status-dot ' + (status === 'error' ? 'error' : 'success');
+    // Re-render card with output by replacing it
+    const toolId = card.dataset.toolId;
+    if (toolId) {
+      const msg = s.messages.find(m => m.toolId === toolId);
+      if (msg && msg.toolOutput) {
+        const newCard = createToolCardEl(msg);
+        card.replaceWith(newCard);
+      }
     }
+    break;
   }
 }
 
@@ -1217,8 +1262,9 @@ function _groupToolCards(chatArea) {
   let count = 0;
 
   for (let i = 0; i <= children.length; i++) {
-    const isToolCard = i < children.length && children[i].classList.contains('tool-card');
-    if (isToolCard) {
+    const el = i < children.length ? children[i] : null;
+    const isReadOnlyTool = el && el.classList.contains('tool-card') && _READONLY_TOOLS.has(el.dataset.toolName || '');
+    if (isReadOnlyTool) {
       if (groupStart < 0) groupStart = i;
       count++;
     } else {
