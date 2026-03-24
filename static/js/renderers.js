@@ -122,12 +122,9 @@ registerRenderer('claude-code', {
 registerRenderer('claude-json', {
   name: 'claude-json',
 
-  // History: use ClawMux history API — the agent's spoken responses go through
-  // clawmux send (saved to history.json), not through the JSONL transcript
-  // which only has tool calls. Same source as claude-code.
+  // History: transcript API — includes tool cards + text extracted from clawmux send
   historyUrl(session) {
-    const project = typeof currentProject !== 'undefined' ? currentProject : '';
-    return `/api/history/${session.voice}?limit=150${project ? '&project=' + encodeURIComponent(project) : ''}`;
+    return `/api/sessions/${session.session_id}/transcript?limit=50`;
   },
 
   // Transcript: process full Anthropic content blocks

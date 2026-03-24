@@ -20,6 +20,54 @@ log = logging.getLogger("hub.transcript")
 
 _CLAUDE_PROJECTS_DIR = Path.home() / ".claude" / "projects"
 
+
+def _extract_clawmux_send_text(cmd: str) -> str:
+    """Extract the message text from a 'clawmux send --to user' command.
+
+    Handles both single-quoted and double-quoted messages:
+    - clawmux send --to user 'Hello world'
+    - clawmux send --to user "Hello world"
+    - clawmux send --to user --re msg-xxx 'Hello'
+
+    Returns empty string if not a user-facing send command.
+    """
+    if not cmd or "clawmux send" not in cmd:
+        return ""
+    # Must be sending to user (not to another agent)
+    if "--to user" not in cmd:
+        return ""
+    # Skip bare acks (--re with no message body)
+    parts = cmd.split("--to user", 1)
+    if len(parts) < 2:
+        return ""
+    after_to = parts[1].strip()
+    # Skip --re only (bare ack)
+    if after_to.startswith("--re ") and "'" not in after_to and '"' not in after_to:
+        return ""
+    # Extract quoted message — find first quote after flags
+    # Remove --re msg-xxx if present
+    import re as _re
+    after_to = _re.sub(r'--re\s+\S+\s*', '', after_to).strip()
+    if not after_to:
+        return ""
+    # Single-quoted
+    if after_to.startswith("'"):
+        # Find matching end quote (handle escaped quotes)
+        text = after_to[1:]
+        # Shell single quotes: no escaping inside, but '\'' is shell idiom
+        text = text.replace("'\\''", "'")
+        if text.endswith("'"):
+            text = text[:-1]
+        return text.strip()
+    # Double-quoted
+    if after_to.startswith('"'):
+        text = after_to[1:]
+        if text.endswith('"'):
+            text = text[:-1]
+        return text.strip()
+    # Unquoted (less common)
+    return after_to.strip()
+
 # Entry types to display
 _DISPLAY_TYPES = {"user", "assistant"}
 
@@ -153,6 +201,21 @@ def _parse_jsonl(path: Path, limit: int) -> list[dict]:
                                     t = sub.get("text", "")
                                     if len(t) > 2000:
                                         sub["text"] = t[:2000] + "…"
+
+            # For assistant messages with only tool_use blocks (no text),
+            # check if any Bash tool_use contains a clawmux send --to user command.
+            # This extracts the spoken response from legacy sessions that used clawmux send.
+            if role == "assistant" and isinstance(content, list):
+                has_text = any(isinstance(b, dict) and b.get("type") == "text" for b in content)
+                if not has_text:
+                    for block in content:
+                        if (isinstance(block, dict) and block.get("type") == "tool_use"
+                                and block.get("name") == "Bash"):
+                            cmd = block.get("input", {}).get("command", "")
+                            spoken = _extract_clawmux_send_text(cmd)
+                            if spoken:
+                                content.append({"type": "text", "text": spoken})
+                                break
 
             # Extract text for filtering decisions
             text = ""
