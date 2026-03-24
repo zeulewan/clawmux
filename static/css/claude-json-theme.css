@@ -266,3 +266,90 @@
   bottom: 0;
   left: 12px;
 }
+
+/* === Permission Request Card === */
+.permission-card {
+  border: 1.5px solid #d97757;
+  border-radius: 8px;
+  background: rgba(217, 119, 87, 0.08);
+  padding: 12px 16px;
+  margin: 8px 0;
+  max-width: min(500px, 90%);
+  align-self: flex-start;
+  animation: cj-fadeIn 0.3s ease;
+}
+.permission-header {
+  font-weight: 700;
+  font-size: 0.95em;
+  color: #d97757;
+  margin-bottom: 6px;
+}
+.permission-desc {
+  font-size: 0.85em;
+  color: var(--cj-secondary-fg);
+  margin-bottom: 8px;
+}
+.permission-preview {
+  font-family: var(--cj-mono-font);
+  font-size: 0.82em;
+  background: rgba(0,0,0,0.2);
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin-bottom: 10px;
+  max-height: 80px;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-all;
+  mask-image: linear-gradient(to bottom, black 60px, transparent 80px);
+}
+.permission-actions {
+  display: flex;
+  gap: 8px;
+}
+.permission-btn {
+  padding: 6px 16px;
+  border-radius: 4px;
+  border: none;
+  font-family: inherit;
+  font-size: 0.85em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.permission-btn:hover { opacity: 0.85; }
+.permission-btn.allow {
+  background: var(--cj-success);
+  color: #000;
+}
+.permission-btn.deny {
+  background: var(--cj-failure);
+  color: #fff;
+}
+.permission-card.resolved-allow {
+  border-color: var(--cj-success);
+  background: var(--cj-success-bg);
+  padding: 8px 16px;
+}
+.permission-card.resolved-deny {
+  border-color: var(--cj-failure);
+  background: var(--cj-failure-bg);
+  padding: 8px 16px;
+}
+.permission-result {
+  font-size: 0.85em;
+  font-weight: 500;
+}
+
+/* === Permission Mode Label === */
+#permission-mode-label {
+  font-size: 0.8em;
+  color: #d97757;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(217, 119, 87, 0.3);
+  user-select: none;
+}
+#permission-mode-label:hover {
+  background: rgba(217, 119, 87, 0.1);
+}

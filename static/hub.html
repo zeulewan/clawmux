@@ -157,6 +157,7 @@
     <option value="low">Low</option>
   </select>
   <span id="effort-label" class="header-label" onclick="toggleEffortPopup(event)"></span>
+  <span id="permission-mode-label" style="display:none;" onclick="cyclePermissionMode()"></span>
   <select id="project-selector" tabindex="-1" style="display:none;" onchange="switchProject(this.value)">
     <option value="default">Default</option>
   </select>
@@ -708,6 +709,7 @@ function switchTab(sessionId, manual = false) {
       sessionEffortEl.value = s.effort || 'high';
     }
     updateEffortLabel();
+    if (typeof updatePermissionModeLabel === 'function') updatePermissionModeLabel();
 
     // Resume thinking sound and indicator if this session is already active
     const ss = s.sidebarState || 'idle';

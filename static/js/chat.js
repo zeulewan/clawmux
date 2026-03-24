@@ -1594,3 +1594,102 @@ function initDragDrop() {
   });
 }
 
+// === Permission Request Card ===
+function renderPermissionCard(sessionId, reqData) {
+  if (sessionId !== activeSessionId) return;
+  const chatArea = document.getElementById('chat-area');
+  if (!chatArea) return;
+
+  const card = document.createElement('div');
+  card.className = 'permission-card';
+  card.dataset.requestId = reqData.request_id || '';
+
+  const header = document.createElement('div');
+  header.className = 'permission-header';
+  header.textContent = reqData.title || `Allow ${reqData.display_name || reqData.tool_name || 'tool'}?`;
+  card.appendChild(header);
+
+  if (reqData.description) {
+    const desc = document.createElement('div');
+    desc.className = 'permission-desc';
+    desc.textContent = reqData.description;
+    card.appendChild(desc);
+  }
+
+  // Input preview
+  if (reqData.input) {
+    const preview = document.createElement('pre');
+    preview.className = 'permission-preview';
+    const inputStr = typeof reqData.input === 'string' ? reqData.input : JSON.stringify(reqData.input, null, 2);
+    preview.textContent = inputStr.slice(0, 500);
+    card.appendChild(preview);
+  }
+
+  // Action buttons
+  const actions = document.createElement('div');
+  actions.className = 'permission-actions';
+
+  const allowBtn = document.createElement('button');
+  allowBtn.className = 'permission-btn allow';
+  allowBtn.textContent = 'Allow';
+  allowBtn.onclick = () => _respondPermission(sessionId, reqData.request_id, true, card);
+  actions.appendChild(allowBtn);
+
+  const denyBtn = document.createElement('button');
+  denyBtn.className = 'permission-btn deny';
+  denyBtn.textContent = 'Deny';
+  denyBtn.onclick = () => _respondPermission(sessionId, reqData.request_id, false, card);
+  actions.appendChild(denyBtn);
+
+  card.appendChild(actions);
+  chatArea.appendChild(card);
+  chatScrollToBottom(true);
+}
+
+async function _respondPermission(sessionId, requestId, allow, cardEl) {
+  try {
+    await fetch(`/api/sessions/${sessionId}/permission-response`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ request_id: requestId, allow, message: '' }),
+    });
+    // Replace card with result indicator
+    cardEl.className = 'permission-card ' + (allow ? 'resolved-allow' : 'resolved-deny');
+    cardEl.innerHTML = `<div class="permission-result">${allow ? '\u2705 Allowed' : '\u274C Denied'}: ${cardEl.dataset.requestId}</div>`;
+  } catch (e) {
+    console.error('Permission response failed:', e);
+  }
+}
+
+// === Permission Mode Picker ===
+const _PERMISSION_MODES = ['bypassPermissions', 'auto', 'acceptEdits', 'plan', 'dontAsk'];
+const _PERMISSION_LABELS = { bypassPermissions: 'Bypass', auto: 'Auto', acceptEdits: 'Accept Edits', plan: 'Plan', dontAsk: "Don't Ask" };
+
+async function cyclePermissionMode() {
+  if (!activeSessionId) return;
+  const s = sessions.get(activeSessionId);
+  if (!s || s.backend !== 'claude-json') return;
+  const current = s.permissionMode || 'bypassPermissions';
+  const idx = _PERMISSION_MODES.indexOf(current);
+  const next = _PERMISSION_MODES[(idx + 1) % _PERMISSION_MODES.length];
+  try {
+    await fetch(`/api/sessions/${activeSessionId}/permission-mode`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: next }),
+    });
+    s.permissionMode = next;
+    updatePermissionModeLabel();
+  } catch (e) { console.error('Failed to set permission mode:', e); }
+}
+
+function updatePermissionModeLabel() {
+  const el = document.getElementById('permission-mode-label');
+  if (!el) return;
+  const s = activeSessionId ? sessions.get(activeSessionId) : null;
+  if (!s || s.backend !== 'claude-json') { el.style.display = 'none'; return; }
+  const mode = s.permissionMode || 'bypassPermissions';
+  el.textContent = (_PERMISSION_LABELS[mode] || mode) + ' \u25BE';
+  el.style.display = 'inline';
+}
+

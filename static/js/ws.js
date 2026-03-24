@@ -449,6 +449,11 @@ function handleMessage(data) {
       s.toolStatusText = 'Compacting context...';
       s.compacting = true;
       showAgentIndicator(data.session_id, 'compacting', { text: 'Compacting context...' });
+    } else if (evType === 'permission_request') {
+      const reqData = data.data || {};
+      if (typeof renderPermissionCard === 'function') {
+        renderPermissionCard(data.session_id, reqData);
+      }
     }
     renderSidebar();
     return;
