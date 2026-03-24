@@ -1363,7 +1363,7 @@ body.sidebar-hidden #focus-view {
   box-shadow: var(--shadow-lg);
   backdrop-filter: blur(16px);
 }
-#context-menu .ctx-has-submenu:hover > .ctx-submenu,
+@media (hover: hover) { #context-menu .ctx-has-submenu:hover > .ctx-submenu { display: block; } }
 #context-menu .ctx-has-submenu.open > .ctx-submenu { display: block; }
 #context-menu .ctx-submenu .ctx-sub-item {
   padding: 8px 16px;
