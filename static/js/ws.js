@@ -513,6 +513,12 @@ function handleMessage(data) {
   const s = sessions.get(session_id);
   if (!s) return;
 
+  if (type === 'assistant_message') {
+    // Inline image or other assistant content (e.g. from clawmux send --image)
+    if (data.text) addMessage(session_id, 'assistant', data.text, { id: data.msg_id || null });
+    return;
+  }
+
   if (type === 'activity_text') {
     getRenderer(session_id).handleActivityText(session_id, data.text);
     return;
