@@ -60,6 +60,7 @@ class Session:
     backend: str = DEFAULT_BACKEND  # backend type (e.g. "claude-code", "opencode", "codex")
     model_id: str = ""  # actual model string, e.g. "claude-opus-4-6", "gpt-5"
     pending_model_restart: bool = False  # True when model was changed and needs restart after current turn
+    permission_mode: str = "bypassPermissions"  # permission mode for claude-json backend
     restarting: bool = False  # True while model restart is in progress (skip health checks)
     processing: bool = False  # DEPRECATED — derived from state during migration
     in_wait: bool = False  # DEPRECATED — derived from state during migration
@@ -502,6 +503,9 @@ class SessionManager:
             )
             session.model = session_model
             session.effort = session_effort
+            # Sync permission mode to backend before spawn
+            if session.permission_mode != "bypassPermissions" and hasattr(backend_impl, 'set_permission_mode'):
+                backend_impl.set_permission_mode(session_id, session.permission_mode)
             await backend_impl.spawn(
                 session_name=tmux_name, work_dir=str(work_dir),
                 session_id=session_id, hub_port=HUB_PORT,

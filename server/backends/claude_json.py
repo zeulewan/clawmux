@@ -103,9 +103,8 @@ class ClaudeJsonBackend(AgentBackend):
         _hub_ports[session_name] = hub_port
         _work_dirs[session_name] = work_dir
 
-        # Determine permission mode
+        # Determine permission mode from session object or module cache
         perm_mode = _permission_modes.get(session_name, "bypassPermissions")
-        _permission_modes[session_name] = perm_mode
         log.info("[%s] Spawn with permission_mode=%s", session_name, perm_mode)
 
         # Build command — use base claude without --dangerously-skip-permissions

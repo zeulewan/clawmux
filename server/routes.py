@@ -414,6 +414,8 @@ async def set_permission_mode(session_id: str, request: Request):
     from backends.claude_json import ClaudeJsonBackend
     if not ClaudeJsonBackend.set_permission_mode(session_id, mode):
         return JSONResponse({"error": f"invalid mode: {mode}"}, status_code=400)
+    # Also store on session object so it persists across restart
+    session.permission_mode = mode
     return JSONResponse({"session_id": session_id, "permission_mode": mode, "restart_required": True})
 
 
