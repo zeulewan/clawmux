@@ -1398,18 +1398,118 @@ function _slashMenuNav(dir) {
   items[_slashActiveIdx]?.classList.add('active');
 }
 
-// Auto-resize textarea + slash menu trigger
+// === @Mention File Autocomplete ===
+const _fileMenu = document.getElementById('file-menu');
+let _fileActiveIdx = -1;
+let _fileAtPos = -1;       // cursor position of the triggering @
+let _fileFetchTimer = null; // debounce timer
+
+function _getAtMention() {
+  // Find the @ before the cursor with a partial query (no spaces)
+  const cur = textInput.selectionStart;
+  const val = textInput.value;
+  for (let i = cur - 1; i >= 0; i--) {
+    if (val[i] === '@') return { pos: i, query: val.slice(i + 1, cur) };
+    if (val[i] === ' ' || val[i] === '\n') break;
+  }
+  return null;
+}
+
+async function _fetchFiles(query) {
+  if (!activeSessionId) return [];
+  try {
+    const r = await fetch(`/api/sessions/${encodeURIComponent(activeSessionId)}/files?query=${encodeURIComponent(query)}`);
+    if (!r.ok) return [];
+    const data = await r.json();
+    return data.files || [];
+  } catch { return []; }
+}
+
+function _showFileMenu(files) {
+  if (!files.length || !_isSlashMenuBackend()) {
+    _hideFileMenu(); return;
+  }
+  _fileMenu.innerHTML = '';
+  files.slice(0, 15).forEach((f, i) => {
+    const path = typeof f === 'string' ? f : (f.path || f.name || '');
+    const parts = path.split('/');
+    const name = parts.pop();
+    const dir = parts.length ? parts.join('/') + '/' : '';
+    const el = document.createElement('div');
+    el.className = 'file-item' + (i === 0 ? ' active' : '');
+    el.dataset.path = path;
+    el.innerHTML =
+      '<span class="file-item-icon">📄</span>' +
+      '<span class="file-item-name">' + (name || path) + '</span>' +
+      (dir ? '<span class="file-item-dir">' + dir + '</span>' : '');
+    el.addEventListener('click', () => _selectFile(path));
+    _fileMenu.appendChild(el);
+  });
+  _fileActiveIdx = 0;
+  _fileMenu.style.display = 'block';
+}
+
+function _hideFileMenu() {
+  _fileMenu.style.display = 'none';
+  _fileActiveIdx = -1;
+  _fileAtPos = -1;
+  if (_fileFetchTimer) { clearTimeout(_fileFetchTimer); _fileFetchTimer = null; }
+}
+
+function _selectFile(path) {
+  const val = textInput.value;
+  const before = val.slice(0, _fileAtPos);
+  const after = val.slice(textInput.selectionStart);
+  textInput.value = before + '@' + path + ' ' + after;
+  const newCur = _fileAtPos + 1 + path.length + 1;
+  textInput.setSelectionRange(newCur, newCur);
+  textInput.style.height = 'auto';
+  textInput.style.height = Math.min(textInput.scrollHeight, 120) + 'px';
+  textSendBtn.disabled = !textInput.value.trim();
+  _hideFileMenu();
+  textInput.focus();
+}
+
+function _fileMenuNav(dir) {
+  const items = _fileMenu.querySelectorAll('.file-item');
+  if (!items.length) return;
+  items[_fileActiveIdx]?.classList.remove('active');
+  _fileActiveIdx = (_fileActiveIdx + dir + items.length) % items.length;
+  items[_fileActiveIdx]?.classList.add('active');
+  items[_fileActiveIdx]?.scrollIntoView({ block: 'nearest' });
+}
+
+// Auto-resize textarea + slash/file menu triggers
 textInput.addEventListener('input', () => {
   textInput.style.height = 'auto';
   textInput.style.height = Math.min(textInput.scrollHeight, 120) + 'px';
   textSendBtn.disabled = !textInput.value.trim();
 
-  // Slash command detection
+  // Slash command detection (only at start of input)
   const val = textInput.value;
   if (val.startsWith('/') && !val.includes(' ') && !val.includes('\n')) {
     _showSlashMenu(val);
+    _hideFileMenu();
+    return;
   } else {
     _hideSlashMenu();
+  }
+
+  // @mention file detection
+  const mention = _getAtMention();
+  if (mention && _isSlashMenuBackend()) {
+    _fileAtPos = mention.pos;
+    if (_fileFetchTimer) clearTimeout(_fileFetchTimer);
+    _fileFetchTimer = setTimeout(async () => {
+      const files = await _fetchFiles(mention.query);
+      // Re-check mention is still valid after async
+      const current = _getAtMention();
+      if (current && current.pos === _fileAtPos) {
+        _showFileMenu(files);
+      }
+    }, 150);
+  } else {
+    _hideFileMenu();
   }
 });
 
@@ -1432,15 +1532,28 @@ textInput.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { e.preventDefault(); _hideSlashMenu(); return; }
   }
 
+  // File menu navigation
+  if (_fileMenu.style.display !== 'none') {
+    if (e.key === 'ArrowDown') { e.preventDefault(); _fileMenuNav(1); return; }
+    if (e.key === 'ArrowUp') { e.preventDefault(); _fileMenuNav(-1); return; }
+    if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+      e.preventDefault();
+      const active = _fileMenu.querySelector('.file-item.active');
+      if (active) _selectFile(active.dataset.path);
+      return;
+    }
+    if (e.key === 'Escape') { e.preventDefault(); _hideFileMenu(); return; }
+  }
+
   if (e.key === 'Enter' && !e.shiftKey && !isMobile) {
     e.preventDefault();
     sendTextMessage();
   }
 });
 
-// Dismiss slash menu on outside click
+// Dismiss menus on outside click
 document.addEventListener('click', (e) => {
-  if (!e.target.closest('#text-input-bar')) _hideSlashMenu();
+  if (!e.target.closest('#text-input-bar')) { _hideSlashMenu(); _hideFileMenu(); }
 });
 
 function sendTextMessage() {

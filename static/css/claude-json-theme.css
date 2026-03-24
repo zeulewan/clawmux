@@ -392,6 +392,60 @@
   color: var(--cj-secondary-fg, rgba(255,255,255,0.6));
 }
 
+/* === File Mention Menu === */
+#file-menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 8px;
+  right: 8px;
+  background: var(--bg-card, #1e1e1e);
+  border: 1px solid var(--cj-border, rgba(255,255,255,0.1));
+  border-radius: 8px;
+  padding: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.4);
+}
+.file-item {
+  padding: 6px 10px;
+  cursor: pointer;
+  border-radius: 6px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  overflow: hidden;
+}
+.file-item:hover, .file-item.active {
+  background: rgba(255,255,255,0.08);
+}
+.file-item-icon {
+  flex-shrink: 0;
+  font-size: 0.85em;
+  opacity: 0.6;
+}
+.file-item-name {
+  font-family: var(--cj-mono-font, 'SF Mono', Monaco, Consolas, monospace);
+  font-weight: 600;
+  font-size: 0.88em;
+  color: var(--cj-link, #4a9eff);
+  white-space: nowrap;
+}
+.file-item-dir {
+  font-family: var(--cj-mono-font, 'SF Mono', Monaco, Consolas, monospace);
+  font-size: 0.78em;
+  color: var(--cj-secondary-fg, rgba(255,255,255,0.6));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.file-menu-empty {
+  padding: 8px 10px;
+  font-size: 0.85em;
+  color: var(--cj-secondary-fg, rgba(255,255,255,0.6));
+  font-style: italic;
+}
+
 /* === DiffView === */
 .diff-card {
   border: 1.5px solid var(--cj-border);
