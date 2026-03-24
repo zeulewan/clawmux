@@ -675,14 +675,14 @@ function _createAgentCard(voiceId, name, state) {
     touchStartX = touch.clientX; touchStartY = touch.clientY;
     lpTimer = setTimeout(() => {
       lpTimer = null; lpFired = true;
-      // Show context menu immediately while finger is still held
       ctxShown = true;
       card.classList.add('long-press-active');
-      const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: touchStartX, clientY: touchStartY };
+      // Position menu above the finger so it's visible while holding
+      const menuY = Math.max(10, touchStartY - 120);
+      const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: touchStartX, clientY: menuY };
       if (card._voiceSession) { showContextMenu(fakeEvent, card._voiceSession.session_id, voiceId); }
       else { showContextMenu(fakeEvent, null, voiceId); }
-      setTimeout(() => card.classList.remove('long-press-active'), 200);
-    }, 400);
+    }, 500);
   }, { passive: true });
   card.addEventListener('touchmove', (e) => {
     const touch = e.touches[0];
@@ -709,10 +709,12 @@ function _createAgentCard(voiceId, name, state) {
     if (touchDragging && _touchDrag) { _touchDrag.ghost.remove(); _touchDrag = null; }
     document.querySelectorAll('.drag-above,.drag-below,.drag-over-group').forEach(el =>
       el.classList.remove('drag-above', 'drag-below', 'drag-over-group'));
+    card.classList.remove('long-press-active');
     touchDragging = false; lpFired = false; ctxShown = false;
   };
   card.addEventListener('touchend', (e) => {
     if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+    card.classList.remove('long-press-active');
     if (touchDragging) {
       e.preventDefault();
       _touchDragEnd(e.changedTouches[0]);
