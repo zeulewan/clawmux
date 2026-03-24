@@ -125,25 +125,67 @@ registerRenderer('claude-json', {
     return `/api/sessions/${session.session_id}/transcript?limit=50`;
   },
 
-  // Transcript: render tool_calls as tool cards
+  // Transcript: process full Anthropic content blocks
   processTranscriptMessage(msg, messages) {
+    const content = msg.content;
+    const ts = msg.ts || 0;
+    // If content blocks are available, process each block by type
+    if (Array.isArray(content) && content.length > 0) {
+      for (const block of content) {
+        if (!block || typeof block !== 'object') continue;
+        if (block.type === 'text' && block.text) {
+          messages.push({
+            role: msg.role, text: block.text,
+            id: msg.uuid || msg.id || undefined, ts,
+          });
+        } else if (block.type === 'tool_use') {
+          messages.push({
+            role: 'tool', toolName: block.name, toolData: block.input || {},
+            toolStatus: 'done', toolId: block.id || ('hist-' + Date.now()),
+            ts,
+          });
+        } else if (block.type === 'tool_result') {
+          // Fill in the OUT row of the matching tool card
+          const toolUseId = block.tool_use_id;
+          if (toolUseId) {
+            for (let i = messages.length - 1; i >= 0; i--) {
+              if (messages[i].role === 'tool' && messages[i].toolId === toolUseId) {
+                const resultContent = block.content;
+                messages[i].toolOutput = typeof resultContent === 'string'
+                  ? resultContent
+                  : Array.isArray(resultContent)
+                    ? resultContent.filter(b => b.type === 'text').map(b => b.text).join('\n')
+                    : JSON.stringify(resultContent);
+                if (block.is_error) messages[i].toolStatus = 'error';
+                break;
+              }
+            }
+          }
+        } else if (block.type === 'thinking' && block.text) {
+          messages.push({
+            role: 'thinking', text: block.text, ts,
+            thinkingDuration: block.duration || null,
+          });
+        }
+      }
+      return;
+    }
+    // Fallback: legacy format with tool_calls array
     if (msg.tool_calls && msg.tool_calls.length > 0) {
       for (const tc of msg.tool_calls) {
         messages.push({
           role: 'tool', toolName: tc.name, toolData: tc.input || {},
-          toolStatus: 'done', toolId: 'hist-' + (tc.id || Date.now()),
-          ts: msg.ts || 0,
+          toolStatus: 'done', toolId: 'hist-' + (tc.id || Date.now()), ts,
         });
       }
     }
     if (msg.text) {
-      const obj = { role: msg.role, text: msg.text };
-      if (msg.uuid) obj.id = msg.uuid;
-      else if (msg.id) obj.id = msg.id;
-      if (msg.ts) obj.ts = msg.ts;
-      if (msg.parent_id) obj.parentId = msg.parent_id;
-      if (msg.bare_ack) obj.isBareAck = true;
-      messages.push(obj);
+      messages.push({
+        role: msg.role, text: msg.text,
+        id: msg.uuid || msg.id || undefined, ts,
+        parentId: msg.parent_id || undefined,
+        isBareAck: msg.bare_ack || undefined,
+      });
     }
   },
 

@@ -627,6 +627,21 @@ function renderChat(forceScroll = false) {
       chatArea.appendChild(createToolCardEl(msg));
       continue;
     }
+    // Thinking blocks (collapsible details)
+    if (msg.role === 'thinking') {
+      const details = document.createElement('details');
+      details.className = 'thinking-details';
+      const summary = document.createElement('summary');
+      const dur = msg.thinkingDuration ? ` (${Math.round(msg.thinkingDuration)}s)` : '';
+      summary.textContent = `Thought${dur}`;
+      details.appendChild(summary);
+      const content = document.createElement('div');
+      content.className = 'thinking-content';
+      content.textContent = msg.text;
+      details.appendChild(content);
+      chatArea.appendChild(details);
+      continue;
+    }
     const hasReplies = msg.id && threadReplies.has(msg.id);
     const hasAcksOnly = msg.id && !hasReplies && bareAcks.has(msg.id);
     if (hasReplies) {
