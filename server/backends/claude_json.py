@@ -346,9 +346,19 @@ class ClaudeJsonBackend(AgentBackend):
         hub_state imports (session_mgr, send_to_browser, _save_activity).
         """
         hub_port = _hub_ports.get(session_name)
+        work_dir = _work_dirs.get(session_name, "")
         hub = _get_hub()
         send_fn = hub["send"]
         text_buffer: list[str] = []
+
+        # Open raw stream log for appending
+        stream_log = None
+        if work_dir:
+            try:
+                from pathlib import Path
+                stream_log = open(Path(work_dir) / "stream.jsonl", "a")
+            except Exception as e:
+                log.warning("[%s] Could not open stream.jsonl: %s", session_name, e)
 
         try:
             while proc.returncode is None:
@@ -360,6 +370,14 @@ class ClaudeJsonBackend(AgentBackend):
                     if proc.returncode is not None:
                         break
                     continue
+
+                # Write raw line to stream log
+                if stream_log:
+                    try:
+                        stream_log.write(line.decode(errors="replace"))
+                        stream_log.flush()
+                    except Exception:
+                        pass
 
                 try:
                     data = json.loads(line.decode())
@@ -563,6 +581,11 @@ class ClaudeJsonBackend(AgentBackend):
         except Exception as e:
             log.error("[%s] Claude JSON listener error: %s", session_name, e, exc_info=True)
         finally:
+            if stream_log:
+                try:
+                    stream_log.close()
+                except Exception:
+                    pass
             if proc.returncode is None:
                 log.warning("[%s] Subprocess still running after listener exit", session_name)
 

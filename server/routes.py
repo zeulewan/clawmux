@@ -447,6 +447,27 @@ async def respond_to_permission(session_id: str, request: Request):
     return JSONResponse({"ok": True, "allowed": allow})
 
 
+@router.get("/api/sessions/{session_id}/stream-log")
+async def get_stream_log(session_id: str, request: Request):
+    """Return the last N lines of the raw stream.jsonl event log."""
+    session = session_mgr.sessions.get(session_id)
+    if not session or not session.work_dir:
+        return JSONResponse({"error": "session not found"}, status_code=404)
+    tail = min(int(request.query_params.get("tail", 100)), 500)
+    log_path = os.path.join(session.work_dir, "stream.jsonl")
+    if not os.path.exists(log_path):
+        return JSONResponse({"lines": []})
+
+    def _read_tail():
+        import subprocess as _sp
+        result = _sp.run(["tail", "-n", str(tail), log_path],
+                         capture_output=True, text=True, timeout=5)
+        return [l for l in result.stdout.strip().splitlines() if l]
+
+    lines = await asyncio.to_thread(_read_tail)
+    return JSONResponse({"lines": lines, "count": len(lines)})
+
+
 @router.post("/api/sessions/{session_id}/interrupt")
 async def interrupt_session(session_id: str):
     """Soft-interrupt a running agent via the appropriate backend method."""
