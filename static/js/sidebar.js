@@ -674,13 +674,20 @@ function _createAgentCard(voiceId, name, state) {
   };
   // Mobile long-press: 500ms timer, show menu on lift
   if (isMobile) {
-    let _lp = null; // { timer, fired }
-    card.addEventListener('touchstart', () => {
-      _lp = { fired: false, timer: setTimeout(() => { _lp.fired = true; card.classList.add('long-press-active'); }, 500) };
+    let _lp = null; // { timer, fired, x, y }
+    card.addEventListener('touchstart', (e) => {
+      const t = e.touches[0];
+      _lp = { fired: false, x: t.clientX, y: t.clientY,
+        timer: setTimeout(() => { _lp.fired = true; card.classList.add('long-press-active'); }, 500) };
     }, { passive: true });
-    card.addEventListener('touchmove', () => {
-      if (_lp && _lp.timer) { clearTimeout(_lp.timer); _lp.timer = null; }
-      if (_lp && _lp.fired) { _lp.fired = false; card.classList.remove('long-press-active'); }
+    card.addEventListener('touchmove', (e) => {
+      if (!_lp) return;
+      const t = e.touches[0];
+      const dist = Math.hypot(t.clientX - _lp.x, t.clientY - _lp.y);
+      if (dist > 10) { // allow small finger drift
+        if (_lp.timer) { clearTimeout(_lp.timer); _lp.timer = null; }
+        if (_lp.fired) { _lp.fired = false; card.classList.remove('long-press-active'); }
+      }
     }, { passive: true });
     card.addEventListener('touchend', (e) => {
       if (_lp && _lp.timer) { clearTimeout(_lp.timer); }
@@ -689,7 +696,7 @@ function _createAgentCard(voiceId, name, state) {
         e.preventDefault();
         _blockNextClick = true;
         const t = e.changedTouches[0];
-        const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: t.clientX, clientY: Math.max(10, t.clientY - 40) };
+        const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: t.clientX, clientY: Math.max(10, t.clientY - 10) };
         if (card._voiceSession) { showContextMenu(fakeEvent, card._voiceSession.session_id, voiceId); }
         else { showContextMenu(fakeEvent, null, voiceId); }
       }
