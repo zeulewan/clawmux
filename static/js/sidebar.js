@@ -657,50 +657,42 @@ function _createAgentCard(voiceId, name, state) {
   }
   card._voiceSession = state.session;
   card._voiceSpawning = state.isSpawning;
-  let _lpClickGuard = false;
+  let _ctxPending = null; // deferred context menu event (shown on touchend)
   card.onclick = () => {
-    if (_lpClickGuard) { _lpClickGuard = false; return; }
+    if (_ctxPending) { _ctxPending = null; return; } // block click after long-press
     if (card._voiceSpawning) return;
     if (card._voiceSession) { switchTab(card._voiceSession.session_id, true); }
     else { spawnSession(voiceId); }
   };
+  // Desktop: show context menu immediately on right-click
+  // Mobile: native contextmenu fires during hold — defer display to touchend
   card.oncontextmenu = (e) => {
     e.preventDefault();
-    if (card._voiceSession) { showContextMenu(e, card._voiceSession.session_id, voiceId); }
-    else { showContextMenu(e, null, voiceId); }
-  };
-  // Mobile: long-press = context menu only (no drag — use "Move to Folder" menu item instead)
-  let lpTimer = null, lpFired = false;
-  card.addEventListener('touchstart', (e) => {
-    lpFired = false;
-    const touch = e.touches[0];
-    lpTimer = setTimeout(() => {
-      lpTimer = null; lpFired = true;
+    if ('ontouchstart' in window) {
+      // Mobile: stash the event, show on touchend
+      _ctxPending = { x: e.clientX, y: e.clientY };
       card.classList.add('long-press-active');
-    }, 500);
-  }, { passive: true });
-  card.addEventListener('touchmove', () => {
-    // Any movement cancels the long-press (user is scrolling)
-    if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
-    if (lpFired) { lpFired = false; card.classList.remove('long-press-active'); }
-  }, { passive: true });
+    } else {
+      // Desktop: show immediately
+      if (card._voiceSession) { showContextMenu(e, card._voiceSession.session_id, voiceId); }
+      else { showContextMenu(e, null, voiceId); }
+    }
+  };
   card.addEventListener('touchend', (e) => {
-    if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
     card.classList.remove('long-press-active');
-    if (lpFired) {
+    if (_ctxPending) {
       e.preventDefault();
-      _lpClickGuard = true;
       const t = e.changedTouches[0];
       const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: t.clientX, clientY: Math.max(10, t.clientY - 40) };
       if (card._voiceSession) { showContextMenu(fakeEvent, card._voiceSession.session_id, voiceId); }
       else { showContextMenu(fakeEvent, null, voiceId); }
-      lpFired = false;
+      // _ctxPending stays set to block the synthetic click in onclick above
+      setTimeout(() => { _ctxPending = null; }, 400);
     }
   });
   card.addEventListener('touchcancel', () => {
-    if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
     card.classList.remove('long-press-active');
-    lpFired = false;
+    _ctxPending = null;
   });
   return card;
 }
