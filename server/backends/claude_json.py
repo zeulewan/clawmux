@@ -343,16 +343,26 @@ class ClaudeJsonBackend(AgentBackend):
 
         Format: {"type":"user","message":{"role":"user","content":[{"type":"text","text":"..."}]}}
         """
-        msg = json.dumps({
+        msg_obj = {
             "type": "user",
             "message": {
                 "role": "user",
                 "content": [{"type": "text", "text": text}],
             },
-        }) + "\n"
+        }
+        msg = json.dumps(msg_obj) + "\n"
         try:
             proc.stdin.write(msg.encode())
             await proc.stdin.drain()
+            # Log stdin to stream.jsonl for full conversation visibility
+            work_dir = _work_dirs.get(session_name)
+            if work_dir:
+                try:
+                    from pathlib import Path
+                    with open(Path(work_dir) / "stream.jsonl", "a") as f:
+                        f.write(json.dumps({"_direction": "stdin", **msg_obj}, indent=2) + "\n")
+                except Exception:
+                    pass
         except Exception as e:
             log.error("[%s] Failed to write to stdin: %s", session_name, e)
 
@@ -410,9 +420,13 @@ class ClaudeJsonBackend(AgentBackend):
                         break
                     continue
 
-                # Write raw line to stream log
+                # Write pretty-printed JSON to stream log
                 if stream_log:
                     try:
+                        parsed_for_log = json.loads(line.decode(errors="replace"))
+                        stream_log.write(json.dumps(parsed_for_log, indent=2) + "\n")
+                        stream_log.flush()
+                    except (json.JSONDecodeError, UnicodeDecodeError):
                         stream_log.write(line.decode(errors="replace"))
                         stream_log.flush()
                     except Exception:
