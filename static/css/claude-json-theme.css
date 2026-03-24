@@ -546,3 +546,51 @@
   opacity: 0.7;
 }
 .diff-card.resolved-reject .diff-body { max-height: 60px; }
+
+/* === Light Mode Overrides === */
+@media (prefers-color-scheme: light) {
+  .backend-claude-json {
+    --cj-success: #1a7f37;
+    --cj-failure: #a1260d;
+    --cj-warning: #9d6b00;
+    --cj-success-bg: rgba(26, 127, 55, 0.12);
+    --cj-failure-bg: rgba(161, 38, 13, 0.12);
+    --cj-tool-bg: rgba(0,0,0,0.03);
+    --cj-border: rgba(0,0,0,0.15);
+    --cj-secondary-fg: rgba(0,0,0,0.55);
+    --cj-link: #0969da;
+  }
+  /* Timeline dot colors for light bg */
+  .backend-claude-json .tool-card.status-success::before { background-color: #1a7f37; }
+  .backend-claude-json .tool-card.status-error::before { background-color: #a1260d; }
+  .backend-claude-json .tool-card::after { background-color: rgba(0,0,0,0.15); }
+  /* Diff colors */
+  .backend-claude-json .diff-line.del { background: rgba(161, 38, 13, 0.1); color: #a1260d; }
+  .backend-claude-json .diff-line.add { background: rgba(26, 127, 55, 0.1); color: #1a7f37; }
+  .backend-claude-json .diff-line.ctx { color: rgba(0,0,0,0.5); }
+  /* Permission card */
+  .backend-claude-json .permission-card { border-color: #9a6700; background: rgba(154, 103, 0, 0.06); }
+  .backend-claude-json .permission-header { color: #9a6700; }
+  .backend-claude-json .diff-tool-badge { background: rgba(154, 103, 0, 0.1); color: #9a6700; }
+  /* Thinking */
+  .backend-claude-json .thinking-glyph { color: #9a6700; }
+  .backend-claude-json .thinking-text { color: rgba(0,0,0,0.6); }
+  /* Tool body */
+  .backend-claude-json .tool-body-content { mask-image: linear-gradient(to bottom, black 40px, transparent 60px); }
+  /* Annotation badges */
+  .backend-claude-json .tool-annotation.success { color: #1a7f37; background-color: rgba(26, 127, 55, 0.12); }
+  .backend-claude-json .tool-annotation.error { color: #a1260d; background-color: rgba(161, 38, 13, 0.12); }
+}
+
+/* Also support explicit .light-theme class */
+body.light-theme .backend-claude-json {
+  --cj-success: #1a7f37;
+  --cj-failure: #a1260d;
+  --cj-warning: #9d6b00;
+  --cj-success-bg: rgba(26, 127, 55, 0.12);
+  --cj-failure-bg: rgba(161, 38, 13, 0.12);
+  --cj-tool-bg: rgba(0,0,0,0.03);
+  --cj-border: rgba(0,0,0,0.15);
+  --cj-secondary-fg: rgba(0,0,0,0.55);
+  --cj-link: #0969da;
+}

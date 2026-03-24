@@ -679,11 +679,13 @@ function switchTab(sessionId, manual = false) {
   if (s) {
     activeVoiceEl.textContent = s.backend === 'openclaw' ? (s.label || s.session_id) : voiceDisplayName(s.voice);
     const vc = getRenderer(sessionId).bubbleColor(s);
-    activeVoiceEl.style.color = vc;
+    // Header name uses voice color (not bubble color which may be transparent)
+    const headerColor = vc === 'transparent' ? voiceColor(s.voice) : vc;
+    activeVoiceEl.style.color = headerColor;
     activeVoiceEl.style.display = 'inline';
-    document.getElementById('main-content').style.backgroundColor = hexToRgba(vc, 0.10);
-    document.documentElement.style.setProperty('--voice-color', vc);
-    document.documentElement.style.setProperty('--voice-color-bg', hexToRgba(vc, 0.18));
+    document.getElementById('main-content').style.backgroundColor = hexToRgba(headerColor, 0.10);
+    document.documentElement.style.setProperty('--voice-color', headerColor);
+    document.documentElement.style.setProperty('--voice-color-bg', hexToRgba(headerColor, 0.18));
   }
 
   // Render chat messages (force scroll — switching sessions)
