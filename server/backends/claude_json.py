@@ -611,19 +611,32 @@ class ClaudeJsonBackend(AgentBackend):
         # Forward to browser and wait for response
         hub = _get_hub()
         send_fn = hub["send"]
+        tool_input = request.get("input", {})
+
+        # Build event data
+        event_data = {
+            "request_id": request_id,
+            "tool_name": tool_name,
+            "tool_use_id": tool_use_id,
+            "input": tool_input,
+            "title": request.get("title", ""),
+            "description": request.get("description", ""),
+            "display_name": request.get("display_name", tool_name),
+        }
+
+        # For Write/Edit in acceptEdits/plan: include diff data
+        if tool_name in ("Write", "Edit") and perm_mode in ("acceptEdits", "plan"):
+            diff_data = await self._build_diff_data(tool_name, tool_input)
+            if diff_data:
+                event_data["diff"] = diff_data
+
+        event_type = "diff_request" if "diff" in event_data else "permission_request"
         await send_fn({
             "type": "structured_event",
             "session_id": session_name,
-            "event_type": "permission_request",
-            "data": {
-                "request_id": request_id,
-                "tool_name": tool_name,
-                "tool_use_id": tool_use_id,
-                "input": request.get("input", {}),
-                "title": request.get("title", ""),
-                "description": request.get("description", ""),
-                "display_name": request.get("display_name", tool_name),
-            },
+            "event_type": event_type,
+            **({} if event_type == "permission_request" else {}),
+            "data": event_data,
         })
 
         # Create a Future and wait for the browser to resolve it
@@ -751,6 +764,44 @@ class ClaudeJsonBackend(AgentBackend):
                         })
                     except Exception:
                         pass
+
+    @staticmethod
+    async def _build_diff_data(tool_name: str, tool_input: dict) -> dict | None:
+        """Read current file from disk and build diff data for Write/Edit tools.
+
+        Returns dict with file_path, old_content, and either new_content (Write)
+        or old_string/new_string (Edit). Returns None if file can't be read.
+        """
+        from pathlib import Path
+        file_path = tool_input.get("file_path", "")
+        if not file_path:
+            return None
+
+        # Read current file content
+        old_content = ""
+        p = Path(file_path)
+        if p.exists() and p.is_file():
+            try:
+                old_content = await asyncio.to_thread(p.read_text, errors="replace")
+            except Exception:
+                old_content = ""
+
+        if tool_name == "Write":
+            new_content = tool_input.get("content", "")
+            return {
+                "file_path": file_path,
+                "old_content": old_content[:10000],  # cap to avoid huge payloads
+                "new_content": new_content[:10000],
+                "is_new_file": not p.exists(),
+            }
+        elif tool_name == "Edit":
+            return {
+                "file_path": file_path,
+                "old_content": old_content[:10000],
+                "old_string": tool_input.get("old_string", ""),
+                "new_string": tool_input.get("new_string", ""),
+            }
+        return None
 
     @staticmethod
     def _tool_activity(tool_name: str, tool_input: dict) -> str:
