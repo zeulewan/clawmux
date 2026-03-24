@@ -1347,7 +1347,8 @@ body.sidebar-hidden #focus-view {
   user-select: none;
   transition: all 0.1s;
 }
-#context-menu .ctx-item:hover { background: rgba(128,128,128,0.1); }
+@media (hover: hover) { #context-menu .ctx-item:hover { background: rgba(128,128,128,0.1); } }
+#context-menu .ctx-item:active { background: rgba(128,128,128,0.15); }
 #context-menu .ctx-has-submenu { position: relative; }
 #context-menu .ctx-submenu {
   display: none;
@@ -1373,7 +1374,8 @@ body.sidebar-hidden #focus-view {
   transition: all 0.1s;
   white-space: nowrap;
 }
-#context-menu .ctx-submenu .ctx-sub-item:hover { background: rgba(128,128,128,0.1); }
+@media (hover: hover) { #context-menu .ctx-submenu .ctx-sub-item:hover { background: rgba(128,128,128,0.1); } }
+#context-menu .ctx-submenu .ctx-sub-item:active { background: rgba(128,128,128,0.15); }
 #context-menu .ctx-submenu .ctx-sub-item.active { color: var(--voice-color, #4a9eff); font-weight: 600; }
 /* Locked during touch-hold: visible but non-interactive */
 #context-menu.touch-locked { pointer-events: none; }
