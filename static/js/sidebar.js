@@ -545,7 +545,8 @@ function _createAgentCard(voiceId, name, state) {
   const card = document.createElement('div');
   card.className = 'sidebar-card';
   card.dataset.voiceId = voiceId;
-  card.draggable = true;
+  const isMobile = 'ontouchstart' in window;
+  card.draggable = !isMobile; // disable native drag on mobile
 
   // Drag-and-drop for cross-project moves
   card.addEventListener('dragstart', (e) => {
@@ -657,43 +658,49 @@ function _createAgentCard(voiceId, name, state) {
   }
   card._voiceSession = state.session;
   card._voiceSpawning = state.isSpawning;
-  let _ctxPending = null; // deferred context menu event (shown on touchend)
+  let _blockNextClick = false;
   card.onclick = () => {
-    if (_ctxPending) { _ctxPending = null; return; } // block click after long-press
+    if (_blockNextClick) { _blockNextClick = false; return; }
     if (card._voiceSpawning) return;
     if (card._voiceSession) { switchTab(card._voiceSession.session_id, true); }
     else { spawnSession(voiceId); }
   };
-  // Desktop: show context menu immediately on right-click
-  // Mobile: native contextmenu fires during hold — defer display to touchend
   card.oncontextmenu = (e) => {
     e.preventDefault();
-    if ('ontouchstart' in window) {
-      // Mobile: stash the event, show on touchend
-      _ctxPending = { x: e.clientX, y: e.clientY };
-      card.classList.add('long-press-active');
-    } else {
-      // Desktop: show immediately
+    if (!isMobile) {
       if (card._voiceSession) { showContextMenu(e, card._voiceSession.session_id, voiceId); }
       else { showContextMenu(e, null, voiceId); }
     }
   };
-  card.addEventListener('touchend', (e) => {
-    card.classList.remove('long-press-active');
-    if (_ctxPending) {
-      e.preventDefault();
-      const t = e.changedTouches[0];
-      const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: t.clientX, clientY: Math.max(10, t.clientY - 40) };
-      if (card._voiceSession) { showContextMenu(fakeEvent, card._voiceSession.session_id, voiceId); }
-      else { showContextMenu(fakeEvent, null, voiceId); }
-      // _ctxPending stays set to block the synthetic click in onclick above
-      setTimeout(() => { _ctxPending = null; }, 400);
-    }
-  });
-  card.addEventListener('touchcancel', () => {
-    card.classList.remove('long-press-active');
-    _ctxPending = null;
-  });
+  // Mobile long-press: 500ms timer, show menu on lift
+  if (isMobile) {
+    let _lp = null; // { timer, fired }
+    card.addEventListener('touchstart', () => {
+      _lp = { fired: false, timer: setTimeout(() => { _lp.fired = true; card.classList.add('long-press-active'); }, 500) };
+    }, { passive: true });
+    card.addEventListener('touchmove', () => {
+      if (_lp && _lp.timer) { clearTimeout(_lp.timer); _lp.timer = null; }
+      if (_lp && _lp.fired) { _lp.fired = false; card.classList.remove('long-press-active'); }
+    }, { passive: true });
+    card.addEventListener('touchend', (e) => {
+      if (_lp && _lp.timer) { clearTimeout(_lp.timer); }
+      card.classList.remove('long-press-active');
+      if (_lp && _lp.fired) {
+        e.preventDefault();
+        _blockNextClick = true;
+        const t = e.changedTouches[0];
+        const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: t.clientX, clientY: Math.max(10, t.clientY - 40) };
+        if (card._voiceSession) { showContextMenu(fakeEvent, card._voiceSession.session_id, voiceId); }
+        else { showContextMenu(fakeEvent, null, voiceId); }
+      }
+      _lp = null;
+    });
+    card.addEventListener('touchcancel', () => {
+      if (_lp && _lp.timer) { clearTimeout(_lp.timer); }
+      card.classList.remove('long-press-active');
+      _lp = null;
+    });
+  }
   return card;
 }
 
