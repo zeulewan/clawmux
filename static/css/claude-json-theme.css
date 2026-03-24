@@ -353,3 +353,41 @@
 #permission-mode-label:hover {
   background: rgba(217, 119, 87, 0.1);
 }
+
+/* === Slash Command Menu === */
+#slash-menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 8px;
+  right: 8px;
+  background: var(--bg-card, #1e1e1e);
+  border: 1px solid var(--cj-border, rgba(255,255,255,0.1));
+  border-radius: 8px;
+  padding: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.4);
+}
+.slash-item {
+  padding: 8px 10px;
+  cursor: pointer;
+  border-radius: 6px;
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+.slash-item:hover, .slash-item.active {
+  background: rgba(255,255,255,0.08);
+}
+.slash-item-cmd {
+  font-family: var(--cj-mono-font, 'SF Mono', Monaco, Consolas, monospace);
+  font-weight: 600;
+  font-size: 0.9em;
+  color: #d97757;
+  white-space: nowrap;
+}
+.slash-item-desc {
+  font-size: 0.85em;
+  color: var(--cj-secondary-fg, rgba(255,255,255,0.6));
+}

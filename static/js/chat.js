@@ -1347,20 +1347,100 @@ function hideThinkingDecode(sessionId) {
   });
 }
 
-// Auto-resize textarea
+// === Slash Command Menu ===
+const _slashCommands = [
+  { cmd: '/compact', desc: 'Compact the conversation' },
+  { cmd: '/model', desc: 'Change model' },
+  { cmd: '/effort', desc: 'Change effort level' },
+  { cmd: '/help', desc: 'Show help' },
+];
+const _slashMenu = document.getElementById('slash-menu');
+let _slashActiveIdx = -1;
+
+function _isSlashMenuBackend() {
+  const s = typeof sessions !== 'undefined' ? sessions.get(activeSessionId) : null;
+  return s && s.backend === 'claude-json';
+}
+
+function _showSlashMenu(filter) {
+  const matches = _slashCommands.filter(c => c.cmd.startsWith(filter));
+  if (!matches.length || !_isSlashMenuBackend()) { _hideSlashMenu(); return; }
+  _slashMenu.innerHTML = '';
+  matches.forEach((c, i) => {
+    const el = document.createElement('div');
+    el.className = 'slash-item' + (i === 0 ? ' active' : '');
+    el.innerHTML = '<span class="slash-item-cmd">' + c.cmd + '</span><span class="slash-item-desc">' + c.desc + '</span>';
+    el.addEventListener('click', () => _selectSlashCommand(c.cmd));
+    _slashMenu.appendChild(el);
+  });
+  _slashActiveIdx = 0;
+  _slashMenu.style.display = 'block';
+}
+
+function _hideSlashMenu() {
+  _slashMenu.style.display = 'none';
+  _slashActiveIdx = -1;
+}
+
+function _selectSlashCommand(cmd) {
+  _hideSlashMenu();
+  textInput.value = cmd;
+  textInput.style.height = 'auto';
+  textSendBtn.disabled = false;
+  sendTextMessage();
+}
+
+function _slashMenuNav(dir) {
+  const items = _slashMenu.querySelectorAll('.slash-item');
+  if (!items.length) return;
+  items[_slashActiveIdx]?.classList.remove('active');
+  _slashActiveIdx = (_slashActiveIdx + dir + items.length) % items.length;
+  items[_slashActiveIdx]?.classList.add('active');
+}
+
+// Auto-resize textarea + slash menu trigger
 textInput.addEventListener('input', () => {
   textInput.style.height = 'auto';
   textInput.style.height = Math.min(textInput.scrollHeight, 120) + 'px';
   textSendBtn.disabled = !textInput.value.trim();
+
+  // Slash command detection
+  const val = textInput.value;
+  if (val.startsWith('/') && !val.includes(' ') && !val.includes('\n')) {
+    _showSlashMenu(val);
+  } else {
+    _hideSlashMenu();
+  }
 });
 
 // Send on Enter (Shift+Enter for newline) — desktop only
 // On mobile, Enter inserts newline; the send button handles sending
 textInput.addEventListener('keydown', (e) => {
+  // Slash menu navigation
+  if (_slashMenu.style.display !== 'none') {
+    if (e.key === 'ArrowDown') { e.preventDefault(); _slashMenuNav(1); return; }
+    if (e.key === 'ArrowUp') { e.preventDefault(); _slashMenuNav(-1); return; }
+    if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+      e.preventDefault();
+      const active = _slashMenu.querySelector('.slash-item.active');
+      if (active) {
+        const cmd = active.querySelector('.slash-item-cmd').textContent;
+        _selectSlashCommand(cmd);
+      }
+      return;
+    }
+    if (e.key === 'Escape') { e.preventDefault(); _hideSlashMenu(); return; }
+  }
+
   if (e.key === 'Enter' && !e.shiftKey && !isMobile) {
     e.preventDefault();
     sendTextMessage();
   }
+});
+
+// Dismiss slash menu on outside click
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#text-input-bar')) _hideSlashMenu();
 });
 
 function sendTextMessage() {
