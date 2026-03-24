@@ -367,7 +367,7 @@ class ClaudeJsonBackend(AgentBackend):
                     continue
 
                 event_type = data.get("type", "")
-                log.debug("[%s] Stream event: %s (subtype=%s)", session_name, event_type, data.get("subtype", data.get("event", {}).get("type", "")))
+                log.info("[%s] Stream event: type=%s", session_name, event_type)
                 session = hub["mgr"].sessions.get(session_name)
                 if not session:
                     continue
