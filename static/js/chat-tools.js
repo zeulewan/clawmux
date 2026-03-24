@@ -439,6 +439,8 @@ function toggleVerboseMode() {
   _verboseMode = !_verboseMode;
   localStorage.setItem('clawmux_verbose', _verboseMode ? 'true' : 'false');
   updateVerboseToggle();
+  // Re-render chat to show/hide thinking blocks and usage stats
+  if (typeof renderChat === 'function') renderChat(true);
 }
 
 function updateVerboseToggle() {

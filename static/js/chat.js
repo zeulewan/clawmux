@@ -148,6 +148,40 @@ function renderChat(forceScroll = false) {
       chatArea.appendChild(createToolCardEl(msg));
       continue;
     }
+    // Thinking blocks (verbose mode only)
+    if (msg.role === 'thinking') {
+      if (typeof isVerboseMode === 'function' && isVerboseMode()) {
+        const details = document.createElement('details');
+        details.className = 'verbose-thinking';
+        const summary = document.createElement('summary');
+        const dur = msg.thinkingDuration ? ' (' + msg.thinkingDuration + 's)' : '';
+        const tokens = Math.ceil((msg.text || '').length / 4);
+        summary.textContent = '\u25B8 Thought' + dur + (tokens ? ' ~' + tokens + ' tokens' : '');
+        details.appendChild(summary);
+        const body = document.createElement('div');
+        body.className = 'thinking-body';
+        body.textContent = msg.text || '';
+        details.appendChild(body);
+        chatArea.appendChild(details);
+      }
+      continue;
+    }
+    // Usage stats (verbose mode only)
+    if (msg.role === 'usage') {
+      if (typeof isVerboseMode === 'function' && isVerboseMode()) {
+        const u = msg.usage || {};
+        const input = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+        const output = u.output_tokens || 0;
+        const cache = u.cache_read_input_tokens || 0;
+        const parts = [input.toLocaleString() + ' in', output.toLocaleString() + ' out'];
+        if (cache) parts.push(cache.toLocaleString() + ' cache');
+        const el = document.createElement('div');
+        el.className = 'verbose-usage';
+        el.textContent = parts.join(' \u00B7 ');
+        chatArea.appendChild(el);
+      }
+      continue;
+    }
     const hasReplies = msg.id && threadReplies.has(msg.id);
     const hasAcksOnly = msg.id && !hasReplies && bareAcks.has(msg.id);
     if (hasReplies) {

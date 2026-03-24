@@ -453,12 +453,18 @@ function handleMessage(data) {
     } else if (evType === 'diff_request') {
       getRenderer(data.session_id).renderDiff(data.session_id, data.data || {});
     } else if (evType === 'thinking_text') {
+      const thinkText = (data.data || {}).text || '';
+      // Store in messages for renderChat persistence
+      s.messages.push({ role: 'thinking', text: thinkText, ts: Date.now() / 1000 });
       if (typeof renderThinkingBlock === 'function') {
-        renderThinkingBlock(data.session_id, (data.data || {}).text || '');
+        renderThinkingBlock(data.session_id, thinkText);
       }
     } else if (evType === 'usage_stats') {
+      const usage = data.data || {};
+      // Store in messages for renderChat persistence
+      s.messages.push({ role: 'usage', usage, ts: Date.now() / 1000 });
       if (typeof renderUsageStats === 'function') {
-        renderUsageStats(data.session_id, data.data || {});
+        renderUsageStats(data.session_id, usage);
       }
     }
     renderSidebar();
