@@ -85,15 +85,9 @@ class ClaudeJsonBackend(AgentBackend):
         return (session_model, session_effort, session_model)
 
     def prepare_workspace(self, work_dir: str) -> None:
-        """Swap CLAUDE.md with claude-json variant (direct text, not clawmux send)."""
-        from pathlib import Path
-        json_md = Path(work_dir) / "CLAUDE.json.md"
-        claude_md = Path(work_dir) / "CLAUDE.md"
-        if json_md.exists():
-            claude_md.write_text(json_md.read_text())
-            log.info("[%s] Using claude-json CLAUDE.md (direct text output)", work_dir)
-        # Also accept workspace trust (same as ClaudeCodeBackend)
+        """Accept workspace trust so Claude Code doesn't prompt."""
         import json as _json
+        from pathlib import Path
         claude_json_path = Path.home() / ".claude.json"
         try:
             settings = _json.loads(claude_json_path.read_text()) if claude_json_path.exists() else {}

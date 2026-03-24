@@ -471,9 +471,9 @@ class SessionManager:
 
             session.conversation_id = conversation_id
 
-            # Write instructions for all backends (CLAUDE.md + INSTRUCTIONS.md + opencode.json)
+            # Write instructions for this backend only
             if self._template_renderer:
-                await self._template_renderer.render_to_file(voice_id, work_dir)
+                await self._template_renderer.render_to_file(voice_id, work_dir, backend=backend)
             else:
                 # Fallback: write minimal CLAUDE.md
                 (work_dir / "CLAUDE.md").write_text(f"Your name is {voice_name}.\n")
@@ -579,7 +579,7 @@ class SessionManager:
             session.work_dir = str(work_dir)
 
             if self._template_renderer:
-                await self._template_renderer.render_to_file(f"openclaw_{agent_id}", work_dir)
+                await self._template_renderer.render_to_file(f"openclaw_{agent_id}", work_dir, backend="openclaw")
 
             backend_impl = self._get_backend("openclaw")
             await backend_impl.spawn(

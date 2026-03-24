@@ -1,12 +1,15 @@
 """Template renderer for agent instructions.
 
-Renders instruction templates with agent-specific variables from agents.json.
-Writes ALL formats for every agent so backends can be switched without re-rendering:
-  - claude-code: CLAUDE.md + .claude/rules/role.md
-  - opencode: INSTRUCTIONS.md + .opencode/rules/role.md + opencode.json instructions
-  - codex: AGENTS.md (Codex loads from CWD automatically)
-  - openclaw: AGENTS.md (shared with Codex) + IDENTITY.md + SOUL.md
-Role-specific rules are loaded from server/templates/rules/.
+Per-backend templates: each backend has its own instruction template.
+At spawn, the renderer picks the right template, fills variables,
+and writes only the files that backend needs.
+
+Backend → template → output files:
+  - claude-code: claude-code.md → CLAUDE.md + .claude/rules/role.md
+  - claude-json: claude-json.md → CLAUDE.md + .claude/rules/role.md
+  - opencode: claude-code.md → INSTRUCTIONS.md + .opencode/rules/role.md
+  - codex: claude-code.md → AGENTS.md
+  - openclaw: claude-code.md → AGENTS.md + IDENTITY.md + SOUL.md
 """
 
 import json
@@ -18,8 +21,26 @@ from agents_store import AgentsStore
 log = logging.getLogger("template_renderer")
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
-TEMPLATE_FILE = TEMPLATES_DIR / "claude_md.template"
+TEMPLATE_FILE = TEMPLATES_DIR / "claude_md.template"  # legacy fallback
 RULES_DIR = TEMPLATES_DIR / "rules"
+
+# Backend → template file mapping
+_BACKEND_TEMPLATES = {
+    "claude-code": TEMPLATES_DIR / "claude-code.md",
+    "claude-json": TEMPLATES_DIR / "claude-json.md",
+    "opencode":    TEMPLATES_DIR / "claude-code.md",  # same base, different output file
+    "codex":       TEMPLATES_DIR / "claude-code.md",
+    "openclaw":    TEMPLATES_DIR / "claude-code.md",
+}
+
+# Backend → which files to write
+_BACKEND_OUTPUT = {
+    "claude-code": {"main": "CLAUDE.md", "rules_dir": ".claude/rules"},
+    "claude-json": {"main": "CLAUDE.md", "rules_dir": ".claude/rules"},
+    "opencode":    {"main": "INSTRUCTIONS.md", "rules_dir": ".opencode/rules"},
+    "codex":       {"main": "AGENTS.md"},
+    "openclaw":    {"main": "AGENTS.md"},
+}
 
 # Voice ID to display name mapping (voice_id prefix → name)
 VOICE_NAMES = {
@@ -46,18 +67,21 @@ class TemplateRenderer:
 
     def __init__(self, agents_store: AgentsStore):
         self._store = agents_store
-        self._template = self._load_template()
+        self._templates: dict[str, str] = {}
+        self._load_templates()
 
-    def _load_template(self) -> str:
-        """Load the CLAUDE.md template file."""
-        if not TEMPLATE_FILE.exists():
-            log.error("Template file not found: %s", TEMPLATE_FILE)
-            return ""
-        return TEMPLATE_FILE.read_text()
+    def _load_templates(self) -> None:
+        """Load all per-backend templates."""
+        for backend, path in _BACKEND_TEMPLATES.items():
+            if path.exists():
+                self._templates[backend] = path.read_text()
+        # Legacy fallback
+        if TEMPLATE_FILE.exists():
+            self._templates.setdefault("claude-code", TEMPLATE_FILE.read_text())
 
     def reload_template(self) -> None:
-        """Reload the template from disk (for dev convenience)."""
-        self._template = self._load_template()
+        """Reload all templates from disk."""
+        self._load_templates()
 
     def _load_rules(self, role: str) -> str:
         """Load role-specific rules from templates/rules/{role}.md."""
@@ -88,116 +112,75 @@ class TemplateRenderer:
 
         return "\n".join(lines)
 
-    async def render(self, voice_id: str) -> str | None:
-        """Render CLAUDE.md for a specific agent. Returns None if agent not found."""
+    async def render(self, voice_id: str, backend: str = "claude-code") -> str | None:
+        """Render instructions for a specific agent + backend."""
         entry = await self._store.get(voice_id)
         if entry is None:
-            log.warning("Cannot render CLAUDE.md: agent %s not found", voice_id)
+            log.warning("Cannot render instructions: agent %s not found", voice_id)
+            return None
+
+        template = self._templates.get(backend, self._templates.get("claude-code", ""))
+        if not template:
+            log.error("No template for backend %s", backend)
             return None
 
         name = voice_id_to_name(voice_id)
         role = entry.role or "worker"
         project = entry.project or ""
-        repo = entry.repo or ""
-
         managers_section = self._build_managers_section(entry.project)
 
-        rendered = self._template.format(
+        rendered = template.format(
             name=name,
             role=role,
             project=project,
-            area=repo,
+            area=entry.repo or "",
             managers_section=managers_section,
         )
 
-        # Clean up trailing whitespace from empty substitutions
         lines = [line.rstrip() for line in rendered.splitlines()]
         while lines and not lines[-1]:
             lines.pop()
         return "\n".join(lines) + "\n"
 
-    async def render_to_file(self, voice_id: str, work_dir: Path, **_kw: str) -> bool:
-        """Render instructions in ALL formats to the agent's work directory.
+    async def render_to_file(self, voice_id: str, work_dir: Path,
+                             backend: str = "claude-code", **_kw: str) -> bool:
+        """Render instructions for one backend to the agent's work directory.
 
-        Writes Claude Code, OpenCode, and Codex formats so agents can switch
-        backends without re-rendering.
+        Each agent gets only the files their backend needs.
         """
-        content = await self.render(voice_id)
+        content = await self.render(voice_id, backend)
         if content is None:
             return False
 
-        # Claude Code (tmux): CLAUDE.md
-        (work_dir / "CLAUDE.md").write_text(content)
+        output = _BACKEND_OUTPUT.get(backend, _BACKEND_OUTPUT["claude-code"])
+        main_file = output["main"]
 
-        # Claude JSON: CLAUDE.md variant — respond with direct text, not clawmux send
-        json_content = self._adapt_for_claude_json(content)
-        (work_dir / "CLAUDE.json.md").write_text(json_content)
+        # For codex/openclaw: append role rules inline (no separate rules dir)
+        if backend in ("codex", "openclaw"):
+            entry = await self._store.get(voice_id)
+            role = entry.role if entry else ""
+            role_rules = self._load_rules(role) if role else ""
+            if role_rules:
+                content += "\n" + role_rules + "\n"
 
-        # OpenCode: INSTRUCTIONS.md
-        (work_dir / "INSTRUCTIONS.md").write_text(content)
+        # Write main instruction file
+        (work_dir / main_file).write_text(content)
 
-        # Codex + OpenClaw: AGENTS.md (role rules appended inline — no separate rules file)
-        entry = await self._store.get(voice_id)
-        role = entry.role if entry else ""
-        role_rules = self._load_rules(role) if role else ""
-        agents_content = content
-        if role_rules:
-            agents_content += "\n" + role_rules + "\n"
-        (work_dir / "AGENTS.md").write_text(agents_content)
+        # Write role rules to separate dir (Claude Code, Claude JSON, OpenCode)
+        rules_dir = output.get("rules_dir")
+        if rules_dir:
+            await self.render_role_to_file(voice_id, work_dir)
 
-        # OpenClaw: IDENTITY.md + SOUL.md (auto-injected into context each turn)
-        name = voice_id_to_name(voice_id)
-        self._write_openclaw_identity(work_dir, name, voice_id)
-        self._write_openclaw_soul(work_dir, name, role)
+        # OpenClaw extras
+        if backend == "openclaw":
+            name = voice_id_to_name(voice_id)
+            entry = await self._store.get(voice_id)
+            role = entry.role if entry else ""
+            self._write_openclaw_identity(work_dir, name, voice_id)
+            self._write_openclaw_soul(work_dir, name, role)
 
-        # Role rules for Claude Code + OpenCode (separate rule files)
-        await self.render_role_to_file(voice_id, work_dir)
-
-        log.info("Rendered all instruction formats for %s at %s", voice_id, work_dir)
+        log.info("Rendered %s for %s (backend=%s)", main_file, voice_id, backend)
         return True
-
-    @staticmethod
-    def _adapt_for_claude_json(content: str) -> str:
-        """Adapt CLAUDE.md content for claude-json backend.
-
-        Replaces the 'clawmux send' communication rules with direct text output
-        instructions. The JSON stream IS the communication channel — the agent
-        should respond naturally instead of wrapping everything in Bash tool calls.
-        """
-        import re
-
-        # Replace the "Important Rules" clawmux send line
-        content = content.replace(
-            "- NEVER print text directly to the terminal chat. ALL communication must go through `clawmux send`. "
-            "The user cannot see your terminal — they only see messages sent via ClawMux.",
-            "- Respond with direct text output. The user sees your text responses in the browser. "
-            "Use `clawmux send` ONLY for inter-agent messaging (--to <agent>), NOT for speaking to the user.",
-        )
-
-        # Replace the footer reminder
-        content = content.replace(
-            "IMPORTANT: Always use `clawmux send --to user` for ALL output to the user. "
-            "Never just print text to the terminal. Text printed directly to Claude Code chat "
-            "is NOT visible to the user in the browser.",
-            "Your text output is streamed directly to the user's browser. "
-            "Use `clawmux send` only for inter-agent messages (--to <agent_name>).",
-        )
-
-        # Replace the Communication header section
-        content = re.sub(
-            r"# Communication \(v[\d.]+\)\nYou are running in CLI mode\. All communication uses the unified `clawmux send` command\.\n\n"
-            r"## Speaking to the user \(TTS\)\n```bash\nclawmux send --to user 'Your message here'\n```\n"
-            r"This triggers TTS and returns immediately\. Do NOT block waiting for a response\.\n\n"
-            r"\*\*IMPORTANT: Always use single quotes\*\*.*?\n",
-            "# Communication\n"
-            "You are running in JSON streaming mode. Your text output is streamed directly to the user's browser.\n\n"
-            "## Speaking to the user\n"
-            "Just write your response as normal text. It will be rendered in the chat with markdown formatting.\n\n",
-            content,
-            flags=re.DOTALL,
-        )
-
-        return content
 
     async def render_role_to_file(self, voice_id: str, work_dir: Path, **_kw: str) -> bool:
         """Write role-specific rules for ALL backends."""
