@@ -682,6 +682,9 @@ function _createAgentCard(voiceId, name, state) {
       const fakeEvent = { preventDefault(){}, stopPropagation(){}, clientX: touchStartX, clientY: menuY };
       if (card._voiceSession) { showContextMenu(fakeEvent, card._voiceSession.session_id, voiceId); }
       else { showContextMenu(fakeEvent, null, voiceId); }
+      // Block interaction on menu while finger is still held — prevents accidental selection
+      const ctxMenu = document.getElementById('context-menu');
+      if (ctxMenu) ctxMenu.style.pointerEvents = 'none';
     }, 500);
   }, { passive: true });
   card.addEventListener('touchmove', (e) => {
@@ -715,6 +718,9 @@ function _createAgentCard(voiceId, name, state) {
   card.addEventListener('touchend', (e) => {
     if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
     card.classList.remove('long-press-active');
+    // Re-enable menu interaction now that finger is lifted
+    const ctxMenu = document.getElementById('context-menu');
+    if (ctxMenu) ctxMenu.style.pointerEvents = '';
     if (touchDragging) {
       e.preventDefault();
       _touchDragEnd(e.changedTouches[0]);
