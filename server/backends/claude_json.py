@@ -77,6 +77,13 @@ class ClaudeJsonBackend(AgentBackend):
     def idle_delay_after_interrupt(self) -> float:
         return 0.0  # JSON events will signal completion
 
+    def resolve_spawn_params(self, model: str, effort: str, model_id: str) -> tuple[str, str, str]:
+        """Use Claude Code defaults for model/effort."""
+        from hub_config import CLAUDE_MODEL, CLAUDE_EFFORT
+        session_model = model or CLAUDE_MODEL
+        session_effort = effort or CLAUDE_EFFORT
+        return (session_model, session_effort, session_model)
+
     def role_update_message(self, role: str) -> str:
         return (
             f"Your role has been updated to: {role}. "
