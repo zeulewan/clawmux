@@ -167,8 +167,8 @@ function handleMessage(data) {
             // Restore indicator immediately for the active session (reconnect — switchTab won't be called)
             if (s.session_id === activeSessionId) {
               const indicatorActive = ['processing', 'compacting', 'starting'].includes(serverState);
-              if (indicatorActive) showAgentIndicator(s.session_id);
-              else hideAgentIndicator(s.session_id);
+              if (indicatorActive) getRenderer(s.session_id).showIndicator(s.session_id);
+              else getRenderer(s.session_id).hideIndicator(s.session_id);
             }
           }
         }
@@ -320,11 +320,8 @@ function handleMessage(data) {
   if (type === 'session_status') {
     const s = sessions.get(data.session_id);
     if (s) {
-      // Update activity and tool_name (claude-json manages these via structured_event)
-      if (s.backend !== 'claude-json') {
-        if ('activity' in data) s.toolStatusText = data.activity || '';
-        if ('tool_name' in data) s.toolName = data.tool_name || '';
-      }
+      // Update activity and tool_name via renderer (claude-json skips, uses structured_event)
+      getRenderer(data.session_id).updateActivity(s, data);
       if ('walking_mode' in data) {
         s.walking_mode = data.walking_mode;
         if (data.session_id === activeSessionId && typeof setToggle === 'function') {
@@ -345,12 +342,12 @@ function handleMessage(data) {
         s.compacting = (serverState === 'compacting');
         setSessionSidebarState(data.session_id, serverState);
         const isActive = ['processing', 'compacting', 'starting'].includes(serverState);
-        if (isActive) showAgentIndicator(data.session_id);
-        else hideAgentIndicator(data.session_id);
+        if (isActive) getRenderer(data.session_id).showIndicator(data.session_id);
+        else getRenderer(data.session_id).hideIndicator(data.session_id);
       } else if (data.agent_idle) {
         s.toolStatusText = '';
         setSessionSidebarState(data.session_id, 'idle');
-        hideAgentIndicator(data.session_id);
+        getRenderer(data.session_id).hideIndicator(data.session_id);
       }
       // Legacy status field (ready/starting)
       if (data.status === 'ready' && !data.silent) {
@@ -398,12 +395,11 @@ function handleMessage(data) {
       setTimeout(() => handleMessage(data), 500);
       return;
     }
-    const isJsonBackend = s.backend === 'claude-json';
+    const renderer = getRenderer(data.session_id);
     const evType = data.event_type;
     if (evType === 'tool_use') {
       const toolName = data.tool_name || 'Tool';
       const toolData = data.data || {};
-      // Build human-readable activity description
       let desc = toolName;
       if (toolName === 'Bash' && toolData.command) desc = `Running: ${toolData.command.slice(0, 60)}`;
       else if (toolName === 'Read' && toolData.file_path) desc = `Reading ${toolData.file_path.split('/').pop()}`;
@@ -414,22 +410,21 @@ function handleMessage(data) {
       else if (toolName === 'Agent') desc = 'Spawning agent...';
       s.toolStatusText = desc;
       s.toolName = toolName;
-      if (isJsonBackend) {
-        // Claude-json: render tool card inline in chat
-        if (typeof hideThinkingDecode === 'function') hideThinkingDecode(data.session_id);
+      const cardEl = renderer.renderToolCard({ toolName, toolData, toolStatus: 'running' });
+      if (cardEl) {
+        renderer.hideIndicator(data.session_id);
         const toolId = 'tool-' + Date.now();
         s.messages.push({ role: 'tool', toolName, toolData, toolStatus: 'running', toolId, ts: Date.now() / 1000 });
         if (data.session_id === activeSessionId) {
-          const card = createToolCardEl(s.messages[s.messages.length - 1]);
-          chatArea.appendChild(card);
+          chatArea.appendChild(createToolCardEl(s.messages[s.messages.length - 1]));
           chatScrollToBottom(false);
         }
       } else {
-        showAgentIndicator(data.session_id, 'tool', { text: desc });
+        renderer.showIndicator(data.session_id, 'tool', { text: desc });
       }
     } else if (evType === 'tool_result') {
       s.toolName = '';
-      if (isJsonBackend) {
+      if (renderer.renderToolCard({})) {
         const resultData = data.data || {};
         const isError = resultData.is_error || false;
         for (let i = s.messages.length - 1; i >= 0; i--) {
@@ -444,25 +439,19 @@ function handleMessage(data) {
     } else if (evType === 'thinking') {
       s.toolStatusText = 'Thinking...';
       s.toolName = '';
-      showAgentIndicator(data.session_id, 'thinking', { text: 'Thinking...' });
+      renderer.showIndicator(data.session_id, 'thinking', { text: 'Thinking...' });
     } else if (evType === 'idle') {
       s.toolStatusText = '';
       s.toolName = '';
-      hideAgentIndicator(data.session_id);
+      getRenderer(data.session_id).hideIndicator(data.session_id);
     } else if (evType === 'compacting') {
       s.toolStatusText = 'Compacting context...';
       s.compacting = true;
-      showAgentIndicator(data.session_id, 'compacting', { text: 'Compacting context...' });
+      renderer.showIndicator(data.session_id, 'compacting', { text: 'Compacting context...' });
     } else if (evType === 'permission_request') {
-      const reqData = data.data || {};
-      if (typeof renderPermissionCard === 'function') {
-        renderPermissionCard(data.session_id, reqData);
-      }
+      getRenderer(data.session_id).renderPermission(data.session_id, data.data || {});
     } else if (evType === 'diff_request') {
-      const reqData = data.data || {};
-      if (typeof renderDiffView === 'function') {
-        renderDiffView(data.session_id, reqData);
-      }
+      getRenderer(data.session_id).renderDiff(data.session_id, data.data || {});
     }
     renderSidebar();
     return;
@@ -511,9 +500,7 @@ function handleMessage(data) {
   if (!s) return;
 
   if (type === 'activity_text') {
-    // claude-json uses structured_event for activity — skip old activity_text path
-    if (s.backend === 'claude-json') return;
-    addMessage(session_id, 'activity', data.text);
+    getRenderer(session_id).handleActivityText(session_id, data.text);
     return;
   }
   if (type === 'assistant_text') {
@@ -532,7 +519,7 @@ function handleMessage(data) {
         if (session_id === activeSessionId) {
           const el = chatArea.querySelector(`[data-msg-id="${CSS.escape(msgId)}"]`);
           if (el) {
-            const vc = s.backend === 'openclaw' ? '#2ecc71' : voiceColor(s.voice);
+            const vc = getRenderer(session_id).bubbleColor(s);
             const newEl = createMsgEl('assistant', data.text, vc, s.voice, existing);
             el.replaceWith(newEl);
           }
