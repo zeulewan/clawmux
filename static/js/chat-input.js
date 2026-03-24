@@ -17,6 +17,8 @@ function _isSlashMenuBackend() {
   return s && s.backend === 'claude-json';
 }
 
+function openSlashMenu() { _showSlashMenu('/'); }
+
 function _showSlashMenu(filter) {
   const matches = _slashCommands.filter(c => c.cmd.startsWith(filter));
   if (!matches.length || !_isSlashMenuBackend()) { _hideSlashMenu(); return; }

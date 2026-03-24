@@ -547,6 +547,29 @@
 }
 .diff-card.resolved-reject .diff-body { max-height: 60px; }
 
+/* === Slash Command Button === */
+#slash-cmd-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--cj-border, rgba(255,255,255,0.15));
+  border-radius: 6px;
+  background: none;
+  color: #d97757;
+  font-family: var(--cj-mono-font, 'SF Mono', Monaco, Consolas, monospace);
+  font-size: 1em;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  line-height: 28px;
+  text-align: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+#slash-cmd-btn:hover {
+  background: rgba(217, 119, 87, 0.1);
+  border-color: #d97757;
+}
+
 /* === Light Mode Overrides === */
 @media (prefers-color-scheme: light) {
   .backend-claude-json {
