@@ -8,6 +8,11 @@ const _slashCommands = [
   { cmd: '/model', desc: 'Change model' },
   { cmd: '/effort', desc: 'Change effort level' },
   { cmd: '/help', desc: 'Show help' },
+  { cmd: '/clear', desc: 'Clear the chat display' },
+  { cmd: '/bug', desc: 'Report a bug' },
+  { cmd: '/doctor', desc: 'Run health checks' },
+  { cmd: '/init', desc: 'Reinitialize the session' },
+  { cmd: '/config', desc: 'Open settings' },
 ];
 const _slashMenu = document.getElementById('slash-menu');
 let _slashActiveIdx = -1;

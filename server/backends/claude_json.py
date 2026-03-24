@@ -496,14 +496,14 @@ class ClaudeJsonBackend(AgentBackend):
                                 text_buffer.clear()
                                 text_buffer.append(text)
                         elif block_type == "thinking":
-                            # Extended thinking block — forward for collapsible display
+                            # Extended thinking block — full text for verbose mode
                             thinking_text = block.get("thinking", "")
                             if thinking_text:
                                 await send_fn({
                                     "type": "structured_event",
                                     "session_id": session_name,
-                                    "event_type": "thinking",
-                                    "data": {"text": thinking_text[:500]},
+                                    "event_type": "thinking_text",
+                                    "data": {"text": thinking_text},
                                 })
                     # Cache usage
                     usage = msg.get("usage")
@@ -591,6 +591,15 @@ class ClaudeJsonBackend(AgentBackend):
                     await hub["save_activity"](session, "Idle")
                     await send_fn({"session_id": session_name, "type": "listening", "state": "idle"})
                     await send_fn(hub["status_msg"](session))
+
+                    # Emit usage stats for verbose mode
+                    if usage:
+                        await send_fn({
+                            "type": "structured_event",
+                            "session_id": session_name,
+                            "event_type": "usage_stats",
+                            "data": usage,
+                        })
 
                 # --- rate limit ---
                 elif event_type == "rate_limit_event":

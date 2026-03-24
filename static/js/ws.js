@@ -452,6 +452,14 @@ function handleMessage(data) {
       getRenderer(data.session_id).renderPermission(data.session_id, data.data || {});
     } else if (evType === 'diff_request') {
       getRenderer(data.session_id).renderDiff(data.session_id, data.data || {});
+    } else if (evType === 'thinking_text') {
+      if (typeof renderThinkingBlock === 'function') {
+        renderThinkingBlock(data.session_id, (data.data || {}).text || '');
+      }
+    } else if (evType === 'usage_stats') {
+      if (typeof renderUsageStats === 'function') {
+        renderUsageStats(data.session_id, data.data || {});
+      }
     }
     renderSidebar();
     return;

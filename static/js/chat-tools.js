@@ -431,3 +431,62 @@ function updatePermissionModeLabel() {
   el.textContent = (_PERMISSION_LABELS[mode] || mode) + ' \u25BE';
   el.style.display = 'inline';
 }
+
+// === Verbose Mode ===
+let _verboseMode = localStorage.getItem('clawmux_verbose') === 'true';
+
+function toggleVerboseMode() {
+  _verboseMode = !_verboseMode;
+  localStorage.setItem('clawmux_verbose', _verboseMode ? 'true' : 'false');
+  updateVerboseToggle();
+}
+
+function updateVerboseToggle() {
+  const el = document.getElementById('verbose-toggle');
+  if (!el) return;
+  const s = activeSessionId ? sessions.get(activeSessionId) : null;
+  if (!s || s.backend !== 'claude-json') { el.style.display = 'none'; return; }
+  el.textContent = _verboseMode ? 'Verbose' : 'Quiet';
+  el.className = _verboseMode ? 'active' : '';
+  el.style.display = 'inline';
+}
+
+function isVerboseMode() { return _verboseMode; }
+
+// === Verbose: Thinking Text Block ===
+function renderThinkingBlock(sessionId, text) {
+  if (!_verboseMode || sessionId !== activeSessionId) return;
+  const chatArea = document.getElementById('chat-area');
+  if (!chatArea) return;
+  const details = document.createElement('details');
+  details.className = 'verbose-thinking';
+  const summary = document.createElement('summary');
+  const preview = text.length > 80 ? text.slice(0, 80) + '...' : text;
+  summary.textContent = '\u25B8 Thought (' + Math.ceil(text.length / 4) + ' tokens)';
+  details.appendChild(summary);
+  const body = document.createElement('div');
+  body.className = 'thinking-body';
+  body.textContent = text;
+  details.appendChild(body);
+  chatArea.appendChild(details);
+  chatScrollToBottom(false);
+}
+
+// === Verbose: Usage Stats ===
+function renderUsageStats(sessionId, usage) {
+  if (!_verboseMode || sessionId !== activeSessionId) return;
+  const chatArea = document.getElementById('chat-area');
+  if (!chatArea) return;
+  const input = usage.input_tokens || 0;
+  const output = usage.output_tokens || 0;
+  const cacheRead = usage.cache_read_input_tokens || 0;
+  const cacheCreate = usage.cache_creation_input_tokens || 0;
+  const total = input + cacheRead + cacheCreate;
+  const parts = [total.toLocaleString() + ' in', output.toLocaleString() + ' out'];
+  if (cacheRead) parts.push(cacheRead.toLocaleString() + ' cache');
+  const el = document.createElement('div');
+  el.className = 'verbose-usage';
+  el.textContent = parts.join(' \u00B7 ');
+  chatArea.appendChild(el);
+  chatScrollToBottom(false);
+}
