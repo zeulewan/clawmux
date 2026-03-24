@@ -674,7 +674,7 @@ function switchTab(sessionId, manual = false) {
   const activeVoiceEl = document.getElementById('active-voice');
   if (s) {
     activeVoiceEl.textContent = s.backend === 'openclaw' ? (s.label || s.session_id) : voiceDisplayName(s.voice);
-    const vc = s.backend === 'openclaw' ? '#2ecc71' : voiceColor(s.voice);
+    const vc = getRenderer(sessionId).bubbleColor(s);
     activeVoiceEl.style.color = vc;
     activeVoiceEl.style.display = 'inline';
     document.getElementById('main-content').style.backgroundColor = hexToRgba(vc, 0.10);
@@ -697,8 +697,7 @@ function switchTab(sessionId, manual = false) {
   });
 
   if (s) {
-    if (s.backend !== 'claude-json') setStatus(s.statusText || 'Ready');
-    else setStatus('');
+    setStatus(getRenderer(sessionId).switchTabStatus(s), sessionId);
     micBtn.disabled = s.status !== 'ready' && s.status !== 'active';
     if (voiceSelect) voiceSelect.value = s.voice || 'af_sky';
     speedSelect.value = String(parseFloat(s.speed || 1.0).toFixed(1));
@@ -717,8 +716,8 @@ function switchTab(sessionId, manual = false) {
     // Resume thinking sound and indicator if this session is already active
     const ss = s.sidebarState || 'idle';
     if (['processing', 'compacting', 'starting'].includes(ss)) {
-      startAgentThinkingSound(sessionId);
-      showAgentIndicator(sessionId);
+      getRenderer(sessionId).startSound(sessionId);
+      getRenderer(sessionId).showIndicator(sessionId);
     }
 
     // Play buffered audio if any accumulated while tab was inactive
@@ -835,15 +834,8 @@ async function addSession(data, autoSwitch = false) {
   let serverMessages = [];
   let hasMoreHistory = false;
   try {
-    let histUrl;
-    if (data.backend === 'openclaw') {
-      histUrl = `/api/openclaw/history/${data.session_id}?limit=150`;
-    } else if (_isClaudeBackend(data.backend || 'claude-code')) {
-      // Claude backends: use transcript API for rich history (tool_calls, tool_results)
-      histUrl = `/api/sessions/${data.session_id}/transcript?limit=50`;
-    } else {
-      histUrl = `/api/history/${data.voice}?limit=150`;
-    }
+    const _r = getRenderer(data.backend || 'claude-code');
+    const histUrl = _r.historyUrl({ session_id: data.session_id, voice: data.voice });
     const resp = await fetch(histUrl);
     if (resp.ok) {
       const hist = await resp.json();
@@ -856,23 +848,7 @@ async function addSession(data, autoSwitch = false) {
         if (m.uuid) _seenIds.add(m.uuid);
         if (m.id && _seenIds.has(m.id)) continue;
         if (m.id) _seenIds.add(m.id);
-        // Render tool_calls as inline tool cards (claude-json only — tmux backends show tools in terminal)
-        if (m.tool_calls && m.tool_calls.length > 0 && data.backend === 'claude-json') {
-          for (const tc of m.tool_calls) {
-            serverMessages.push({
-              role: 'tool', toolName: tc.name, toolData: tc.input || {},
-              toolStatus: 'done', toolId: 'hist-' + (tc.id || Date.now()),
-              ts: m.ts || 0,
-            });
-          }
-        }
-        const obj = { role: m.role, text: m.text || '' };
-        if (m.uuid) obj.id = m.uuid;
-        else if (m.id) obj.id = m.id;
-        if (m.ts) obj.ts = m.ts;
-        if (m.parent_id) obj.parentId = m.parent_id;
-        if (m.bare_ack) obj.isBareAck = true;
-        if (obj.text) serverMessages.push(obj);
+        _r.processTranscriptMessage(m, serverMessages);
       }
       console.log(`[addSession] ${data.session_id}: loaded ${serverMessages.length} messages from ${histUrl}`);
     } else {
@@ -930,9 +906,9 @@ async function addSession(data, autoSwitch = false) {
     const sess = sessions.get(data.session_id);
     if (sess) { sess.sessionState = 'processing'; sess.sidebarState = serverState; }
     showThinking(data.session_id);
-    startAgentThinkingSound(data.session_id);
+    getRenderer(data.session_id).startSound(data.session_id);
     if (data.session_id === activeSessionId) {
-      showAgentIndicator(data.session_id);
+      getRenderer(data.session_id).showIndicator(data.session_id);
     }
   } else if (serverState === 'starting') {
     const sess = sessions.get(data.session_id);

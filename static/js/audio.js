@@ -768,11 +768,11 @@ function setSessionState(sessionId, newState) {
   if (newState === 'idle') {
     stopThinkingSound();
     stopThinkingVAD();
-    hideAgentIndicator(sessionId);
-    if (s.backend !== 'claude-json') showIdleStatus(sessionId);
+    getRenderer(sessionId).hideIndicator(sessionId);
+    getRenderer(sessionId).showIdleStatus(sessionId);
     setSessionSidebarState(sessionId, 'idle');
     if (sessionId === activeSessionId) {
-      if (s.backend !== 'claude-json') setStatus('Ready', sessionId);
+      getRenderer(sessionId).setIdleStatusText(sessionId);
       micBtn.disabled = false;
       updateMicUI();
     }
@@ -787,10 +787,10 @@ function setSessionState(sessionId, newState) {
     }
   } else if (newState === 'processing') {
     showThinking(sessionId);  // reuses status indicator, switches to processing style
-    startAgentThinkingSound(sessionId);
+    getRenderer(sessionId).startSound(sessionId);
     setSessionSidebarState(sessionId, 'processing');
     if (sessionId === activeSessionId) {
-      showAgentIndicator(sessionId);
+      getRenderer(sessionId).showIndicator(sessionId);
       setStatus(isMobile ? 'Tap to Record' : 'Tap or Hold Space', sessionId);
       startThinkingVAD(sessionId);
     }
@@ -1740,7 +1740,7 @@ function interruptPlayback(sessionId) {
   _audioPlaying = false;
   updateMicUI();
   const _ss = sessions.get(sessionId);
-  if (!_ss || _ss.backend !== 'claude-json') setStatus('Ready', sessionId);
+  getRenderer(sessionId).setIdleStatusText(sessionId);
 
   // Send playback_done to notify hub that audio finished (not for group chats)
   if (sessionId !== '__group__' && ws && ws.readyState === WebSocket.OPEN) {

@@ -586,7 +586,7 @@ function renderChat(forceScroll = false) {
   chatArea.innerHTML = '';
   const s = sessions.get(activeSessionId);
   if (!s) return;
-  const vc = s.backend === 'openclaw' ? '#2ecc71' : voiceColor(s.voice);
+  const vc = getRenderer(activeSessionId).bubbleColor(s);
   const limit = _getChatLimit(activeSessionId);
   const { slice: displayMessages, hasMore } = _getDisplaySlice(s.messages, limit);
 
@@ -672,7 +672,7 @@ function renderChat(forceScroll = false) {
   if (s && s.backend === 'claude-json') _groupToolCards(chatArea);
   // Restore indicator if session is currently active
   if (s && s.sessionState === 'processing') {
-    showAgentIndicator(activeSessionId);
+    getRenderer(activeSessionId).showIndicator(activeSessionId);
   }
 }
 
@@ -879,7 +879,7 @@ function addMessage(sessionId, role, text, opts = {}) {
     // For threaded messages, insert inline under the parent
     if (opts.parentId) {
       const wasNearBottom = chatArea.scrollTop + chatArea.clientHeight >= chatArea.scrollHeight - 150;
-      const vc = s.backend === 'openclaw' ? '#2ecc71' : voiceColor(s.voice);
+      const vc = getRenderer(activeSessionId).bubbleColor(s);
       const parentEl = chatArea.querySelector(`[data-msg-id="${CSS.escape(opts.parentId)}"]`);
       if (parentEl) {
         if (opts.isBareAck) {
@@ -1106,40 +1106,10 @@ function _toggleActivityExpand(el, sessionId) {
   }
 }
 
-// === Backend-Aware Indicator Dispatcher ===
-const _indicatorRenderers = {
-  'claude-json': {
-    show(sid, type, data) { showThinkingDecode(sid); },
-    hide(sid) { hideThinkingDecode(sid); },
-    sound(sid) { /* no thinking sound for json backend */ },
-  },
-  'default': {
-    show(sid, type, data) {
-      showTypingIndicator(sid);
-      if (data && data.text) _updateTypingIndicatorText(sid, data.text);
-    },
-    hide(sid) { hideTypingIndicator(sid); },
-    sound(sid) { if (typeof startThinkingSound === 'function') startThinkingSound(sid); },
-  },
-};
-
-function _getIndicatorRenderer(sessionId) {
-  const s = typeof sessions !== 'undefined' ? sessions.get(sessionId) : null;
-  const backend = s ? s.backend : '';
-  return _indicatorRenderers[backend] || _indicatorRenderers['default'];
-}
-
-function showAgentIndicator(sessionId, type, data) {
-  _getIndicatorRenderer(sessionId).show(sessionId, type, data);
-}
-
-function hideAgentIndicator(sessionId) {
-  _getIndicatorRenderer(sessionId).hide(sessionId);
-}
-
-function startAgentThinkingSound(sessionId) {
-  _getIndicatorRenderer(sessionId).sound(sessionId);
-}
+// Legacy compat wrappers — redirect to renderer registry (renderers.js)
+function showAgentIndicator(sid, t, d) { getRenderer(sid).showIndicator(sid, t, d); }
+function hideAgentIndicator(sid) { getRenderer(sid).hideIndicator(sid); }
+function startAgentThinkingSound(sid) { getRenderer(sid).startSound(sid); }
 
 // === Claude JSON: Tool Card Rendering ===
 const _THINKING_GLYPHS = ['·', '✢', '*', '✶', '✻', '✽'];
