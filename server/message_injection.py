@@ -113,10 +113,8 @@ def _format_message(msg: dict, walking_mode: bool = False, backend: str = "") ->
         # Inter-agent: always prefixed (agent needs to know sender)
         return f"[MSG id:{msg_id} from:{sender}] {content}"
     elif msg_type in ("voice", "text", "file_upload"):
-        # User message: minimal metadata for claude-json, full prefix for tmux
+        # User message: raw text for claude-json, prefixed for tmux backends
         if backend == "claude-json":
-            if msg_id:
-                return f"[msg:{msg_id}] {content}"
             return content
         return f"[VOICE id:{msg_id} from:{sender}] {content}"
     elif msg_type == "group":
