@@ -1469,7 +1469,10 @@ async def get_history(voice_id: str, request: Request):
     # Use project from query param or active project
     project = request.query_params.get("project", project_mgr.active_project)
     prefix = project_mgr.get_history_prefix(project)
-    messages = await asyncio.to_thread(history.load, voice_id, prefix)
+    all_messages = await asyncio.to_thread(history.load, voice_id, prefix)
+    # Filter out activity entries from chat display (status changes, tool names)
+    # Keep: user, assistant, system, bare_ack. Skip: activity
+    messages = [m for m in all_messages if m.get("role") != "activity"]
     # Cursor-based filtering: return only messages after the given ID (reconnect sync)
     after_id = request.query_params.get("after")
     if after_id:
