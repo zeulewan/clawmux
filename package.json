@@ -1,0 +1,33 @@
+{
+  "name": "clawmux-lite",
+  "version": "1.0.0",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "cmx": "./cli.js"
+  },
+  "scripts": {
+    "start": "npm run build && node server.js",
+    "dev": "node server.js",
+    "build": "cd app && npm run build",
+    "update": "git pull && npm install && cd app && npm install && npm run build",
+    "format": "prettier --check .",
+    "format:fix": "prettier --write .",
+    "test": "npx playwright test",
+    "test:ui": "npx playwright test tests/ui.spec.js --project=desktop",
+    "test:mobile": "npx playwright test tests/ui.spec.js --project=mobile",
+    "test:visual": "npx playwright test --update-snapshots",
+    "test:report": "npx playwright show-report"
+  },
+  "dependencies": {
+    "@opencode-ai/sdk": "^1.4.6",
+    "express": "^5.2.1",
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "@vitejs/plugin-react": "^6.0.1",
+    "prettier": "^3.8.2",
+    "vite": "^8.0.3"
+  }
+}

@@ -1,23 +1,10 @@
-.env
-__pycache__/
-*.pyc
-.venv/
-site/
-*.egg-info/
-.cache/
-data/
-
-# iOS
-ios/build/
-ios/VoiceChat.xcodeproj/
-ios/ClawMux.xcodeproj/xcuserdata/
-ios/ClawMux.xcodeproj/project.xcworkspace/xcuserdata/
-ios/*.xcworkspace/
-_garbage/
-
-# Node
 node_modules/
+dist/
+.env
+*.log
+public/assets/
+build/
 
-# Stray audio files from whisper/kokoro servers
-*.wav
-*.mp3
+test-results/
+playwright-report/
+

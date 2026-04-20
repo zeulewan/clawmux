@@ -1,9 +1,0 @@
-{
-  "name": "ClawMux",
-  "short_name": "ClawMux",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#06090f",
-  "theme_color": "#06090f",
-  "description": "Multi-agent voice interface"
-}

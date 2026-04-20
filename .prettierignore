@@ -1,0 +1,7 @@
+node_modules
+dist
+build
+source/webview/dist
+source/webview/node_modules
+source/modules
+*.min.*

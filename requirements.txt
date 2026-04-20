@@ -1,8 +1,0 @@
-fastapi
-uvicorn
-httpx
-python-dotenv
-python-multipart
-zensical
-websockets
-psutil
