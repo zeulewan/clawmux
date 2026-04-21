@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { homedir } from 'os';
 import http from 'http';
+import { buildMigrationPromptFromFile } from './server/session-migration.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const cmd = process.argv[2];
@@ -496,6 +497,48 @@ Examples:
     process.exit(1);
   }
 
+} else if (cmd === 'migration-prompt') {
+  const args = process.argv.slice(3);
+  const filePath = args.find((arg) => !arg.startsWith('--'));
+  const targetIdx = args.indexOf('--to');
+  const maxTokensIdx = args.indexOf('--max-tokens');
+  const maxCharsIdx = args.indexOf('--max-chars');
+  const maxTurnsIdx = args.indexOf('--max-turns');
+  const userIdx = args.indexOf('--user');
+  const targetBackend = targetIdx !== -1 ? args[targetIdx + 1] : 'codex';
+  const maxTokens = maxTokensIdx !== -1 ? parseInt(args[maxTokensIdx + 1], 10) : null;
+  const maxChars = maxCharsIdx !== -1 ? parseInt(args[maxCharsIdx + 1], 10) : null;
+  const maxTurns = maxTurnsIdx !== -1 ? parseInt(args[maxTurnsIdx + 1], 10) : 40;
+  const userMessage = userIdx !== -1 ? args[userIdx + 1] : '';
+
+  if (!filePath || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage: cmx migration-prompt <session.jsonl> [--to codex|claude] [--max-tokens N] [--max-chars N] [--max-turns N] [--user "message"]
+
+Build a migration-ready prompt from a Claude or Codex JSONL session file.
+
+Examples:
+  cmx migration-prompt ~/.claude/projects/.../4018b24b-....jsonl
+  cmx migration-prompt ~/.claude/projects/.../019da1ec-....jsonl --to claude
+  cmx migration-prompt ~/.claude/projects/.../session.jsonl --to codex --user "Continue from here"
+`);
+    process.exit(filePath ? 0 : 1);
+  }
+
+  try {
+    const result = buildMigrationPromptFromFile({
+      filePath,
+      targetBackend,
+      maxTokens: Number.isFinite(maxTokens) ? maxTokens : null,
+      maxChars: Number.isFinite(maxChars) ? maxChars : null,
+      maxTurns: Number.isFinite(maxTurns) ? maxTurns : 40,
+      userMessage,
+    });
+    process.stdout.write(result.prompt + '\n');
+  } catch (e) {
+    console.error(`${RED}${e.message}${RESET}`);
+    process.exit(1);
+  }
+
 } else if (cmd === 'help' || cmd === '-h' || cmd === '--help') {
   console.log(`${BOLD}cmx${RESET} — ClawMux Lite CLI\n`);
   console.log('Commands:');
@@ -512,6 +555,7 @@ Examples:
   console.log(`  ${BOLD}logs${RESET}               Run server in foreground`);
   console.log(`  ${BOLD}update${RESET}             Git pull + rebuild + restart`);
   console.log(`  ${BOLD}doctor${RESET}             System health check`);
+  console.log(`  ${BOLD}migration-prompt${RESET}   Build a chunky migration prompt from a session JSONL`);
   console.log(`  ${BOLD}version${RESET}            Show versions`);
   console.log(`  ${BOLD}help${RESET}               This help`);
 } else {

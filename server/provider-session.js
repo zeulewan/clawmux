@@ -52,6 +52,7 @@ export default class ProviderSession {
     this.provider = null;
     this.connections = new Map(); // channelId → { conn, unsub }
     this._pendingMessages = new Map(); // channelId → [messages] (queued while connecting)
+    this._hiddenTurns = new Map(); // channelId → { skipLocalPersist, resolve, reject }
 
     // Live state for monitor
     this.state = {
@@ -167,6 +168,27 @@ export default class ProviderSession {
     }
     this.connections.clear();
     this.provider = null;
+  }
+
+  /**
+   * Prime a freshly launched target backend with hidden migration context.
+   * The next turn is suppressed from the frontend so migration happens in-band
+   * without polluting the visible chat history.
+   */
+  async primeMigration(channelId, text, { skipLocalPersist = true } = {}) {
+    const entry = this.connections.get(channelId);
+    if (!entry?.conn || !this.provider) {
+      throw new Error(`Cannot prime migration for ${this.agentId}: connection not ready`);
+    }
+    return await new Promise((resolve, reject) => {
+      this._hiddenTurns.set(channelId, { skipLocalPersist, resolve, reject });
+      try {
+        this.provider.send(entry.conn, text, { skipPersist: skipLocalPersist });
+      } catch (err) {
+        this._hiddenTurns.delete(channelId);
+        reject(err);
+      }
+    });
   }
 
   async launchProvider(msg) {
@@ -641,25 +663,35 @@ export default class ProviderSession {
   _handleProviderEvent(channelId, event) {
     // Track whether content_block_start was sent for streaming
     if (!this._turnState) this._turnState = {};
+    const hiddenTurn = this._hiddenTurns.get(channelId);
 
     // For non-Claude providers, translate internal events to the frontend protocol
     // Debug: uncomment to trace events
     // console.log(`[event] ${channelId.slice(0, 12)} ← ${event.type}`);
     switch (event.type) {
       case 'turn_start':
-        this._turnState[channelId] = { blockStarted: false, thinkingBlockStarted: false, contentBlocks: [], _currentText: '', _currentThinking: '' };
+        this._turnState[channelId] = {
+          blockStarted: false,
+          thinkingBlockStarted: false,
+          contentBlocks: [],
+          _currentText: '',
+          _currentThinking: '',
+          _hidden: !!hiddenTurn,
+        };
         this._updateState('thinking');
-        this.send({
-          type: 'io_message',
-          channelId,
-          message: { type: 'message_start', message: { role: 'assistant' } },
-        });
+        if (!hiddenTurn) {
+          this.send({
+            type: 'io_message',
+            channelId,
+            message: { type: 'message_start', message: { role: 'assistant' } },
+          });
+        }
         break;
 
       case 'text_delta': {
         this._updateState('responding');
         const ts = this._turnState[channelId];
-        if (ts && !ts.blockStarted) {
+        if (ts && !ts.blockStarted && !ts._hidden) {
           this.send({
             type: 'io_message',
             channelId,
@@ -668,14 +700,16 @@ export default class ProviderSession {
           ts.blockStarted = true;
         }
         if (ts) ts._currentText += event.text;
-        this.send({
-          type: 'io_message',
-          channelId,
-          message: {
-            type: 'content_block_delta',
-            delta: { type: 'text_delta', text: event.text },
-          },
-        });
+        if (!ts?._hidden) {
+          this.send({
+            type: 'io_message',
+            channelId,
+            message: {
+              type: 'content_block_delta',
+              delta: { type: 'text_delta', text: event.text },
+            },
+          });
+        }
         break;
       }
 
@@ -686,11 +720,13 @@ export default class ProviderSession {
           ts2._currentText = '';
           ts2.blockStarted = false;
         }
-        this.send({
-          type: 'io_message',
-          channelId,
-          message: { type: 'content_block_stop' },
-        });
+        if (!ts2?._hidden) {
+          this.send({
+            type: 'io_message',
+            channelId,
+            message: { type: 'content_block_stop' },
+          });
+        }
         break;
       }
 
@@ -698,7 +734,7 @@ export default class ProviderSession {
         this._updateState('thinking');
         console.log(`[thinking] ${this.agentId}: thinking_delta len=${event.text?.length}`);
         const tst = this._turnState[channelId];
-        if (tst && !tst.thinkingBlockStarted) {
+        if (tst && !tst.thinkingBlockStarted && !tst._hidden) {
           this.send({
             type: 'io_message',
             channelId,
@@ -707,14 +743,16 @@ export default class ProviderSession {
           tst.thinkingBlockStarted = true;
         }
         if (tst) tst._currentThinking += event.text;
-        this.send({
-          type: 'io_message',
-          channelId,
-          message: {
-            type: 'content_block_delta',
-            delta: { type: 'thinking_delta', thinking: event.text },
-          },
-        });
+        if (!tst?._hidden) {
+          this.send({
+            type: 'io_message',
+            channelId,
+            message: {
+              type: 'content_block_delta',
+              delta: { type: 'thinking_delta', thinking: event.text },
+            },
+          });
+        }
         break;
       }
 
@@ -724,11 +762,13 @@ export default class ProviderSession {
         if (tst2?.thinkingBlockStarted) {
           if (tst2._currentThinking) tst2.contentBlocks.push({ type: 'thinking', thinking: tst2._currentThinking });
           tst2._currentThinking = '';
-          this.send({
-            type: 'io_message',
-            channelId,
-            message: { type: 'content_block_stop' },
-          });
+          if (!tst2._hidden) {
+            this.send({
+              type: 'io_message',
+              channelId,
+              message: { type: 'content_block_stop' },
+            });
+          }
           tst2.thinkingBlockStarted = false;
         }
         break;
@@ -745,19 +785,21 @@ export default class ProviderSession {
           }
           tsTool.contentBlocks.push({ type: 'tool_use', id: event.id, name: event.name, input: event.input || {} });
         }
-        this.send({
-          type: 'io_message',
-          channelId,
-          message: {
-            type: 'content_block_start',
-            content_block: {
-              type: 'tool_use',
-              id: event.id,
-              name: event.name,
-              input: event.input || {},
+        if (!tsTool?._hidden) {
+          this.send({
+            type: 'io_message',
+            channelId,
+            message: {
+              type: 'content_block_start',
+              content_block: {
+                type: 'tool_use',
+                id: event.id,
+                name: event.name,
+                input: event.input || {},
+              },
             },
-          },
-        });
+          });
+        }
         break;
       }
 
@@ -769,24 +811,26 @@ export default class ProviderSession {
           ts3._toolResults = ts3._toolResults || [];
           ts3._toolResults.push({ tool_use_id: event.id, content: event.output, is_error: event.isError });
         }
-        this.send({
-          type: 'io_message',
-          channelId,
-          message: {
-            type: 'user',
+        if (!ts3?._hidden) {
+          this.send({
+            type: 'io_message',
+            channelId,
             message: {
-              role: 'user',
-              content: [
-                {
-                  type: 'tool_result',
-                  tool_use_id: event.id,
-                  content: event.output,
-                  is_error: event.isError,
-                },
-              ],
+              type: 'user',
+              message: {
+                role: 'user',
+                content: [
+                  {
+                    type: 'tool_result',
+                    tool_use_id: event.id,
+                    content: event.output,
+                    is_error: event.isError,
+                  },
+                ],
+              },
             },
-          },
-        });
+          });
+        }
         break;
       }
 
@@ -800,19 +844,21 @@ export default class ProviderSession {
           }
           tsCmd.contentBlocks.push({ type: 'tool_use', id: event.id, name: 'Bash', input: { command: event.command } });
         }
-        this.send({
-          type: 'io_message',
-          channelId,
-          message: {
-            type: 'content_block_start',
-            content_block: {
-              type: 'tool_use',
-              id: event.id,
-              name: 'Bash',
-              input: { command: event.command },
+        if (!tsCmd?._hidden) {
+          this.send({
+            type: 'io_message',
+            channelId,
+            message: {
+              type: 'content_block_start',
+              content_block: {
+                type: 'tool_use',
+                id: event.id,
+                name: 'Bash',
+                input: { command: event.command },
+              },
             },
-          },
-        });
+          });
+        }
         break;
       }
 
@@ -836,24 +882,26 @@ export default class ProviderSession {
           ts4._toolResults = ts4._toolResults || [];
           ts4._toolResults.push({ tool_use_id: event.id, content: resultText, is_error: event.exitCode !== 0 });
         }
-        this.send({
-          type: 'io_message',
-          channelId,
-          message: {
-            type: 'user',
+        if (!ts4?._hidden) {
+          this.send({
+            type: 'io_message',
+            channelId,
             message: {
-              role: 'user',
-              content: [
-                {
-                  type: 'tool_result',
-                  tool_use_id: event.id,
-                  content: resultText,
-                  is_error: event.exitCode !== 0,
-                },
-              ],
+              type: 'user',
+              message: {
+                role: 'user',
+                content: [
+                  {
+                    type: 'tool_result',
+                    tool_use_id: event.id,
+                    content: resultText,
+                    is_error: event.exitCode !== 0,
+                  },
+                ],
+              },
             },
-          },
-        });
+          });
+        }
         break;
       }
 
@@ -879,13 +927,14 @@ export default class ProviderSession {
       case 'turn_complete': {
         this._updateState('idle');
         const tsDone = this._turnState[channelId];
+        const hidden = this._hiddenTurns.get(channelId);
         if (this.providerName === 'claude') {
           const blocks = tsDone?.contentBlocks || [];
           const thinkingCount = blocks.filter(b => b.type === 'thinking').length;
           const thinkingLens = blocks.filter(b => b.type === 'thinking').map(b => (b.thinking||'').length);
           console.log(`[turn_complete] ${this.agentId} provider=${this.providerName} tsDone=${!!tsDone} blocks=${blocks.length} thinking=${thinkingCount} lens=${thinkingLens}`);
         }
-        if (tsDone && this.providerName !== 'claude') {
+        if (tsDone && this.providerName !== 'claude' && !hidden?.skipLocalPersist) {
           // Write accumulated assistant message to session JSONL (non-Claude providers)
           // Flush any trailing text
           if (tsDone._currentText) tsDone.contentBlocks.push({ type: 'text', text: tsDone._currentText });
@@ -907,34 +956,49 @@ export default class ProviderSession {
             this._writeSessionEntry({ type: 'thinking_cache', blocks: thinkingBlocks, timestamp: new Date().toISOString() });
           }
         }
-        this.send({
-          type: 'io_message',
-          channelId,
-          message: {
-            type: 'result',
-            subtype: 'success',
-            usage: event.usage
-              ? {
-                  input_tokens: event.usage.inputTokens,
-                  output_tokens: event.usage.outputTokens,
-                }
-              : undefined,
-          },
-        });
+        if (!tsDone?._hidden) {
+          this.send({
+            type: 'io_message',
+            channelId,
+            message: {
+              type: 'result',
+              subtype: 'success',
+              usage: event.usage
+                ? {
+                    input_tokens: event.usage.inputTokens,
+                    output_tokens: event.usage.outputTokens,
+                  }
+                : undefined,
+            },
+          });
+        }
+        if (hidden) {
+          hidden.resolve({
+            usage: event.usage,
+            sessionId: this.connections.get(channelId)?.sessionId || this.connections.get(channelId)?.conn?.threadId || this.connections.get(channelId)?.conn?.sessionId || null,
+          });
+          this._hiddenTurns.delete(channelId);
+        }
         break;
       }
 
       case 'turn_error':
         this._updateState('error');
-        this.send({
-          type: 'io_message',
-          channelId,
-          message: {
-            type: 'result',
-            subtype: 'error',
-            error: event.message,
-          },
-        });
+        if (!this._turnState[channelId]?._hidden) {
+          this.send({
+            type: 'io_message',
+            channelId,
+            message: {
+              type: 'result',
+              subtype: 'error',
+              error: event.message,
+            },
+          });
+        }
+        if (this._hiddenTurns.has(channelId)) {
+          this._hiddenTurns.get(channelId).reject(new Error(event.message));
+          this._hiddenTurns.delete(channelId);
+        }
         break;
 
       case 'session_ready': {

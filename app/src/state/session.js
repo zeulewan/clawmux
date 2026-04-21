@@ -121,7 +121,7 @@ export function createSession({ resume, cwd, model, provider } = {}) {
     launch() {
       if (this._launched) return;
       this._launched = true;
-      launchAgent(channelId, { resume });
+      launchAgent(channelId, { resume: this.sessionId });
       this.notify();
     },
 
