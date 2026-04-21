@@ -417,10 +417,15 @@ export class CodexProvider {
 
     // JSON-RPC response (has id)
     if (msg.id && msg.result) {
-      // turn/start response — only update turnId, don't overwrite threadId
+      // turn/start response — emit turnStart here as Codex doesn't always send turn/started notification
       if (msg.result.turn) {
         if (msg.result.turn.threadId) conn.threadId = msg.result.turn.threadId;
         conn.turnId = msg.result.turn.id;
+        // Guard: emit once per turn (turn/started notification may also arrive)
+        if (conn._turnStartEmitted !== conn.turnId) {
+          conn._turnStartEmitted = conn.turnId;
+          this._emit(conn, E.turnStart());
+        }
       }
     }
 
@@ -438,7 +443,11 @@ export class CodexProvider {
 
       case 'turn/started':
         if (params.turn?.id) conn.turnId = params.turn.id;
-        this._emit(conn, E.turnStart());
+        // Guard: emit once per turn (RPC response may have already emitted it)
+        if (conn._turnStartEmitted !== conn.turnId) {
+          conn._turnStartEmitted = conn.turnId;
+          this._emit(conn, E.turnStart());
+        }
         break;
 
       case 'item/agentMessage/delta':
