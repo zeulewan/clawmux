@@ -326,6 +326,64 @@ Examples:
     process.exit(1);
   }
 
+  // ── migrate ──
+
+} else if (cmd === 'migrate') {
+  const target = process.argv[3];
+  const args = process.argv.slice(4);
+  const toIdx = args.indexOf('--to');
+  const maxTokensIdx = args.indexOf('--max-tokens');
+  const toBackend = toIdx !== -1 ? args[toIdx + 1] : null;
+  const maxTokens = maxTokensIdx !== -1 ? parseInt(args[maxTokensIdx + 1], 10) : null;
+
+  if (!target || target === '--help' || target === '-h' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage: cmx migrate <agent> --to <backend> [--max-tokens N]
+
+Convert an agent's current session into a fresh session on another backend.
+The source session is compacted into a migration prompt, the old live backend
+connection is stopped, and the target backend is primed invisibly so the next
+message can continue almost seamlessly.
+
+Examples:
+  cmx migrate puck --to codex
+  cmx migrate river --to claude --max-tokens 90000`);
+    process.exit(target ? 0 : 1);
+  }
+
+  if (!toBackend) {
+    console.log('Usage: cmx migrate <agent> --to <backend> [--max-tokens N]');
+    process.exit(1);
+  }
+  if (maxTokensIdx !== -1 && !Number.isFinite(maxTokens)) {
+    console.log(`${RED}Invalid --max-tokens value${RESET}`);
+    process.exit(1);
+  }
+
+  try {
+    const res = await postApi('/api/migrate', {
+      agentId: target,
+      toBackend,
+      maxTokens: Number.isFinite(maxTokens) ? maxTokens : null,
+    });
+    if (res.alreadyOnBackend) {
+      console.log(`${YELLOW}${target} already on ${res.backend}${RESET}`);
+      process.exit(0);
+    }
+    if (!res.ok) {
+      console.log(`${RED}${res.error || 'Failed'}${RESET}`);
+      process.exit(1);
+    }
+
+    console.log(`${GREEN}Migrated ${target} ${res.fromBackend} → ${res.toBackend}${RESET}`);
+    console.log(`  Source session: ${res.sourceSessionId}`);
+    console.log(`  Target session: ${res.targetSessionId || 'pending'}`);
+    console.log(`  Context budget: ~${res.estimatedTokens}/${res.tokenBudget} tokens${res.truncated ? ' (truncated)' : ''}`);
+    console.log(`  Turns included: ${res.turnsIncluded}`);
+  } catch (e) {
+    console.error(`Cannot connect to server: ${e.message}`);
+    process.exit(1);
+  }
+
   // ── logs ──
 
 } else if (cmd === 'logs') {
@@ -551,6 +609,7 @@ Examples:
   console.log(`  ${BOLD}send${RESET} <agent> <msg> Send a message to an agent`);
   console.log(`  ${BOLD}launch${RESET} <agent>     Launch or restart an agent`);
   console.log(`  ${BOLD}terminate${RESET} <agent>  Stop a running agent`);
+  console.log(`  ${BOLD}migrate${RESET} <agent>    Migrate an agent session to another backend`);
   console.log(`  ${BOLD}config${RESET}             Show config summary`);
   console.log(`  ${BOLD}logs${RESET}               Run server in foreground`);
   console.log(`  ${BOLD}update${RESET}             Git pull + rebuild + restart`);

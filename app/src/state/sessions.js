@@ -260,6 +260,25 @@ export async function init() {
     setTimeout(() => getAgentState().catch(() => {}), 300);
   });
 
+  on('agent_migrated', async (msg) => {
+    await reloadConfig();
+    if (msg.agentId !== store.focusedAgent) {
+      notify();
+      return;
+    }
+    const state = _focused();
+    if (state.activeSession) {
+      state.activeSession.provider = msg.toBackend;
+      state.activeSession._launched = true;
+      if (msg.sessionId) {
+        state.activeSession.sessionId = msg.sessionId;
+        localStorage.setItem(`cmx-session-${msg.agentId}-${msg.toBackend}`, msg.sessionId);
+        localStorage.setItem(`cmx-session-${msg.agentId}`, msg.sessionId);
+      }
+    }
+    notify();
+  });
+
   // Restore focused agent
   const agents = store.config?.agents?.agents || [];
   const firstAgent = agents[0]?.name?.toLowerCase() || 'adam';

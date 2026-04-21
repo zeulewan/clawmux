@@ -34,6 +34,7 @@ import { startPolling, getLastUsage, onUsageUpdate } from './server/usage-poller
 import { updateBackendModels } from './server/config.js';
 import { discoverPiModels } from './server/providers/pi-provider.js';
 import { discoverCodexModels } from './server/providers/codex-provider.js';
+import { buildMigrationPromptFromSession } from './server/session-migration.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -52,6 +53,11 @@ function agentWorkDir(agentId) {
   const dir = join(AGENTS_DIR, name);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   return dir;
+}
+
+function _getLiveSessionId(session) {
+  const connEntry = session ? [...(session.connections?.values() || [])][0] : null;
+  return connEntry?.sessionId || connEntry?.conn?.threadId || connEntry?.conn?.sessionId || null;
 }
 
 // Global agent registry — agentId → { proc, channelId, session }
@@ -389,6 +395,122 @@ app.post('/api/send', (req, res) => {
   }
 
   res.json({ ok: true, msgId });
+});
+
+app.post('/api/migrate', async (req, res) => {
+  const { agentId, toBackend, maxTokens } = req.body;
+  const id = cleanAgentId(agentId);
+  const agents = getAgentsMap();
+  if (!agents[id]) return res.json({ error: `Unknown agent: ${agentId}` });
+  if (!toBackend) return res.json({ error: 'toBackend required' });
+
+  const backends = getBackendsConfig();
+  if (!backends[toBackend] || toBackend.startsWith('_')) {
+    return res.json({ error: `unknown backend: ${toBackend}` });
+  }
+
+  const fromBackend = getAgentBackend(id);
+  const fromModel = getAgentModel(id);
+  if (fromBackend === toBackend) {
+    return res.json({ ok: true, alreadyOnBackend: true, agent: id, backend: toBackend });
+  }
+
+  const existing = agentProcs.get(id);
+  const liveSession = existing?.session || null;
+  if (liveSession && ['thinking', 'responding', 'tool_call'].includes(liveSession.state.status)) {
+    return res.json({ error: `${agentName(id)} is busy (${liveSession.state.status}); migrate when idle` });
+  }
+
+  const cwd = agentWorkDir(id);
+  const sourceSessionId = _getLiveSessionId(liveSession) || getAgentSession(id, fromBackend);
+  if (!sourceSessionId) {
+    return res.json({ error: `No ${fromBackend} session found for ${agentName(id)}` });
+  }
+
+  const session = liveSession || new ProviderSession(() => {}, cwd, id, agentProcs);
+  const channelId = existing?.channelId || `migrate_${id}_${Date.now()}`;
+  const parsedMaxTokens = maxTokens == null ? null : parseInt(String(maxTokens), 10);
+  if (maxTokens != null && !Number.isFinite(parsedMaxTokens)) {
+    return res.json({ error: `Invalid maxTokens: ${maxTokens}` });
+  }
+
+  try {
+    const migration = buildMigrationPromptFromSession({
+      sessionId: sourceSessionId,
+      cwd,
+      sourceBackend: fromBackend,
+      targetBackend: toBackend,
+      maxTokens: Number.isFinite(parsedMaxTokens) ? parsedMaxTokens : null,
+      userMessage:
+        'Internal one-time migration step. Load the transcript as prior context. Reply with exactly MIGRATION_READY and nothing else.',
+    });
+
+    setAgentBackend(id, toBackend);
+    if (liveSession) {
+      liveSession.killConnections();
+      liveSession._updateState('offline');
+    }
+
+    await session.launchProvider({ channelId, resume: undefined, cwd });
+    const primeResult = await session.primeMigration(channelId, migration.prompt, { skipLocalPersist: true });
+    const targetSessionId = primeResult?.sessionId || _getLiveSessionId(session) || getAgentSession(id, toBackend);
+
+    const payload = JSON.stringify({
+      type: 'agent_migrated',
+      agentId: id,
+      fromBackend,
+      toBackend,
+      sessionId: targetSessionId,
+      estimatedTokens: migration.estimatedTokens,
+      tokenBudget: migration.tokenBudget,
+      truncated: migration.truncated,
+    });
+    for (const ws of wss.clients) {
+      if (ws.readyState === ws.OPEN) ws.send(payload);
+    }
+
+    console.log(
+      `[migrate] ${agentName(id)} ${fromBackend} -> ${toBackend} source=${sourceSessionId} target=${targetSessionId || 'new'} tokens≈${migration.estimatedTokens}/${migration.tokenBudget}`,
+    );
+
+    res.json({
+      ok: true,
+      agent: id,
+      fromBackend,
+      toBackend,
+      sourceSessionId,
+      targetSessionId,
+      estimatedTokens: migration.estimatedTokens,
+      tokenBudget: migration.tokenBudget,
+      truncated: migration.truncated,
+      turnsIncluded: migration.turnsIncluded,
+      channelId,
+    });
+  } catch (err) {
+    try {
+      session.killConnections();
+      session._updateState('offline');
+    } catch {}
+    try {
+      setAgentBackend(id, fromBackend);
+      if (fromModel && fromModel !== 'default') {
+        setAgentModel(id, fromModel);
+      }
+    } catch (rollbackErr) {
+      console.error(`[migrate] Failed to restore backend config for ${agentName(id)}: ${rollbackErr.message}`);
+    }
+    if (liveSession) {
+      try {
+        await session.launchProvider({ channelId, resume: sourceSessionId || undefined, cwd });
+      } catch (rollbackErr) {
+        console.error(`[migrate] Failed to relaunch ${agentName(id)} on ${fromBackend}: ${rollbackErr.message}`);
+      }
+    } else {
+      agentProcs.delete(id);
+    }
+    console.error(`[migrate] Failed to migrate ${agentName(id)}: ${err.message}`);
+    res.json({ error: err.message });
+  }
 });
 
 app.get('/api/messages/:agentId', (req, res) => {
