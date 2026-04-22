@@ -18,7 +18,7 @@ export function createSession({ resume, cwd, model, provider } = {}) {
     busy: false,
     error: null,
     summary: resume ? 'Resuming...' : 'New conversation',
-    sessionId: resume || channelId,
+    sessionId: resume || null,
     model: model || null,
     provider: provider || null,
     effortLevel: 'default',
@@ -121,7 +121,7 @@ export function createSession({ resume, cwd, model, provider } = {}) {
     launch() {
       if (this._launched) return;
       this._launched = true;
-      launchAgent(channelId, { resume: this.sessionId });
+      launchAgent(channelId, { resume: this.sessionId || undefined });
       this.notify();
     },
 

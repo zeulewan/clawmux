@@ -107,6 +107,17 @@ export class CodexProvider {
         conn.alive = true;
         clearTimeout(timeout);
 
+        const startNewThread = () => {
+          conn._threadCreateId = crypto.randomUUID();
+          ws.send(
+            JSON.stringify({
+              id: conn._threadCreateId,
+              method: 'thread/start',
+              params: { cwd: conn.cwd || undefined },
+            }),
+          );
+        };
+
         // Send initialize handshake
         conn._initId = crypto.randomUUID();
         ws.send(
@@ -127,9 +138,9 @@ export class CodexProvider {
           // Handle init response
           if (msg.id === conn._initId && msg.result) {
             console.log(`[codex-provider] Connected to ${msg.result.userAgent}`);
-            conn._threadCreateId = crypto.randomUUID();
             if (config.resume) {
               // Resume existing thread
+              conn._threadCreateId = crypto.randomUUID();
               ws.send(
                 JSON.stringify({
                   id: conn._threadCreateId,
@@ -139,13 +150,7 @@ export class CodexProvider {
               );
             } else {
               // Create new thread
-              ws.send(
-                JSON.stringify({
-                  id: conn._threadCreateId,
-                  method: 'thread/start',
-                  params: { cwd: conn.cwd || undefined },
-                }),
-              );
+              startNewThread();
             }
             return;
           }
@@ -161,8 +166,14 @@ export class CodexProvider {
           // Handle thread/resume error (stale thread)
           if (msg.id === conn._threadCreateId && msg.error) {
             console.log(`[codex-provider] Thread resume failed: ${msg.error.message || 'unknown'}`);
-            this._emit(conn, { type: 'resume_failed' });
-            resolve(conn);
+            if (config.resume) {
+              console.log('[codex-provider] Falling back to a fresh thread');
+              config.resume = null;
+              startNewThread();
+            } else {
+              this._emit(conn, { type: 'resume_failed' });
+              resolve(conn);
+            }
             return;
           }
           this._handleMessage(conn, msg);
