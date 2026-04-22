@@ -9,10 +9,11 @@ import { on, launchAgent, sendMessage, interrupt, closeChannel, request } from '
 
 let sessionIdCounter = 0;
 
-export function createSession({ resume, cwd, model, provider } = {}) {
+export function createSession({ resume, cwd, model, provider, agentId } = {}) {
   const channelId = `ch_${++sessionIdCounter}_${Date.now()}`;
 
   const session = {
+    agentId: agentId || null,
     channelId,
     messages: [],
     busy: false,
@@ -121,7 +122,11 @@ export function createSession({ resume, cwd, model, provider } = {}) {
     launch() {
       if (this._launched) return;
       this._launched = true;
-      launchAgent(channelId, { resume: this.sessionId || undefined });
+      launchAgent(channelId, {
+        resume: this.sessionId || undefined,
+        agentId: this.agentId || undefined,
+        provider: this.provider || undefined,
+      });
       this.notify();
     },
 
@@ -165,26 +170,30 @@ export function createSession({ resume, cwd, model, provider } = {}) {
       }
       this.notify();
 
-      sendMessage(channelId, {
-        type: 'user',
-        uuid: msgUuid,
-        session_id: this.sessionId || '',
-        parent_tool_use_id: null,
-        message: {
-          role: 'user',
-          content: contentBlocks,
+      sendMessage(
+        channelId,
+        {
+          type: 'user',
+          uuid: msgUuid,
+          session_id: this.sessionId || '',
+          parent_tool_use_id: null,
+          message: {
+            role: 'user',
+            content: contentBlocks,
+          },
         },
-      });
+        this.agentId || undefined,
+      );
     },
 
     /** Interrupt the current response. */
     interrupt() {
-      interrupt(channelId);
+      interrupt(channelId, this.agentId || undefined);
     },
 
     /** Close this session's channel. */
     close() {
-      closeChannel(channelId);
+      closeChannel(channelId, this.agentId || undefined);
     },
 
     /** Handle an incoming io_message from Claude. */
@@ -429,9 +438,13 @@ export function createSession({ resume, cwd, model, provider } = {}) {
         case 'system': {
           if (event.session_id) {
             this.sessionId = event.session_id;
-            // Persist per-agent only — no global claude-last-session writes
-            const agent = localStorage.getItem('cmx-current-agent');
-            if (agent) localStorage.setItem(`cmx-session-${agent}`, event.session_id);
+            // Persist under the owning agent, not the currently focused one.
+            if (this.agentId) {
+              localStorage.setItem(`cmx-session-${this.agentId}`, event.session_id);
+              if (this.provider) {
+                localStorage.setItem(`cmx-session-${this.agentId}-${this.provider}`, event.session_id);
+              }
+            }
           }
           break;
         }

@@ -109,7 +109,11 @@ export async function reloadConfig() {
 
 export function createNewSession(opts = {}) {
   const state = _focused();
-  const session = createSession({ ...opts, provider: getCurrentProvider() });
+  const session = createSession({
+    ...opts,
+    agentId: store.focusedAgent,
+    provider: opts.provider || getCurrentProvider(),
+  });
   session._models = getModelsForCurrentBackend();
   state.sessions.unshift(session);
   state.activeSession = session;
@@ -135,7 +139,11 @@ export function resumeSession(sessionId, summary, provider) {
     notify();
     return existing;
   }
-  const session = createSession({ resume: sessionId, provider: provider || getCurrentProvider() });
+  const session = createSession({
+    resume: sessionId,
+    provider: provider || getCurrentProvider(),
+    agentId: store.focusedAgent,
+  });
   session._models = getModelsForCurrentBackend();
   if (summary) session.summary = summary;
   state.sessions.unshift(session);
@@ -177,6 +185,8 @@ export async function changeBackend(agentId, backend) {
   const state = _focused();
   if (state.activeSession) {
     state.activeSession._launched = false; // force relaunch on next send
+    state.activeSession.provider = backend;
+    state.activeSession.sessionId = null;
   }
   notify();
 }

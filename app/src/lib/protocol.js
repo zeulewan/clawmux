@@ -53,20 +53,20 @@ export function on(type, callback) {
 
 // ── High-level API ──
 
-export function launchAgent(channelId, { resume } = {}) {
-  send({ type: 'launch', channelId, resume });
+export function launchAgent(channelId, { resume, agentId, provider } = {}) {
+  send({ type: 'launch', channelId, resume, agentId, provider });
 }
 
-export function sendMessage(channelId, message) {
-  send({ type: 'io_message', channelId, message, done: true });
+export function sendMessage(channelId, message, agentId) {
+  send({ type: 'io_message', channelId, agentId, message, done: true });
 }
 
-export function interrupt(channelId) {
-  send({ type: 'interrupt', channelId });
+export function interrupt(channelId, agentId) {
+  send({ type: 'interrupt', channelId, agentId });
 }
 
-export function closeChannel(channelId) {
-  send({ type: 'close_channel', channelId });
+export function closeChannel(channelId, agentId) {
+  send({ type: 'close_channel', channelId, agentId });
 }
 
 export async function listSessions() {
