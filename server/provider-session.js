@@ -170,6 +170,24 @@ export default class ProviderSession {
     return null;
   }
 
+  _normalizeTextDelta(current, incoming) {
+    if (!incoming) return { append: '', total: current || '' };
+    const existing = current || '';
+    // Some providers stream full-so-far snapshots instead of incremental deltas.
+    // Convert those back to incremental form so the UI and local persistence
+    // don't duplicate text like "YesYes.. I I’m".
+    if (existing && incoming.startsWith(existing)) {
+      return {
+        append: incoming.slice(existing.length),
+        total: incoming,
+      };
+    }
+    return {
+      append: incoming,
+      total: existing + incoming,
+    };
+  }
+
   _remapLiveConnection(oldChannelId, newChannelId, conversationId) {
     const entry = this.connections.get(oldChannelId);
     if (!entry?.conn || !this.provider) return false;
@@ -817,14 +835,15 @@ export default class ProviderSession {
           });
           ts.blockStarted = true;
         }
-        if (ts) ts._currentText += event.text;
-        if (!ts?._hidden) {
+        const normalized = this._normalizeTextDelta(ts?._currentText, event.text);
+        if (ts) ts._currentText = normalized.total;
+        if (!ts?._hidden && normalized.append) {
           this.send({
             type: 'io_message',
             channelId,
             message: {
               type: 'content_block_delta',
-              delta: { type: 'text_delta', text: event.text },
+              delta: { type: 'text_delta', text: normalized.append },
             },
           });
         }
@@ -860,14 +879,15 @@ export default class ProviderSession {
           });
           tst.thinkingBlockStarted = true;
         }
-        if (tst) tst._currentThinking += event.text;
-        if (!tst?._hidden) {
+        const normalized = this._normalizeTextDelta(tst?._currentThinking, event.text);
+        if (tst) tst._currentThinking = normalized.total;
+        if (!tst?._hidden && normalized.append) {
           this.send({
             type: 'io_message',
             channelId,
             message: {
               type: 'content_block_delta',
-              delta: { type: 'thinking_delta', thinking: event.text },
+              delta: { type: 'thinking_delta', thinking: normalized.append },
             },
           });
         }
