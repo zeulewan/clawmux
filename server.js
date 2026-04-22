@@ -863,7 +863,7 @@ server.listen(PORT, HOST, () => {
       const session = entry?.session;
       if (!session) continue; // never launched — don't auto-launch
       const status = session.state.status;
-      // Relaunch agents that went offline (crash) or hit error (stale stream watchdog)
+      // Relaunch agents that went offline or hit an explicit error state.
       if (status !== 'offline' && status !== 'error') continue;
       const backend = cfg.backend || defaultBackend;
       const sessionId = getAgentSession(id, backend);

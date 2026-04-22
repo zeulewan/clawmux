@@ -68,23 +68,10 @@ export default class ProviderSession {
     this.state.currentTool = currentTool;
     this.state.lastActivity = Date.now();
     monitorBus.emit('change', this.agentId);
+  }
 
-    // Stale stream watchdog: if agent stays in an active state too long without
-    // any events, transition to error. Resets on every state update.
-    if (this._staleTimer) clearTimeout(this._staleTimer);
-    const activeStates = ['thinking', 'responding', 'tool_call'];
-    if (activeStates.includes(status)) {
-      this._staleTimer = setTimeout(() => {
-        if (activeStates.includes(this.state.status)) {
-          const staleSec = Math.round((Date.now() - this.state.lastActivity) / 1000);
-          console.log(`[watchdog] ${this.agentId} stale for ${staleSec}s in ${this.state.status} — transitioning to error`);
-          this.state.status = 'error';
-          this.state.currentTool = null;
-          this.state.lastActivity = Date.now();
-          monitorBus.emit('change', this.agentId);
-        }
-      }, 120000); // 2 minutes without any event = stale
-    }
+  _isActiveState(status = this.state.status) {
+    return ['thinking', 'responding', 'tool_call'].includes(status);
   }
 
   setSendFn(fn) {
@@ -168,6 +155,12 @@ export default class ProviderSession {
     }
 
     return null;
+  }
+
+  _canReuseLiveConnection(reusableChannel, requestedChannelId) {
+    if (!reusableChannel) return false;
+    if (reusableChannel === requestedChannelId) return true;
+    return !this._isActiveState();
   }
 
   _normalizeTextDelta(current, incoming) {
@@ -336,6 +329,7 @@ export default class ProviderSession {
 
   async launchProvider(msg) {
     const { channelId, resume, cwd, conversationId } = msg;
+    let desiredResume = resume;
 
     if (this._launching) {
       // Safety: if _launching has been stuck for over 30s, force-clear it
@@ -368,10 +362,18 @@ export default class ProviderSession {
     if (this.connections.size > 0 && this.provider) {
       const reusableChannel = this._findReusableChannel({ conversationId, resume });
       if (reusableChannel) {
-        console.log(`[launch] Reusing live connection for ${this.agentId} (${reusableChannel} → ${channelId})`);
-        this._remapLiveConnection(reusableChannel, channelId, conversationId);
-        this._launching = false;
-        return;
+        if (this._canReuseLiveConnection(reusableChannel, channelId)) {
+          console.log(`[launch] Reusing live connection for ${this.agentId} (${reusableChannel} → ${channelId})`);
+          this._remapLiveConnection(reusableChannel, channelId, conversationId);
+          this._launching = false;
+          return;
+        }
+
+        const reusableEntry = this.connections.get(reusableChannel);
+        desiredResume = desiredResume || this._getSessionIdForEntry(reusableEntry) || undefined;
+        console.log(
+          `[launch] Active connection for ${this.agentId} cannot be remapped (${reusableChannel} → ${channelId}) — reconnecting fresh`,
+        );
       }
     }
 
@@ -393,14 +395,14 @@ export default class ProviderSession {
     const spawnCwd = cwd || this.cwd;
 
     console.log(
-      `[launch] provider=${this.providerName} agent=${this.agentId} channel=${channelId} resume=${resume || 'new'} model=${configModel} cwd=${spawnCwd}`,
+      `[launch] provider=${this.providerName} agent=${this.agentId} channel=${channelId} resume=${desiredResume || 'new'} model=${configModel} cwd=${spawnCwd}`,
     );
 
     try {
       const conn = await this.provider.connect({
         cwd: spawnCwd,
         model: configModel,
-        resume,
+        resume: desiredResume,
         agentId: this.agentId,
         effortLevel: configEffort,
       });
@@ -410,7 +412,7 @@ export default class ProviderSession {
         this._handleProviderEvent(channelId, event);
       });
 
-      this.connections.set(channelId, { conn, unsub, sessionId: resume, conversationId: conversationId || null });
+      this.connections.set(channelId, { conn, unsub, sessionId: desiredResume, conversationId: conversationId || null });
       if (conversationId) this._bindConversation(channelId, conversationId);
 
       // Flush any messages queued while connecting
@@ -467,10 +469,20 @@ export default class ProviderSession {
   handleIoMessage(msg) {
     let { channelId, entry } = this._resolveConnection(msg.channelId, msg.conversationId);
     if (entry?.conn && channelId && msg.channelId && channelId !== msg.channelId) {
-      console.log(`[session] Rebinding ${this.agentId} conversation ${msg.conversationId || '(anonymous)'} (${channelId} → ${msg.channelId})`);
-      this._remapLiveConnection(channelId, msg.channelId, msg.conversationId);
-      channelId = msg.channelId;
-      entry = this.connections.get(channelId);
+      if (this._canReuseLiveConnection(channelId, msg.channelId)) {
+        console.log(
+          `[session] Rebinding ${this.agentId} conversation ${msg.conversationId || '(anonymous)'} (${channelId} → ${msg.channelId})`,
+        );
+        this._remapLiveConnection(channelId, msg.channelId, msg.conversationId);
+        channelId = msg.channelId;
+        entry = this.connections.get(channelId);
+      } else {
+        console.log(
+          `[session] Active connection for ${this.agentId} cannot be rebound (${channelId} → ${msg.channelId}) — reconnecting fresh`,
+        );
+        entry = undefined;
+        channelId = null;
+      }
     }
     if (!entry?.conn || !this.provider) {
       const reusableChannel =
@@ -479,14 +491,20 @@ export default class ProviderSession {
       if (reusableChannel && this.provider) {
         const liveEntry = this.connections.get(reusableChannel);
         if (reusableChannel && liveEntry?.conn?.alive !== false && reusableChannel !== msg.channelId) {
-          console.log(`[session] Recovering stale channel for ${this.agentId} (${msg.channelId} → ${reusableChannel})`);
-          if (this._remapLiveConnection(reusableChannel, msg.channelId, msg.conversationId)) {
-            const recovered = this.connections.get(msg.channelId);
-            if (recovered?.conn) {
-              this._lastSentMessage = msg;
-              this._sendToProvider(recovered, msg);
-              return;
+          if (this._canReuseLiveConnection(reusableChannel, msg.channelId)) {
+            console.log(`[session] Recovering stale channel for ${this.agentId} (${msg.channelId} → ${reusableChannel})`);
+            if (this._remapLiveConnection(reusableChannel, msg.channelId, msg.conversationId)) {
+              const recovered = this.connections.get(msg.channelId);
+              if (recovered?.conn) {
+                this._lastSentMessage = msg;
+                this._sendToProvider(recovered, msg);
+                return;
+              }
             }
+          } else {
+            console.log(
+              `[session] Active connection for ${this.agentId} cannot recover stale channel (${reusableChannel} → ${msg.channelId}) — reconnecting fresh`,
+            );
           }
         }
       }
@@ -495,6 +513,20 @@ export default class ProviderSession {
       }
       this._pendingMessages.get(msg.channelId).push(msg);
       console.log(`[session] Queued message for ${msg.channelId} (connection not ready)`);
+      if (reusableChannel && this.provider) {
+        const liveEntry = this.connections.get(reusableChannel);
+        if (liveEntry?.conn?.alive !== false && !this._canReuseLiveConnection(reusableChannel, msg.channelId)) {
+          const desiredResume = this._getSessionIdForEntry(liveEntry) || undefined;
+          this.launchProvider({
+            channelId: msg.channelId,
+            resume: desiredResume,
+            cwd: this.cwd,
+            conversationId: msg.conversationId,
+          }).catch((err) => {
+            console.error(`[session] Failed to reconnect ${this.agentId}: ${err.message}`);
+          });
+        }
+      }
       return;
     }
 
@@ -1117,6 +1149,7 @@ export default class ProviderSession {
           });
           this._hiddenTurns.delete(channelId);
         }
+        if (this._turnState) delete this._turnState[channelId];
         break;
       }
 
@@ -1137,6 +1170,7 @@ export default class ProviderSession {
           this._hiddenTurns.get(channelId).reject(new Error(event.message));
           this._hiddenTurns.delete(channelId);
         }
+        if (this._turnState) delete this._turnState[channelId];
         break;
 
       case 'session_ready': {
@@ -1188,6 +1222,7 @@ export default class ProviderSession {
         });
         this.connections.delete(channelId);
         this._forgetConversationForChannel(channelId);
+        if (this._turnState) delete this._turnState[channelId];
         break;
 
       case 'permission_request':

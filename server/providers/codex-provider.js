@@ -644,6 +644,8 @@ export class CodexProvider {
       }
 
       case 'turn/completed': {
+        conn.turnId = null;
+        conn._turnStartEmitted = null;
         const usage = params.turn?.usage || params.usage;
         const mapped = usage
           ? {
@@ -656,6 +658,8 @@ export class CodexProvider {
       }
 
       case 'turn/failed':
+        conn.turnId = null;
+        conn._turnStartEmitted = null;
         this._emit(conn, E.turnError(params.turn?.error?.message || params.error?.message || 'Turn failed'));
         break;
 
