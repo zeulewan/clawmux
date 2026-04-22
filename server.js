@@ -222,7 +222,7 @@ function getMonitorSnapshot() {
   for (const [, entry] of agentProcs) {
     if (entry.session?.providerName !== 'codex') continue;
     const u = entry.session?.lastUsage;
-    if (u?.fiveHour && !snapshot._usage.openai) {
+    if (u?.fiveHour?.percent != null && !snapshot._usage.openai) {
       snapshot._usage.openai = {
         fiveHour: u.fiveHour.percent,
         weekly: u.weekly?.percent,
@@ -267,6 +267,11 @@ app.get('/api/monitor/stream', (req, res) => {
 
   // Send deltas on state changes
   const onChange = (agentId) => {
+    const usage = getMonitorSnapshot()._usage;
+    if (agentId === '_usage') {
+      res.write(`data: ${JSON.stringify({ _usage: usage })}\n\n`);
+      return;
+    }
     const agents = getAgentsMap();
     const cfg = agents[agentId];
     if (!cfg) return;
@@ -286,6 +291,7 @@ app.get('/api/monitor/stream', (req, res) => {
         sessionId: connEntry2?.sessionId || connEntry2?.conn?.threadId || connEntry2?.conn?.sessionId || null,
         contextPercent: usage2.contextPercent != null ? usage2.contextPercent : null,
       },
+      _usage: usage,
     };
     res.write(`data: ${JSON.stringify(delta)}\n\n`);
   };
@@ -801,5 +807,6 @@ server.listen(PORT, HOST, () => {
     for (const ws of wss.clients) {
       if (ws.readyState === ws.OPEN) ws.send(msg);
     }
+    monitorBus.emit('change', '_usage');
   });
 });

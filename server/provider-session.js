@@ -1211,6 +1211,7 @@ export default class ProviderSession {
           merged.contextPercent = Math.max(0, Math.min(100, merged.contextPercent));
         }
         this.lastUsage = merged;
+        monitorBus.emit('change', this.agentId);
         this.send({
           type: 'request',
           channelId: '',
