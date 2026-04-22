@@ -39,6 +39,9 @@ export function InputBar({ onSubmit, onInterrupt, busy, session, effortLevel: li
       request('apply_settings', { settings: { effortLevel: level } }).catch(() => {});
     });
   }, [session]);
+  useEffect(() => {
+    _setEffortLevel(liveEffortLevel);
+  }, [liveEffortLevel]);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [attachments, setAttachments] = useState([]);
   const [dragging, setDragging] = useState(false);

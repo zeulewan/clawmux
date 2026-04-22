@@ -809,6 +809,7 @@ export default class ProviderSession {
               if (entry.conn) this.provider.setThinkingLevel(entry.conn, settings.effortLevel);
             }
           }
+          monitorBus.emit('change', this.agentId);
           console.log(`[session] Effort level set to: ${settings.effortLevel}`);
         }
         respond({ type: 'apply_settings_response' });

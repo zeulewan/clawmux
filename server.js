@@ -212,6 +212,7 @@ app.post('/api/agents/:id/effort', (req, res) => {
   const { effort } = req.body;
   if (!effort) return res.status(400).json({ error: 'effort required' });
   setAgentEffort(id, effort);
+  monitorBus.emit('change', id);
   console.log(`[config] ${agentName(id)} effort → ${effort}`);
   res.json({ ok: true, agent: id, effort });
 });
