@@ -613,6 +613,7 @@ wss.on('connection', (ws) => {
   ws._isAlive = true;
   ws._sessions = new Map(); // agentId → ProviderSession
   ws._channelToAgent = new Map(); // channelId → agentId
+  ws._conversationToAgent = new Map(); // conversationId → agentId
   ws._currentAgent = null;
 
   ws.on('pong', function () {
@@ -657,13 +658,20 @@ wss.on('connection', (ws) => {
         if (agentId && msg.channelId) {
           ws._channelToAgent.set(msg.channelId, agentId);
         }
+        if (agentId && msg.conversationId) {
+          ws._conversationToAgent.set(msg.conversationId, agentId);
+        }
         const session = getOrCreateSession(ws, agentId, msg.provider);
         session.handleMessage(msg);
         return;
       }
 
-      // Route all other messages by channelId → agentId, or fall back to current agent
-      const targetAgent = ws._channelToAgent.get(msg.channelId) || agentId;
+      // Route all other messages by conversationId first, then channelId,
+      // then fall back to the currently focused agent.
+      const targetAgent =
+        (msg.conversationId && ws._conversationToAgent.get(msg.conversationId)) ||
+        ws._channelToAgent.get(msg.channelId) ||
+        agentId;
       if (targetAgent) {
         const session = ws._sessions.get(targetAgent);
         if (session) session.handleMessage(msg);

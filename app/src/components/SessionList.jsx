@@ -36,7 +36,7 @@ export function SessionList({ onClose }) {
   const inMemory = getSessions();
   const allSessions = [
     ...inMemory.map((s) => ({
-      id: s.sessionId || s.channelId,
+      id: s.conversationId || s.sessionId || s.channelId,
       summary: s.summary || 'New conversation',
       lastModified: s.lastModified || Date.now(),
       session: s,

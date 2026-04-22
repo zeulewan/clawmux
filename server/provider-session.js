@@ -51,6 +51,7 @@ export default class ProviderSession {
     this.providerName = getAgentBackend(agentId);
     this.provider = null;
     this.connections = new Map(); // channelId → { conn, unsub }
+    this._conversationChannels = new Map(); // conversationId → channelId
     this._pendingMessages = new Map(); // channelId → [messages] (queued while connecting)
     this._hiddenTurns = new Map(); // channelId → { skipLocalPersist, resolve, reject }
 
@@ -109,17 +110,85 @@ export default class ProviderSession {
     }
   }
 
-  _remapLiveConnection(oldChannelId, newChannelId) {
+  _getSessionIdForEntry(entry) {
+    return entry?.sessionId || entry?.conn?.threadId || entry?.conn?.sessionId || null;
+  }
+
+  _forgetConversationForChannel(channelId) {
+    for (const [conversationId, mappedChannelId] of this._conversationChannels) {
+      if (mappedChannelId === channelId) this._conversationChannels.delete(conversationId);
+    }
+  }
+
+  _bindConversation(channelId, conversationId) {
+    if (!conversationId) return;
+    this._forgetConversationForChannel(channelId);
+    this._conversationChannels.set(conversationId, channelId);
+    const entry = this.connections.get(channelId);
+    if (entry) entry.conversationId = conversationId;
+  }
+
+  _findChannelByConversation(conversationId) {
+    if (!conversationId) return null;
+    const mappedChannelId = this._conversationChannels.get(conversationId);
+    if (mappedChannelId && this.connections.has(mappedChannelId)) return mappedChannelId;
+    for (const [channelId, entry] of this.connections) {
+      if (entry?.conversationId === conversationId) {
+        this._conversationChannels.set(conversationId, channelId);
+        return channelId;
+      }
+    }
+    return null;
+  }
+
+  _resolveConnection(channelId, conversationId) {
+    const direct = channelId ? this.connections.get(channelId) : undefined;
+    if (direct && (!conversationId || !direct.conversationId || direct.conversationId === conversationId)) {
+      return { channelId, entry: direct };
+    }
+    const byConversation = this._findChannelByConversation(conversationId);
+    if (!byConversation) return { channelId: null, entry: undefined };
+    return { channelId: byConversation, entry: this.connections.get(byConversation) };
+  }
+
+  _findReusableChannel({ conversationId, resume } = {}) {
+    const byConversation = this._findChannelByConversation(conversationId);
+    if (byConversation && this.connections.get(byConversation)?.conn?.alive !== false) return byConversation;
+
+    if (resume) {
+      for (const [channelId, entry] of this.connections) {
+        if (entry?.conn?.alive === false) continue;
+        if (this._getSessionIdForEntry(entry) === resume) return channelId;
+      }
+    }
+
+    if (!conversationId && !resume && this.connections.size === 1) {
+      const [channelId, entry] = this.connections.entries().next().value || [];
+      if (channelId && entry?.conn?.alive !== false) return channelId;
+    }
+
+    return null;
+  }
+
+  _remapLiveConnection(oldChannelId, newChannelId, conversationId) {
     const entry = this.connections.get(oldChannelId);
     if (!entry?.conn || !this.provider) return false;
 
     const wasStreaming = ['thinking', 'responding', 'tool_call'].includes(this.state.status);
     this.connections.delete(oldChannelId);
     this.connections.set(newChannelId, entry);
+    this._forgetConversationForChannel(oldChannelId);
+    if (conversationId || entry.conversationId) {
+      this._bindConversation(newChannelId, conversationId || entry.conversationId);
+    }
 
     if (this._turnState?.[oldChannelId]) {
       this._turnState[newChannelId] = this._turnState[oldChannelId];
       delete this._turnState[oldChannelId];
+    }
+    if (this._hiddenTurns.has(oldChannelId)) {
+      this._hiddenTurns.set(newChannelId, this._hiddenTurns.get(oldChannelId));
+      this._hiddenTurns.delete(oldChannelId);
     }
 
     this._updateState(wasStreaming ? this.state.status : 'idle', wasStreaming ? this.state.currentTool : null);
@@ -132,10 +201,15 @@ export default class ProviderSession {
     entry.unsub = unsub;
 
     if (this.agentId) {
-      this.agentProcs.set(this.agentId, { conn: entry.conn, channelId: newChannelId, session: this });
+      this.agentProcs.set(this.agentId, {
+        conn: entry.conn,
+        channelId: newChannelId,
+        conversationId: entry.conversationId || conversationId || null,
+        session: this,
+      });
     }
 
-    const sid = entry.sessionId || entry.conn?.threadId || entry.conn?.sessionId;
+    const sid = this._getSessionIdForEntry(entry);
     if (sid) {
       this._handleProviderEvent(newChannelId, { type: 'session_ready', sessionId: sid });
     }
@@ -170,17 +244,17 @@ export default class ProviderSession {
         this.handleIoMessage(msg);
         break;
       case 'interrupt':
-        this.interruptProvider(msg.channelId);
+        this.interruptProvider(msg.channelId, msg.conversationId);
         break;
       case 'close_channel':
-        this.closeChannel(msg.channelId);
+        this.closeChannel(msg.channelId, msg.conversationId);
         break;
       case 'set_provider':
         this.setProvider(msg.provider);
         break;
       case 'response': {
         // Permission response from frontend
-        const entry = msg.channelId ? this.connections.get(msg.channelId) : undefined;
+        const { entry } = this._resolveConnection(msg.channelId, msg.conversationId);
         if (entry?.conn && this.provider) {
           const allowed = msg.response?.result?.behavior === 'allow';
           this.provider.respondPermission(entry.conn, msg.requestId, allowed);
@@ -203,6 +277,7 @@ export default class ProviderSession {
         if (this.provider) this.provider.close(entry.conn);
       }
       this.connections.clear();
+      this._conversationChannels.clear();
       this.providerName = name;
       this.provider = null;
       console.log(`[session] Provider switched to: ${name}`);
@@ -216,6 +291,7 @@ export default class ProviderSession {
       if (this.provider) this.provider.close(entry.conn);
     }
     this.connections.clear();
+    this._conversationChannels.clear();
     this.provider = null;
   }
 
@@ -241,7 +317,7 @@ export default class ProviderSession {
   }
 
   async launchProvider(msg) {
-    const { channelId, resume, cwd } = msg;
+    const { channelId, resume, cwd, conversationId } = msg;
 
     if (this._launching) {
       // Safety: if _launching has been stuck for over 30s, force-clear it
@@ -270,13 +346,12 @@ export default class ProviderSession {
       this.setProvider(configBackend);
     }
 
-    // If we already have a live connection and backend hasn't changed,
-    // reuse it (just remap the channelId) instead of killing + respawning
+    // Reuse only when the launch refers to the same logical conversation.
     if (this.connections.size > 0 && this.provider) {
-      const [[oldChannelId, entry]] = this.connections;
-      if (entry.conn?.alive !== false) {
-        console.log(`[launch] Reusing live connection for ${this.agentId} (${oldChannelId} → ${channelId})`);
-        this._remapLiveConnection(oldChannelId, channelId);
+      const reusableChannel = this._findReusableChannel({ conversationId, resume });
+      if (reusableChannel) {
+        console.log(`[launch] Reusing live connection for ${this.agentId} (${reusableChannel} → ${channelId})`);
+        this._remapLiveConnection(reusableChannel, channelId, conversationId);
         this._launching = false;
         return;
       }
@@ -291,6 +366,7 @@ export default class ProviderSession {
       if (this.provider && entry.conn) this.provider.close(entry.conn);
     }
     this.connections.clear();
+    this._conversationChannels.clear();
 
     if (!this.provider) {
       this.provider = getProvider(this.providerName);
@@ -316,14 +392,15 @@ export default class ProviderSession {
         this._handleProviderEvent(channelId, event);
       });
 
-      this.connections.set(channelId, { conn, unsub, sessionId: resume });
+      this.connections.set(channelId, { conn, unsub, sessionId: resume, conversationId: conversationId || null });
+      if (conversationId) this._bindConversation(channelId, conversationId);
 
       // Flush any messages queued while connecting
       this._flushPending(channelId);
 
       // Register in global agent procs
       if (this.agentId) {
-        this.agentProcs.set(this.agentId, { conn, channelId, session: this });
+        this.agentProcs.set(this.agentId, { conn, channelId, conversationId: conversationId || null, session: this });
       }
 
       // For providers that set sessionId/threadId on conn, emit session_ready
@@ -370,13 +447,22 @@ export default class ProviderSession {
   }
 
   handleIoMessage(msg) {
-    const entry = this.connections.get(msg.channelId);
+    let { channelId, entry } = this._resolveConnection(msg.channelId, msg.conversationId);
+    if (entry?.conn && channelId && msg.channelId && channelId !== msg.channelId) {
+      console.log(`[session] Rebinding ${this.agentId} conversation ${msg.conversationId || '(anonymous)'} (${channelId} → ${msg.channelId})`);
+      this._remapLiveConnection(channelId, msg.channelId, msg.conversationId);
+      channelId = msg.channelId;
+      entry = this.connections.get(channelId);
+    }
     if (!entry?.conn || !this.provider) {
-      if (this.connections.size === 1 && this.provider) {
-        const [liveChannelId, liveEntry] = this.connections.entries().next().value || [];
-        if (liveChannelId && liveEntry?.conn?.alive !== false && liveChannelId !== msg.channelId) {
-          console.log(`[session] Recovering stale channel for ${this.agentId} (${msg.channelId} → ${liveChannelId})`);
-          if (this._remapLiveConnection(liveChannelId, msg.channelId)) {
+      const reusableChannel =
+        this._findReusableChannel({ conversationId: msg.conversationId }) ||
+        (!msg.conversationId && this.connections.size === 1 ? this.connections.entries().next().value?.[0] : null);
+      if (reusableChannel && this.provider) {
+        const liveEntry = this.connections.get(reusableChannel);
+        if (reusableChannel && liveEntry?.conn?.alive !== false && reusableChannel !== msg.channelId) {
+          console.log(`[session] Recovering stale channel for ${this.agentId} (${msg.channelId} → ${reusableChannel})`);
+          if (this._remapLiveConnection(reusableChannel, msg.channelId, msg.conversationId)) {
             const recovered = this.connections.get(msg.channelId);
             if (recovered?.conn) {
               this._lastSentMessage = msg;
@@ -424,12 +510,12 @@ export default class ProviderSession {
     }
   }
 
-  interruptProvider(channelId) {
-    const entry = this.connections.get(channelId);
+  interruptProvider(channelId, conversationId) {
+    const { entry } = this._resolveConnection(channelId, conversationId);
     if (entry?.conn && this.provider) {
-      console.log(`[session] Interrupting ${this.providerName} channel ${channelId}`);
+      console.log(`[session] Interrupting ${this.providerName} channel ${channelId || conversationId || '(unknown)'}`);
       this.provider.interrupt(entry.conn);
-    } else {
+    } else if (!conversationId) {
       // Try interrupting any active connection
       for (const [id, e] of this.connections) {
         if (e.conn && this.provider) {
@@ -441,15 +527,18 @@ export default class ProviderSession {
     }
   }
 
-  closeChannel(channelId) {
-    const entry = this.connections.get(channelId);
+  closeChannel(channelId, conversationId) {
+    const resolved = this._resolveConnection(channelId, conversationId);
+    const closeId = resolved.channelId || channelId;
+    const entry = resolved.entry;
     if (entry) {
       if (entry.unsub) entry.unsub();
       if (this.provider) this.provider.close(entry.conn);
-      this.connections.delete(channelId);
+      this.connections.delete(closeId);
     }
+    this._forgetConversationForChannel(closeId);
     // Clean up turn state for this channel
-    if (this._turnState) delete this._turnState[channelId];
+    if (this._turnState) delete this._turnState[closeId];
   }
 
   handleRequest(msg) {
@@ -1004,7 +1093,7 @@ export default class ProviderSession {
         if (hidden) {
           hidden.resolve({
             usage: event.usage,
-            sessionId: this.connections.get(channelId)?.sessionId || this.connections.get(channelId)?.conn?.threadId || this.connections.get(channelId)?.conn?.sessionId || null,
+            sessionId: this._getSessionIdForEntry(this.connections.get(channelId)),
           });
           this._hiddenTurns.delete(channelId);
         }
@@ -1053,14 +1142,16 @@ export default class ProviderSession {
         // Session ID was stale — re-queue last message and relaunch fresh
         console.log(`[session] Resume failed for ${this.agentId}, relaunching fresh`);
         this._resumeRetrying = true;
+        const conversationId = this.connections.get(channelId)?.conversationId || null;
         if (this._lastSentMessage) {
           if (!this._pendingMessages.has(channelId)) this._pendingMessages.set(channelId, []);
           this._pendingMessages.get(channelId).push(this._lastSentMessage);
           this._lastSentMessage = null;
         }
         this.connections.delete(channelId);
+        this._forgetConversationForChannel(channelId);
         this._launching = false;
-        this.launchProvider({ channelId, resume: undefined, cwd: this.cwd });
+        this.launchProvider({ channelId, resume: undefined, cwd: this.cwd, conversationId });
         break;
 
       case 'session_closed':
@@ -1076,6 +1167,7 @@ export default class ProviderSession {
           error: event.reason !== 'normal' ? event.reason : undefined,
         });
         this.connections.delete(channelId);
+        this._forgetConversationForChannel(channelId);
         break;
 
       case 'permission_request':

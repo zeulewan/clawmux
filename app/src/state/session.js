@@ -9,12 +9,17 @@ import { on, launchAgent, sendMessage, interrupt, closeChannel, request } from '
 
 let sessionIdCounter = 0;
 
-export function createSession({ resume, cwd, model, provider, agentId } = {}) {
+function defaultConversationId(resume) {
+  return resume ? `session:${resume}` : `conv_${crypto.randomUUID()}`;
+}
+
+export function createSession({ resume, cwd, model, provider, agentId, conversationId } = {}) {
   const channelId = `ch_${++sessionIdCounter}_${Date.now()}`;
 
   const session = {
     agentId: agentId || null,
     channelId,
+    conversationId: conversationId || defaultConversationId(resume),
     messages: [],
     busy: false,
     error: null,
@@ -126,6 +131,7 @@ export function createSession({ resume, cwd, model, provider, agentId } = {}) {
         resume: this.sessionId || undefined,
         agentId: this.agentId || undefined,
         provider: this.provider || undefined,
+        conversationId: this.conversationId,
       });
       this.notify();
     },
@@ -183,17 +189,18 @@ export function createSession({ resume, cwd, model, provider, agentId } = {}) {
           },
         },
         this.agentId || undefined,
+        this.conversationId,
       );
     },
 
     /** Interrupt the current response. */
     interrupt() {
-      interrupt(channelId, this.agentId || undefined);
+      interrupt(channelId, this.agentId || undefined, this.conversationId);
     },
 
     /** Close this session's channel. */
     close() {
-      closeChannel(channelId, this.agentId || undefined);
+      closeChannel(channelId, this.agentId || undefined, this.conversationId);
     },
 
     /** Handle an incoming io_message from Claude. */
@@ -444,7 +451,12 @@ export function createSession({ resume, cwd, model, provider, agentId } = {}) {
               if (this.provider) {
                 localStorage.setItem(`cmx-session-${this.agentId}-${this.provider}`, event.session_id);
               }
+              localStorage.setItem(`cmx-conversation-${this.agentId}`, this.conversationId);
+              if (this.provider) {
+                localStorage.setItem(`cmx-conversation-${this.agentId}-${this.provider}`, this.conversationId);
+              }
             }
+            localStorage.setItem(`cmx-conversation-session-${event.session_id}`, this.conversationId);
           }
           break;
         }

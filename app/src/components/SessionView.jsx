@@ -166,7 +166,7 @@ export function SessionView() {
           <div className="cmx-content">
             <div className="sessionBody">
               {activeSession ? (
-                <ChatContainer key={activeSession?.channelId || activeSession?.sessionId} session={activeSession} />
+                <ChatContainer key={activeSession?.conversationId || activeSession?.sessionId || activeSession?.channelId} session={activeSession} />
               ) : (
                 <div className="chatContainer">
                   <div className="emptyState">

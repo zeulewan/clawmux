@@ -43,6 +43,27 @@ function notify() {
   for (const fn of _listeners) fn();
 }
 
+function _conversationKey(agentId, backend) {
+  return agentId && backend ? `cmx-conversation-${agentId}-${backend}` : null;
+}
+
+function _resolveConversationId({ agentId, backend, sessionId } = {}) {
+  if (sessionId) {
+    const bySession = localStorage.getItem(`cmx-conversation-session-${sessionId}`);
+    if (bySession) return bySession;
+  }
+  const byBackend = _conversationKey(agentId, backend);
+  if (byBackend) {
+    const stored = localStorage.getItem(byBackend);
+    if (stored) return stored;
+  }
+  if (agentId) {
+    const fallback = localStorage.getItem(`cmx-conversation-${agentId}`);
+    if (fallback) return fallback;
+  }
+  return sessionId ? `session:${sessionId}` : null;
+}
+
 // ── Public getters ─────────────────────────────────────────────
 
 export function subscribe(fn) {
@@ -109,10 +130,11 @@ export async function reloadConfig() {
 
 export function createNewSession(opts = {}) {
   const state = _focused();
+  const provider = opts.provider || getCurrentProvider();
   const session = createSession({
     ...opts,
     agentId: store.focusedAgent,
-    provider: opts.provider || getCurrentProvider(),
+    provider,
   });
   session._models = getModelsForCurrentBackend();
   state.sessions.unshift(session);
@@ -143,6 +165,12 @@ export function resumeSession(sessionId, summary, provider) {
     resume: sessionId,
     provider: provider || getCurrentProvider(),
     agentId: store.focusedAgent,
+    conversationId:
+      _resolveConversationId({
+        agentId: store.focusedAgent,
+        backend: provider || getCurrentProvider(),
+        sessionId,
+      }) || `session:${sessionId}`,
   });
   session._models = getModelsForCurrentBackend();
   if (summary) session.summary = summary;
@@ -282,6 +310,7 @@ export async function init() {
       state.activeSession._launched = true;
       if (msg.sessionId) {
         state.activeSession.sessionId = msg.sessionId;
+        localStorage.setItem(`cmx-conversation-session-${msg.sessionId}`, state.activeSession.conversationId);
         localStorage.setItem(`cmx-session-${msg.agentId}-${msg.toBackend}`, msg.sessionId);
         localStorage.setItem(`cmx-session-${msg.agentId}`, msg.sessionId);
       }
@@ -302,6 +331,15 @@ export async function init() {
 
 function _persistSession() {
   const state = _focused();
+  if (state.activeSession?.conversationId && store.focusedAgent) {
+    const backend = getCurrentProvider();
+    const conversationId = state.activeSession.conversationId;
+    localStorage.setItem(`cmx-conversation-${store.focusedAgent}`, conversationId);
+    localStorage.setItem(`cmx-conversation-${store.focusedAgent}-${backend}`, conversationId);
+    if (state.activeSession.sessionId) {
+      localStorage.setItem(`cmx-conversation-session-${state.activeSession.sessionId}`, conversationId);
+    }
+  }
   if (state.activeSession?.sessionId && store.focusedAgent) {
     const backend = getCurrentProvider();
     localStorage.setItem(`cmx-session-${store.focusedAgent}-${backend}`, state.activeSession.sessionId);
