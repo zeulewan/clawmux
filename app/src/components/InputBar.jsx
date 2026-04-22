@@ -19,7 +19,7 @@ function ModeIcon({ mode }) {
  * Uses <fieldset>, contenteditable div, and proper footer with add/menu/send buttons.
  * CSS classes: inputBarContainer, inputFooter, addButton, sendButton
  */
-export function InputBar({ onSubmit, onInterrupt, busy, session }) {
+export function InputBar({ onSubmit, onInterrupt, busy, session, effortLevel: liveEffortLevel = 'medium' }) {
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
   const [text, setText] = useState('');
@@ -27,14 +27,18 @@ export function InputBar({ onSubmit, onInterrupt, busy, session }) {
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [permissionMode, setPermissionMode] = useState('bypassPermissions');
-  const [effortLevel, _setEffortLevel] = useState('medium');
+  const [selectedEffortLevel, _setEffortLevel] = useState(liveEffortLevel);
   const setEffortLevel = useCallback((level) => {
     _setEffortLevel(level);
+    if (session) {
+      session.effortLevel = level;
+      session.notify?.();
+    }
     // Send to server so it's used on next turn
     import('../lib/protocol.js').then(({ request }) => {
       request('apply_settings', { settings: { effortLevel: level } }).catch(() => {});
     });
-  }, []);
+  }, [session]);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [attachments, setAttachments] = useState([]);
   const [dragging, setDragging] = useState(false);
@@ -142,6 +146,10 @@ export function InputBar({ onSubmit, onInterrupt, busy, session }) {
     // Don't auto-focus on mobile — prevents keyboard popping up
     if (!busy && window.innerWidth >= 768) inputRef.current?.focus();
   }, [busy]);
+
+  useEffect(() => {
+    if (liveEffortLevel) _setEffortLevel(liveEffortLevel);
+  }, [liveEffortLevel]);
 
   // Close all popups on click outside
   useEffect(() => {
@@ -374,7 +382,7 @@ export function InputBar({ onSubmit, onInterrupt, busy, session }) {
                 currentMode={permissionMode}
                 onSelect={setPermissionMode}
                 onClose={() => setShowModesMenu(false)}
-                effortLevel={effortLevel}
+                effortLevel={selectedEffortLevel}
                 onEffortChange={setEffortLevel}
               />
             </div>

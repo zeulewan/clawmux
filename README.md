@@ -68,6 +68,8 @@ cmx status             # check if running
 cmx monitor            # live agent status dashboard (3Hz, alt screen)
 cmx agents             # list all agents with backend/model/status
 cmx send <agent> <msg> # send message to an agent
+cmx send --close-thread <agent>        # end a peer thread without provoking a reply
+cmx send --reopen-thread <agent> <msg> # reopen a closed thread and send a fresh message
 cmx config             # show config summary
 cmx logs               # run server in foreground (see stdout)
 cmx update             # git pull + rebuild + restart
@@ -85,6 +87,7 @@ Agents auto-resume on server restart. Session IDs stored in `agents.json` are us
 
 - Status: offline, idle, thinking, responding, tool_call, error
 - Current tool name when active (Bash, Edit, Read, etc.)
+- Thinking / effort level per agent
 - Context window usage (%) per agent
 - Backend, model, session ID, last activity
 - Anthropic and OpenAI rate limits (5h/7d) in footer

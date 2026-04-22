@@ -336,6 +336,14 @@ test.describe('Loading indicators', () => {
 });
 
 test.describe('API reliability', () => {
+  test('monitor includes effort for agents', async ({ request }) => {
+    const res = await request.get('/api/monitor');
+    const data = await res.json();
+    const agent = Object.entries(data).find(([k, v]) => k !== '_usage' && v && typeof v === 'object');
+    expect(agent).toBeTruthy();
+    expect(agent?.[1]?.effort).toBeTruthy();
+  });
+
   test('context% never exceeds 100 for active agents', async ({ request }) => {
     const res = await request.get('/api/monitor');
     const data = await res.json();
@@ -381,6 +389,38 @@ test.describe('API reliability', () => {
     });
     expect((await r1.json()).ok).toBe(true);
     expect((await r2.json()).ok).toBe(true);
+  });
+
+  test('close-thread blocks sends until reopen-thread', async ({ request }) => {
+    const agents = await (await request.get('/api/agents')).json();
+    const target = Object.keys(agents).find((id) => id !== 'puck');
+    expect(target).toBeTruthy();
+
+    await request.post('/api/launch', { data: { agentId: target } });
+    await new Promise((r) => setTimeout(r, 3000));
+
+    const from = 'test_thread_control';
+
+    // Clear any stale state from a previous failed run.
+    await request.post('/api/send', {
+      data: { from, to: target, control: 'reopen-thread' },
+    });
+
+    const closed = await request.post('/api/send', {
+      data: { from, to: target, control: 'close-thread', text: 'done' },
+    });
+    expect((await closed.json()).ok).toBe(true);
+
+    const blocked = await request.post('/api/send', {
+      data: { from, to: target, text: 'should-be-blocked' },
+    });
+    const blockedBody = await blocked.json();
+    expect(blockedBody.error).toContain('is closed');
+
+    const reopened = await request.post('/api/send', {
+      data: { from, to: target, control: 'reopen-thread', text: 'fresh-topic' },
+    });
+    expect((await reopened.json()).ok).toBe(true);
   });
 
   test('terminate API stops a running agent', async ({ request }) => {

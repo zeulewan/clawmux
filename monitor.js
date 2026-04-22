@@ -227,6 +227,7 @@ const colMaxFull = {
   name: 'AGENT'.length,
   backend: 'opencode'.length,        // longest known backend name
   model: 'MODEL'.length,
+  effort: 'THINK'.length,
   ctx: '100%'.length,                // ctx never wider than this
   status: 'responding'.length + 2,   // longest label + icon + space
   tool: 'TOOL'.length,
@@ -252,12 +253,13 @@ function computeCols(rows, compact) {
     }
     return c;
   }
-  for (const [, a] of rows) {
-    c.name = Math.max(c.name, (a.name || '').length);
-    c.backend = Math.max(c.backend, (a.backend || '-').length);
-    c.model = Math.max(c.model, shortenModel(a.model || '').length);
-    const lbl = (statusStyle[a.status] || statusStyle.offline).label;
-    c.status = Math.max(c.status, lbl.length + 2);
+    for (const [, a] of rows) {
+      c.name = Math.max(c.name, (a.name || '').length);
+      c.backend = Math.max(c.backend, (a.backend || '-').length);
+      c.model = Math.max(c.model, shortenModel(a.model || '').length);
+      c.effort = Math.max(c.effort, (a.effort || '').length);
+      const lbl = (statusStyle[a.status] || statusStyle.offline).label;
+      c.status = Math.max(c.status, lbl.length + 2);
     c.tool = Math.max(c.tool, shortenTool(a.currentTool || '').length);
     if (a.status !== 'offline') c.activity = Math.max(c.activity, timeAgo(a.lastActivity).length);
   }
@@ -284,11 +286,13 @@ function renderRow(agent, idx, cols, compact) {
 
   const model = shortenModel(agent.model);
   const sid = agent.sessionId ? agent.sessionId.slice(0, 16) : '';
+  const effort = agent.effort || '';
   const ctx = ctxPct(agent.status !== 'offline' ? agent.contextPercent : null, cols.ctx);
 
   let line = ` ${nameColor}${pad(agent.name, cols.name)}${FG_RESET} `;
   line += `${bcol}${pad(agent.backend || '-', cols.backend)}${FG_RESET} `;
   line += `${pad(model, cols.model)} `;
+  line += `${DIM_FG}${pad(effort, cols.effort)}${FG_RESET} `;
   line += `${ctx} `;
   line += `${st.color}${st.icon} ${pad(st.label, cols.status - 2)}${FG_RESET} `;
   line += `${agent.currentTool ? colors.magenta : ''}${pad(tool, cols.tool)}${FG_RESET} `;
@@ -342,7 +346,7 @@ function render() {
     lines.push(` ${DIM}${'─'.repeat(totalWidth)}${RESET}`);
   } else {
     lines.push(
-      ` ${DIM}${pad('AGENT', cols.name)} ${pad('BACKEND', cols.backend)} ${pad('MODEL', cols.model)} ${padRight('CTX', cols.ctx)} ${pad('STATUS', cols.status)} ${pad('TOOL', cols.tool)} ${pad('SESSION', cols.session)} ${padRight('ACTIVITY', cols.activity)}${RESET}`,
+      ` ${DIM}${pad('AGENT', cols.name)} ${pad('BACKEND', cols.backend)} ${pad('MODEL', cols.model)} ${pad('THINK', cols.effort)} ${padRight('CTX', cols.ctx)} ${pad('STATUS', cols.status)} ${pad('TOOL', cols.tool)} ${pad('SESSION', cols.session)} ${padRight('ACTIVITY', cols.activity)}${RESET}`,
     );
     lines.push(` ${DIM}${'─'.repeat(totalWidth)}${RESET}`);
   }

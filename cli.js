@@ -237,8 +237,9 @@ if (!cmd || cmd === 'start') {
   // ── send ──
 
 } else if (cmd === 'send') {
-  if (process.argv[3] === '--help' || process.argv[3] === '-h') {
-    console.log(`Usage: cmx send <agent> <message>
+  const rawArgs = process.argv.slice(3);
+  if (rawArgs.includes('--help') || rawArgs.includes('-h')) {
+    console.log(`Usage: cmx send [--close-thread|--reopen-thread] <agent> [message]
 
 Send a message to an agent. The sender is auto-detected:
   - CMX_AGENT env var (set automatically for claude/pi backends)
@@ -246,19 +247,34 @@ Send a message to an agent. The sender is auto-detected:
   - cwd path inside ~/.clawmux/agents/<name>/
   - Falls back to "cli" (human at terminal)
 
+Controls:
+  --close-thread   Mark the peer thread closed; future sends are blocked until reopened
+  --reopen-thread  Reopen a previously closed peer thread; optional message starts the new thread
+
 Examples:
   cmx send sky "hello"          Send to sky as cli (human)
   cmx send puck "got it"        Agent sends to puck (auto-detected)
+  cmx send --close-thread adam  End the Adam thread with no reply expected
+  cmx send --reopen-thread adam "new topic"  Reopen and send a fresh message
 
 Agents: Adam, Alice, Alloy, Aoede, Bella, Daniel, Echo, Emma, Eric,
   Fable, Fenrir, George, Heart, Jadzia, Jessica, Kore, Lewis, Liam,
   Lily, Michael, Nicole, Nova, Onyx, Puck, River, Sarah, Sky`);
     process.exit(0);
   }
-  const target = process.argv[3];
-  const message = process.argv.slice(4).join(' ');
-  if (!target || !message) {
-    console.log('Usage: cmx send <agent> <message> (try --help for details)');
+  const flags = rawArgs.filter((arg) => arg.startsWith('--'));
+  const positionals = rawArgs.filter((arg) => !arg.startsWith('--'));
+  const closeThread = flags.includes('--close-thread');
+  const reopenThread = flags.includes('--reopen-thread');
+  if (closeThread && reopenThread) {
+    console.log(`${RED}Choose only one control: --close-thread or --reopen-thread${RESET}`);
+    process.exit(1);
+  }
+  const control = closeThread ? 'close-thread' : reopenThread ? 'reopen-thread' : null;
+  const target = positionals[0];
+  const message = positionals.slice(1).join(' ');
+  if (!target || (!message && !control)) {
+    console.log('Usage: cmx send [--close-thread|--reopen-thread] <agent> [message] (try --help for details)');
     process.exit(1);
   }
   // Auto-detect sender: CMX_AGENT env > .cmx-agent file in cwd > cwd path detection > 'cli'
@@ -277,8 +293,12 @@ Agents: Adam, Alice, Alloy, Aoede, Bella, Daniel, Echo, Emma, Eric,
   }
   if (!from) from = 'cli';
   try {
-    const res = await postApi('/api/send', { to: target, text: message, from });
-    if (res.ok) console.log(`${GREEN}Sent to ${target}${RESET}`);
+    const res = await postApi('/api/send', { to: target, text: message, from, control });
+    if (res.ok) {
+      if (control === 'close-thread') console.log(`${GREEN}Closed thread with ${target}${RESET}`);
+      else if (control === 'reopen-thread') console.log(`${GREEN}Reopened thread with ${target}${RESET}`);
+      else console.log(`${GREEN}Sent to ${target}${RESET}`);
+    }
     else console.log(`${RED}${res.error || 'Failed'}${RESET}`);
   } catch (e) {
     console.error(`Cannot connect to server: ${e.message}`);

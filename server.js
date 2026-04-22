@@ -44,9 +44,49 @@ const HOST = process.env.HOST || '127.0.0.1';
 const CLAWMUX_DIR = join(homedir(), '.clawmux');
 const AGENTS_DIR = process.env.AGENTS_DIR || join(CLAWMUX_DIR, 'agents');
 const MESSAGES_DIR = join(CLAWMUX_DIR, 'messages');
+const THREAD_STATE_FILE = join(CLAWMUX_DIR, 'thread-state.json');
 
 if (!existsSync(AGENTS_DIR)) mkdirSync(AGENTS_DIR, { recursive: true });
 if (!existsSync(MESSAGES_DIR)) mkdirSync(MESSAGES_DIR, { recursive: true });
+
+function loadThreadState() {
+  try {
+    if (!existsSync(THREAD_STATE_FILE)) return {};
+    const parsed = JSON.parse(readFileSync(THREAD_STATE_FILE, 'utf8'));
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+const closedThreads = loadThreadState();
+
+function saveThreadState() {
+  writeFileSync(THREAD_STATE_FILE, JSON.stringify(closedThreads, null, 2));
+}
+
+function threadKey(a, b) {
+  return [cleanAgentId(a), cleanAgentId(b)].sort().join('::');
+}
+
+function getClosedThread(a, b) {
+  return closedThreads[threadKey(a, b)] || null;
+}
+
+function closeThread(a, b, meta) {
+  closedThreads[threadKey(a, b)] = { ...meta, updatedAt: Date.now() };
+  saveThreadState();
+}
+
+function reopenThread(a, b) {
+  const key = threadKey(a, b);
+  const existed = !!closedThreads[key];
+  if (existed) {
+    delete closedThreads[key];
+    saveThreadState();
+  }
+  return existed;
+}
 
 function agentWorkDir(agentId) {
   const name = cleanAgentId(agentId);
@@ -357,24 +397,77 @@ function persistMessage(agentId, record) {
   appendFileSync(file, JSON.stringify(record) + '\n');
 }
 
-app.post('/api/send', (req, res) => {
-  const { from, to, text } = req.body;
-  const toId = cleanAgentId(to);
-  const target = agentProcs.get(toId);
-  if (!target?.session) {
-    return res.json({ error: `${agentName(to)} is not running` });
+function broadcastAgentMessage(record) {
+  const notification = JSON.stringify({
+    type: 'agent_message',
+    from: record.from,
+    to: record.to,
+    text: record.text,
+    msgId: record.msgId,
+    timestamp: record.timestamp,
+    control: record.control || null,
+  });
+  for (const ws of wss.clients) {
+    if (ws.readyState === ws.OPEN) ws.send(notification);
   }
+}
+
+app.post('/api/send', (req, res) => {
+  const { from, to, text, control } = req.body;
+  const normalizedControl = control || null;
+  if (normalizedControl && !['close-thread', 'reopen-thread'].includes(normalizedControl)) {
+    return res.json({ error: `unknown control: ${normalizedControl}` });
+  }
+  const toId = cleanAgentId(to);
+  const agents = getAgentsMap();
+  if (!agents[toId]) {
+    return res.json({ error: `unknown agent: ${to}` });
+  }
+  const target = agentProcs.get(toId);
   const fromId = cleanAgentId(from);
   const fromName = agentName(from);
   const toName = agentName(to);
+  const bodyText = typeof text === 'string' ? text : '';
+  if (!normalizedControl && !bodyText) {
+    return res.json({ error: 'message text required' });
+  }
   const msgId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const timestamp = Date.now();
-  const formatted = `[MSG id:${msgId} from:${fromName}] ${text}`;
-
-  // Persist for both sender and recipient
-  const record = { from: fromName, to: toName, text, msgId, timestamp };
+  const controlTag = normalizedControl ? ` ctl:${normalizedControl}` : '';
+  const formatted = `[MSG id:${msgId} from:${fromName}${controlTag}] ${bodyText}`.trimEnd();
+  const record = { from: fromName, to: toName, text: bodyText, msgId, timestamp, control: normalizedControl };
   persistMessage(fromId, record);
   persistMessage(toId, record);
+  broadcastAgentMessage(record);
+
+  if (normalizedControl === 'close-thread') {
+    closeThread(fromId, toId, {
+      closedBy: fromName,
+      closedById: fromId,
+      message: bodyText || null,
+      closedAt: timestamp,
+    });
+    return res.json({ ok: true, msgId, control: normalizedControl, closed: true });
+  }
+
+  if (normalizedControl === 'reopen-thread') {
+    const reopened = reopenThread(fromId, toId);
+    if (!bodyText) {
+      return res.json({ ok: true, msgId, control: normalizedControl, reopened });
+    }
+  }
+
+  const closed = getClosedThread(fromId, toId);
+  if (closed) {
+    return res.json({
+      error: `Thread between ${fromName} and ${toName} is closed; use cmx send --reopen-thread ${toId} "..." to resume`,
+      closedThread: closed,
+    });
+  }
+
+  if (!target?.session) {
+    return res.json({ error: `${agentName(to)} is not running` });
+  }
 
   // Deliver to recipient
   const channelId = target.channelId;
@@ -386,19 +479,6 @@ app.post('/api/send', (req, res) => {
       message: { role: 'user', content: [{ type: 'text', text: formatted }] },
     },
   });
-
-  // Notify all connected browsers so the message renders in the chat UI
-  const notification = JSON.stringify({
-    type: 'agent_message',
-    from: fromName,
-    to: toName,
-    text,
-    msgId,
-    timestamp,
-  });
-  for (const ws of wss.clients) {
-    if (ws.readyState === ws.OPEN) ws.send(notification);
-  }
 
   res.json({ ok: true, msgId });
 });

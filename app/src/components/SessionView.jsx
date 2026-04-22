@@ -62,6 +62,7 @@ export function SessionView() {
     : null;
   const liveCtx = monitorAgent?.contextPercent;
   const ctxValue = liveCtx != null ? liveCtx : usage.contextPercent;
+  const liveEffort = monitorAgent?.effort || activeSession?.effortLevel || null;
 
   // Per-backend rate limits. The 5h/7d quotas only apply to claude and codex;
   // pi/opencode have no rate-limit telemetry to show.
@@ -139,6 +140,10 @@ export function SessionView() {
                 {ctxValue != null ? `${ctxValue}%` : '—'}
               </span>
             </span>
+            <span className="header-stat" title="Thinking / effort level">
+              <span className="header-stat-label">THINK</span>
+              <span>{liveEffort || '—'}</span>
+            </span>
           </div>
           <div className="headerSpacer" />
           <div className="header-stats">
@@ -166,7 +171,11 @@ export function SessionView() {
           <div className="cmx-content">
             <div className="sessionBody">
               {activeSession ? (
-                <ChatContainer key={activeSession?.conversationId || activeSession?.sessionId || activeSession?.channelId} session={activeSession} />
+                <ChatContainer
+                  key={activeSession?.conversationId || activeSession?.sessionId || activeSession?.channelId}
+                  session={activeSession}
+                  effortLevel={liveEffort || undefined}
+                />
               ) : (
                 <div className="chatContainer">
                   <div className="emptyState">

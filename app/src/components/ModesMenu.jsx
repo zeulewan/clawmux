@@ -74,7 +74,7 @@ function getEffortLabels() {
     for (const e of custom) labels[e.value] = e.label;
     return labels;
   }
-  return { low: 'Low', medium: 'Medium', high: 'High', max: 'Max' };
+  return { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'XHigh', max: 'Max' };
 }
 
 export function ModesMenu({ currentMode, onSelect, onClose, effortLevel = 'medium', onEffortChange }) {

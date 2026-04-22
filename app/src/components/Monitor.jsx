@@ -77,6 +77,7 @@ export function Monitor({ onClose }) {
               <th>AGENT</th>
               <th>BACKEND</th>
               <th>MODEL</th>
+              <th>THINK</th>
               <th className="monitor-col-num">CTX</th>
               <th>STATUS</th>
               <th>TOOL</th>
@@ -100,6 +101,7 @@ export function Monitor({ onClose }) {
                   <td className="monitor-cell-name">{a.name}</td>
                   <td style={{ color: backendColor[a.backend] || 'inherit' }}>{a.backend || '-'}</td>
                   <td className="monitor-cell-dim">{a.model || ''}</td>
+                  <td className="monitor-cell-dim">{a.effort || ''}</td>
                   <td className="monitor-col-num" style={{ color: ctxColor(a.contextPercent) }}>
                     {!offline && a.contextPercent != null ? `${a.contextPercent}%` : ''}
                   </td>

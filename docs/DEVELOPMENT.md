@@ -149,6 +149,10 @@ cmx restart --hard     Clean restart (no auto-resume)
 cmx monitor            Live dashboard (3Hz, alt screen, auto-reconnect)
 cmx agents             List agents + status
 cmx send <agent> <msg> Inter-agent message (sender auto-detected)
+cmx send --close-thread <agent>
+                       Close a peer thread without injecting a reply-provoking prompt
+cmx send --reopen-thread <agent> <msg>
+                       Reopen a closed peer thread and send a fresh opener
 cmx launch <agent>     Launch or restart an agent
 cmx terminate <agent>  Stop a running agent
 cmx doctor             System health check

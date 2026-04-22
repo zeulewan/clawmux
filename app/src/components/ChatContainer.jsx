@@ -7,7 +7,7 @@ import { CrabIcon } from '../assets/crab.jsx';
 /**
  * ChatContainer — scrollable message list with input bar.
  */
-export function ChatContainer({ session }) {
+export function ChatContainer({ session, effortLevel }) {
   const sub = useCallback((fn) => session.subscribe(fn), [session]);
   const messages = useSyncExternalStore(sub, () => session.messages);
   const busy = useSyncExternalStore(sub, () => session.busy);
@@ -127,7 +127,7 @@ export function ChatContainer({ session }) {
 
       {/* Input */}
       <div className="inputContainer">
-        <InputBar onSubmit={handleSubmit} onInterrupt={handleInterrupt} busy={busy} session={session} />
+        <InputBar onSubmit={handleSubmit} onInterrupt={handleInterrupt} busy={busy} session={session} effortLevel={effortLevel} />
       </div>
     </div>
   );

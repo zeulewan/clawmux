@@ -140,6 +140,9 @@ cmx status                      Check if running
 cmx monitor                     Live dashboard (3Hz, alt screen, auto-reconnect)
 cmx agents                      List all agents with backend/model/status
 cmx send <agent> <msg>          Send message to an agent
+cmx send --close-thread <agent> End a peer thread without triggering another reply
+cmx send --reopen-thread <agent> <msg>
+                                Reopen a closed thread and send a fresh message
 cmx config                      Show config summary
 cmx logs                        Run server in foreground
 cmx version                     Versions (clawmux + all backend CLIs)

@@ -1244,7 +1244,8 @@ export default class ProviderSession {
 
   _getEffortLevelsForProvider() {
     const levels = this._getBackendConfig().effortLevels || [];
-    return levels.map((l) => ({ value: l, label: l.charAt(0).toUpperCase() + l.slice(1) }));
+    const labels = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'XHigh', max: 'Max' };
+    return levels.map((l) => ({ value: l, label: labels[l] || l.charAt(0).toUpperCase() + l.slice(1) }));
   }
 
   _getPermissionModesForProvider() {

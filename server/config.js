@@ -61,7 +61,7 @@ const DEFAULT_BACKENDS = {
       { id: 'default', label: 'Default (codex)', contextWindow: 272000 },
     ],
     defaultModel: 'default',
-    effortLevels: [],
+    effortLevels: ['low', 'medium', 'high', 'xhigh'],
     permissionModes: [],
     commands: [],
   },
@@ -106,6 +106,38 @@ function _ensureConfig(path, defaults) {
 _ensureConfig(AGENTS_PATH, DEFAULT_AGENTS);
 _ensureConfig(BACKENDS_PATH, DEFAULT_BACKENDS);
 
+const REQUIRED_EFFORT_LEVELS = {
+  claude: ['low', 'medium', 'high', 'max'],
+  codex: ['low', 'medium', 'high', 'xhigh'],
+  pi: ['low', 'medium', 'high', 'xhigh'],
+};
+
+function _normalizeBackendsConfig(config) {
+  let changed = false;
+  for (const [backend, required] of Object.entries(REQUIRED_EFFORT_LEVELS)) {
+    const current = config?.[backend]?.effortLevels;
+    if (!config?.[backend]) continue;
+    if (!Array.isArray(current) || current.length === 0) {
+      config[backend].effortLevels = [...required];
+      changed = true;
+      continue;
+    }
+    const merged = [...current];
+    let backendChanged = false;
+    for (const level of required) {
+      if (!merged.includes(level)) {
+        merged.push(level);
+        backendChanged = true;
+      }
+    }
+    if (backendChanged) {
+      config[backend].effortLevels = merged;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 // Migrate: merge sessions.json into agents.json if it exists
 const _oldSessionsPath = join(CONFIG_DIR, 'sessions.json');
 if (existsSync(_oldSessionsPath)) {
@@ -140,6 +172,9 @@ let _backendsConfig = null;
 export function getBackendsConfig() {
   if (!_backendsConfig) {
     _backendsConfig = JSON.parse(readFileSync(BACKENDS_PATH, 'utf8'));
+    if (_normalizeBackendsConfig(_backendsConfig)) {
+      writeFileSync(BACKENDS_PATH, JSON.stringify(_backendsConfig, null, 2) + '\n');
+    }
   }
   return _backendsConfig;
 }
