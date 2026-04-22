@@ -335,7 +335,16 @@ export class CodexProvider {
 
     _sharedServerProc = spawn(
       CODEX_CMD,
-      ['app-server', '--listen', listenUrl, '-c', 'sandbox_mode="danger-full-access"'],
+      [
+        'app-server',
+        '--listen',
+        listenUrl,
+        '--dangerously-bypass-approvals-and-sandbox',
+        '-c',
+        'approval_policy="never"',
+        '-c',
+        'sandbox_mode="danger-full-access"',
+      ],
       {
         stdio: ['pipe', 'pipe', 'pipe'],
         cwd: cwd || process.cwd(),
