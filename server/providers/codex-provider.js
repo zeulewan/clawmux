@@ -18,6 +18,9 @@ import { hashProjectPath } from '../sessions.js';
 
 const CODEX_CMD = process.env.CODEX_CMD || 'codex';
 const CODEX_PORT = parseInt(process.env.CODEX_PORT || '4500');
+const CODEX_APPROVAL_POLICY = 'never';
+const CODEX_SANDBOX_MODE = 'danger-full-access';
+const CODEX_SANDBOX_POLICY = { type: 'dangerFullAccess' };
 
 /**
  * Discover available models by querying the codex app-server via model/list RPC.
@@ -108,7 +111,7 @@ export class CodexProvider {
           JSON.stringify({
             id: conn._threadCreateId,
             method: 'thread/start',
-            params: { cwd: conn.cwd || undefined },
+            params: this._threadStartParams(conn),
           }),
         );
       };
@@ -144,7 +147,7 @@ export class CodexProvider {
                 JSON.stringify({
                   id: conn._threadCreateId,
                   method: 'thread/resume',
-                  params: { threadId: config.resume, cwd: conn.cwd || undefined, persistExtendedHistory: false },
+                  params: this._threadResumeParams(conn, config.resume),
                 }),
               );
             } else {
@@ -210,11 +213,7 @@ export class CodexProvider {
     const payload = {
       id: turnId,
       method: 'turn/start',
-      params: {
-        threadId: conn.threadId,
-        input: [{ type: 'text', text: message }],
-        effort: conn.effortLevel || undefined,
-      },
+      params: this._turnStartParams(conn, message),
     };
     console.log(`[codex-provider] → turn/start threadId=${conn.threadId} input="${message.slice(0, 50)}"`);
     conn.ws.send(JSON.stringify(payload));
@@ -426,10 +425,39 @@ export class CodexProvider {
     for (const fn of conn.listeners) fn(event);
   }
 
+  _threadStartParams(conn) {
+    return {
+      cwd: conn.cwd || undefined,
+      approvalPolicy: CODEX_APPROVAL_POLICY,
+      sandbox: CODEX_SANDBOX_MODE,
+    };
+  }
+
+  _threadResumeParams(conn, threadId) {
+    return {
+      threadId,
+      cwd: conn.cwd || undefined,
+      approvalPolicy: CODEX_APPROVAL_POLICY,
+      sandbox: CODEX_SANDBOX_MODE,
+      persistExtendedHistory: false,
+    };
+  }
+
+  _turnStartParams(conn, message) {
+    return {
+      threadId: conn.threadId,
+      input: [{ type: 'text', text: message }],
+      effort: conn.effortLevel || undefined,
+      approvalPolicy: CODEX_APPROVAL_POLICY,
+      sandboxPolicy: CODEX_SANDBOX_POLICY,
+    };
+  }
+
   _handleMessage(conn, msg) {
     // JSON-RPC notification or server request (has method)
     if (msg.method) {
-      console.debug(`[codex-provider] ← ${msg.method}${msg.id ? ' (request)' : ''}`);
+      const isRequest = msg.id !== undefined && msg.id !== null;
+      console.debug(`[codex-provider] ← ${msg.method}${isRequest ? ' (request)' : ''}`);
       this._handleNotification(conn, msg.method, msg.params || {}, msg.id);
       return;
     }
@@ -558,7 +586,7 @@ export class CodexProvider {
 
       case 'item/commandExecution/terminalInteraction':
         // Interactive terminal prompt — auto-respond empty (we can't interact)
-        if (msgId) {
+        if (msgId !== undefined && msgId !== null) {
           console.warn(`[codex-provider] Terminal interaction requested — auto-sending empty response`);
           conn.ws.send(JSON.stringify({ id: msgId, result: { input: '' } }));
         }
@@ -646,9 +674,27 @@ export class CodexProvider {
       case 'item/fileChange/requestApproval':
       case 'item/permissions/requestApproval': {
         // Auto-approve — use the JSON-RPC message ID (server request), not params
-        const reqId = msgId || params.requestId || params.id;
+        const reqId = msgId ?? params.requestId ?? params.id;
+        if (reqId === undefined || reqId === null) {
+          console.warn(
+            `[codex-provider] ${method} arrived without request id; params keys=${Object.keys(params).join(',') || '(none)'}`,
+          );
+          break;
+        }
         console.log(`[codex-provider] Auto-approving ${method} (id=${reqId})`);
-        if (reqId) this.respondPermission(conn, reqId, true);
+        if (method === 'item/permissions/requestApproval') {
+          conn.ws.send(
+            JSON.stringify({
+              id: reqId,
+              result: {
+                permissions: params.permissions || {},
+                scope: 'session',
+              },
+            }),
+          );
+        } else {
+          this.respondPermission(conn, reqId, true);
+        }
         break;
       }
 
