@@ -775,7 +775,7 @@ server.listen(PORT, HOST, () => {
       const sessionId = getAgentSession(id, backend);
       console.log(`[health] Relaunching ${cfg.name} (status=${status}, backend=${backend})`);
       const cwd = agentWorkDir(id);
-      const channelId = `health_${id}_${Date.now()}`;
+      const channelId = entry?.channelId || `health_${id}_${Date.now()}`;
       session.launchProvider({ channelId, resume: sessionId || undefined, cwd }).catch((err) => {
         console.error(`[health] Failed to relaunch ${cfg.name}: ${err.message}`);
       });

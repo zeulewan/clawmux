@@ -109,6 +109,55 @@ export default class ProviderSession {
     }
   }
 
+  _remapLiveConnection(oldChannelId, newChannelId) {
+    const entry = this.connections.get(oldChannelId);
+    if (!entry?.conn || !this.provider) return false;
+
+    const wasStreaming = ['thinking', 'responding', 'tool_call'].includes(this.state.status);
+    this.connections.delete(oldChannelId);
+    this.connections.set(newChannelId, entry);
+
+    if (this._turnState?.[oldChannelId]) {
+      this._turnState[newChannelId] = this._turnState[oldChannelId];
+      delete this._turnState[oldChannelId];
+    }
+
+    this._updateState(wasStreaming ? this.state.status : 'idle', wasStreaming ? this.state.currentTool : null);
+    console.log(`[session] Remapped live connection for ${this.agentId} (${oldChannelId} → ${newChannelId})`);
+
+    if (entry.unsub) entry.unsub();
+    const unsub = this.provider.onEvent(entry.conn, (event) => {
+      this._handleProviderEvent(newChannelId, event);
+    });
+    entry.unsub = unsub;
+
+    if (this.agentId) {
+      this.agentProcs.set(this.agentId, { conn: entry.conn, channelId: newChannelId, session: this });
+    }
+
+    const sid = entry.sessionId || entry.conn?.threadId || entry.conn?.sessionId;
+    if (sid) {
+      this._handleProviderEvent(newChannelId, { type: 'session_ready', sessionId: sid });
+    }
+
+    if (wasStreaming) {
+      this._turnState[newChannelId] = this._turnState[newChannelId] || { blockStarted: false, thinkingBlockStarted: false };
+      this.send({
+        type: 'io_message',
+        channelId: newChannelId,
+        message: { type: 'message_start', message: { role: 'assistant' } },
+      });
+    }
+
+    const pending = this._pendingMessages.get(oldChannelId);
+    if (pending?.length) {
+      this._pendingMessages.set(newChannelId, [...(this._pendingMessages.get(newChannelId) || []), ...pending]);
+      this._pendingMessages.delete(oldChannelId);
+    }
+    this._flushPending(newChannelId);
+    return true;
+  }
+
   handleMessage(msg) {
     switch (msg.type) {
       case 'request':
@@ -226,42 +275,8 @@ export default class ProviderSession {
     if (this.connections.size > 0 && this.provider) {
       const [[oldChannelId, entry]] = this.connections;
       if (entry.conn?.alive !== false) {
-        const wasStreaming = ['thinking', 'responding', 'tool_call'].includes(this.state.status);
-        // Remap: new channelId → existing connection
-        this.connections.delete(oldChannelId);
-        this.connections.set(channelId, entry);
-        if (this._turnState?.[oldChannelId]) {
-          delete this._turnState[oldChannelId];
-        }
-        this._updateState(wasStreaming ? this.state.status : 'idle', wasStreaming ? this.state.currentTool : null);
         console.log(`[launch] Reusing live connection for ${this.agentId} (${oldChannelId} → ${channelId})`);
-
-        // Re-subscribe events to the new channelId
-        if (entry.unsub) entry.unsub();
-        const unsub = this.provider.onEvent(entry.conn, (event) => {
-          this._handleProviderEvent(channelId, event);
-        });
-        entry.unsub = unsub;
-
-        if (this.agentId) {
-          this.agentProcs.set(this.agentId, { conn: entry.conn, channelId, session: this });
-        }
-        // Emit session_ready so frontend gets the session ID
-        const sid = entry.sessionId || entry.conn?.threadId || entry.conn?.sessionId;
-        if (sid) {
-          this._handleProviderEvent(channelId, { type: 'session_ready', sessionId: sid });
-        }
-        if (wasStreaming) {
-          // A reconnect gets a fresh client-side session object. Re-open the
-          // assistant turn so subsequent deltas have somewhere to land.
-          this._turnState[channelId] = { blockStarted: false, thinkingBlockStarted: false };
-          this.send({
-            type: 'io_message',
-            channelId,
-            message: { type: 'message_start', message: { role: 'assistant' } },
-          });
-        }
-        this._flushPending(channelId);
+        this._remapLiveConnection(oldChannelId, channelId);
         this._launching = false;
         return;
       }
@@ -357,6 +372,20 @@ export default class ProviderSession {
   handleIoMessage(msg) {
     const entry = this.connections.get(msg.channelId);
     if (!entry?.conn || !this.provider) {
+      if (this.connections.size === 1 && this.provider) {
+        const [liveChannelId, liveEntry] = this.connections.entries().next().value || [];
+        if (liveChannelId && liveEntry?.conn?.alive !== false && liveChannelId !== msg.channelId) {
+          console.log(`[session] Recovering stale channel for ${this.agentId} (${msg.channelId} → ${liveChannelId})`);
+          if (this._remapLiveConnection(liveChannelId, msg.channelId)) {
+            const recovered = this.connections.get(msg.channelId);
+            if (recovered?.conn) {
+              this._lastSentMessage = msg;
+              this._sendToProvider(recovered, msg);
+              return;
+            }
+          }
+        }
+      }
       if (!this._pendingMessages.has(msg.channelId)) {
         this._pendingMessages.set(msg.channelId, []);
       }
