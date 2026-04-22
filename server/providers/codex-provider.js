@@ -102,21 +102,20 @@ export class CodexProvider {
 
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error('Codex WebSocket connect timeout')), 10000);
+      const startNewThread = () => {
+        conn._threadCreateId = crypto.randomUUID();
+        ws.send(
+          JSON.stringify({
+            id: conn._threadCreateId,
+            method: 'thread/start',
+            params: { cwd: conn.cwd || undefined },
+          }),
+        );
+      };
 
       ws.on('open', async () => {
         conn.alive = true;
         clearTimeout(timeout);
-
-        const startNewThread = () => {
-          conn._threadCreateId = crypto.randomUUID();
-          ws.send(
-            JSON.stringify({
-              id: conn._threadCreateId,
-              method: 'thread/start',
-              params: { cwd: conn.cwd || undefined },
-            }),
-          );
-        };
 
         // Send initialize handshake
         conn._initId = crypto.randomUUID();
