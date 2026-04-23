@@ -88,6 +88,14 @@ export class PiProvider {
     proc.stderr.on('data', (d) => {
       const t = d.toString().trim();
       if (t) console.error(`[pi-provider] stderr: ${t}`);
+      if (t) {
+        this._emitRaw(conn, {
+          direction: 'err',
+          transport: 'stderr',
+          raw: t,
+          payload: { type: 'stderr', text: t },
+        });
+      }
       if (t.includes('No session found')) {
         conn._resumeFailed = true;
         this._emit(conn, { type: 'resume_failed' });
@@ -177,6 +185,12 @@ export class PiProvider {
   _write(conn, obj) {
     if (!conn.alive || !conn.proc.stdin.writable) return;
     try {
+      this._emitRaw(conn, {
+        direction: 'out',
+        transport: 'stdio',
+        raw: JSON.stringify(obj),
+        payload: obj,
+      });
       conn.proc.stdin.write(JSON.stringify(obj) + '\n');
     } catch (err) {
       console.error(`[pi-provider] write failed: ${err.message}`);
@@ -206,6 +220,12 @@ export class PiProvider {
         console.error(`[pi-provider] bad JSONL: ${err.message}`);
         continue;
       }
+      this._emitRaw(conn, {
+        direction: 'in',
+        transport: 'stdio',
+        raw: line,
+        payload: msg,
+      });
       this._dispatch(conn, msg);
     }
   }
@@ -417,5 +437,9 @@ export class PiProvider {
         console.error(`[pi-provider] listener error: ${err.message}`);
       }
     }
+  }
+
+  _emitRaw(conn, event) {
+    this._emit(conn, E.rawEvent(event));
   }
 }

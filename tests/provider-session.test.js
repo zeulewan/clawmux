@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import ProviderSession from '../server/provider-session.js';
+import ProviderSession, { getRawEvents, clearRawEvents } from '../server/provider-session.js';
 
 function makeFakeProvider() {
   const calls = { connect: [], close: [] };
@@ -27,9 +27,9 @@ function makeFakeProvider() {
   return { provider, calls };
 }
 
-function makeSession() {
+function makeSession(agentId = 'puck') {
   const agentProcs = new Map();
-  const session = new ProviderSession(() => {}, '/tmp/clawmux-provider-session-test', 'puck', agentProcs);
+  const session = new ProviderSession(() => {}, '/tmp/clawmux-provider-session-test', agentId, agentProcs);
   const fake = makeFakeProvider();
   session.provider = fake.provider;
   return { session, calls: fake.calls, agentProcs };
@@ -90,4 +90,35 @@ test('launchProvider reconnects active live connections instead of remapping the
   assert.equal(session.connections.has('old-channel'), false);
   assert.equal(session.connections.has('new-channel'), true);
   assert.equal(session.connections.get('new-channel')?.sessionId, 'resume-abc');
+});
+
+test('raw provider events are buffered with agent conversation metadata', () => {
+  const agentId = 'raw-tail-test';
+  clearRawEvents(agentId);
+  const { session } = makeSession(agentId);
+  session.providerName = 'codex';
+
+  session.connections.set('channel-1', {
+    conn: { alive: true, threadId: 'thr_123' },
+    unsub: () => {},
+    sessionId: 'thr_123',
+    conversationId: 'conv-123',
+  });
+  session._bindConversation('channel-1', 'conv-123');
+
+  session._handleProviderEvent('channel-1', {
+    type: 'raw_event',
+    direction: 'in',
+    transport: 'ws',
+    raw: '{"method":"turn/started"}',
+    payload: { method: 'turn/started' },
+  });
+
+  const events = getRawEvents(agentId, 1);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].agentId, agentId);
+  assert.equal(events[0].backend, 'codex');
+  assert.equal(events[0].conversationId, 'conv-123');
+  assert.equal(events[0].sessionId, 'thr_123');
+  assert.equal(events[0].summary, 'turn/started');
 });

@@ -28,7 +28,7 @@ import {
   getDefaultBackend,
   getAgentSession,
 } from './server/config.js';
-import ProviderSession, { monitorBus } from './server/provider-session.js';
+import ProviderSession, { monitorBus, rawEventBus, getRawEvents } from './server/provider-session.js';
 import { listProviders } from './server/providers/provider.js';
 import { startPolling, getLastUsage, onUsageUpdate } from './server/usage-poller.js';
 import { updateBackendModels } from './server/config.js';
@@ -339,6 +339,47 @@ app.get('/api/monitor/stream', (req, res) => {
 
   monitorBus.on('change', onChange);
   req.on('close', () => monitorBus.off('change', onChange));
+});
+
+app.get('/api/agents/:id/raw', (req, res) => {
+  const id = cleanAgentId(req.params.id);
+  const limit = parseInt(req.query.limit || '200', 10);
+  const agents = getAgentsMap();
+  if (!agents[id]) return res.status(404).json({ error: `unknown agent: ${req.params.id}` });
+  res.json({
+    agentId: id,
+    backend: getAgentBackend(id),
+    events: getRawEvents(id, Number.isFinite(limit) ? limit : 200),
+  });
+});
+
+app.get('/api/agents/:id/raw/stream', (req, res) => {
+  const id = cleanAgentId(req.params.id);
+  const limit = parseInt(req.query.limit || '50', 10);
+  const agents = getAgentsMap();
+  if (!agents[id]) return res.status(404).json({ error: `unknown agent: ${req.params.id}` });
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+
+  res.write(
+    `data: ${JSON.stringify({
+      agentId: id,
+      backend: getAgentBackend(id),
+      events: getRawEvents(id, Number.isFinite(limit) ? limit : 50),
+    })}\n\n`,
+  );
+
+  const onRaw = (agentId, event) => {
+    if (agentId !== id) return;
+    res.write(`data: ${JSON.stringify({ event })}\n\n`);
+  };
+
+  rawEventBus.on('event', onRaw);
+  req.on('close', () => rawEventBus.off('event', onRaw));
 });
 
 app.post('/api/terminate', (req, res) => {

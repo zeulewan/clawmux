@@ -221,7 +221,15 @@ export class OpenCodeProvider {
       _reasoningPartIds: new Set(), // partIds that are reasoning type
     };
 
-    const dispatch = (ev) => this._handleEvent(conn, ev);
+    const dispatch = (ev) => {
+      this._emitRaw(conn, {
+        direction: 'in',
+        transport: 'sse',
+        raw: JSON.stringify(ev),
+        payload: ev,
+      });
+      this._handleEvent(conn, ev);
+    };
     if (!_sessionListeners.has(sessionId)) _sessionListeners.set(sessionId, new Set());
     _sessionListeners.get(sessionId).add(dispatch);
     conn._unsubscribe = () => {
@@ -256,6 +264,13 @@ export class OpenCodeProvider {
       body.variant = conn.effortLevel;
     }
     try {
+      this._emitRaw(conn, {
+        direction: 'out',
+        transport: 'http',
+        raw: JSON.stringify(body),
+        payload: body,
+        summary: 'prompt_async',
+      });
       const res = await fetch(`${_baseUrl()}/session/${conn.sessionId}/prompt_async`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -277,6 +292,13 @@ export class OpenCodeProvider {
   async interrupt(conn) {
     if (!conn.alive) return;
     try {
+      this._emitRaw(conn, {
+        direction: 'out',
+        transport: 'http',
+        raw: JSON.stringify({ sessionId: conn.sessionId, action: 'abort' }),
+        payload: { sessionId: conn.sessionId, action: 'abort' },
+        summary: 'abort',
+      });
       await fetch(`${_baseUrl()}/session/${conn.sessionId}/abort`, { method: 'POST' });
     } catch {}
   }
@@ -378,11 +400,19 @@ export class OpenCodeProvider {
   }
 
   async _approvePermission(conn, sessionId, permissionId) {
+    const body = { response: 'always' };
     try {
+      this._emitRaw(conn, {
+        direction: 'out',
+        transport: 'http',
+        raw: JSON.stringify(body),
+        payload: body,
+        summary: `permission:${permissionId}`,
+      });
       await fetch(`${_baseUrl()}/session/${sessionId}/permissions/${permissionId}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ response: 'always' }),
+        body: JSON.stringify(body),
       });
     } catch (err) {
       console.error(`[opencode-provider] permission approval failed: ${err.message}`);
@@ -459,5 +489,9 @@ export class OpenCodeProvider {
         console.error(`[opencode-provider] listener error: ${err.message}`);
       }
     }
+  }
+
+  _emitRaw(conn, event) {
+    this._emit(conn, E.rawEvent(event));
   }
 }

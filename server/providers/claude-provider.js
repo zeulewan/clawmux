@@ -60,7 +60,14 @@ export class ClaudeProvider {
         if (line.endsWith('\r')) line = line.slice(0, -1);
         if (!line) continue;
         try {
-          this._handleEvent(conn, JSON.parse(line));
+          const parsed = JSON.parse(line);
+          this._emitRaw(conn, {
+            direction: 'in',
+            transport: 'stdio',
+            raw: line,
+            payload: parsed,
+          });
+          this._handleEvent(conn, parsed);
         } catch (err) {
           console.error(`[claude-provider] parse/handle error: ${err.message}, line: ${line.slice(0, 200)}`);
         }
@@ -70,6 +77,12 @@ export class ClaudeProvider {
     proc.stderr.on('data', (d) => {
       const t = d.toString().trim();
       if (!t) return;
+      this._emitRaw(conn, {
+        direction: 'err',
+        transport: 'stderr',
+        raw: t,
+        payload: { type: 'stderr', text: t },
+      });
       console.error(`[claude-provider] stderr: ${t}`);
       // If resume fails, mark session ID as invalid so caller can retry
       if (t.includes('No conversation found')) {
@@ -102,15 +115,20 @@ export class ClaudeProvider {
 
   send(conn, message) {
     if (!conn.alive || !conn.proc.stdin.writable) return;
-    conn.proc.stdin.write(
-      JSON.stringify({
-        type: 'user',
-        uuid: crypto.randomUUID(),
-        session_id: conn.sessionId || '',
-        parent_tool_use_id: null,
-        message: { role: 'user', content: [{ type: 'text', text: message }] },
-      }) + '\n',
-    );
+    const payload = {
+      type: 'user',
+      uuid: crypto.randomUUID(),
+      session_id: conn.sessionId || '',
+      parent_tool_use_id: null,
+      message: { role: 'user', content: [{ type: 'text', text: message }] },
+    };
+    this._emitRaw(conn, {
+      direction: 'out',
+      transport: 'stdio',
+      raw: JSON.stringify(payload),
+      payload,
+    });
+    conn.proc.stdin.write(JSON.stringify(payload) + '\n');
   }
 
   onEvent(conn, callback) {
@@ -120,28 +138,40 @@ export class ClaudeProvider {
 
   respondPermission(conn, requestId, allowed) {
     if (!conn.alive || !conn.proc.stdin.writable) return;
-    conn.proc.stdin.write(
-      JSON.stringify({
-        type: 'control_response',
-        response: {
-          request_id: requestId,
-          subtype: 'success',
-          result: { behavior: allowed ? 'allow' : 'deny' },
-        },
-      }) + '\n',
-    );
+    const payload = {
+      type: 'control_response',
+      response: {
+        request_id: requestId,
+        subtype: 'success',
+        result: { behavior: allowed ? 'allow' : 'deny' },
+      },
+    };
+    this._emitRaw(conn, {
+      direction: 'out',
+      transport: 'stdio',
+      raw: JSON.stringify(payload),
+      payload,
+      summary: 'control_response',
+    });
+    conn.proc.stdin.write(JSON.stringify(payload) + '\n');
   }
 
   interrupt(conn) {
     if (!conn.alive) return;
     if (conn.proc.stdin.writable) {
-      conn.proc.stdin.write(
-        JSON.stringify({
-          request_id: Math.random().toString(36).substring(2, 15),
-          type: 'control_request',
-          request: { subtype: 'interrupt' },
-        }) + '\n',
-      );
+      const payload = {
+        request_id: Math.random().toString(36).substring(2, 15),
+        type: 'control_request',
+        request: { subtype: 'interrupt' },
+      };
+      this._emitRaw(conn, {
+        direction: 'out',
+        transport: 'stdio',
+        raw: JSON.stringify(payload),
+        payload,
+        summary: 'interrupt',
+      });
+      conn.proc.stdin.write(JSON.stringify(payload) + '\n');
     } else {
       conn.proc.kill('SIGINT');
     }
@@ -158,6 +188,10 @@ export class ClaudeProvider {
 
   _emit(conn, event) {
     for (const fn of conn.listeners) fn(event);
+  }
+
+  _emitRaw(conn, event) {
+    this._emit(conn, E.rawEvent(event));
   }
 
   _handleEvent(conn, parsed) {
@@ -242,16 +276,22 @@ export class ClaudeProvider {
       case 'control_request':
         // Auto-approve tool permissions
         if (parsed.request?.subtype === 'can_use_tool' && conn.proc.stdin.writable) {
-          conn.proc.stdin.write(
-            JSON.stringify({
-              type: 'control_response',
-              response: {
-                request_id: parsed.request_id,
-                subtype: 'success',
-                result: { behavior: 'allow', updatedInput: parsed.request?.input },
-              },
-            }) + '\n',
-          );
+          const payload = {
+            type: 'control_response',
+            response: {
+              request_id: parsed.request_id,
+              subtype: 'success',
+              result: { behavior: 'allow', updatedInput: parsed.request?.input },
+            },
+          };
+          this._emitRaw(conn, {
+            direction: 'out',
+            transport: 'stdio',
+            raw: JSON.stringify(payload),
+            payload,
+            summary: 'control_response',
+          });
+          conn.proc.stdin.write(JSON.stringify(payload) + '\n');
         }
         break;
 

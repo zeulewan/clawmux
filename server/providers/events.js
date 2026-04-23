@@ -5,6 +5,9 @@
 
 // Helper to create typed events
 export const E = {
+  // Provider-native raw traffic/debug stream
+  rawEvent: (event) => ({ type: 'raw_event', ...event }),
+
   // Text streaming
   textDelta: (text) => ({ type: 'text_delta', text }),
   textDone: (text) => ({ type: 'text_done', text }),

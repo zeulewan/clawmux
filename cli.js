@@ -125,6 +125,65 @@ function pad(s, n) {
   return s.length >= n ? s.slice(0, n) : s + ' '.repeat(n - s.length);
 }
 
+async function streamSse(path, onData) {
+  const res = await fetch(`${BASE}${path}`, { headers: { accept: 'text/event-stream' } });
+  if (!res.ok || !res.body) {
+    throw new Error(`Stream failed (${res.status})`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let buf = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buf.indexOf('\n\n')) !== -1) {
+      const record = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      const payload = record
+        .split('\n')
+        .filter((line) => line.startsWith('data:'))
+        .map((line) => line.slice(5).trim())
+        .join('\n');
+      if (!payload) continue;
+      onData(JSON.parse(payload));
+    }
+  }
+}
+
+function _arrowForDirection(direction) {
+  if (direction === 'out') return `${CYAN}→${RESET}`;
+  if (direction === 'err') return `${RED}!${RESET}`;
+  return `${MAGENTA}←${RESET}`;
+}
+
+function _formatTime(ts) {
+  const d = new Date(ts || Date.now());
+  return d.toTimeString().slice(0, 8);
+}
+
+function _formatRawEvent(event, { raw = false, json = false } = {}) {
+  if (json) return JSON.stringify(event);
+
+  const prefix = `${DIM}${_formatTime(event.ts)}${RESET} ${_arrowForDirection(event.direction)} ${pad(event.transport || 'provider', 6)} `;
+  if (!raw) {
+    const sid = event.sessionId ? ` ${DIM}${String(event.sessionId).slice(0, 12)}${RESET}` : '';
+    return `${prefix}${event.summary || 'event'}${sid}`;
+  }
+
+  const body =
+    event.raw ||
+    (event.payload && typeof event.payload === 'object'
+      ? JSON.stringify(event.payload, null, 2)
+      : String(event.payload ?? ''));
+
+  const lines = String(body).split('\n');
+  return lines.map((line, idx) => (idx === 0 ? `${prefix}${line}` : `${' '.repeat(18)}${line}`)).join('\n');
+}
+
 // Strip ANSI when stdout isn't a TTY so colors don't leak as raw escape codes
 // when output is captured/piped (e.g. by other agents or scripts).
 const COLOR = process.stdout.isTTY && process.env.NO_COLOR !== '1';
@@ -404,6 +463,55 @@ Examples:
     process.exit(1);
   }
 
+  // ── tail ──
+
+} else if (cmd === 'tail') {
+  const args = process.argv.slice(3);
+  const target = args.find((arg) => !arg.startsWith('--'));
+  const rawView = args.includes('--raw');
+  const jsonView = args.includes('--json');
+  const limitIdx = args.indexOf('--limit');
+  const limit = limitIdx !== -1 ? parseInt(args[limitIdx + 1], 10) : 50;
+
+  if (!target || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage: cmx tail <agent> [--raw|--json] [--limit N]
+
+Watch the provider-native traffic for one agent.
+
+Views:
+  default   concise live summaries
+  --raw     raw provider payloads / lines
+  --json    enriched JSON event objects
+
+Examples:
+  cmx tail alice
+  cmx tail alice --raw
+  cmx tail alice --json --limit 200`);
+    process.exit(target ? 0 : 1);
+  }
+
+  if (rawView && jsonView) {
+    console.log(`${RED}Choose only one view: --raw or --json${RESET}`);
+    process.exit(1);
+  }
+
+  try {
+    const encoded = encodeURIComponent(target);
+    console.log(`${DIM}Listening to ${target} raw stream... Ctrl+C to stop.${RESET}`);
+    await streamSse(
+      `/api/agents/${encoded}/raw/stream?limit=${Number.isFinite(limit) ? limit : 50}`,
+      (packet) => {
+        const events = packet.events || (packet.event ? [packet.event] : []);
+        for (const event of events) {
+          process.stdout.write(_formatRawEvent(event, { raw: rawView, json: jsonView }) + '\n');
+        }
+      },
+    );
+  } catch (e) {
+    console.error(`Cannot connect to stream: ${e.message}`);
+    process.exit(1);
+  }
+
   // ── logs ──
 
 } else if (cmd === 'logs') {
@@ -630,6 +738,7 @@ Examples:
   console.log(`  ${BOLD}launch${RESET} <agent>     Launch or restart an agent`);
   console.log(`  ${BOLD}terminate${RESET} <agent>  Stop a running agent`);
   console.log(`  ${BOLD}migrate${RESET} <agent>    Migrate an agent session to another backend`);
+  console.log(`  ${BOLD}tail${RESET} <agent>       Watch raw provider traffic for an agent`);
   console.log(`  ${BOLD}config${RESET}             Show config summary`);
   console.log(`  ${BOLD}logs${RESET}               Run server in foreground`);
   console.log(`  ${BOLD}update${RESET}             Git pull + rebuild + restart`);

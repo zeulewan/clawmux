@@ -107,13 +107,11 @@ export class CodexProvider {
       const timeout = setTimeout(() => reject(new Error('Codex WebSocket connect timeout')), 10000);
       const startNewThread = () => {
         conn._threadCreateId = crypto.randomUUID();
-        ws.send(
-          JSON.stringify({
-            id: conn._threadCreateId,
-            method: 'thread/start',
-            params: this._threadStartParams(conn),
-          }),
-        );
+        this._sendWs(conn, {
+          id: conn._threadCreateId,
+          method: 'thread/start',
+          params: this._threadStartParams(conn),
+        });
       };
 
       ws.on('open', async () => {
@@ -122,34 +120,37 @@ export class CodexProvider {
 
         // Send initialize handshake
         conn._initId = crypto.randomUUID();
-        ws.send(
-          JSON.stringify({
-            id: conn._initId,
-            method: 'initialize',
-            params: {
-              clientInfo: { name: 'ClawMux', version: '1.0.0' },
-              capabilities: {},
-            },
-          }),
-        );
+        this._sendWs(conn, {
+          id: conn._initId,
+          method: 'initialize',
+          params: {
+            clientInfo: { name: 'ClawMux', version: '1.0.0' },
+            capabilities: {},
+          },
+        });
       });
 
       ws.on('message', (data) => {
         try {
-          const msg = JSON.parse(data.toString());
+          const raw = data.toString();
+          const msg = JSON.parse(raw);
+          this._emitRaw(conn, {
+            direction: 'in',
+            transport: 'ws',
+            raw,
+            payload: msg,
+          });
           // Handle init response
           if (msg.id === conn._initId && msg.result) {
             console.log(`[codex-provider] Connected to ${msg.result.userAgent}`);
             if (config.resume) {
               // Resume existing thread
               conn._threadCreateId = crypto.randomUUID();
-              ws.send(
-                JSON.stringify({
-                  id: conn._threadCreateId,
-                  method: 'thread/resume',
-                  params: this._threadResumeParams(conn, config.resume),
-                }),
-              );
+              this._sendWs(conn, {
+                id: conn._threadCreateId,
+                method: 'thread/resume',
+                params: this._threadResumeParams(conn, config.resume),
+              });
             } else {
               // Create new thread
               startNewThread();
@@ -216,7 +217,7 @@ export class CodexProvider {
       params: this._turnStartParams(conn, message),
     };
     console.log(`[codex-provider] → turn/start threadId=${conn.threadId} input="${message.slice(0, 50)}"`);
-    conn.ws.send(JSON.stringify(payload));
+    this._sendWs(conn, payload);
     this._appendToSession(conn, 'user', message);
     // Don't emit turnStart here — the server will send turn/started notification
   }
@@ -228,26 +229,22 @@ export class CodexProvider {
 
   respondPermission(conn, requestId, allowed) {
     if (!conn.alive) return;
-    conn.ws.send(
-      JSON.stringify({
-        id: requestId,
-        result: { decision: allowed ? 'accept' : 'deny' },
-      }),
-    );
+    this._sendWs(conn, {
+      id: requestId,
+      result: { decision: allowed ? 'accept' : 'deny' },
+    });
   }
 
   interrupt(conn) {
     if (!conn.alive) return;
-    conn.ws.send(
-      JSON.stringify({
-        id: crypto.randomUUID(),
-        method: 'turn/interrupt',
-        params: {
-          threadId: conn.threadId,
-          turnId: conn.turnId,
-        },
-      }),
-    );
+    this._sendWs(conn, {
+      id: crypto.randomUUID(),
+      method: 'turn/interrupt',
+      params: {
+        threadId: conn.threadId,
+        turnId: conn.turnId,
+      },
+    });
   }
 
   close(conn) {
@@ -425,6 +422,20 @@ export class CodexProvider {
     for (const fn of conn.listeners) fn(event);
   }
 
+  _emitRaw(conn, event) {
+    this._emit(conn, E.rawEvent(event));
+  }
+
+  _sendWs(conn, payload) {
+    this._emitRaw(conn, {
+      direction: 'out',
+      transport: 'ws',
+      raw: JSON.stringify(payload),
+      payload,
+    });
+    conn.ws.send(JSON.stringify(payload));
+  }
+
   _threadStartParams(conn) {
     return {
       cwd: conn.cwd || undefined,
@@ -588,7 +599,7 @@ export class CodexProvider {
         // Interactive terminal prompt — auto-respond empty (we can't interact)
         if (msgId !== undefined && msgId !== null) {
           console.warn(`[codex-provider] Terminal interaction requested — auto-sending empty response`);
-          conn.ws.send(JSON.stringify({ id: msgId, result: { input: '' } }));
+          this._sendWs(conn, { id: msgId, result: { input: '' } });
         }
         break;
 
@@ -683,15 +694,13 @@ export class CodexProvider {
         }
         console.log(`[codex-provider] Auto-approving ${method} (id=${reqId})`);
         if (method === 'item/permissions/requestApproval') {
-          conn.ws.send(
-            JSON.stringify({
-              id: reqId,
-              result: {
-                permissions: params.permissions || {},
-                scope: 'session',
-              },
-            }),
-          );
+          this._sendWs(conn, {
+            id: reqId,
+            result: {
+              permissions: params.permissions || {},
+              scope: 'session',
+            },
+          });
         } else {
           this.respondPermission(conn, reqId, true);
         }

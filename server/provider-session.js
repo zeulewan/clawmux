@@ -19,6 +19,8 @@ import { getProvider } from './providers/provider.js';
 // Global event bus for monitor state changes
 export const monitorBus = new EventEmitter();
 monitorBus.setMaxListeners(50);
+export const rawEventBus = new EventEmitter();
+rawEventBus.setMaxListeners(50);
 import { getLastUsage as getPolledUsage } from './usage-poller.js';
 import { listClaudeCliSessions, readSessionMessages, hashProjectPath } from './sessions.js';
 import {
@@ -33,6 +35,72 @@ import {
 } from './config.js';
 
 const CLAUDE_PROJECTS_DIR = join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude'), 'projects');
+const RAW_EVENT_LIMIT = 500;
+const rawEventBuffers = new Map();
+
+function _summarizeRawPayload(payload) {
+  if (payload == null) return 'empty';
+  if (typeof payload === 'string') return payload.slice(0, 120);
+  if (Array.isArray(payload)) return `array[${payload.length}]`;
+  if (typeof payload !== 'object') return String(payload);
+  if (payload.method) return payload.method;
+  if (payload.error?.message) return `error:${payload.error.message}`;
+  if (payload.result?.turn?.id) return 'turn/result';
+  if (payload.result?.thread?.id) return 'thread/result';
+  return (
+    payload.type ||
+    payload.command ||
+    payload.event ||
+    payload.field ||
+    payload.status?.type ||
+    payload.request?.subtype ||
+    payload.message?.content?.[0]?.type ||
+    payload.properties?.field ||
+    payload.properties?.status?.type ||
+    payload.properties?.part?.type ||
+    payload.properties?.info?.role ||
+    'object'
+  );
+}
+
+function _inferRawSessionId(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  return (
+    payload.sessionId ||
+    payload.session_id ||
+    payload.threadId ||
+    payload.params?.threadId ||
+    payload.params?.thread?.id ||
+    payload.params?.turn?.threadId ||
+    payload.result?.thread?.id ||
+    payload.result?.turn?.threadId ||
+    payload.data?.sessionId ||
+    payload.properties?.sessionID ||
+    payload.properties?.info?.sessionID ||
+    payload.properties?.info?.id ||
+    payload.properties?.part?.sessionID ||
+    null
+  );
+}
+
+function _pushRawEvent(agentId, event) {
+  if (!agentId) return;
+  const buf = rawEventBuffers.get(agentId) || [];
+  buf.push(event);
+  if (buf.length > RAW_EVENT_LIMIT) buf.splice(0, buf.length - RAW_EVENT_LIMIT);
+  rawEventBuffers.set(agentId, buf);
+  rawEventBus.emit('event', agentId, event);
+}
+
+export function getRawEvents(agentId, limit = 100) {
+  const buf = rawEventBuffers.get(agentId) || [];
+  const n = Math.max(0, Number.isFinite(limit) ? Math.trunc(limit) : 100);
+  return n > 0 ? buf.slice(-n) : [];
+}
+
+export function clearRawEvents(agentId) {
+  rawEventBuffers.delete(agentId);
+}
 
 const RETIRED_PROVIDERS = { openclaw: true, glueclaw: true };
 function _remapRetiredProvider(name) {
@@ -833,11 +901,33 @@ export default class ProviderSession {
     // Track whether content_block_start was sent for streaming
     if (!this._turnState) this._turnState = {};
     const hiddenTurn = this._hiddenTurns.get(channelId);
+    const entry = this.connections.get(channelId);
 
     // For non-Claude providers, translate internal events to the frontend protocol
     // Debug: uncomment to trace events
     // console.log(`[event] ${channelId.slice(0, 12)} ← ${event.type}`);
     switch (event.type) {
+      case 'raw_event': {
+        const liveSessionId = this._getSessionIdForEntry(entry);
+        const rawSessionId = event.sessionId || _inferRawSessionId(event.payload);
+        if (rawSessionId && liveSessionId && rawSessionId !== liveSessionId) break;
+        _pushRawEvent(this.agentId, {
+          id: `${Date.now()}-${crypto.randomUUID()}`,
+          ts: Date.now(),
+          agentId: this.agentId,
+          backend: this.providerName,
+          channelId,
+          conversationId: entry?.conversationId || null,
+          sessionId: rawSessionId || liveSessionId,
+          direction: event.direction || 'in',
+          transport: event.transport || 'provider',
+          raw: event.raw || null,
+          payload: event.payload,
+          summary: event.summary || _summarizeRawPayload(event.payload),
+        });
+        break;
+      }
+
       case 'turn_start':
         this._turnState[channelId] = {
           blockStarted: false,
