@@ -426,6 +426,24 @@ export class CodexProvider {
     this._emit(conn, E.rawEvent(event));
   }
 
+  _extractThreadId(payload) {
+    if (!payload || typeof payload !== 'object') return null;
+    return (
+      payload.threadId ||
+      payload.thread?.id ||
+      payload.turn?.threadId ||
+      payload.turn?.thread?.id ||
+      payload.item?.threadId ||
+      payload.item?.thread?.id ||
+      null
+    );
+  }
+
+  _isForeignThreadEvent(conn, payload) {
+    const eventThreadId = this._extractThreadId(payload);
+    return !!(eventThreadId && conn.threadId && eventThreadId !== conn.threadId);
+  }
+
   _sendWs(conn, payload) {
     this._emitRaw(conn, {
       direction: 'out',
@@ -474,10 +492,12 @@ export class CodexProvider {
     }
 
     // JSON-RPC response (has id)
-    if (msg.id && msg.result) {
+    if (msg.id !== undefined && msg.id !== null && msg.result) {
       // turn/start response — emit turnStart here as Codex doesn't always send turn/started notification
       if (msg.result.turn) {
-        if (msg.result.turn.threadId) conn.threadId = msg.result.turn.threadId;
+        if (msg.result.turn.threadId && (!conn.threadId || conn.threadId === msg.result.turn.threadId)) {
+          conn.threadId = msg.result.turn.threadId;
+        }
         conn.turnId = msg.result.turn.id;
         // Guard: emit once per turn (turn/started notification may also arrive)
         if (conn._turnStartEmitted !== conn.turnId) {
@@ -488,18 +508,21 @@ export class CodexProvider {
     }
 
     // JSON-RPC error
-    if (msg.id && msg.error) {
+    if (msg.id !== undefined && msg.id !== null && msg.error) {
       this._emit(conn, E.turnError(msg.error.message || 'Codex error'));
     }
   }
 
   _handleNotification(conn, method, params, msgId) {
+    if (this._isForeignThreadEvent(conn, params)) return;
+
     switch (method) {
       case 'thread/started':
-        if (params.thread?.id) conn.threadId = params.thread.id;
+        if (!conn.threadId && params.thread?.id) conn.threadId = params.thread.id;
         break;
 
       case 'turn/started':
+        if (params.turn?.threadId && !conn.threadId) conn.threadId = params.turn.threadId;
         if (params.turn?.id) conn.turnId = params.turn.id;
         // Guard: emit once per turn (RPC response may have already emitted it)
         if (conn._turnStartEmitted !== conn.turnId) {

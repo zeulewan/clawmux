@@ -54,3 +54,61 @@ test('codex treats request id 0 as a valid approval callback', () => {
 
   assert.deepEqual(approval, { requestId: 0, allowed: true });
 });
+
+test('codex ignores thread-bound notifications for a different thread', () => {
+  const provider = new CodexProvider();
+  const events = [];
+  const conn = {
+    alive: true,
+    threadId: 'thr_alice',
+    listeners: new Set([event => events.push(event)]),
+  };
+
+  provider._handleNotification(conn, 'turn/started', {
+    threadId: 'thr_bob',
+    turn: { id: 'turn_bob', status: 'inProgress' },
+  });
+  provider._handleNotification(conn, 'item/agentMessage/delta', {
+    threadId: 'thr_bob',
+    turnId: 'turn_bob',
+    delta: 'wrong thread',
+  });
+  provider._handleNotification(conn, 'turn/completed', {
+    threadId: 'thr_bob',
+    turn: { id: 'turn_bob', status: 'completed' },
+  });
+
+  assert.equal(conn.threadId, 'thr_alice');
+  assert.equal(conn.turnId, undefined);
+  assert.deepEqual(events, []);
+});
+
+test('codex does not let foreign thread/started overwrite the active thread', () => {
+  const provider = new CodexProvider();
+  const conn = {
+    alive: true,
+    threadId: 'thr_alice',
+    listeners: new Set(),
+  };
+
+  provider._handleNotification(conn, 'thread/started', {
+    thread: { id: 'thr_bob' },
+  });
+
+  assert.equal(conn.threadId, 'thr_alice');
+});
+
+test('codex adopts thread id from thread/started only before a thread is known', () => {
+  const provider = new CodexProvider();
+  const conn = {
+    alive: true,
+    threadId: null,
+    listeners: new Set(),
+  };
+
+  provider._handleNotification(conn, 'thread/started', {
+    thread: { id: 'thr_new' },
+  });
+
+  assert.equal(conn.threadId, 'thr_new');
+});
