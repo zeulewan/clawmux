@@ -506,8 +506,6 @@
   }
 
   .menuPopup {
-    left: 0 !important;
-    right: 0 !important;
     min-width: 0 !important;
     width: auto;
     max-width: none;

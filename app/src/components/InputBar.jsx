@@ -36,10 +36,11 @@ export function InputBar({ onSubmit, onInterrupt, busy, session, effortLevel: li
   const calcPos = (ref, align = 'left') => {
     if (!ref.current) return null;
     const r = ref.current.getBoundingClientRect();
-    return {
-      bottom: window.innerHeight - r.top + 4,
-      ...(align === 'left' ? { left: r.left } : { right: window.innerWidth - r.right }),
-    };
+    const bottom = window.innerHeight - r.top + 4;
+    if (align === 'right') {
+      return { bottom, right: window.innerWidth - r.right, left: 'auto' };
+    }
+    return { bottom, left: Math.max(8, r.left) };
   };
   const [permissionMode, setPermissionMode] = useState('bypassPermissions');
   const [selectedEffortLevel, _setEffortLevel] = useState(liveEffortLevel);
@@ -243,7 +244,7 @@ export function InputBar({ onSubmit, onInterrupt, busy, session, effortLevel: li
             <div
               className="menuPopup menuPopupV2"
               onClick={(e) => e.stopPropagation()}
-              style={{ position: 'fixed', bottom: addMenuPos.bottom, left: addMenuPos.left, zIndex: 1000 }}
+              style={{ position: 'fixed', ...addMenuPos, zIndex: 1000 }}
             >
               <button type="button" className="menuItemV2" onClick={openFilePicker}>
                 <span className="menuItemText">
@@ -291,7 +292,7 @@ export function InputBar({ onSubmit, onInterrupt, busy, session, effortLevel: li
             <div
               className="menuPopup menuPopupV2"
               onClick={(e) => e.stopPropagation()}
-              style={{ position: 'fixed', bottom: slashMenuPos.bottom, left: slashMenuPos.left, zIndex: 1000 }}
+              style={{ position: 'fixed', ...slashMenuPos, zIndex: 1000 }}
             >
               <div className="menuHeader">
                 <span className="menuHeaderTitle">Commands</span>
@@ -399,15 +400,14 @@ export function InputBar({ onSubmit, onInterrupt, busy, session, effortLevel: li
         {/* Permission mode button */}
         <div className="menuContainer">
           {showModesMenu && modesMenuPos && (
-            <div style={{ position: 'fixed', bottom: modesMenuPos.bottom, right: modesMenuPos.right, zIndex: 1000 }}>
-              <ModesMenu
-                currentMode={permissionMode}
-                onSelect={setPermissionMode}
-                onClose={() => setShowModesMenu(false)}
-                effortLevel={selectedEffortLevel}
-                onEffortChange={setEffortLevel}
-              />
-            </div>
+            <ModesMenu
+              currentMode={permissionMode}
+              onSelect={setPermissionMode}
+              onClose={() => setShowModesMenu(false)}
+              effortLevel={selectedEffortLevel}
+              onEffortChange={setEffortLevel}
+              style={{ position: 'fixed', ...modesMenuPos, zIndex: 1000 }}
+            />
           )}
           <button
             ref={modesButtonRef}

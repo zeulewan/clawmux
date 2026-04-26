@@ -77,13 +77,13 @@ function getEffortLabels() {
   return { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'XHigh', max: 'Max' };
 }
 
-export function ModesMenu({ currentMode, onSelect, onClose, effortLevel = 'medium', onEffortChange }) {
+export function ModesMenu({ currentMode, onSelect, onClose, effortLevel = 'medium', onEffortChange, style }) {
   const EFFORT_LEVELS = getEffortLevels();
   const EFFORT_LABELS = getEffortLabels();
   const permModes = window._clawmuxPermissionModes;
   const modes = permModes && permModes.length > 0 ? MODES.filter((m) => permModes.some((p) => p.id === m.id)) : MODES;
   return (
-    <div className="menuPopup menuPopupRight menuPopupV2" onClick={(e) => e.stopPropagation()}>
+    <div className="menuPopup menuPopupRight menuPopupV2" onClick={(e) => e.stopPropagation()} style={style}>
       <div className="menuHeader">
         <span className="menuHeaderTitle">Modes</span>
         <span className="menuHeaderHint">

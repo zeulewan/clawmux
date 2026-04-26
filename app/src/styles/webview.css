@@ -7997,56 +7997,61 @@ button {
     transform: translateY(0);
   }
 }
+/* ── Menu containers ───────────────────────────────────────────── */
+
+/* Wrapper for menus anchored inside the layout (non-input-bar uses) */
 .menuContainer {
   position: relative;
   display: flex;
   align-items: center;
   min-width: 0;
 }
+
+/*
+ * .menuPopup — base popup style.
+ *
+ * Input bar menus (add, slash, modes) override position to `fixed` via
+ * inline style from InputBar.jsx (calcPos). This allows them to escape
+ * the stacked overflow:hidden containers in SessionView / cmx-root.
+ * All other positioning props (bottom, left, right) are also set inline
+ * for those menus, so the defaults here only apply to non-input-bar uses.
+ */
 .menuPopup {
   position: absolute;
+  bottom: 100%;
+  z-index: 10;
+  max-width: calc(100vw - 16px);
+  padding: 4px;
+  margin-bottom: 8px;
   background: var(--app-menu-background);
   border: 1px solid var(--app-input-border);
   border-radius: var(--corner-radius-large);
-  overflow: hidden;
+  overflow: visible;
   animation: fadeIn 0.15s ease-out;
-  z-index: 10;
-  min-width: 260px;
-  margin-bottom: 8px;
-  padding: 4px;
-  bottom: 100%;
-  left: 0;
 }
+
+/* Right-aligned variant — flips anchor to right edge */
 .menuPopupRight {
   left: auto;
   right: 0;
 }
+
+/* V2 layout — column flex with list spacing */
 .menuPopupV2 {
-  padding: var(--app-list-padding);
   display: flex;
-  gap: var(--app-list-gap);
   flex-direction: column;
-  min-width: 300px;
+  gap: var(--app-list-gap);
+  padding: var(--app-list-padding);
   padding-top: 6px;
   padding-bottom: 4px;
 }
-/* Mobile: pin slash/add/modes menus to viewport so they don't overflow off-screen.
-   The inline `left: 0` anchors them to the (small, often right-of-center) button,
-   and `min-width: 300px` then runs them off the right edge on phones. */
+
+/* Mobile: no min-width, cap at viewport width.
+   Positioning is handled by JS (calcPos in InputBar.jsx). */
 @media (max-width: 500px) {
   .menuPopup {
-    position: fixed !important;
-    left: 8px !important;
-    right: 8px !important;
-    bottom: calc(64px + env(safe-area-inset-bottom, 0px)) !important;
-    top: auto !important;
-    width: auto !important;
-    min-width: 0 !important;
-    max-width: none !important;
-    margin: 0 !important;
-  }
-  .menuPopupV2 {
-    min-width: 0 !important;
+    min-width: 0;
+    max-width: calc(100vw - 16px);
   }
 }
 .menuHeader {
@@ -8060,9 +8065,7 @@ button {
   font-size: 0.85em;
 }
 .menuHeaderHint {
-  color: var(--app-secondary-foreground);
-  opacity: 0.7;
-  font-size: 0.75em;
+  display: none;
 }
 .menuHeaderHint kbd {
   font-family: inherit;
@@ -8122,7 +8125,7 @@ button {
   align-self: center;
   align-items: center;
   width: 16px;
-  margin-left: auto;
+  margin-left: 8px;
 }
 .menuItemCheckRight svg {
   color: var(--app-primary-foreground);
@@ -8205,8 +8208,7 @@ button {
   color: var(--app-primary-foreground);
 }
 .menuItemDescription {
-  color: var(--app-secondary-foreground);
-  font-size: 0.85em;
+  display: none;
 }
 @keyframes fadeInRj {
   0% {
