@@ -256,7 +256,7 @@ export async function init() {
   getAgentState().catch(() => {});
 
   // Re-establish server-side channelId mapping on WS reconnect
-  on('ws_reconnected', () => {
+  on('ws_reconnected', async () => {
     const state = _focused();
     if (state?.activeSession) {
       // Reset _launched so launch() actually sends the launch message,
@@ -266,6 +266,19 @@ export async function init() {
       state.activeSession._launched = false;
       state.activeSession.busy = false;
       state.activeSession._currentAssistantMessage = null;
+
+      let historyReloaded = false;
+      if (state.activeSession.sessionId) {
+        try {
+          const res = await request('get_session_request', { sessionId: state.activeSession.sessionId });
+          if (res?.messages?.length > 0) {
+            state.activeSession.loadMessages(res.messages);
+            historyReloaded = true;
+          }
+        } catch {}
+      }
+
+      state.activeSession._historyReloadedOnReconnect = historyReloaded;
       state.activeSession.launch();
     }
   });

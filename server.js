@@ -701,11 +701,34 @@ setInterval(() => {
   }
 }, HEARTBEAT_INTERVAL);
 
+function isReplayableWsMessage(msg) {
+  return msg?.type === 'io_message' || msg?.type === 'close_channel';
+}
+
 /** Create a send function that routes through a specific WS. */
-function makeSendFn(ws) {
+function makeSendFn(ws, { paused = false } = {}) {
   const fn = (msg) => {
+    if (fn._paused && isReplayableWsMessage(msg)) {
+      fn._buffer.push(msg);
+      return;
+    }
+    fn._sendDirect(msg);
+  };
+  fn._sendDirect = (msg) => {
     if (ws.readyState === ws.OPEN) {
       ws.send(JSON.stringify(msg));
+    }
+  };
+  fn._paused = paused;
+  fn._buffer = [];
+  fn._resume = (minReplaySeq = 0) => {
+    fn._paused = false;
+    if (fn._buffer.length === 0) return;
+    const buffered = fn._buffer;
+    fn._buffer = [];
+    for (const msg of buffered) {
+      if (isReplayableWsMessage(msg) && Number(msg.replaySeq || 0) <= minReplaySeq) continue;
+      fn._sendDirect(msg);
     }
   };
   // Tag with WS reference so we can remove it on close
@@ -730,7 +753,7 @@ function getOrCreateSession(ws, rawAgentId, provider) {
   const existing = agentId ? agentProcs.get(agentId) : null;
   if (existing?.session) {
     session = existing.session;
-    session.setSendFn(makeSendFn(ws));
+    session.setSendFn(makeSendFn(ws, { paused: true }));
     if (provider && provider !== session.providerName) {
       session.setProvider(provider);
     }
@@ -773,6 +796,7 @@ wss.on('connection', (ws) => {
         return;
       }
       const msg = JSON.parse(raw);
+      msg._ws = ws;
       const agentId = cleanAgentId(msg.agentId || ws._currentAgent || '');
 
       // Agent switch — just update focus, no WS teardown

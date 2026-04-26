@@ -34,6 +34,8 @@ export function createSession({ resume, cwd, model, provider, agentId, conversat
     // Listeners
     _listeners: new Set(),
     _currentAssistantMessage: null,
+    _lastReplaySeq: 0,
+    _historyReloadedOnReconnect: false,
 
     notify() {
       for (const fn of this._listeners) fn();
@@ -117,6 +119,7 @@ export function createSession({ resume, cwd, model, provider, agentId, conversat
       }
       if (loaded.length > 0) {
         this.messages = loaded;
+        this._currentAssistantMessage = null;
         this.notify();
       }
     },
@@ -132,7 +135,10 @@ export function createSession({ resume, cwd, model, provider, agentId, conversat
         agentId: this.agentId || undefined,
         provider: this.provider || undefined,
         conversationId: this.conversationId,
+        replayAfterSeq: this._lastReplaySeq || 0,
+        historyReloaded: !!this._historyReloadedOnReconnect,
       });
+      this._historyReloadedOnReconnect = false;
       this.notify();
     },
 
@@ -205,6 +211,9 @@ export function createSession({ resume, cwd, model, provider, agentId, conversat
 
     /** Handle an incoming io_message from Claude. */
     _handleIO(msg) {
+      if (Number.isFinite(msg.replaySeq)) {
+        this._lastReplaySeq = Math.max(this._lastReplaySeq, Number(msg.replaySeq));
+      }
       const event = msg.message;
       if (!event) return;
 

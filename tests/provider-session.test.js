@@ -122,3 +122,84 @@ test('raw provider events are buffered with agent conversation metadata', () => 
   assert.equal(events[0].sessionId, 'thr_123');
   assert.equal(events[0].summary, 'turn/started');
 });
+
+
+test('replay journal replays only unseen events for the same conversation', () => {
+  const { session } = makeSession();
+
+  session.connections.set('channel-1', {
+    conn: { alive: true },
+    unsub: () => {},
+    conversationId: 'conv-1',
+  });
+  session._bindConversation('channel-1', 'conv-1');
+
+  session.send({
+    type: 'io_message',
+    channelId: 'channel-1',
+    message: { type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'first' }] } },
+  });
+  session.send({
+    type: 'io_message',
+    channelId: 'channel-1',
+    message: { type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'second' }] } },
+  });
+
+  const delivered = [];
+  const fn = {
+    _sendDirect: (msg) => delivered.push(msg),
+    _resume: () => {},
+  };
+
+  session._replayToSendFn(fn, {
+    conversationId: 'conv-1',
+    channelId: 'channel-2',
+    replayAfterSeq: 1,
+  });
+
+  assert.equal(delivered.length, 1);
+  assert.equal(delivered[0].channelId, 'channel-2');
+  assert.equal(delivered[0].conversationId, 'conv-1');
+  assert.equal(delivered[0].replaySeq, 2);
+  assert.equal(delivered[0].message.message.content[0].text, 'second');
+});
+
+test('history reload suppresses replay for events already covered by persisted history', () => {
+  const { session } = makeSession();
+
+  session.connections.set('channel-1', {
+    conn: { alive: true },
+    unsub: () => {},
+    conversationId: 'conv-1',
+  });
+  session._bindConversation('channel-1', 'conv-1');
+
+  session.send({
+    type: 'io_message',
+    channelId: 'channel-1',
+    message: { type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'persisted' }] } },
+  });
+  session._markConversationPersisted('conv-1');
+  session.send({
+    type: 'io_message',
+    channelId: 'channel-1',
+    message: { type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'live-tail' }] } },
+  });
+
+  const delivered = [];
+  const fn = {
+    _sendDirect: (msg) => delivered.push(msg),
+    _resume: () => {},
+  };
+
+  session._replayToSendFn(fn, {
+    conversationId: 'conv-1',
+    channelId: 'channel-2',
+    replayAfterSeq: 0,
+    historyReloaded: true,
+  });
+
+  assert.equal(delivered.length, 1);
+  assert.equal(delivered[0].replaySeq, 2);
+  assert.equal(delivered[0].message.message.content[0].text, 'live-tail');
+});
