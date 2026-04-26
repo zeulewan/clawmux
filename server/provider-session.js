@@ -36,6 +36,7 @@ import {
 
 const CLAUDE_PROJECTS_DIR = join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude'), 'projects');
 const RAW_EVENT_LIMIT = 500;
+const REPLAY_EVENT_LIMIT = 1500;
 const rawEventBuffers = new Map();
 
 function _summarizeRawPayload(payload) {
@@ -122,6 +123,9 @@ export default class ProviderSession {
     this._conversationChannels = new Map(); // conversationId → channelId
     this._pendingMessages = new Map(); // channelId → [messages] (queued while connecting)
     this._hiddenTurns = new Map(); // channelId → { skipLocalPersist, resolve, reject }
+    this._replaySeq = 0;
+    this._replayBuffers = new Map(); // conversationId -> replayable outbound events
+    this._persistedReplaySeq = new Map(); // conversationId -> highest replay seq covered by persisted history
 
     // Live state for monitor
     this.state = {
@@ -154,8 +158,76 @@ export default class ProviderSession {
     if (this._sendFns) this._sendFns.delete(fn);
   }
 
+  _findSendFnForWs(ws) {
+    if (!ws || !this._sendFns?.size) return null;
+    for (const fn of this._sendFns) {
+      if (fn._ws === ws) return fn;
+    }
+    return null;
+  }
+
+  _isReplayableOutbound(msg) {
+    return msg?.type === 'io_message' || msg?.type === 'close_channel';
+  }
+
+  _conversationKey(conversationId) {
+    return conversationId || '__default__';
+  }
+
+  _getConversationIdForOutbound(msg) {
+    if (msg?.conversationId) return msg.conversationId;
+    const entry = msg?.channelId ? this.connections.get(msg.channelId) : null;
+    return entry?.conversationId || null;
+  }
+
+  _recordReplayEvent(payload) {
+    if (!this._isReplayableOutbound(payload)) return payload;
+    const conversationId = this._getConversationIdForOutbound(payload);
+    if (!conversationId) return payload;
+    const replaySeq = ++this._replaySeq;
+    const enriched = { ...payload, conversationId, replaySeq };
+    const key = this._conversationKey(conversationId);
+    const buf = this._replayBuffers.get(key) || [];
+    buf.push(enriched);
+    if (buf.length > REPLAY_EVENT_LIMIT) buf.splice(0, buf.length - REPLAY_EVENT_LIMIT);
+    this._replayBuffers.set(key, buf);
+    return enriched;
+  }
+
+  _getReplayEvents({ conversationId, fromSequenceExclusive = 0, channelId, historyReloaded = false } = {}) {
+    const key = this._conversationKey(conversationId);
+    const persistedSeq = historyReloaded ? (this._persistedReplaySeq.get(key) || 0) : 0;
+    const minSeq = Math.max(Number(fromSequenceExclusive) || 0, persistedSeq);
+    const buf = this._replayBuffers.get(key) || [];
+    return buf
+      .filter((event) => Number(event.replaySeq || 0) > minSeq)
+      .map((event) => ({ ...event, channelId }));
+  }
+
+  _markConversationPersisted(conversationId) {
+    if (!conversationId) return;
+    this._persistedReplaySeq.set(this._conversationKey(conversationId), this._replaySeq);
+  }
+
+  _replayToSendFn(fn, { conversationId, channelId, replayAfterSeq = 0, historyReloaded = false } = {}) {
+    if (!fn || typeof fn._sendDirect !== 'function') return;
+    const events = this._getReplayEvents({
+      conversationId,
+      fromSequenceExclusive: replayAfterSeq,
+      channelId,
+      historyReloaded,
+    });
+    let maxSeq = Number(replayAfterSeq) || 0;
+    for (const event of events) {
+      fn._sendDirect(event);
+      if (Number(event.replaySeq || 0) > maxSeq) maxSeq = Number(event.replaySeq);
+    }
+    if (typeof fn._resume === 'function') fn._resume(maxSeq);
+  }
+
   send(msg) {
-    const payload = { ...msg, agentId: this.agentId };
+    let payload = { ...msg, agentId: this.agentId };
+    payload = this._recordReplayEvent(payload);
     if (this._sendFns?.size > 0) {
       for (const fn of this._sendFns) {
         try { fn(payload); } catch {}
@@ -397,6 +469,9 @@ export default class ProviderSession {
 
   async launchProvider(msg) {
     const { channelId, resume, cwd, conversationId } = msg;
+    const replayAfterSeq = Number.isFinite(msg.replayAfterSeq) ? Math.trunc(msg.replayAfterSeq) : 0;
+    const historyReloaded = !!msg.historyReloaded;
+    const targetSendFn = this._findSendFnForWs(msg._ws);
     let desiredResume = resume;
 
     if (this._launching) {
@@ -433,6 +508,12 @@ export default class ProviderSession {
         if (this._canReuseLiveConnection(reusableChannel, channelId)) {
           console.log(`[launch] Reusing live connection for ${this.agentId} (${reusableChannel} → ${channelId})`);
           this._remapLiveConnection(reusableChannel, channelId, conversationId);
+          this._replayToSendFn(targetSendFn, {
+            conversationId: conversationId || this.connections.get(channelId)?.conversationId || null,
+            channelId,
+            replayAfterSeq,
+            historyReloaded,
+          });
           this._launching = false;
           return;
         }
@@ -530,6 +611,12 @@ export default class ProviderSession {
         message: { type: 'result', subtype: 'error', error: err.message },
       });
     } finally {
+      this._replayToSendFn(targetSendFn, {
+        conversationId: conversationId || this.connections.get(channelId)?.conversationId || null,
+        channelId,
+        replayAfterSeq,
+        historyReloaded,
+      });
       this._launching = false;
     }
   }
@@ -1232,6 +1319,7 @@ export default class ProviderSession {
                 : undefined,
             },
           });
+          this._markConversationPersisted(this.connections.get(channelId)?.conversationId || null);
         }
         if (hidden) {
           hidden.resolve({

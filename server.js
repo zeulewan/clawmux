@@ -41,6 +41,8 @@ const __dirname = dirname(__filename);
 
 const PORT = process.env.PORT || 3470;
 const HOST = process.env.HOST || '127.0.0.1';
+const DEV_MODE = process.env.CLAWMUX_DEV === '1';
+const VITE_PORT = process.env.VITE_PORT || 5173;
 const CLAWMUX_DIR = join(homedir(), '.clawmux');
 const AGENTS_DIR = process.env.AGENTS_DIR || join(CLAWMUX_DIR, 'agents');
 const MESSAGES_DIR = join(CLAWMUX_DIR, 'messages');
@@ -128,6 +130,16 @@ const ASSET_VERSION = Date.now().toString(36);
 
 const serveCleanWebview = (req, res) => {
   res.setHeader('Cache-Control', 'no-store, must-revalidate');
+  if (DEV_MODE) {
+    // In dev mode the Vite dev server hosts the frontend with HMR.
+    // Anything that lands on the backend's HTML route gets bounced over.
+    const target = `http://${req.hostname}:${VITE_PORT}${req.originalUrl || '/'}`;
+    res.status(302).set('Location', target).send(
+      `<!DOCTYPE html><meta charset="utf-8"><title>ClawMux dev</title>` +
+        `<p>Dev mode — open <a href="${target}">${target}</a> for the Vite dev server (HMR enabled).</p>`,
+    );
+    return;
+  }
   res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -689,11 +701,34 @@ setInterval(() => {
   }
 }, HEARTBEAT_INTERVAL);
 
+function isReplayableWsMessage(msg) {
+  return msg?.type === 'io_message' || msg?.type === 'close_channel';
+}
+
 /** Create a send function that routes through a specific WS. */
-function makeSendFn(ws) {
+function makeSendFn(ws, { paused = false } = {}) {
   const fn = (msg) => {
+    if (fn._paused && isReplayableWsMessage(msg)) {
+      fn._buffer.push(msg);
+      return;
+    }
+    fn._sendDirect(msg);
+  };
+  fn._sendDirect = (msg) => {
     if (ws.readyState === ws.OPEN) {
       ws.send(JSON.stringify(msg));
+    }
+  };
+  fn._paused = paused;
+  fn._buffer = [];
+  fn._resume = (minReplaySeq = 0) => {
+    fn._paused = false;
+    if (fn._buffer.length === 0) return;
+    const buffered = fn._buffer;
+    fn._buffer = [];
+    for (const msg of buffered) {
+      if (isReplayableWsMessage(msg) && Number(msg.replaySeq || 0) <= minReplaySeq) continue;
+      fn._sendDirect(msg);
     }
   };
   // Tag with WS reference so we can remove it on close
@@ -718,7 +753,7 @@ function getOrCreateSession(ws, rawAgentId, provider) {
   const existing = agentId ? agentProcs.get(agentId) : null;
   if (existing?.session) {
     session = existing.session;
-    session.setSendFn(makeSendFn(ws));
+    session.setSendFn(makeSendFn(ws, { paused: true }));
     if (provider && provider !== session.providerName) {
       session.setProvider(provider);
     }
@@ -761,6 +796,7 @@ wss.on('connection', (ws) => {
         return;
       }
       const msg = JSON.parse(raw);
+      msg._ws = ws;
       const agentId = cleanAgentId(msg.agentId || ws._currentAgent || '');
 
       // Agent switch — just update focus, no WS teardown
@@ -836,6 +872,9 @@ wss.on('connection', (ws) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`ClawMux Lite on http://${HOST}:${PORT}`);
+  if (DEV_MODE) {
+    console.log(`[dev] CLAWMUX_DEV=1 — open http://${HOST}:${VITE_PORT} for the Vite dev server (HMR)`);
+  }
   startPolling();
 
   // Discover available models from each backend CLI

@@ -434,6 +434,12 @@ button {
 .timelineMessage.dotProgress:before {
   animation: blink 1s linear infinite;
 }
+.timelineMessage.processingMessage {
+  padding-left: 24px;
+}
+.timelineMessage.processingMessage:before {
+  display: none;
+}
 @keyframes cmx-blink {
   0%,
   to {

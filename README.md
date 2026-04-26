@@ -70,6 +70,12 @@ cmx agents             # list all agents with backend/model/status
 cmx send <agent> <msg> # send message to an agent
 cmx send --close-thread <agent>        # end a peer thread without provoking a reply
 cmx send --reopen-thread <agent> <msg> # reopen a closed thread and send a fresh message
+
+### Inter-agent threads
+
+Each agent pair shares a thread — a conversation channel that can be open or closed. When an agent closes a thread with `--close-thread`, further sends to that agent are blocked until `--reopen-thread` is used.
+
+This prevents reply loops: without thread control, Agent A responds, Agent B says "got it", Agent A says "great", and so on indefinitely. Closing the thread signals the conversation is done. Agents should close threads when wrapping up and only reopen them for genuinely new topics.
 cmx config             # show config summary
 cmx logs               # run server in foreground (see stdout)
 cmx update             # git pull + rebuild + restart

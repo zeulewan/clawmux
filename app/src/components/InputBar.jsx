@@ -22,10 +22,25 @@ function ModeIcon({ mode }) {
 export function InputBar({ onSubmit, onInterrupt, busy, session, effortLevel: liveEffortLevel = 'medium' }) {
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
+  const addButtonRef = useRef(null);
+  const slashButtonRef = useRef(null);
+  const modesButtonRef = useRef(null);
   const [text, setText] = useState('');
   const [showModesMenu, setShowModesMenu] = useState(false);
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
+  const [addMenuPos, setAddMenuPos] = useState(null);
+  const [slashMenuPos, setSlashMenuPos] = useState(null);
+  const [modesMenuPos, setModesMenuPos] = useState(null);
+
+  const calcPos = (ref, align = 'left') => {
+    if (!ref.current) return null;
+    const r = ref.current.getBoundingClientRect();
+    return {
+      bottom: window.innerHeight - r.top + 4,
+      ...(align === 'left' ? { left: r.left } : { right: window.innerWidth - r.right }),
+    };
+  };
   const [permissionMode, setPermissionMode] = useState('bypassPermissions');
   const [selectedEffortLevel, _setEffortLevel] = useState(liveEffortLevel);
   const setEffortLevel = useCallback((level) => {
@@ -223,12 +238,12 @@ export function InputBar({ onSubmit, onInterrupt, busy, session, effortLevel: li
       </div>
       <div className="inputFooter inputFooterV2">
         {/* Add button */}
-        <div className="addButtonContainer" style={{ position: 'relative' }}>
-          {showAddMenu && (
+        <div className="addButtonContainer">
+          {showAddMenu && addMenuPos && (
             <div
               className="menuPopup menuPopupV2"
               onClick={(e) => e.stopPropagation()}
-              style={{ position: 'absolute', bottom: '100%', left: 0, marginBottom: 4 }}
+              style={{ position: 'fixed', bottom: addMenuPos.bottom, left: addMenuPos.left, zIndex: 1000 }}
             >
               <button type="button" className="menuItemV2" onClick={openFilePicker}>
                 <span className="menuItemText">
@@ -243,11 +258,13 @@ export function InputBar({ onSubmit, onInterrupt, busy, session, effortLevel: li
             </div>
           )}
           <button
+            ref={addButtonRef}
             type="button"
             className="addButton addButtonSquare"
             title="Add"
             onClick={(e) => {
               e.stopPropagation();
+              setAddMenuPos(calcPos(addButtonRef, 'left'));
               setShowAddMenu(!showAddMenu);
               setShowSlashMenu(false);
               setShowModesMenu(false);
@@ -269,12 +286,12 @@ export function InputBar({ onSubmit, onInterrupt, busy, session, effortLevel: li
           </button>
         </div>
         {/* Slash command menu button */}
-        <div style={{ position: 'relative' }}>
-          {showSlashMenu && (
+        <div>
+          {showSlashMenu && slashMenuPos && (
             <div
               className="menuPopup menuPopupV2"
               onClick={(e) => e.stopPropagation()}
-              style={{ position: 'absolute', bottom: '100%', left: 0, marginBottom: 4, minWidth: 220 }}
+              style={{ position: 'fixed', bottom: slashMenuPos.bottom, left: slashMenuPos.left, zIndex: 1000 }}
             >
               <div className="menuHeader">
                 <span className="menuHeaderTitle">Commands</span>
@@ -354,11 +371,13 @@ export function InputBar({ onSubmit, onInterrupt, busy, session, effortLevel: li
             </div>
           )}
           <button
+            ref={slashButtonRef}
             type="button"
             className="footerMenuButton"
             title="Show command menu (/)"
             onClick={(e) => {
               e.stopPropagation();
+              setSlashMenuPos(calcPos(slashButtonRef, 'left'));
               setShowSlashMenu(!showSlashMenu);
               setShowAddMenu(false);
               setShowModesMenu(false);
@@ -378,9 +397,9 @@ export function InputBar({ onSubmit, onInterrupt, busy, session, effortLevel: li
         </div>
         <div className="spacer" />
         {/* Permission mode button */}
-        <div className="menuContainer" style={{ position: 'relative' }}>
-          {showModesMenu && (
-            <div style={{ position: 'absolute', bottom: '100%', right: 0, marginBottom: 4, zIndex: 10 }}>
+        <div className="menuContainer">
+          {showModesMenu && modesMenuPos && (
+            <div style={{ position: 'fixed', bottom: modesMenuPos.bottom, right: modesMenuPos.right, zIndex: 1000 }}>
               <ModesMenu
                 currentMode={permissionMode}
                 onSelect={setPermissionMode}
@@ -391,11 +410,13 @@ export function InputBar({ onSubmit, onInterrupt, busy, session, effortLevel: li
             </div>
           )}
           <button
+            ref={modesButtonRef}
             type="button"
             className="footerButton footerButtonPrimary"
             title="Click to change mode, or press Shift+Tab to cycle."
             onClick={(e) => {
               e.stopPropagation();
+              setModesMenuPos(calcPos(modesButtonRef, 'right'));
               setShowModesMenu(!showModesMenu);
               setShowAddMenu(false);
               setShowSlashMenu(false);

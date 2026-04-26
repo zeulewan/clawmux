@@ -40,7 +40,7 @@ export function MessageList({ messages, busy }) {
 
           {/* Spinner if this is the last turn and we're waiting */}
           {busy && ti === turns.length - 1 && turn.assistants.length === 0 && (
-            <div className="message timelineMessage dotProgress">
+            <div className="message timelineMessage dotProgress processingMessage">
               <ThinkingIndicator />
             </div>
           )}
@@ -181,7 +181,7 @@ function AssistantMessage({ message, isLast, busy }) {
   if (!message.content || message.content.length === 0) {
     if (isLast && busy) {
       return (
-        <div className="message timelineMessage dotProgress">
+        <div className="message timelineMessage dotProgress processingMessage">
           <ThinkingIndicator />
         </div>
       );
