@@ -6,6 +6,7 @@ import { LogoIcon } from '../assets/logo.jsx';
 import { CrabIcon } from '../assets/crab.jsx';
 import { useKaraokePlayer } from '../hooks/useKaraoke.js';
 import { isVoiceEnabled, subscribe as subscribeVoice, getSnapshot as getVoiceSnapshot } from '../state/voice.js';
+import { getVoice, getSpeed } from '../state/settings.js';
 
 /**
  * ChatContainer — scrollable message list with input bar.
@@ -98,7 +99,7 @@ export function ChatContainer({ session, effortLevel }) {
     fetch('/api/tts-captioned', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, voice: 'af_sky', speed: 1.0 }),
+      body: JSON.stringify({ text, voice: getVoice(), speed: getSpeed() }),
     })
       .then(r => r.json())
       .then(({ audio_b64, words }) => {
@@ -118,7 +119,7 @@ export function ChatContainer({ session, effortLevel }) {
     fetch('/api/tts-captioned', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, voice: 'af_sky', speed: 1.0 }),
+      body: JSON.stringify({ text, voice: getVoice(), speed: getSpeed() }),
     })
       .then(r => r.json())
       .then(({ audio_b64, words }) => karaokePlay(audio_b64, words, msgId))

@@ -1,5 +1,6 @@
 import React, { useRef, useCallback, useSyncExternalStore } from 'react';
 import { subscribe, getSnapshot, setRecording, setTranscribing } from '../state/voice.js';
+import { subscribe as subscribeSettings, getSnapshot as getSettingsSnapshot } from '../state/settings.js';
 
 /**
  * VoiceBar — replaces InputBar when voice mode is active.
@@ -7,23 +8,38 @@ import { subscribe, getSnapshot, setRecording, setTranscribing } from '../state/
  */
 export function VoiceBar({ onSubmit, onInterrupt, busy, play, stop, pause, resume }) {
   const voice = useSyncExternalStore(subscribe, getSnapshot);
+  const settings = useSyncExternalStore(subscribeSettings, getSettingsSnapshot);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
   const startRecording = useCallback(async () => {
+    if (settings.sttProvider === 'apple') {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) {
+        alert('Web Speech API not available in this browser. Use Safari on iOS/macOS or switch to Local STT in settings.');
+        return;
+      }
+      const rec = new SR();
+      rec.continuous = false;
+      rec.interimResults = false;
+      rec.lang = 'en-US';
+      rec.onstart = () => setRecording(true);
+      rec.onend = () => setRecording(false);
+      rec.onerror = (e) => { console.error('[voice] SpeechRecognition error:', e); setRecording(false); };
+      rec.onresult = (e) => {
+        const text = Array.from(e.results).map(r => r[0].transcript).join(' ').trim();
+        if (text) onSubmit(text, []);
+      };
+      rec.start();
+      return;
+    }
+
+    // Local Whisper STT
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      // Pick the best supported mimeType — order of preference
-      const PREFERRED = [
-        'audio/webm;codecs=opus',
-        'audio/webm',
-        'audio/ogg;codecs=opus',
-        'audio/mp4',
-      ];
+      const PREFERRED = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
       const mimeType = PREFERRED.find(t => MediaRecorder.isTypeSupported(t)) || '';
       console.log('[voice] recording mimeType:', mimeType || '(browser default)');
-
       const mr = new MediaRecorder(stream, mimeType ? { mimeType } : {});
       audioChunksRef.current = [];
       mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
@@ -31,12 +47,10 @@ export function VoiceBar({ onSubmit, onInterrupt, busy, play, stop, pause, resum
       mr.onstop = async () => {
         stream.getTracks().forEach(t => t.stop());
         setRecording(false);
-
         if (audioChunksRef.current.length === 0) {
           console.warn('[voice] no audio chunks captured');
           return;
         }
-
         setTranscribing(true);
         try {
           const blob = new Blob(audioChunksRef.current, { type: mr.mimeType || 'audio/webm' });
@@ -49,22 +63,20 @@ export function VoiceBar({ onSubmit, onInterrupt, busy, play, stop, pause, resum
           });
           const { text, error } = await res.json();
           console.log('[voice] STT result:', JSON.stringify(text), error || '');
-          if (text?.trim()) {
-            onSubmit(text.trim(), []);
-          }
+          if (text?.trim()) onSubmit(text.trim(), []);
         } catch (e) {
           console.error('[voice] STT error:', e);
         } finally {
           setTranscribing(false);
         }
       };
-      mr.start(250); // 250ms timeslice — ensures ondataavailable fires regularly
+      mr.start(250);
       mediaRecorderRef.current = mr;
       setRecording(true);
     } catch (e) {
       console.error('[voice] mic error:', e);
     }
-  }, [onSubmit]);
+  }, [onSubmit, settings.sttProvider]);
 
   const stopRecording = useCallback(() => {
     mediaRecorderRef.current?.stop();

@@ -7,6 +7,8 @@ import { Sidebar } from './components/Sidebar.jsx';
 import { Monitor } from './components/Monitor.jsx';
 // StatusBar is now integrated into SessionView header
 import { init } from './state/sessions.js';
+import { loadSettings } from './state/settings.js';
+import { SettingsPanel } from './components/SettingsPanel.jsx';
 
 // CSS handles html/body/#root layout (flex:1, height:100%)
 
@@ -188,6 +190,8 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showMonitor, setShowMonitor] = useState(false);
 
+  useEffect(() => { loadSettings(); }, []);
+
   useEffect(() => {
     const themeMeta = ensureMeta('theme-color', '#171717');
     const syncMobileChrome = () => {
@@ -242,6 +246,7 @@ function App() {
       <div className="main-content">
         {showMonitor ? <Monitor onClose={() => setShowMonitor(false)} /> : <SessionView />}
       </div>
+      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
     </div>
   );
 }
