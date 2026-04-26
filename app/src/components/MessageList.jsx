@@ -214,7 +214,7 @@ function AssistantMessage({ message, isLast, busy }) {
   }
 
   return (
-    <>
+    <div data-msg-id={message._uuid} style={{ display: 'contents' }}>
       {groups.map((group, gi) => {
         const isLastGroup = gi === groups.length - 1;
         const groupDot = isLastGroup && isLast && busy ? 'dotProgress' : dotClass;
@@ -244,7 +244,7 @@ function AssistantMessage({ message, isLast, busy }) {
           </div>
         );
       })}
-    </>
+    </div>
   );
 }
 

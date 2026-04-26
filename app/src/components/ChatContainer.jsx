@@ -3,6 +3,8 @@ import { MessageList } from './MessageList.jsx';
 import { InputBar } from './InputBar.jsx';
 import { LogoIcon } from '../assets/logo.jsx';
 import { CrabIcon } from '../assets/crab.jsx';
+import { useKaraokePlayer } from '../hooks/useKaraoke.js';
+import { isVoiceEnabled } from '../state/voice.js';
 
 /**
  * ChatContainer — scrollable message list with input bar.
@@ -16,6 +18,8 @@ export function ChatContainer({ session, effortLevel }) {
   const prevMsgCount = useRef(0);
   const userAtBottom = useRef(true);
   const prevSessionRef = useRef(session);
+  const { play: karaokePlay, stop: karaokeStop } = useKaraokePlayer();
+  const lastSpokenMsgRef = useRef(null);
 
   // Reset scroll state when switching sessions
   useEffect(() => {
@@ -62,6 +66,51 @@ export function ChatContainer({ session, effortLevel }) {
   const handleInterrupt = useCallback(() => {
     session.interrupt();
   }, [session]);
+
+  // TTS auto-play: fire when agent finishes a response (busy flips false)
+  const prevBusyRef = useRef(busy);
+  useEffect(() => {
+    const wasJustBusy = prevBusyRef.current && !busy;
+    prevBusyRef.current = busy;
+    if (!wasJustBusy) return;
+    if (!isVoiceEnabled()) return;
+
+    // Find the last assistant text message
+    const lastAssistant = [...messages].reverse().find(
+      m => m.type === 'assistant' && m.content?.some(b => b.content?.type === 'text' || b.type === 'text')
+    );
+    if (!lastAssistant) return;
+
+    // Don't re-speak the same message
+    const msgId = lastAssistant.id || lastAssistant._id;
+    if (msgId && msgId === lastSpokenMsgRef.current) return;
+    lastSpokenMsgRef.current = msgId;
+
+    // Extract text
+    const text = (lastAssistant.content || [])
+      .map(b => (b.content?.type === 'text' ? b.content.text : b.type === 'text' ? b.text : ''))
+      .join('\n')
+      .trim();
+    if (!text) return;
+
+    fetch('/api/tts-captioned', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, voice: 'af_sky', speed: 1.0 }),
+    })
+      .then(r => r.json())
+      .then(({ audio_b64, words }) => {
+        if (!isVoiceEnabled()) return; // user may have toggled off while fetching
+        karaokePlay(audio_b64, words, msgId);
+      })
+      .catch(e => console.error('[voice] TTS error:', e));
+  }, [busy, messages, karaokePlay]);
+
+  // Stop audio when session changes
+  useEffect(() => {
+    karaokeStop();
+    lastSpokenMsgRef.current = null;
+  }, [session, karaokeStop]);
 
   // Global Escape to interrupt current response
   useEffect(() => {

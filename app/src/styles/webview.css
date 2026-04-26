@@ -12135,3 +12135,69 @@ button {
   margin-right: 6px;
   opacity: 0.85;
 }
+
+/* ── Voice mode ────────────────────────────────────────────────────────────── */
+
+/* Header toggle button */
+.voiceToggle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--app-secondary-foreground);
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+.voiceToggle:hover {
+  opacity: 1;
+  background: var(--app-ghost-button-hover-background);
+}
+.voiceToggleActive {
+  opacity: 1;
+  color: #a78bfa;
+}
+.voiceToggleActive:hover {
+  color: #c4b5fd;
+}
+/* Pulsing dot when speaking */
+.voiceToggleDot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #a78bfa;
+  animation: voicePulse 1.2s ease-in-out infinite;
+}
+@keyframes voicePulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.7); }
+}
+
+/* Input bar mic button — active (recording) state */
+.micButton.micButtonActive {
+  color: #ef4444;
+  animation: voicePulse 1s ease-in-out infinite;
+}
+
+/* ── Karaoke word highlighting ─────────────────────────────────────────────── */
+
+/* Spans injected around each word during TTS playback */
+.karaoke-word {
+  transition: color 0.05s, background-color 0.05s;
+}
+
+/* The currently-spoken word */
+.karaoke-active {
+  color: #a78bfa;
+  background-color: rgba(167, 139, 250, 0.12);
+  border-radius: 2px;
+}
