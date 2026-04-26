@@ -35,6 +35,7 @@ import { updateBackendModels } from './server/config.js';
 import { discoverPiModels } from './server/providers/pi-provider.js';
 import { discoverCodexModels } from './server/providers/codex-provider.js';
 import { buildMigrationPromptFromSession } from './server/session-migration.js';
+import { voiceRouter } from './server/voice/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -109,6 +110,12 @@ const agentProcs = new Map();
 
 const app = express();
 app.use(express.json());
+
+// Raw body for STT audio uploads (/api/stt)
+app.use('/api/stt', express.raw({ type: '*/*', limit: '25mb' }));
+
+// Voice routes (TTS, STT, health)
+app.use(voiceRouter);
 
 // Static assets (shim.js)
 app.use(express.static(join(__dirname, 'public')));
