@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback, useSyncExternalStore } from 'react';
 import { MessageList } from './MessageList.jsx';
 import { InputBar } from './InputBar.jsx';
+import { VoiceBar } from './VoiceBar.jsx';
 import { LogoIcon } from '../assets/logo.jsx';
 import { CrabIcon } from '../assets/crab.jsx';
 import { useKaraokePlayer } from '../hooks/useKaraoke.js';
-import { isVoiceEnabled } from '../state/voice.js';
+import { isVoiceEnabled, subscribe as subscribeVoice, getSnapshot as getVoiceSnapshot } from '../state/voice.js';
 
 /**
  * ChatContainer — scrollable message list with input bar.
@@ -18,8 +19,9 @@ export function ChatContainer({ session, effortLevel }) {
   const prevMsgCount = useRef(0);
   const userAtBottom = useRef(true);
   const prevSessionRef = useRef(session);
-  const { play: karaokePlay, stop: karaokeStop } = useKaraokePlayer();
+  const { play: karaokePlay, stop: karaokeStop, pause: karaokePause, resume: karaokeResume } = useKaraokePlayer();
   const lastSpokenMsgRef = useRef(null);
+  const voice = useSyncExternalStore(subscribeVoice, getVoiceSnapshot);
 
   // Reset scroll state when switching sessions
   useEffect(() => {
@@ -82,7 +84,7 @@ export function ChatContainer({ session, effortLevel }) {
     if (!lastAssistant) return;
 
     // Don't re-speak the same message
-    const msgId = lastAssistant.id || lastAssistant._id;
+    const msgId = lastAssistant._uuid;
     if (msgId && msgId === lastSpokenMsgRef.current) return;
     lastSpokenMsgRef.current = msgId;
 
@@ -111,6 +113,17 @@ export function ChatContainer({ session, effortLevel }) {
     karaokeStop();
     lastSpokenMsgRef.current = null;
   }, [session, karaokeStop]);
+
+  const handlePlayMessage = useCallback((msgId, text) => {
+    fetch('/api/tts-captioned', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, voice: 'af_sky', speed: 1.0 }),
+    })
+      .then(r => r.json())
+      .then(({ audio_b64, words }) => karaokePlay(audio_b64, words, msgId))
+      .catch(e => console.error('[voice] TTS error:', e));
+  }, [karaokePlay]);
 
   // Global Escape to interrupt current response
   useEffect(() => {
@@ -150,7 +163,7 @@ export function ChatContainer({ session, effortLevel }) {
           </div>
         ) : (
           <>
-            <MessageList messages={messages} busy={busy} />
+            <MessageList messages={messages} busy={busy} onPlayMessage={handlePlayMessage} />
           </>
         )}
       </div>
@@ -176,7 +189,19 @@ export function ChatContainer({ session, effortLevel }) {
 
       {/* Input */}
       <div className="inputContainer">
-        <InputBar onSubmit={handleSubmit} onInterrupt={handleInterrupt} busy={busy} session={session} effortLevel={effortLevel} />
+        {voice.enabled ? (
+          <VoiceBar
+            onSubmit={handleSubmit}
+            onInterrupt={handleInterrupt}
+            busy={busy}
+            play={karaokePlay}
+            stop={karaokeStop}
+            pause={karaokePause}
+            resume={karaokeResume}
+          />
+        ) : (
+          <InputBar onSubmit={handleSubmit} onInterrupt={handleInterrupt} busy={busy} session={session} effortLevel={effortLevel} />
+        )}
       </div>
     </div>
   );

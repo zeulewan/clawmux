@@ -6,7 +6,7 @@ import { ContentBlockRenderer } from './ContentBlockRenderer.jsx';
  * The reference puts user message + all assistant messages in the SAME turn div,
  * so timeline lines (`:after` pseudo-elements) connect consecutive timelineMessages.
  */
-export function MessageList({ messages, busy }) {
+export function MessageList({ messages, busy, onPlayMessage }) {
   // Group into turns: each turn starts with a user message, followed by assistant messages
   const turns = [];
   let currentTurn = null;
@@ -35,7 +35,7 @@ export function MessageList({ messages, busy }) {
           {/* Assistant messages — siblings so timeline line connects them */}
           {turn.assistants.map(({ msg, idx }, ai) => {
             const isLast = idx === messages.length - 1;
-            return <AssistantMessage key={ai} message={msg} isLast={isLast} busy={busy} />;
+            return <AssistantMessage key={ai} message={msg} isLast={isLast} busy={busy} onPlayMessage={onPlayMessage} />;
           })}
 
           {/* Spinner if this is the last turn and we're waiting */}
@@ -177,7 +177,7 @@ function UserMessage({ message }) {
   );
 }
 
-function AssistantMessage({ message, isLast, busy }) {
+function AssistantMessage({ message, isLast, busy, onPlayMessage }) {
   if (!message.content || message.content.length === 0) {
     if (isLast && busy) {
       return (
@@ -232,7 +232,7 @@ function AssistantMessage({ message, isLast, busy }) {
         }
 
         return (
-          <div key={gi} data-testid="assistant-message" className={`message timelineMessage ${groupDot}`}>
+          <div key={gi} data-testid="assistant-message" className={`message timelineMessage ${groupDot}`} style={{ position: 'relative' }}>
             {group.blocks.map(({ block, idx }) => (
               <ContentBlockRenderer
                 key={idx}
@@ -241,6 +241,23 @@ function AssistantMessage({ message, isLast, busy }) {
                 busy={busy}
               />
             ))}
+            {onPlayMessage && (
+              <button
+                className="msgPlayBtn"
+                onClick={() => {
+                  const text = group.blocks
+                    .map(({ block }) => block.content?.text || block.text || '')
+                    .filter(Boolean)
+                    .join('\n');
+                  if (text) onPlayMessage(message._uuid, text);
+                }}
+                title="Play this message"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </button>
+            )}
           </div>
         );
       })}

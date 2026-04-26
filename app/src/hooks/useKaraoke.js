@@ -8,7 +8,7 @@
  */
 
 import { useRef, useCallback, useEffect } from 'react';
-import { setSpeaking, stopSpeaking } from '../state/voice.js';
+import { setSpeaking, stopSpeaking, setPaused } from '../state/voice.js';
 
 // Shared AudioContext — created once, reused across playbacks
 let _audioCtx = null;
@@ -109,9 +109,23 @@ export function useKaraokePlayer() {
     rafRef.current = requestAnimationFrame(tick);
   }, [stopPlayback, tick]);
 
+  const pause = useCallback(() => {
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    const ctx = getAudioCtx();
+    if (ctx.state === 'running') ctx.suspend();
+    setPaused(true);
+  }, []);
+
+  const resume = useCallback(() => {
+    const ctx = getAudioCtx();
+    if (ctx.state === 'suspended') ctx.resume();
+    setPaused(false);
+    rafRef.current = requestAnimationFrame(tick);
+  }, [tick]);
+
   useEffect(() => () => stopPlayback(), [stopPlayback]);
 
-  return { play, stop: stopPlayback };
+  return { play, stop: stopPlayback, pause, resume };
 }
 
 // ---------------------------------------------------------------------------

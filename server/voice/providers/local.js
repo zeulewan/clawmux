@@ -70,6 +70,10 @@ export async function ttsCaptioned(text, { voice = 'af_sky', speed = 1.0 } = {})
     ({ audio_b64, words } = _stripPrefixAudio(audio_b64, words, prefix));
   }
 
+  // Fix RIFF sentinel size (0xFFFFFFFF) that Kokoro emits for streaming WAVs.
+  // Web Audio API decodeAudioData handles it fine but fix it to be safe.
+  audio_b64 = _fixRiffSize(audio_b64);
+
   return { audio_b64, words };
 }
 
@@ -222,4 +226,17 @@ function _u32le(n) {
   const b = Buffer.alloc(4);
   b.writeUInt32LE(n, 0);
   return b;
+}
+
+/**
+ * Fix WAV RIFF size field if it's the streaming sentinel 0xFFFFFFFF.
+ */
+function _fixRiffSize(audio_b64) {
+  const buf = Buffer.from(audio_b64, 'base64');
+  if (buf.length < 8) return audio_b64;
+  const riffSize = buf.readUInt32LE(4);
+  if (riffSize !== 0xFFFFFFFF) return audio_b64;
+  const fixed = Buffer.from(buf);
+  fixed.writeUInt32LE(buf.length - 8, 4);
+  return fixed.toString('base64');
 }

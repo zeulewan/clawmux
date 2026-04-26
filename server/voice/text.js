@@ -43,7 +43,9 @@ export function applyPronunciation(text) {
  * Strips formatting symbols Kokoro would otherwise read aloud.
  */
 export function stripNonSpeakable(text) {
-  // Remove fenced code blocks — keep inner text
+  // Remove fenced code blocks entirely (including content — don't read raw code aloud)
+  text = text.replace(/```[\w]*\n[\s\S]*?```/g, '');
+  // Catch unclosed or single-line fence markers
   text = text.replace(/```\w*\n?/g, '');
   // Remove display math
   text = text.replace(/\$\$[\s\S]*?\$\$/g, '');

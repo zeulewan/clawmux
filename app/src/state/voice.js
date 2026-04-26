@@ -9,6 +9,8 @@ let state = {
   karaokeWords: [],        // [{word, start_time, end_time}] for active playback
   activeWordIdx: -1,       // current highlighted word index
   recording: false,        // mic is recording
+  transcribing: false,     // STT in progress
+  paused: false,           // playback paused
 };
 
 const listeners = new Set();
@@ -44,12 +46,22 @@ export function setActiveWord(idx) {
 }
 
 export function stopSpeaking() {
-  state = { ...state, speakingMsgId: null, karaokeWords: [], activeWordIdx: -1 };
+  state = { ...state, speakingMsgId: null, karaokeWords: [], activeWordIdx: -1, paused: false };
   notify();
 }
 
 export function setRecording(recording) {
   state = { ...state, recording };
+  notify();
+}
+
+export function setTranscribing(transcribing) {
+  state = { ...state, transcribing };
+  notify();
+}
+
+export function setPaused(paused) {
+  state = { ...state, paused };
   notify();
 }
 
