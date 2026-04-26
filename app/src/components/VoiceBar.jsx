@@ -13,22 +13,42 @@ export function VoiceBar({ onSubmit, onInterrupt, busy, play, stop, pause, resum
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+
+      // Pick the best supported mimeType — order of preference
+      const PREFERRED = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+        'audio/mp4',
+      ];
+      const mimeType = PREFERRED.find(t => MediaRecorder.isTypeSupported(t)) || '';
+      console.log('[voice] recording mimeType:', mimeType || '(browser default)');
+
+      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : {});
       audioChunksRef.current = [];
       mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      mr.onerror = (e) => console.error('[voice] MediaRecorder error:', e);
       mr.onstop = async () => {
         stream.getTracks().forEach(t => t.stop());
         setRecording(false);
+
+        if (audioChunksRef.current.length === 0) {
+          console.warn('[voice] no audio chunks captured');
+          return;
+        }
+
         setTranscribing(true);
         try {
-          const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          const blob = new Blob(audioChunksRef.current, { type: mr.mimeType || 'audio/webm' });
+          console.log('[voice] sending audio blob:', blob.size, 'bytes, type:', blob.type);
           const buf = await blob.arrayBuffer();
           const res = await fetch('/api/stt', {
             method: 'POST',
             body: buf,
-            headers: { 'Content-Type': 'audio/webm' },
+            headers: { 'Content-Type': blob.type || 'audio/webm' },
           });
-          const { text } = await res.json();
+          const { text, error } = await res.json();
+          console.log('[voice] STT result:', JSON.stringify(text), error || '');
           if (text?.trim()) {
             onSubmit(text.trim(), []);
           }
@@ -38,7 +58,7 @@ export function VoiceBar({ onSubmit, onInterrupt, busy, play, stop, pause, resum
           setTranscribing(false);
         }
       };
-      mr.start();
+      mr.start(250); // 250ms timeslice — ensures ondataavailable fires regularly
       mediaRecorderRef.current = mr;
       setRecording(true);
     } catch (e) {

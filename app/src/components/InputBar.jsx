@@ -178,16 +178,18 @@ export function InputBar({ onSubmit, onInterrupt, busy, session, effortLevel: li
     if (voice.recording) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      const PREFERRED = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+      const mimeType = PREFERRED.find(t => MediaRecorder.isTypeSupported(t)) || '';
+      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : {});
       audioChunksRef.current = [];
       mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
       mr.onstop = async () => {
         stream.getTracks().forEach(t => t.stop());
         setRecording(false);
-        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const blob = new Blob(audioChunksRef.current, { type: mr.mimeType || 'audio/webm' });
         const buf = await blob.arrayBuffer();
         try {
-          const res = await fetch('/api/stt', { method: 'POST', body: buf, headers: { 'Content-Type': 'audio/webm' } });
+          const res = await fetch('/api/stt', { method: 'POST', body: buf, headers: { 'Content-Type': blob.type } });
           const { text } = await res.json();
           if (text && inputRef.current) {
             const prev = inputRef.current.textContent || '';
@@ -196,7 +198,7 @@ export function InputBar({ onSubmit, onInterrupt, busy, session, effortLevel: li
           }
         } catch (e) { console.error('[voice] STT error:', e); }
       };
-      mr.start();
+      mr.start(250);
       mediaRecorderRef.current = mr;
       setRecording(true);
     } catch (e) { console.error('[voice] mic error:', e); }
