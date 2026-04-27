@@ -7,7 +7,8 @@
 
 import express from 'express';
 import { WebSocketServer } from 'ws';
-import { createServer } from 'http';
+import { createServer as createHttpServer } from 'http';
+import { createServer as createHttpsServer } from 'https';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync, mkdirSync, writeFileSync, appendFileSync, readFileSync } from 'fs';
@@ -682,7 +683,18 @@ app.get('/{*path}', (req, res) => {
 
 // ── WebSocket ────────────────────────────────────────────────────
 
-const server = createServer(app);
+// ── HTTPS via Tailscale cert (optional) ──────────────────────────
+const TLS_CERT = join(__dirname, 'workstation.tailee9084.ts.net.crt');
+const TLS_KEY  = join(__dirname, 'workstation.tailee9084.ts.net.key');
+const HTTPS_PORT = process.env.HTTPS_PORT || 3471;
+
+let httpsServer = null;
+if (existsSync(TLS_CERT) && existsSync(TLS_KEY)) {
+  const tlsOptions = { cert: readFileSync(TLS_CERT), key: readFileSync(TLS_KEY) };
+  httpsServer = createHttpsServer(tlsOptions, app);
+}
+
+const server = createHttpServer(app);
 const wss = new WebSocketServer({ noServer: true });
 
 server.on('upgrade', (request, socket, head) => {
@@ -876,6 +888,21 @@ wss.on('connection', (ws) => {
 });
 
 // ── Start ────────────────────────────────────────────────────────
+
+// Share WebSocket upgrade handler with the HTTPS server too
+if (httpsServer) {
+  httpsServer.on('upgrade', (request, socket, head) => {
+    const url = new URL(request.url, `https://${request.headers.host}`);
+    if (url.pathname === '/ws/chat') {
+      wss.handleUpgrade(request, socket, head, (ws) => { wss.emit('connection', ws); });
+    } else {
+      socket.destroy();
+    }
+  });
+  httpsServer.listen(HTTPS_PORT, '0.0.0.0', () => {
+    console.log(`ClawMux Lite (HTTPS) on https://workstation.tailee9084.ts.net:${HTTPS_PORT}`);
+  });
+}
 
 server.listen(PORT, HOST, () => {
   console.log(`ClawMux Lite on http://${HOST}:${PORT}`);

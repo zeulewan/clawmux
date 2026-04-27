@@ -56,6 +56,10 @@ export function VoiceBar({ onSubmit, onInterrupt, busy, stop, pause, resume, rep
 
   // ── Local (Whisper) STT ──────────────────────────────────────────────────
   const startLocalSTT = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      alert('Microphone access requires HTTPS. Connect via https://workstation.tailee9084.ts.net:3471');
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const PREFERRED = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];

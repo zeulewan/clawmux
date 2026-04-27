@@ -8,3 +8,5 @@ build/
 test-results/
 playwright-report/
 
+*.crt
+*.key
