@@ -437,7 +437,8 @@ button {
 .timelineMessage.processingMessage {
   padding-left: 24px;
 }
-.timelineMessage.processingMessage:before {
+.timelineMessage.processingMessage:before,
+.timelineMessage.processingMessage:after {
   display: none;
 }
 @keyframes cmx-blink {
