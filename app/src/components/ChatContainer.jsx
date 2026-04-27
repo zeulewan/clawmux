@@ -20,7 +20,7 @@ export function ChatContainer({ session, effortLevel }) {
   const prevMsgCount = useRef(0);
   const userAtBottom = useRef(true);
   const prevSessionRef = useRef(session);
-  const { play: karaokePlay, stop: karaokeStop, pause: karaokePause, resume: karaokeResume } = useKaraokePlayer();
+  const { play: karaokePlay, stop: karaokeStop, pause: karaokePause, resume: karaokeResume, replay: karaokeReplay } = useKaraokePlayer();
   const lastSpokenMsgRef = useRef(null);
   const voice = useSyncExternalStore(subscribeVoice, getVoiceSnapshot);
 
@@ -195,10 +195,10 @@ export function ChatContainer({ session, effortLevel }) {
             onSubmit={handleSubmit}
             onInterrupt={handleInterrupt}
             busy={busy}
-            play={karaokePlay}
             stop={karaokeStop}
             pause={karaokePause}
             resume={karaokeResume}
+            replay={karaokeReplay}
           />
         ) : (
           <InputBar onSubmit={handleSubmit} onInterrupt={handleInterrupt} busy={busy} session={session} effortLevel={effortLevel} />

@@ -5,6 +5,8 @@
  * RAF loop directly sets CSS classes on DOM spans — no React state updates per word.
  * DOM word spans are injected/removed manually (message content doesn't re-render
  * for completed turns, so this is safe).
+ *
+ * Supports seek-by-click: clicking any highlighted word seeks to that timestamp.
  */
 
 import { useRef, useCallback, useEffect } from 'react';
@@ -21,24 +23,23 @@ function getAudioCtx() {
 
 export function useKaraokePlayer() {
   const rafRef    = useRef(null);
-  const audioRef  = useRef(null); // { source, startTime, words: [{...ts, el}] }
+  // audioRef: { source, buffer, startTime, words: [{...ts, el}] }
+  const audioRef  = useRef(null);
   const activeIdx = useRef(-1);
-  const msgElRef  = useRef(null); // DOM element with karaoke spans
+  const msgElRef  = useRef(null);
+  const seekRef   = useRef(null); // kept current so play() can close over it
 
   const stopPlayback = useCallback(() => {
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
 
-    // Stop audio source
     if (audioRef.current?.source) {
       try { audioRef.current.source.onended = null; audioRef.current.source.stop(); } catch {}
     }
 
-    // Remove active highlight
     if (activeIdx.current >= 0 && audioRef.current?.words) {
       audioRef.current.words[activeIdx.current]?.el?.classList.remove('karaoke-active');
     }
 
-    // Unwrap all karaoke spans back to plain text
     if (msgElRef.current) _unwrapKaraokeSpans(msgElRef.current);
     msgElRef.current = null;
 
@@ -53,7 +54,6 @@ export function useKaraokePlayer() {
 
     const elapsed = getAudioCtx().currentTime - a.startTime;
 
-    // Find active word: last one whose start_time <= elapsed
     let newIdx = -1;
     for (let i = 0; i < a.words.length; i++) {
       if (elapsed >= a.words[i].start_time) newIdx = i;
@@ -68,6 +68,38 @@ export function useKaraokePlayer() {
 
     rafRef.current = requestAnimationFrame(tick);
   }, []);
+
+  /** Seek to a specific time offset (seconds) within the current audio. */
+  const seek = useCallback((time) => {
+    const a = audioRef.current;
+    if (!a?.buffer) return;
+
+    // Cancel RAF + stop current source
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    if (activeIdx.current >= 0) a.words[activeIdx.current]?.el?.classList.remove('karaoke-active');
+    activeIdx.current = -1;
+    try { a.source.onended = null; a.source.stop(); } catch {}
+
+    const ctx = getAudioCtx();
+    if (ctx.state === 'suspended') ctx.resume();
+
+    const source = ctx.createBufferSource();
+    source.buffer = a.buffer;
+    source.connect(ctx.destination);
+
+    const clampedTime = Math.max(0, Math.min(time, a.buffer.duration - 0.01));
+    // startTime is adjusted so elapsed = clampedTime at ctx.currentTime
+    const startTime = ctx.currentTime - clampedTime;
+    audioRef.current = { ...a, source, startTime };
+
+    source.onended = () => setTimeout(stopPlayback, 400);
+    source.start(0, clampedTime);
+    setPaused(false);
+    rafRef.current = requestAnimationFrame(tick);
+  }, [tick, stopPlayback]);
+
+  // Keep seekRef current so play() can safely reference it via closure
+  useEffect(() => { seekRef.current = seek; }, [seek]);
 
   /**
    * Play audio with karaoke highlighting.
@@ -84,15 +116,15 @@ export function useKaraokePlayer() {
     const bytes = Uint8Array.from(atob(audio_b64), c => c.charCodeAt(0));
     const decoded = await ctx.decodeAudioData(bytes.buffer);
 
-    // Filter to real words (skip punctuation-only tokens)
     const realWords = rawWords.filter(w => /[\p{L}\p{N}]/u.test(w.word));
 
-    // Inject karaoke spans into the message DOM element
     const msgEl = msgId ? document.querySelector(`[data-msg-id="${CSS.escape(msgId)}"]`) : null;
     if (msgEl) {
       msgElRef.current = msgEl;
       _injectKaraokeSpans(msgEl);
       _matchWordSpans(realWords, msgEl.querySelectorAll('.karaoke-word'));
+      // Attach click-to-seek handlers — delegate through seekRef so no circular dep
+      _addSeekHandlers(realWords, (t) => seekRef.current?.(t));
     }
 
     setSpeaking(msgId, realWords);
@@ -101,7 +133,7 @@ export function useKaraokePlayer() {
     source.buffer = decoded;
     source.connect(ctx.destination);
 
-    audioRef.current = { source, startTime: ctx.currentTime, words: realWords };
+    audioRef.current = { source, buffer: decoded, startTime: ctx.currentTime, words: realWords };
     activeIdx.current = -1;
 
     source.onended = () => setTimeout(stopPlayback, 400);
@@ -123,9 +155,12 @@ export function useKaraokePlayer() {
     rafRef.current = requestAnimationFrame(tick);
   }, [tick]);
 
+  /** Restart current audio from the beginning. */
+  const replay = useCallback(() => seek(0), [seek]);
+
   useEffect(() => () => stopPlayback(), [stopPlayback]);
 
-  return { play, stop: stopPlayback, pause, resume };
+  return { play, stop: stopPlayback, pause, resume, seek, replay };
 }
 
 // ---------------------------------------------------------------------------
@@ -134,14 +169,9 @@ export function useKaraokePlayer() {
 
 const SKIP_TAGS = new Set(['CODE', 'PRE', 'SCRIPT', 'STYLE', 'KBD', 'MATH']);
 
-/**
- * Walk all text nodes in msgEl (skipping code/pre) and wrap each word
- * in <span class="karaoke-word">. Words are runs of non-whitespace chars.
- */
 function _injectKaraokeSpans(msgEl) {
   const walker = document.createTreeWalker(msgEl, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
-      // Skip text inside code/pre/etc.
       let p = node.parentElement;
       while (p && p !== msgEl) {
         if (SKIP_TAGS.has(p.tagName)) return NodeFilter.FILTER_REJECT;
@@ -160,7 +190,6 @@ function _injectKaraokeSpans(msgEl) {
     if (!text.trim()) continue;
 
     const frag = document.createDocumentFragment();
-    // Split by whitespace runs, preserving whitespace as text nodes
     const parts = text.split(/(\s+)/);
     for (const part of parts) {
       if (/^\s+$/.test(part)) {
@@ -176,22 +205,14 @@ function _injectKaraokeSpans(msgEl) {
   }
 }
 
-/**
- * Remove all .karaoke-word spans, replacing each with its text content.
- */
 function _unwrapKaraokeSpans(msgEl) {
   const spans = msgEl.querySelectorAll('.karaoke-word');
   for (const span of spans) {
     span.replaceWith(document.createTextNode(span.textContent));
   }
-  // Normalize adjacent text nodes
   try { msgEl.normalize(); } catch {}
 }
 
-/**
- * Match TTS word timestamps to DOM spans by text content.
- * Attaches .el ref to each matched word object.
- */
 function _matchWordSpans(words, spans) {
   if (!spans.length || !words.length) return;
   let wordIdx = 0;
@@ -201,7 +222,6 @@ function _matchWordSpans(words, spans) {
     const spanText = span.textContent.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
     if (!spanText) continue;
 
-    // Try matching within a small lookahead window first
     const limit = Math.min(wordIdx + 8, words.length);
     let matched = false;
     for (let i = wordIdx; i < limit; i++) {
@@ -214,7 +234,6 @@ function _matchWordSpans(words, spans) {
         break;
       }
     }
-    // Wider fallback for gaps caused by code blocks or TTS-specific symbol pronunciation
     if (!matched) {
       const wide = Math.min(wordIdx + 200, words.length);
       for (let i = limit; i < wide; i++) {
@@ -227,5 +246,14 @@ function _matchWordSpans(words, spans) {
         }
       }
     }
+  }
+}
+
+/** Attach click-to-seek handlers to matched word spans. */
+function _addSeekHandlers(words, seekFn) {
+  for (const word of words) {
+    if (!word.el) continue;
+    word.el.style.cursor = 'pointer';
+    word.el.onclick = () => seekFn(word.start_time);
   }
 }

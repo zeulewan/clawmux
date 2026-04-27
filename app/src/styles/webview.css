@@ -12227,6 +12227,90 @@ button {
   gap: 16px;
 }
 
+/* Side slots — fixed width so main button stays centered */
+.voiceBarSide {
+  width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.voiceBarSide--left  { justify-content: flex-end; }
+.voiceBarSide--right { justify-content: flex-start; }
+
+.voiceBarSideBtn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--app-primary-border-color);
+  background: transparent;
+  color: var(--app-secondary-foreground);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, transform 0.1s;
+}
+
+.voiceBarSideBtn:hover {
+  background: var(--app-ghost-button-hover-background);
+  color: var(--app-primary-foreground);
+  transform: scale(1.08);
+}
+
+.voiceBarSideBtn:active { transform: scale(0.95); }
+
+/* Send button — accent colour */
+.voiceBarSideBtn--send {
+  background: #a78bfa;
+  border-color: transparent;
+  color: #fff;
+}
+
+.voiceBarSideBtn--send:hover {
+  background: #c4b5fd;
+  color: #fff;
+}
+
+/* Stop button — destructive */
+.voiceBarSideBtn--stop {
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #ef4444;
+}
+
+.voiceBarSideBtn--stop:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+/* Animated waveform bars (recording state) */
+.voiceWaveform {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 28px;
+}
+
+.voiceWaveBar {
+  display: block;
+  width: 4px;
+  border-radius: 2px;
+  background: #fff;
+  animation: voiceWaveBounce 0.8s ease-in-out infinite alternate;
+  transform-origin: bottom;
+}
+
+.voiceWaveBar:nth-child(1) { height: 12px; }
+.voiceWaveBar:nth-child(2) { height: 20px; }
+.voiceWaveBar:nth-child(3) { height: 26px; }
+.voiceWaveBar:nth-child(4) { height: 18px; }
+.voiceWaveBar:nth-child(5) { height: 10px; }
+
+@keyframes voiceWaveBounce {
+  from { transform: scaleY(0.3); }
+  to   { transform: scaleY(1.0); }
+}
+
 .voiceBarMainBtn {
   width: 64px;
   height: 64px;
@@ -12266,11 +12350,13 @@ button {
   background: #c4b5fd;
 }
 
-/* Recording — red pulse */
+/* Recording — dark pill with waveform inside */
 .voiceBarMainBtn--recording {
-  background: #dc2626;
-  color: #fff;
-  animation: voicePulse 1s ease-in-out infinite;
+  background: #1e1e2e;
+  color: #a78bfa;
+  width: 80px;
+  border-radius: 32px;
+  animation: none;
 }
 
 /* Speaking / paused */
@@ -12288,24 +12374,6 @@ button {
   box-shadow: none;
 }
 
-.voiceBarStopBtn {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 1px solid var(--app-primary-border-color);
-  background: transparent;
-  color: var(--app-secondary-foreground);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-
-.voiceBarStopBtn:hover {
-  background: var(--app-ghost-button-hover-background);
-  color: var(--app-primary-foreground);
-}
 
 .voiceBarHint {
   font-size: 11px;
@@ -12362,7 +12430,9 @@ button {
   width: 360px;
   max-width: 100vw;
   height: 100vh;
-  background: var(--app-background);
+  background: color-mix(in srgb, var(--app-background) 88%, transparent);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
   border-left: 1px solid var(--app-primary-border-color);
   display: flex;
   flex-direction: column;
