@@ -172,12 +172,6 @@ export function VoiceBar({ onSubmit, onInterrupt, busy, stop, pause, resume, rep
 
   return (
     <div className="voiceBar">
-      {(voice.transcribing || busy) && !voice.recording && (
-        <div className="voiceBarStatus">
-          {voice.transcribing ? 'Transcribing…' : 'Thinking…'}
-        </div>
-      )}
-
       <div className="voiceBarControls">
 
         {/* ── LEFT — pause / cancel / resume ── */}
@@ -206,15 +200,17 @@ export function VoiceBar({ onSubmit, onInterrupt, busy, stop, pause, resume, rep
           {micState === 'recording' && <LiveWaveformBars stream={streamRef.current} />}
 
           {micState === 'playing' && (
-            // Mic with interruption indicator
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" opacity="0.9">
-              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+            // v0.8 MIC_INTERRUPT_SVG — small centered square
+            <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+              <rect x="7" y="7" width="10" height="10" rx="2"/>
             </svg>
           )}
 
           {(micState === 'idle' || micState === 'paused') && (
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+            // v0.8 MIC_SVG
+            <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
             </svg>
           )}
         </button>

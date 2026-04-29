@@ -130,11 +130,15 @@ export function useKaraokePlayer() {
     const realWords = rawWords.filter(w => /[\p{L}\p{N}]/u.test(w.word));
 
     const msgEl = msgId ? document.querySelector(`[data-msg-id="${CSS.escape(msgId)}"]`) : null;
+    console.log('[karaoke] msgId:', msgId, 'msgEl:', !!msgEl, 'realWords:', realWords.length);
     if (msgEl) {
       msgElRef.current = msgEl;
       _injectKaraokeSpans(msgEl);
-      _matchWordSpans(realWords, msgEl.querySelectorAll('.karaoke-word'));
-      // Attach click-to-seek handlers — delegate through seekRef so no circular dep
+      const spans = msgEl.querySelectorAll('.karaoke-word');
+      console.log('[karaoke] spans injected:', spans.length);
+      _matchWordSpans(realWords, spans);
+      const matched = realWords.filter(w => w.el).length;
+      console.log('[karaoke] words matched:', matched, '/', realWords.length);
       _addSeekHandlers(realWords, (t) => seekRef.current?.(t));
     }
 
