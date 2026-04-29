@@ -4,7 +4,7 @@ import { InputBar } from './InputBar.jsx';
 import { VoiceBar } from './VoiceBar.jsx';
 import { LogoIcon } from '../assets/logo.jsx';
 import { CrabIcon } from '../assets/crab.jsx';
-import { useKaraokePlayer } from '../hooks/useKaraoke.js';
+import { useKaraokePlayer, unlockAudioContext } from '../hooks/useKaraoke.js';
 import { isVoiceEnabled, subscribe as subscribeVoice, getSnapshot as getVoiceSnapshot } from '../state/voice.js';
 import { getVoice, getSpeed } from '../state/settings.js';
 
@@ -116,6 +116,7 @@ export function ChatContainer({ session, effortLevel }) {
   }, [session, karaokeStop]);
 
   const handlePlayMessage = useCallback((msgId, text) => {
+    unlockAudioContext();
     fetch('/api/tts-captioned', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
