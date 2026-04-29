@@ -117,7 +117,7 @@ export function ChatContainer({ session, effortLevel }) {
 
   const handlePlayMessage = useCallback((msgId, text) => {
     unlockAudioContext();
-    return fetch('/api/tts-captioned', {
+    fetch('/api/tts-captioned', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, voice: getVoice(), speed: getSpeed() }),
