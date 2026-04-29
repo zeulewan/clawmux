@@ -12161,10 +12161,10 @@ button {
 }
 .voiceToggleActive {
   opacity: 1;
-  color: #a78bfa;
+  color: #007aff;
 }
 .voiceToggleActive:hover {
-  color: #c4b5fd;
+  color: #4da3ff;
 }
 /* Pulsing dot when speaking */
 .voiceToggleDot {
@@ -12174,7 +12174,7 @@ button {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #a78bfa;
+  background: #007aff;
   animation: voicePulse 1.2s ease-in-out infinite;
 }
 @keyframes voicePulse {
@@ -12197,8 +12197,8 @@ button {
 
 /* The currently-spoken word */
 .karaoke-active {
-  color: #a78bfa;
-  background-color: rgba(167, 139, 250, 0.12);
+  color: #007aff;
+  background-color: rgba(0, 122, 255, 0.12);
   border-radius: 2px;
 }
 
@@ -12262,13 +12262,13 @@ button {
 
 /* Send button — accent colour */
 .voiceBarSideBtn--send {
-  background: #a78bfa;
+  background: #007aff;
   border-color: transparent;
   color: #fff;
 }
 
 .voiceBarSideBtn--send:hover {
-  background: #c4b5fd;
+  background: #4da3ff;
   color: #fff;
 }
 
@@ -12300,15 +12300,17 @@ button {
   transform-origin: bottom;
 }
 
-.voiceWaveBar:nth-child(1) { height: 12px; }
-.voiceWaveBar:nth-child(2) { height: 20px; }
-.voiceWaveBar:nth-child(3) { height: 26px; }
-.voiceWaveBar:nth-child(4) { height: 18px; }
-.voiceWaveBar:nth-child(5) { height: 10px; }
+/* Default heights — JS overrides these with real audio levels */
+.voiceWaveBar:nth-child(1) { height: 10px; animation-delay: 0.0s; }
+.voiceWaveBar:nth-child(2) { height: 18px; animation-delay: 0.15s; }
+.voiceWaveBar:nth-child(3) { height: 24px; animation-delay: 0.05s; }
+.voiceWaveBar:nth-child(4) { height: 16px; animation-delay: 0.2s; }
+.voiceWaveBar:nth-child(5) { height: 8px;  animation-delay: 0.1s; }
 
+/* Fallback pulse (Apple STT / no stream) — JS overrides height directly */
 @keyframes voiceWaveBounce {
-  from { transform: scaleY(0.3); }
-  to   { transform: scaleY(1.0); }
+  0%, 100% { opacity: 0.45; }
+  50%       { opacity: 1; }
 }
 
 .voiceBarMainBtn {
@@ -12342,28 +12344,39 @@ button {
 
 /* Idle — mic */
 .voiceBarMainBtn--idle {
-  background: #a78bfa;
+  background: #007aff;
   color: #fff;
 }
 
 .voiceBarMainBtn--idle:hover {
-  background: #c4b5fd;
+  background: #4da3ff;
 }
 
 /* Recording — dark pill with waveform inside */
 .voiceBarMainBtn--recording {
-  background: #1e1e2e;
-  color: #a78bfa;
+  background: #1c1c1e;
+  color: #007aff;
   width: 80px;
   border-radius: 32px;
   animation: none;
 }
 
-/* Speaking / paused */
-.voiceBarMainBtn--speaking,
+/* Speaking — mic icon, purple like idle (tap to interrupt) */
+.voiceBarMainBtn--speaking {
+  background: #0063d1;
+  color: #fff;
+  animation: voiceSpeakingPulse 2s ease-in-out infinite;
+}
+
+@keyframes voiceSpeakingPulse {
+  0%, 100% { box-shadow: 0 2px 8px rgba(0,122,255,0.4); }
+  50%       { box-shadow: 0 4px 20px rgba(0,122,255,0.7); }
+}
+
+/* Paused */
 .voiceBarMainBtn--paused {
   background: var(--app-ghost-button-hover-background);
-  color: #a78bfa;
+  color: #007aff;
 }
 
 /* Thinking / transcribing — spinner */
@@ -12411,7 +12424,7 @@ button {
 .msgPlayBtn:hover {
   opacity: 1 !important;
   background: var(--app-ghost-button-hover-background);
-  color: #a78bfa;
+  color: #007aff;
 }
 
 /* ── Settings Panel ────────────────────────────────────────────────────────── */
@@ -12531,7 +12544,7 @@ button {
 
 .settingsNote {
   font-size: 11px;
-  color: #a78bfa;
+  color: #007aff;
   margin-top: 6px;
   opacity: 0.85;
 }
@@ -12567,12 +12580,12 @@ button {
 .settingsInput:focus,
 .settingsSelect:focus {
   outline: none;
-  border-color: #a78bfa;
+  border-color: #007aff;
 }
 
 .settingsSlider {
   width: 100%;
-  accent-color: #a78bfa;
+  accent-color: #007aff;
   cursor: pointer;
 }
 
@@ -12612,8 +12625,8 @@ button {
 }
 
 .settingsSegBtn.active {
-  background: #a78bfa22;
-  color: #a78bfa;
+  background: #007aff22;
+  color: #007aff;
   font-weight: 500;
 }
 
