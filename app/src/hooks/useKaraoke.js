@@ -28,7 +28,16 @@ function getAudioCtx() {
  */
 export function unlockAudioContext() {
   const ctx = getAudioCtx();
+  // Resume if suspended
   if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+  // Start+stop a silent 1-sample buffer — required on iOS/Safari to truly unlock
+  try {
+    const buf = ctx.createBuffer(1, 1, 22050);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.start(0);
+  } catch {}
 }
 
 // Belt-and-suspenders: unlock on first user interaction anywhere on the page
@@ -132,10 +141,18 @@ export function useKaraokePlayer() {
     stopPlayback();
 
     const ctx = getAudioCtx();
-    if (ctx.state === 'suspended') await ctx.resume();
+    if (ctx.state === 'suspended') {
+      try { await ctx.resume(); } catch (e) { console.error('[karaoke] ctx.resume failed:', e); }
+    }
 
-    const bytes   = Uint8Array.from(atob(audio_b64), c => c.charCodeAt(0));
-    const decoded = await ctx.decodeAudioData(bytes.buffer);
+    let decoded;
+    try {
+      const bytes = Uint8Array.from(atob(audio_b64), c => c.charCodeAt(0));
+      decoded = await ctx.decodeAudioData(bytes.buffer);
+    } catch (e) {
+      console.error('[karaoke] decodeAudioData failed:', e);
+      return;
+    }
 
     // Filter to words that contain at least one letter/number
     const realWords = rawWords.filter(w => /[\p{L}\p{N}]/u.test(w.word));
@@ -161,7 +178,12 @@ export function useKaraokePlayer() {
     activeIdx.current = -1;
 
     source.onended = () => setTimeout(stopPlayback, 400);
-    source.start(0);
+    try {
+      source.start(0);
+    } catch (e) {
+      console.error('[karaoke] source.start failed:', e, 'ctx.state:', ctx.state);
+      return;
+    }
     rafRef.current = requestAnimationFrame(tick);
   }, [stopPlayback, tick]);
 
