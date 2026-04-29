@@ -142,7 +142,7 @@ export function ChatContainer({ session, effortLevel }) {
   return (
     <div className="chatContainer">
       {/* Messages container — always present for scroll behavior */}
-      <div className="messagesContainer" ref={messagesContainerRef} onScroll={handleScroll}>
+      <div className="messagesContainer stickyMode" ref={messagesContainerRef} onScroll={handleScroll}>
         {messages.length === 0 && !busy ? (
           <div className="emptyState">
             <div className="welcomeContainer">

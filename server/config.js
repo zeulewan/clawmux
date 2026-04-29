@@ -112,6 +112,46 @@ const REQUIRED_EFFORT_LEVELS = {
   pi: ['low', 'medium', 'high', 'xhigh'],
 };
 
+const EFFORT_ALIASES = {
+  claude: { xhigh: 'max' },
+  codex: { max: 'xhigh' },
+  pi: { max: 'xhigh' },
+};
+
+function _normalizeEffortForBackend(backend, effort, fallback = 'high') {
+  const cfg = getBackendsConfig();
+  const valid = cfg?.[backend]?.effortLevels || REQUIRED_EFFORT_LEVELS[backend] || [];
+  if (valid.length === 0) return effort || fallback;
+
+  const normalized = EFFORT_ALIASES[backend]?.[effort] || effort;
+  if (normalized && valid.includes(normalized)) return normalized;
+  if (fallback && valid.includes(fallback)) return fallback;
+  return valid.includes('high') ? 'high' : valid[valid.length - 1];
+}
+
+function _normalizeAgentsConfig(config) {
+  let changed = false;
+  const defaultBackend = config.defaults?.backend || getDefaultBackend();
+  const defaultEffort = config.defaults?.effort || 'high';
+  const normalizedDefaultEffort = _normalizeEffortForBackend(defaultBackend, defaultEffort, 'high');
+  if (config.defaults && config.defaults.effort !== normalizedDefaultEffort) {
+    config.defaults.effort = normalizedDefaultEffort;
+    changed = true;
+  }
+
+  for (const agent of config.agents || []) {
+    const backend = agent.backend || defaultBackend;
+    const rawEffort = agent.effort || normalizedDefaultEffort;
+    const normalizedEffort = _normalizeEffortForBackend(backend, rawEffort, normalizedDefaultEffort);
+    if (agent.effort !== normalizedEffort) {
+      agent.effort = normalizedEffort;
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
 function _normalizeBackendsConfig(config) {
   let changed = false;
   for (const [backend, required] of Object.entries(REQUIRED_EFFORT_LEVELS)) {
@@ -164,6 +204,9 @@ let _agentsConfig = null;
 function getAgentsConfig() {
   if (!_agentsConfig) {
     _agentsConfig = JSON.parse(readFileSync(AGENTS_PATH, 'utf8'));
+    if (_normalizeAgentsConfig(_agentsConfig)) {
+      writeFileSync(AGENTS_PATH, JSON.stringify(_agentsConfig, null, 2) + '\n');
+    }
   }
   return _agentsConfig;
 }
@@ -199,11 +242,13 @@ function _buildAgentsMap() {
   const map = {};
   for (const agent of config.agents || []) {
     const id = agent.name.toLowerCase();
+    const backend = agent.backend || config.defaults?.backend || getDefaultBackend();
+    const fallbackEffort = config.defaults?.effort || 'high';
     map[id] = {
       name: agent.name,
-      backend: agent.backend || config.defaults?.backend || getDefaultBackend(),
+      backend,
       model: agent.model || config.defaults?.model || 'default',
-      effort: agent.effort || config.defaults?.effort || 'high',
+      effort: _normalizeEffortForBackend(backend, agent.effort || fallbackEffort, fallbackEffort),
       permissionMode: agent.permissionMode || config.defaults?.permissionMode || 'bypassPermissions',
     };
   }
@@ -251,9 +296,12 @@ function _setAgentField(id, field, value) {
 }
 
 export function setAgentBackend(id, backend) {
+  const currentEffort = getAgentEffort(id);
   _setAgentField(id, 'backend', backend);
   // Reset model to 'default' — let the backend pick its own default
   _setAgentField(id, 'model', 'default');
+  const normalizedEffort = _normalizeEffortForBackend(backend, currentEffort);
+  _setAgentField(id, 'effort', normalizedEffort);
 }
 
 export function setAgentModel(id, model) {
@@ -270,7 +318,8 @@ export function setAgentModel(id, model) {
 }
 
 export function setAgentEffort(id, effort) {
-  _setAgentField(id, 'effort', effort);
+  const backend = getAgentBackend(id);
+  _setAgentField(id, 'effort', _normalizeEffortForBackend(backend, effort));
 }
 
 // ── Session registry (stored per-agent in agents.json) ──

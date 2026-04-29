@@ -1,12 +1,12 @@
 /**
  * ClawMux Voice — karaoke player hook.
  *
- * Manages Web Audio API playback + requestAnimationFrame word highlighting.
- * RAF loop directly sets CSS classes on DOM spans — no React state updates per word.
- * DOM word spans are injected/removed manually (message content doesn't re-render
- * for completed turns, so this is safe).
- *
- * Supports seek-by-click: clicking any highlighted word seeks to that timestamp.
+ * Ported faithfully from v0.8.0 audio.js:
+ * - RAF loop uses range-based timing (start_time ≤ elapsed < end_time)
+ * - Only iterates words that have a matched DOM span (.el)
+ * - Active class is `.active` on `.karaoke-word` spans (matches v0.8 CSS)
+ * - Pause does NOT suspend AudioContext — stores offset, stops source, resumes
+ *   by creating a new source. AudioContext stays running so auto-play works.
  */
 
 import { useRef, useCallback, useEffect } from 'react';
@@ -22,24 +22,36 @@ function getAudioCtx() {
 }
 
 /**
- * Call this during any user gesture (mic tap, button press) to unlock the
- * AudioContext for subsequent auto-play. Mobile browsers require a gesture
- * before AudioContext.resume() works — pre-unlocking here means TTS can
- * auto-play after the agent responds without needing another tap.
+ * Unlock AudioContext during a user gesture so subsequent auto-play works.
+ * Also wires a one-time document touchstart/click handler as belt-and-suspenders
+ * for mobile browsers that auto-suspend on page load.
  */
 export function unlockAudioContext() {
   const ctx = getAudioCtx();
   if (ctx.state === 'suspended') ctx.resume().catch(() => {});
 }
 
+// Belt-and-suspenders: unlock on first user interaction anywhere on the page
+function _installGlobalUnlock() {
+  const unlock = () => {
+    unlockAudioContext();
+    document.removeEventListener('touchstart', unlock, true);
+    document.removeEventListener('mousedown', unlock, true);
+  };
+  document.addEventListener('touchstart', unlock, { capture: true, passive: true });
+  document.addEventListener('mousedown', unlock, { capture: true, passive: true });
+}
+_installGlobalUnlock();
+
 export function useKaraokePlayer() {
   const rafRef    = useRef(null);
-  // audioRef: { source, buffer, startTime, words: [{...ts, el}] }
-  const audioRef  = useRef(null);
+  const audioRef  = useRef(null); // { source, buffer, startTime, words: [{...ts, el}] }
+  const pauseRef  = useRef(null); // { buffer, offset, words } saved across pause
   const activeIdx = useRef(-1);
   const msgElRef  = useRef(null);
-  const seekRef   = useRef(null); // kept current so play() can close over it
+  const seekRef   = useRef(null);
 
+  // ── Stop all playback and clean up DOM ──────────────────────────────────
   const stopPlayback = useCallback(() => {
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
 
@@ -47,61 +59,65 @@ export function useKaraokePlayer() {
       try { audioRef.current.source.onended = null; audioRef.current.source.stop(); } catch {}
     }
 
+    // Remove active class from current word
     if (activeIdx.current >= 0 && audioRef.current?.words) {
-      audioRef.current.words[activeIdx.current]?.el?.classList.remove('karaoke-active');
+      audioRef.current.words[activeIdx.current]?.el?.classList.remove('active');
     }
 
     if (msgElRef.current) _unwrapKaraokeSpans(msgElRef.current);
     msgElRef.current = null;
 
     audioRef.current = null;
+    pauseRef.current = null;
     activeIdx.current = -1;
     stopSpeaking();
   }, []);
 
+  // ── RAF loop — mirrors v0.8.0 _karaokeFrame exactly ────────────────────
   const tick = useCallback(() => {
     const a = audioRef.current;
-    if (!a || !a.words.length) return;
+    if (!a) return; // stopped — don't reschedule
 
     const elapsed = getAudioCtx().currentTime - a.startTime;
 
+    // Only iterate words with matched spans (activeWords)
     let newIdx = -1;
     for (let i = 0; i < a.words.length; i++) {
-      if (elapsed >= a.words[i].start_time) newIdx = i;
-      else break;
+      const w = a.words[i];
+      if (elapsed >= w.start_time && elapsed < w.end_time) { newIdx = i; break; }
     }
 
-    if (newIdx !== activeIdx.current) {
-      if (activeIdx.current >= 0) a.words[activeIdx.current]?.el?.classList.remove('karaoke-active');
-      if (newIdx >= 0)            a.words[newIdx]?.el?.classList.add('karaoke-active');
+    // Only update on positive match — keeps previous word lit during inter-word gaps
+    if (newIdx >= 0 && newIdx !== activeIdx.current) {
+      if (activeIdx.current >= 0) a.words[activeIdx.current]?.el?.classList.remove('active');
+      a.words[newIdx].el.classList.add('active');
       activeIdx.current = newIdx;
     }
 
     rafRef.current = requestAnimationFrame(tick);
   }, []);
 
-  /** Seek to a specific time offset (seconds) within the current audio. */
+  // ── Seek to absolute time offset ────────────────────────────────────────
   const seek = useCallback((time) => {
-    const a = audioRef.current;
+    const a = audioRef.current || (pauseRef.current ? { ...pauseRef.current, source: null } : null);
     if (!a?.buffer) return;
 
-    // Cancel RAF + stop current source
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
-    if (activeIdx.current >= 0) a.words[activeIdx.current]?.el?.classList.remove('karaoke-active');
+    if (activeIdx.current >= 0 && audioRef.current?.words) {
+      audioRef.current.words[activeIdx.current]?.el?.classList.remove('active');
+    }
     activeIdx.current = -1;
-    try { a.source.onended = null; a.source.stop(); } catch {}
+    try { audioRef.current?.source?.onended && (audioRef.current.source.onended = null); audioRef.current?.source?.stop(); } catch {}
 
     const ctx = getAudioCtx();
-    if (ctx.state === 'suspended') ctx.resume();
-
+    const clampedTime = Math.max(0, Math.min(time, a.buffer.duration - 0.01));
     const source = ctx.createBufferSource();
     source.buffer = a.buffer;
     source.connect(ctx.destination);
 
-    const clampedTime = Math.max(0, Math.min(time, a.buffer.duration - 0.01));
-    // startTime is adjusted so elapsed = clampedTime at ctx.currentTime
     const startTime = ctx.currentTime - clampedTime;
-    audioRef.current = { ...a, source, startTime };
+    audioRef.current = { source, buffer: a.buffer, startTime, words: a.words };
+    pauseRef.current = null;
 
     source.onended = () => setTimeout(stopPlayback, 400);
     source.start(0, clampedTime);
@@ -109,38 +125,31 @@ export function useKaraokePlayer() {
     rafRef.current = requestAnimationFrame(tick);
   }, [tick, stopPlayback]);
 
-  // Keep seekRef current so play() can safely reference it via closure
   useEffect(() => { seekRef.current = seek; }, [seek]);
 
-  /**
-   * Play audio with karaoke highlighting.
-   * @param {string} audio_b64  Base64 WAV from /api/tts-captioned
-   * @param {Array}  rawWords   [{word, start_time, end_time}] from Kokoro
-   * @param {string} msgId      Message _uuid — used to find the DOM element
-   */
+  // ── Play ─────────────────────────────────────────────────────────────────
   const play = useCallback(async (audio_b64, rawWords, msgId) => {
     stopPlayback();
 
     const ctx = getAudioCtx();
     if (ctx.state === 'suspended') await ctx.resume();
 
-    const bytes = Uint8Array.from(atob(audio_b64), c => c.charCodeAt(0));
+    const bytes   = Uint8Array.from(atob(audio_b64), c => c.charCodeAt(0));
     const decoded = await ctx.decodeAudioData(bytes.buffer);
 
+    // Filter to words that contain at least one letter/number
     const realWords = rawWords.filter(w => /[\p{L}\p{N}]/u.test(w.word));
 
     const msgEl = msgId ? document.querySelector(`[data-msg-id="${CSS.escape(msgId)}"]`) : null;
-    console.log('[karaoke] msgId:', msgId, 'msgEl:', !!msgEl, 'realWords:', realWords.length);
     if (msgEl) {
       msgElRef.current = msgEl;
       _injectKaraokeSpans(msgEl);
-      const spans = msgEl.querySelectorAll('.karaoke-word');
-      console.log('[karaoke] spans injected:', spans.length);
-      _matchWordSpans(realWords, spans);
-      const matched = realWords.filter(w => w.el).length;
-      console.log('[karaoke] words matched:', matched, '/', realWords.length);
+      _matchWordSpans(realWords, msgEl.querySelectorAll('.karaoke-word'));
       _addSeekHandlers(realWords, (t) => seekRef.current?.(t));
     }
+
+    // Only track words that have a matched span — mirrors v0.8.0 activeWords filter
+    const activeWords = realWords.filter(w => w.el);
 
     setSpeaking(msgId, realWords);
 
@@ -148,7 +157,7 @@ export function useKaraokePlayer() {
     source.buffer = decoded;
     source.connect(ctx.destination);
 
-    audioRef.current = { source, buffer: decoded, startTime: ctx.currentTime, words: realWords };
+    audioRef.current = { source, buffer: decoded, startTime: ctx.currentTime, words: activeWords };
     activeIdx.current = -1;
 
     source.onended = () => setTimeout(stopPlayback, 400);
@@ -156,21 +165,45 @@ export function useKaraokePlayer() {
     rafRef.current = requestAnimationFrame(tick);
   }, [stopPlayback, tick]);
 
+  // ── Pause — stops source, stores offset. Does NOT suspend AudioContext. ──
   const pause = useCallback(() => {
+    const a = audioRef.current;
+    if (!a) return;
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+
     const ctx = getAudioCtx();
-    if (ctx.state === 'running') ctx.suspend();
+    const offset = ctx.currentTime - a.startTime;
+
+    try { a.source.onended = null; a.source.stop(); } catch {}
+
+    // Save state for resume
+    pauseRef.current = { buffer: a.buffer, offset, words: a.words };
+    audioRef.current = null;
     setPaused(true);
+    // AudioContext stays running — no ctx.suspend()
   }, []);
 
+  // ── Resume — creates new source from saved offset ────────────────────────
   const resume = useCallback(() => {
+    const p = pauseRef.current;
+    if (!p) return;
+
     const ctx = getAudioCtx();
-    if (ctx.state === 'suspended') ctx.resume();
+    const source = ctx.createBufferSource();
+    source.buffer = p.buffer;
+    source.connect(ctx.destination);
+
+    const clampedOffset = Math.max(0, Math.min(p.offset, p.buffer.duration - 0.01));
+    const startTime = ctx.currentTime - clampedOffset;
+    audioRef.current = { source, buffer: p.buffer, startTime, words: p.words };
+    pauseRef.current = null;
+
+    source.onended = () => setTimeout(stopPlayback, 400);
+    source.start(0, clampedOffset);
     setPaused(false);
     rafRef.current = requestAnimationFrame(tick);
-  }, [tick]);
+  }, [tick, stopPlayback]);
 
-  /** Restart current audio from the beginning. */
   const replay = useCallback(() => seek(0), [seek]);
 
   useEffect(() => () => stopPlayback(), [stopPlayback]);
@@ -264,7 +297,6 @@ function _matchWordSpans(words, spans) {
   }
 }
 
-/** Attach click-to-seek handlers to matched word spans. */
 function _addSeekHandlers(words, seekFn) {
   for (const word of words) {
     if (!word.el) continue;

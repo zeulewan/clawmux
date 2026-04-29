@@ -15,7 +15,7 @@ if (typeof crypto !== 'undefined' && typeof crypto.randomUUID !== 'function') {
   };
 }
 
-const WS_URL = `ws://${location.host}/ws/chat`;
+const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/chat`;
 const RECONNECT_BASE = 500;
 const RECONNECT_MAX = 15000;
 const PING_INTERVAL = 20000;
