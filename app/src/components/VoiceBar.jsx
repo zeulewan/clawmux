@@ -1,6 +1,7 @@
 import React, { useRef, useCallback, useEffect, useSyncExternalStore } from 'react';
 import { subscribe, getSnapshot, setRecording, setTranscribing } from '../state/voice.js';
 import { subscribe as subscribeSettings, getSnapshot as getSettingsSnapshot } from '../state/settings.js';
+import { unlockAudioContext } from '../hooks/useKaraoke.js';
 
 /**
  * VoiceBar — replaces InputBar when voice mode is active.
@@ -129,6 +130,7 @@ export function VoiceBar({ onSubmit, onInterrupt, busy, stop, pause, resume, rep
   // During speaking: main btn = INTERRUPT (stop TTS) + start recording
   // During paused: main btn = resume
   const handleMainBtn = useCallback(() => {
+    unlockAudioContext();
     if (voiceState === 'idle')      return startRecording();
     if (voiceState === 'recording') return isApple ? cancelRecording() : sendRecording();
     if (voiceState === 'speaking')  { stop(); startRecording(); return; }
@@ -136,6 +138,7 @@ export function VoiceBar({ onSubmit, onInterrupt, busy, stop, pause, resume, rep
   }, [voiceState, startRecording, sendRecording, cancelRecording, stop, resume, isApple]);
 
   const handleStop = useCallback(() => {
+    unlockAudioContext();
     stop();
     if (busy) onInterrupt();
   }, [stop, busy, onInterrupt]);

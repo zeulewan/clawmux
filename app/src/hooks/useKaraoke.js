@@ -21,6 +21,17 @@ function getAudioCtx() {
   return _audioCtx;
 }
 
+/**
+ * Call this during any user gesture (mic tap, button press) to unlock the
+ * AudioContext for subsequent auto-play. Mobile browsers require a gesture
+ * before AudioContext.resume() works — pre-unlocking here means TTS can
+ * auto-play after the agent responds without needing another tap.
+ */
+export function unlockAudioContext() {
+  const ctx = getAudioCtx();
+  if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+}
+
 export function useKaraokePlayer() {
   const rafRef    = useRef(null);
   // audioRef: { source, buffer, startTime, words: [{...ts, el}] }
