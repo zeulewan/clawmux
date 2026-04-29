@@ -43,7 +43,7 @@ export async function ttsCaptioned(text, { voice = 'af_sky', speed = 1.0 } = {})
   // At higher speeds Kokoro clips the first word. Prepend a dummy prefix so
   // the real content starts after the warmup, then strip it from the result.
   let prefix = null;
-  if (speed >= 2.0)      prefix = 'Hmm, well,';
+  if (speed >= 2.0) prefix = 'Hmm, well,';
   else if (speed >= 1.5) prefix = 'Hmm,';
   const input = prefix ? `${prefix} ${text}` : text;
 
@@ -83,10 +83,13 @@ export async function ttsCaptioned(text, { voice = 'af_sky', speed = 1.0 } = {})
 
 // Whisper hallucinations to always suppress
 const HALLUCINATIONS_ALWAYS = new Set([
-  'thanks for watching', 'thank you for watching',
-  'please like, comment, and subscribe', 'please subscribe',
-  'subscribe to my channel', 'please like and subscribe',
-  'thank you for watching and i\'ll see you in the next one',
+  'thanks for watching',
+  'thank you for watching',
+  'please like, comment, and subscribe',
+  'please subscribe',
+  'subscribe to my channel',
+  'please like and subscribe',
+  "thank you for watching and i'll see you in the next one",
 ]);
 // Short hallucinations only suppressed for short/silent audio
 const HALLUCINATIONS_SHORT = new Set(['thank you', 'thanks', 'you', '.']);
@@ -125,8 +128,12 @@ export async function stt(audioBuffer) {
 
 export async function health() {
   const [kokoroOk, whisperOk] = await Promise.all([
-    fetch(`${KOKORO_URL}/v1/models`).then(r => r.ok).catch(() => false),
-    fetch(`${WHISPER_URL}/health`).then(r => r.ok).catch(() => false),
+    fetch(`${KOKORO_URL}/v1/models`)
+      .then((r) => r.ok)
+      .catch(() => false),
+    fetch(`${WHISPER_URL}/health`)
+      .then((r) => r.ok)
+      .catch(() => false),
   ]);
   return { tts: kokoroOk, stt: whisperOk };
 }
@@ -138,7 +145,9 @@ export async function health() {
 async function _retry(n, fn) {
   let lastErr;
   for (let i = 0; i < n; i++) {
-    try { return await fn(); } catch (e) {
+    try {
+      return await fn();
+    } catch (e) {
       lastErr = e;
       if (i < n - 1) await _sleep(1000 * (i + 1));
     }
@@ -146,7 +155,9 @@ async function _retry(n, fn) {
   throw lastErr;
 }
 
-function _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function _sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 function _getSttPrompt() {
   return process.env.CLAWMUX_STT_PROMPT || '';
@@ -184,7 +195,12 @@ function _stripPrefixAudio(audio_b64, timestamps, prefix) {
     return { audio_b64, words: timestamps };
   }
 
-  let pos = 12, sampleRate = 24000, bitsPerSample = 16, numChannels = 1, dataStart = 0, fmtChunk = null;
+  let pos = 12,
+    sampleRate = 24000,
+    bitsPerSample = 16,
+    numChannels = 1,
+    dataStart = 0,
+    fmtChunk = null;
   while (pos < raw.length - 8) {
     const id = raw.toString('ascii', pos, pos + 4);
     const size = raw.readUInt32LE(pos + 4);
@@ -208,12 +224,16 @@ function _stripPrefixAudio(audio_b64, timestamps, prefix) {
 
   const trimmedPcm = pcm.slice(cutBytes);
   const wav = Buffer.concat([
-    Buffer.from('RIFF'), _u32le(trimmedPcm.length + fmtChunk.length + 8 + 4),
-    Buffer.from('WAVE'), fmtChunk,
-    Buffer.from('data'), _u32le(trimmedPcm.length), trimmedPcm,
+    Buffer.from('RIFF'),
+    _u32le(trimmedPcm.length + fmtChunk.length + 8 + 4),
+    Buffer.from('WAVE'),
+    fmtChunk,
+    Buffer.from('data'),
+    _u32le(trimmedPcm.length),
+    trimmedPcm,
   ]);
 
-  const shifted = timestamps.slice(cutIdx).map(ts => ({
+  const shifted = timestamps.slice(cutIdx).map((ts) => ({
     ...ts,
     start_time: Math.max(0, ts.start_time - cutTime),
     end_time: ts.end_time - cutTime,
@@ -235,7 +255,7 @@ function _fixRiffSize(audio_b64) {
   const buf = Buffer.from(audio_b64, 'base64');
   if (buf.length < 8) return audio_b64;
   const riffSize = buf.readUInt32LE(4);
-  if (riffSize !== 0xFFFFFFFF) return audio_b64;
+  if (riffSize !== 0xffffffff) return audio_b64;
   const fixed = Buffer.from(buf);
   fixed.writeUInt32LE(buf.length - 8, 4);
   return fixed.toString('base64');

@@ -34,7 +34,11 @@ function _detectProvider(entries) {
 
 function _flattenText(value) {
   if (typeof value === 'string') return value;
-  if (Array.isArray(value)) return value.map((item) => _flattenText(item)).filter(Boolean).join('\n');
+  if (Array.isArray(value))
+    return value
+      .map((item) => _flattenText(item))
+      .filter(Boolean)
+      .join('\n');
   if (value && typeof value === 'object') {
     if (typeof value.text === 'string') return value.text;
     if (value.content != null) return _flattenText(value.content);
@@ -63,7 +67,8 @@ function _normalizeBlock(block, role) {
 }
 
 function _normalizeMessage(entry) {
-  const role = entry.message?.role || (entry.type === 'user' ? 'user' : entry.type === 'assistant' ? 'assistant' : null);
+  const role =
+    entry.message?.role || (entry.type === 'user' ? 'user' : entry.type === 'assistant' ? 'assistant' : null);
   if (!role) return null;
 
   let content = entry.message?.content || entry.content || [];
@@ -119,9 +124,7 @@ function _truncateMessages(messages, maxTurns, maxChars) {
 }
 
 function _formatTranscript(messages) {
-  return messages
-    .map((message) => `${message.role === 'user' ? 'User' : 'Assistant'}: ${message.text}`)
-    .join('\n\n');
+  return messages.map((message) => `${message.role === 'user' ? 'User' : 'Assistant'}: ${message.text}`).join('\n\n');
 }
 
 function _tokenBudget(targetBackend, explicitMaxTokens) {
@@ -135,7 +138,16 @@ function _charBudgetFromTokens(tokenBudget) {
   return tokenBudget * 4;
 }
 
-export function buildMigrationPrompt({ messages, sourceBackend = 'unknown', targetBackend = 'codex', sourceSessionId = null, maxTurns = 40, maxChars = null, maxTokens = null, userMessage = '' }) {
+export function buildMigrationPrompt({
+  messages,
+  sourceBackend = 'unknown',
+  targetBackend = 'codex',
+  sourceSessionId = null,
+  maxTurns = 40,
+  maxChars = null,
+  maxTokens = null,
+  userMessage = '',
+}) {
   const normalized = _mergeConsecutive(messages.map(_normalizeMessage).filter(Boolean));
   const tokenBudget = _tokenBudget(targetBackend, maxTokens);
   const charBudget = maxChars || _charBudgetFromTokens(tokenBudget);
@@ -172,7 +184,16 @@ export function buildMigrationPrompt({ messages, sourceBackend = 'unknown', targ
   };
 }
 
-export function buildMigrationPromptFromSession({ sessionId, cwd, targetBackend = 'codex', sourceBackend = 'unknown', maxTurns = 40, maxChars = null, maxTokens = null, userMessage = '' }) {
+export function buildMigrationPromptFromSession({
+  sessionId,
+  cwd,
+  targetBackend = 'codex',
+  sourceBackend = 'unknown',
+  maxTurns = 40,
+  maxChars = null,
+  maxTokens = null,
+  userMessage = '',
+}) {
   const messages = readSessionMessages(sessionId, cwd);
   return buildMigrationPrompt({
     messages,
@@ -186,11 +207,23 @@ export function buildMigrationPromptFromSession({ sessionId, cwd, targetBackend 
   });
 }
 
-export function buildMigrationPromptFromFile({ filePath, targetBackend = 'codex', sourceBackend = null, maxTurns = 40, maxChars = null, maxTokens = null, userMessage = '' }) {
+export function buildMigrationPromptFromFile({
+  filePath,
+  targetBackend = 'codex',
+  sourceBackend = null,
+  maxTurns = 40,
+  maxChars = null,
+  maxTokens = null,
+  userMessage = '',
+}) {
   const absolutePath = resolve(filePath);
   const entries = _readJsonl(absolutePath);
   const detectedProvider = sourceBackend || _detectProvider(entries);
-  const sourceSessionId = absolutePath.split('/').pop()?.replace(/\.jsonl$/, '') || null;
+  const sourceSessionId =
+    absolutePath
+      .split('/')
+      .pop()
+      ?.replace(/\.jsonl$/, '') || null;
   return buildMigrationPrompt({
     messages: entries,
     sourceBackend: detectedProvider,

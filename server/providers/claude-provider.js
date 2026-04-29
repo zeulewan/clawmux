@@ -232,9 +232,7 @@ export class ClaudeProvider {
         const u = parsed.usage;
         if (u) {
           const contextUsed =
-            (u.input_tokens || 0) +
-            (u.cache_creation_input_tokens || 0) +
-            (u.cache_read_input_tokens || 0);
+            (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0);
           this._emit(
             conn,
             E.usageUpdate({
@@ -249,9 +247,10 @@ export class ClaudeProvider {
         // Detect errors: explicit subtype, is_error flag, or API error status
         const isError = parsed.subtype === 'error' || parsed.is_error || parsed.api_error_status;
         if (isError) {
-          const errMsg = parsed.error
-            || (parsed.api_error_status ? `API error (HTTP ${parsed.api_error_status})` : null)
-            || 'Unknown error';
+          const errMsg =
+            parsed.error ||
+            (parsed.api_error_status ? `API error (HTTP ${parsed.api_error_status})` : null) ||
+            'Unknown error';
           this._emit(conn, E.turnError(errMsg));
         } else {
           this._emit(

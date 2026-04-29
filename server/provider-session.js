@@ -196,12 +196,10 @@ export default class ProviderSession {
 
   _getReplayEvents({ conversationId, fromSequenceExclusive = 0, channelId, historyReloaded = false } = {}) {
     const key = this._conversationKey(conversationId);
-    const persistedSeq = historyReloaded ? (this._persistedReplaySeq.get(key) || 0) : 0;
+    const persistedSeq = historyReloaded ? this._persistedReplaySeq.get(key) || 0 : 0;
     const minSeq = Math.max(Number(fromSequenceExclusive) || 0, persistedSeq);
     const buf = this._replayBuffers.get(key) || [];
-    return buf
-      .filter((event) => Number(event.replaySeq || 0) > minSeq)
-      .map((event) => ({ ...event, channelId }));
+    return buf.filter((event) => Number(event.replaySeq || 0) > minSeq).map((event) => ({ ...event, channelId }));
   }
 
   _markConversationPersisted(conversationId) {
@@ -230,7 +228,9 @@ export default class ProviderSession {
     payload = this._recordReplayEvent(payload);
     if (this._sendFns?.size > 0) {
       for (const fn of this._sendFns) {
-        try { fn(payload); } catch {}
+        try {
+          fn(payload);
+        } catch {}
       }
     } else if (this._sendFn) {
       this._sendFn(payload);
@@ -366,7 +366,10 @@ export default class ProviderSession {
     }
 
     if (wasStreaming) {
-      this._turnState[newChannelId] = this._turnState[newChannelId] || { blockStarted: false, thinkingBlockStarted: false };
+      this._turnState[newChannelId] = this._turnState[newChannelId] || {
+        blockStarted: false,
+        thinkingBlockStarted: false,
+      };
       this.send({
         type: 'io_message',
         channelId: newChannelId,
@@ -478,10 +481,14 @@ export default class ProviderSession {
       // Safety: if _launching has been stuck for over 30s, force-clear it
       const launchAge = this._launchStarted ? Date.now() - this._launchStarted : 0;
       if (launchAge < 30000) {
-        console.log(`[launch] Skipping concurrent launch for ${this.agentId} (already launching, ${Math.round(launchAge / 1000)}s ago)`);
+        console.log(
+          `[launch] Skipping concurrent launch for ${this.agentId} (already launching, ${Math.round(launchAge / 1000)}s ago)`,
+        );
         return;
       }
-      console.warn(`[launch] Force-clearing stale _launching for ${this.agentId} (stuck ${Math.round(launchAge / 1000)}s)`);
+      console.warn(
+        `[launch] Force-clearing stale _launching for ${this.agentId} (stuck ${Math.round(launchAge / 1000)}s)`,
+      );
     }
     this._launching = true;
     this._launchStarted = Date.now();
@@ -493,7 +500,9 @@ export default class ProviderSession {
 
     // Warn if launch message specifies a different provider than what's configured
     if (msg.provider && msg.provider !== configBackend) {
-      console.warn(`[launch] ${this.agentId}: launch requested provider="${msg.provider}" but config says "${configBackend}" — using config`);
+      console.warn(
+        `[launch] ${this.agentId}: launch requested provider="${msg.provider}" but config says "${configBackend}" — using config`,
+      );
     }
 
     // Switch provider if config changed
@@ -561,7 +570,12 @@ export default class ProviderSession {
         this._handleProviderEvent(channelId, event);
       });
 
-      this.connections.set(channelId, { conn, unsub, sessionId: desiredResume, conversationId: conversationId || null });
+      this.connections.set(channelId, {
+        conn,
+        unsub,
+        sessionId: desiredResume,
+        conversationId: conversationId || null,
+      });
       if (conversationId) this._bindConversation(channelId, conversationId);
 
       // Flush any messages queued while connecting
@@ -647,7 +661,9 @@ export default class ProviderSession {
         const liveEntry = this.connections.get(reusableChannel);
         if (reusableChannel && liveEntry?.conn?.alive !== false && reusableChannel !== msg.channelId) {
           if (this._canReuseLiveConnection(reusableChannel, msg.channelId)) {
-            console.log(`[session] Recovering stale channel for ${this.agentId} (${msg.channelId} → ${reusableChannel})`);
+            console.log(
+              `[session] Recovering stale channel for ${this.agentId} (${msg.channelId} → ${reusableChannel})`,
+            );
             if (this._remapLiveConnection(reusableChannel, msg.channelId, msg.conversationId)) {
               const recovered = this.connections.get(msg.channelId);
               if (recovered?.conn) {
@@ -1106,7 +1122,9 @@ export default class ProviderSession {
 
       case 'thinking_done': {
         const tst2 = this._turnState[channelId];
-        console.log(`[thinking] ${this.agentId}: thinking_done, started=${tst2?.thinkingBlockStarted}, accumulated=${tst2?._currentThinking?.length}`);
+        console.log(
+          `[thinking] ${this.agentId}: thinking_done, started=${tst2?.thinkingBlockStarted}, accumulated=${tst2?._currentThinking?.length}`,
+        );
         if (tst2?.thinkingBlockStarted) {
           if (tst2._currentThinking) tst2.contentBlocks.push({ type: 'thinking', thinking: tst2._currentThinking });
           tst2._currentThinking = '';
@@ -1278,22 +1296,35 @@ export default class ProviderSession {
         const hidden = this._hiddenTurns.get(channelId);
         if (this.providerName === 'claude') {
           const blocks = tsDone?.contentBlocks || [];
-          const thinkingCount = blocks.filter(b => b.type === 'thinking').length;
-          const thinkingLens = blocks.filter(b => b.type === 'thinking').map(b => (b.thinking||'').length);
-          console.log(`[turn_complete] ${this.agentId} provider=${this.providerName} tsDone=${!!tsDone} blocks=${blocks.length} thinking=${thinkingCount} lens=${thinkingLens}`);
+          const thinkingCount = blocks.filter((b) => b.type === 'thinking').length;
+          const thinkingLens = blocks.filter((b) => b.type === 'thinking').map((b) => (b.thinking || '').length);
+          console.log(
+            `[turn_complete] ${this.agentId} provider=${this.providerName} tsDone=${!!tsDone} blocks=${blocks.length} thinking=${thinkingCount} lens=${thinkingLens}`,
+          );
         }
         if (tsDone && this.providerName !== 'claude' && !hidden?.skipLocalPersist) {
           // Write accumulated assistant message to session JSONL (non-Claude providers)
           // Flush any trailing text
           if (tsDone._currentText) tsDone.contentBlocks.push({ type: 'text', text: tsDone._currentText });
           if (tsDone.contentBlocks.length > 0) {
-            this._writeSessionEntry({ type: 'assistant', message: { role: 'assistant', content: tsDone.contentBlocks } });
+            this._writeSessionEntry({
+              type: 'assistant',
+              message: { role: 'assistant', content: tsDone.contentBlocks },
+            });
           }
           // Write tool results as a user message (matching Claude JSONL format)
           if (tsDone._toolResults?.length > 0) {
             this._writeSessionEntry({
               type: 'user',
-              message: { role: 'user', content: tsDone._toolResults.map((tr) => ({ type: 'tool_result', tool_use_id: tr.tool_use_id, content: tr.content, is_error: tr.is_error })) },
+              message: {
+                role: 'user',
+                content: tsDone._toolResults.map((tr) => ({
+                  type: 'tool_result',
+                  tool_use_id: tr.tool_use_id,
+                  content: tr.content,
+                  is_error: tr.is_error,
+                })),
+              },
             });
           }
         } else if (tsDone && this.providerName === 'claude') {
@@ -1301,7 +1332,11 @@ export default class ProviderSession {
           // Save thinking separately so it can be restored on history load.
           const thinkingBlocks = tsDone.contentBlocks.filter((b) => b.type === 'thinking' && b.thinking);
           if (thinkingBlocks.length > 0) {
-            this._writeSessionEntry({ type: 'thinking_cache', blocks: thinkingBlocks, timestamp: new Date().toISOString() });
+            this._writeSessionEntry({
+              type: 'thinking_cache',
+              blocks: thinkingBlocks,
+              timestamp: new Date().toISOString(),
+            });
           }
         }
         if (!tsDone?._hidden) {

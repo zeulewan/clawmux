@@ -190,13 +190,14 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showMonitor, setShowMonitor] = useState(false);
 
-  useEffect(() => { loadSettings(); }, []);
+  useEffect(() => {
+    loadSettings();
+  }, []);
 
   useEffect(() => {
     const themeMeta = ensureMeta('theme-color', '#171717');
     const syncMobileChrome = () => {
-      const source =
-        document.querySelector('.cmx-header') || document.querySelector('.cmx-root') || document.body;
+      const source = document.querySelector('.cmx-header') || document.querySelector('.cmx-root') || document.body;
       const color = getComputedStyle(source).backgroundColor || '#171717';
       document.documentElement.style.backgroundColor = color;
       document.body.style.backgroundColor = color;

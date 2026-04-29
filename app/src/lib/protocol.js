@@ -53,7 +53,10 @@ export function on(type, callback) {
 
 // ── High-level API ──
 
-export function launchAgent(channelId, { resume, agentId, provider, conversationId, replayAfterSeq, historyReloaded } = {}) {
+export function launchAgent(
+  channelId,
+  { resume, agentId, provider, conversationId, replayAfterSeq, historyReloaded } = {},
+) {
   send({ type: 'launch', channelId, resume, agentId, provider, conversationId, replayAfterSeq, historyReloaded });
 }
 

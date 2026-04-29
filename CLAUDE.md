@@ -64,12 +64,12 @@ tests/
 
 All auto-created on first run if missing.
 
-| File | Purpose |
-|------|---------|
-| `agents.json` | Agent list + per-agent backend/model/effort |
-| `backends.json` | Backend definitions (models, labels, effort levels, commands) |
-| `sessions.json` | Session registry: agent → backend → sessionId |
-| `agents/{name}/` | Per-agent workspace (CLAUDE.md, project files) |
+| File             | Purpose                                                       |
+| ---------------- | ------------------------------------------------------------- |
+| `agents.json`    | Agent list + per-agent backend/model/effort                   |
+| `backends.json`  | Backend definitions (models, labels, effort levels, commands) |
+| `sessions.json`  | Session registry: agent → backend → sessionId                 |
+| `agents/{name}/` | Per-agent workspace (CLAUDE.md, project files)                |
 
 ## WS Protocol
 
@@ -115,19 +115,19 @@ All providers write JSONL session files to `~/.claude/projects/{hash}/` for hist
 
 ## API
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/config` | GET | Full config (agents + backends + sessions) |
-| `/api/agents` | GET | Agent map |
-| `/api/status` | GET | Running agents + PIDs |
-| `/api/monitor` | GET | Agent states snapshot |
-| `/api/monitor/stream` | GET | SSE stream of state changes |
-| `/api/usage` | GET | Anthropic rate limit stats |
-| `/api/agents/:id/backend` | POST | Change backend (resets model to default) |
-| `/api/agents/:id/model` | POST | Change model (validates against backend) |
-| `/api/agents/:id/effort` | POST | Change effort level |
-| `/api/send` | POST | Inter-agent messaging |
-| `/api/terminate` | POST | Kill an agent's session |
+| Endpoint                  | Method | Description                                |
+| ------------------------- | ------ | ------------------------------------------ |
+| `/api/config`             | GET    | Full config (agents + backends + sessions) |
+| `/api/agents`             | GET    | Agent map                                  |
+| `/api/status`             | GET    | Running agents + PIDs                      |
+| `/api/monitor`            | GET    | Agent states snapshot                      |
+| `/api/monitor/stream`     | GET    | SSE stream of state changes                |
+| `/api/usage`              | GET    | Anthropic rate limit stats                 |
+| `/api/agents/:id/backend` | POST   | Change backend (resets model to default)   |
+| `/api/agents/:id/model`   | POST   | Change model (validates against backend)   |
+| `/api/agents/:id/effort`  | POST   | Change effort level                        |
+| `/api/send`               | POST   | Inter-agent messaging                      |
+| `/api/terminate`          | POST   | Kill an agent's session                    |
 
 ## CLI
 
@@ -162,18 +162,18 @@ cmx version                     Versions (clawmux + all backend CLIs)
 
 ## Backend capabilities
 
-| Feature | Claude | Codex | pi | OpenCode |
-|---------|--------|-------|----|----------|
-| Thinking/reasoning | Yes (extended thinking) | No (hidden by API) | Yes (thinking_start/delta/end) | Yes (reasoning parts) |
-| Session resume | `--resume` flag | `thread/resume` RPC | `--session` flag | Stale → retry fresh |
-| Session history | JSONL (native) | JSONL (written by provider) | JSONL (written by provider) | JSONL (written by provider) |
-| Context % tracking | Yes (usage poller) | Yes (tokenUsage/updated) | Yes (turn_end usage) | No |
-| Rate limits (5h/7d) | Yes (Anthropic OAuth API, 5min poll) | Yes (account/rateLimits/updated) | No | No |
-| Tool calls | Full (stream-json) | Full (JSON-RPC) | Full (JSONL events) | Full (HTTP+SSE) |
-| Effort levels | low/medium/high/max | low/medium/high/xhigh | low/medium/high/xhigh | No |
-| Model discovery | Static (well-known) | `model/list` RPC at startup | `pi --list-models` at startup | Static |
-| Process model | 1 per agent | Shared daemon :4500 | 1 per agent | Shared daemon :4499 |
-| Live model name | From config | From config | From `get_state` response | From config |
+| Feature             | Claude                               | Codex                            | pi                             | OpenCode                    |
+| ------------------- | ------------------------------------ | -------------------------------- | ------------------------------ | --------------------------- |
+| Thinking/reasoning  | Yes (extended thinking)              | No (hidden by API)               | Yes (thinking_start/delta/end) | Yes (reasoning parts)       |
+| Session resume      | `--resume` flag                      | `thread/resume` RPC              | `--session` flag               | Stale → retry fresh         |
+| Session history     | JSONL (native)                       | JSONL (written by provider)      | JSONL (written by provider)    | JSONL (written by provider) |
+| Context % tracking  | Yes (usage poller)                   | Yes (tokenUsage/updated)         | Yes (turn_end usage)           | No                          |
+| Rate limits (5h/7d) | Yes (Anthropic OAuth API, 5min poll) | Yes (account/rateLimits/updated) | No                             | No                          |
+| Tool calls          | Full (stream-json)                   | Full (JSON-RPC)                  | Full (JSONL events)            | Full (HTTP+SSE)             |
+| Effort levels       | low/medium/high/max                  | low/medium/high/xhigh            | low/medium/high/xhigh          | No                          |
+| Model discovery     | Static (well-known)                  | `model/list` RPC at startup      | `pi --list-models` at startup  | Static                      |
+| Process model       | 1 per agent                          | Shared daemon :4500              | 1 per agent                    | Shared daemon :4499         |
+| Live model name     | From config                          | From config                      | From `get_state` response      | From config                 |
 
 ## Known limitations
 

@@ -123,7 +123,6 @@ test('raw provider events are buffered with agent conversation metadata', () => 
   assert.equal(events[0].summary, 'turn/started');
 });
 
-
 test('replay journal replays only unseen events for the same conversation', () => {
   const { session } = makeSession();
 

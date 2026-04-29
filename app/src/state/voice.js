@@ -4,13 +4,13 @@
  */
 
 let state = {
-  enabled: false,          // global voice mode toggle
-  speakingMsgId: null,     // message ID currently being spoken (for karaoke)
-  karaokeWords: [],        // [{word, start_time, end_time}] for active playback
-  activeWordIdx: -1,       // current highlighted word index
-  recording: false,        // mic is recording
-  transcribing: false,     // STT in progress
-  paused: false,           // playback paused
+  enabled: false, // global voice mode toggle
+  speakingMsgId: null, // message ID currently being spoken (for karaoke)
+  karaokeWords: [], // [{word, start_time, end_time}] for active playback
+  activeWordIdx: -1, // current highlighted word index
+  recording: false, // mic is recording
+  transcribing: false, // STT in progress
+  paused: false, // playback paused
 };
 
 const listeners = new Set();

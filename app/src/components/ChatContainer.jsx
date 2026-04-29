@@ -20,7 +20,13 @@ export function ChatContainer({ session, effortLevel }) {
   const prevMsgCount = useRef(0);
   const userAtBottom = useRef(true);
   const prevSessionRef = useRef(session);
-  const { play: karaokePlay, stop: karaokeStop, pause: karaokePause, resume: karaokeResume, replay: karaokeReplay } = useKaraokePlayer();
+  const {
+    play: karaokePlay,
+    stop: karaokeStop,
+    pause: karaokePause,
+    resume: karaokeResume,
+    replay: karaokeReplay,
+  } = useKaraokePlayer();
   const lastSpokenMsgRef = useRef(null);
   const voice = useSyncExternalStore(subscribeVoice, getVoiceSnapshot);
 
@@ -79,9 +85,9 @@ export function ChatContainer({ session, effortLevel }) {
     if (!isVoiceEnabled()) return;
 
     // Find the last assistant text message
-    const lastAssistant = [...messages].reverse().find(
-      m => m.type === 'assistant' && m.content?.some(b => b.content?.type === 'text' || b.type === 'text')
-    );
+    const lastAssistant = [...messages]
+      .reverse()
+      .find((m) => m.type === 'assistant' && m.content?.some((b) => b.content?.type === 'text' || b.type === 'text'));
     if (!lastAssistant) return;
 
     // Don't re-speak the same message
@@ -91,7 +97,7 @@ export function ChatContainer({ session, effortLevel }) {
 
     // Extract text
     const text = (lastAssistant.content || [])
-      .map(b => (b.content?.type === 'text' ? b.content.text : b.type === 'text' ? b.text : ''))
+      .map((b) => (b.content?.type === 'text' ? b.content.text : b.type === 'text' ? b.text : ''))
       .join('\n')
       .trim();
     if (!text) return;
@@ -101,12 +107,12 @@ export function ChatContainer({ session, effortLevel }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, voice: getVoice(), speed: getSpeed() }),
     })
-      .then(r => r.json())
+      .then((r) => r.json())
       .then(({ audio_b64, words }) => {
         if (!isVoiceEnabled()) return; // user may have toggled off while fetching
         karaokePlay(audio_b64, words, msgId);
       })
-      .catch(e => console.error('[voice] TTS error:', e));
+      .catch((e) => console.error('[voice] TTS error:', e));
   }, [busy, messages, karaokePlay]);
 
   // Stop audio when session changes
@@ -115,17 +121,20 @@ export function ChatContainer({ session, effortLevel }) {
     lastSpokenMsgRef.current = null;
   }, [session, karaokeStop]);
 
-  const handlePlayMessage = useCallback((msgId, text) => {
-    unlockAudioContext();
-    return fetch('/api/tts-captioned', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, voice: getVoice(), speed: getSpeed() }),
-    })
-      .then(r => r.json())
-      .then(({ audio_b64, words }) => karaokePlay(audio_b64, words, msgId))
-      .catch(e => console.error('[voice] TTS error:', e));
-  }, [karaokePlay]);
+  const handlePlayMessage = useCallback(
+    (msgId, text) => {
+      unlockAudioContext();
+      return fetch('/api/tts-captioned', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, voice: getVoice(), speed: getSpeed() }),
+      })
+        .then((r) => r.json())
+        .then(({ audio_b64, words }) => karaokePlay(audio_b64, words, msgId))
+        .catch((e) => console.error('[voice] TTS error:', e));
+    },
+    [karaokePlay],
+  );
 
   // Global Escape to interrupt current response
   useEffect(() => {
@@ -202,7 +211,13 @@ export function ChatContainer({ session, effortLevel }) {
             replay={karaokeReplay}
           />
         ) : (
-          <InputBar onSubmit={handleSubmit} onInterrupt={handleInterrupt} busy={busy} session={session} effortLevel={effortLevel} />
+          <InputBar
+            onSubmit={handleSubmit}
+            onInterrupt={handleInterrupt}
+            busy={busy}
+            session={session}
+            effortLevel={effortLevel}
+          />
         )}
       </div>
     </div>

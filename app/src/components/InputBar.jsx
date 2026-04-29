@@ -1,6 +1,11 @@
 import React, { useState, useRef, useCallback, useEffect, useSyncExternalStore } from 'react';
 import { ModesMenu, MODES } from './ModesMenu.jsx';
-import { subscribe as subscribeVoice, getSnapshot as getVoiceSnapshot, isVoiceEnabled, setRecording } from '../state/voice.js';
+import {
+  subscribe as subscribeVoice,
+  getSnapshot as getVoiceSnapshot,
+  isVoiceEnabled,
+  setRecording,
+} from '../state/voice.js';
 
 const MODE_ICONS = {};
 for (const m of MODES) MODE_ICONS[m.id] = m.icon;
@@ -9,7 +14,13 @@ function ModeIcon({ mode }) {
   const icon = MODE_ICONS[mode];
   if (!icon) return null;
   return (
-    <svg width="1em" height="1em" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
+    <svg
+      width="1em"
+      height="1em"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ display: 'inline-block', verticalAlign: 'middle' }}
+    >
       {icon}
     </svg>
   );
@@ -45,17 +56,20 @@ export function InputBar({ onSubmit, onInterrupt, busy, session, effortLevel: li
   };
   const [permissionMode, setPermissionMode] = useState('bypassPermissions');
   const [selectedEffortLevel, _setEffortLevel] = useState(liveEffortLevel);
-  const setEffortLevel = useCallback((level) => {
-    _setEffortLevel(level);
-    if (session) {
-      session.effortLevel = level;
-      session.notify?.();
-    }
-    // Send to server so it's used on next turn
-    import('../lib/protocol.js').then(({ request }) => {
-      request('apply_settings', { settings: { effortLevel: level } }).catch(() => {});
-    });
-  }, [session]);
+  const setEffortLevel = useCallback(
+    (level) => {
+      _setEffortLevel(level);
+      if (session) {
+        session.effortLevel = level;
+        session.notify?.();
+      }
+      // Send to server so it's used on next turn
+      import('../lib/protocol.js').then(({ request }) => {
+        request('apply_settings', { settings: { effortLevel: level } }).catch(() => {});
+      });
+    },
+    [session],
+  );
   useEffect(() => {
     _setEffortLevel(liveEffortLevel);
   }, [liveEffortLevel]);
@@ -179,12 +193,14 @@ export function InputBar({ onSubmit, onInterrupt, busy, session, effortLevel: li
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const PREFERRED = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
-      const mimeType = PREFERRED.find(t => MediaRecorder.isTypeSupported(t)) || '';
+      const mimeType = PREFERRED.find((t) => MediaRecorder.isTypeSupported(t)) || '';
       const mr = new MediaRecorder(stream, mimeType ? { mimeType } : {});
       audioChunksRef.current = [];
-      mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      mr.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
       mr.onstop = async () => {
-        stream.getTracks().forEach(t => t.stop());
+        stream.getTracks().forEach((t) => t.stop());
         setRecording(false);
         const blob = new Blob(audioChunksRef.current, { type: mr.mimeType || 'audio/webm' });
         const buf = await blob.arrayBuffer();
@@ -196,12 +212,16 @@ export function InputBar({ onSubmit, onInterrupt, busy, session, effortLevel: li
             inputRef.current.textContent = prev + (prev && !prev.endsWith(' ') ? ' ' : '') + text;
             setText(inputRef.current.textContent);
           }
-        } catch (e) { console.error('[voice] STT error:', e); }
+        } catch (e) {
+          console.error('[voice] STT error:', e);
+        }
       };
       mr.start(250);
       mediaRecorderRef.current = mr;
       setRecording(true);
-    } catch (e) { console.error('[voice] mic error:', e); }
+    } catch (e) {
+      console.error('[voice] mic error:', e);
+    }
   }, [voice.recording]);
 
   const stopRecording = useCallback(() => {
@@ -450,7 +470,7 @@ export function InputBar({ onSubmit, onInterrupt, busy, session, effortLevel: li
               </svg>
             ) : (
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
               </svg>
             )}
           </button>
@@ -481,19 +501,12 @@ export function InputBar({ onSubmit, onInterrupt, busy, session, effortLevel: li
             }}
           >
             <ModeIcon mode={permissionMode} />
-            <span>
-              {MODE_LABELS[permissionMode] || 'Bypass permissions'}
-            </span>
+            <span>{MODE_LABELS[permissionMode] || 'Bypass permissions'}</span>
           </button>
         </div>
         {/* Send / Stop button */}
         {busy ? (
-          <button
-            type="button"
-            className="sendButton stopButton"
-            title="Stop (Esc)"
-            onClick={onInterrupt}
-          >
+          <button type="button" className="sendButton stopButton" title="Stop (Esc)" onClick={onInterrupt}>
             <svg
               width="20"
               height="20"

@@ -37,14 +37,19 @@ export async function discoverCodexModels() {
 
   return new Promise((resolve) => {
     const ws = new WebSocket(`ws://127.0.0.1:${CODEX_PORT}`);
-    const timeout = setTimeout(() => { ws.close(); resolve(null); }, 10000);
+    const timeout = setTimeout(() => {
+      ws.close();
+      resolve(null);
+    }, 10000);
 
     ws.on('open', () => {
-      ws.send(JSON.stringify({
-        id: 'init-discover',
-        method: 'initialize',
-        params: { clientInfo: { name: 'ClawMux-discover', version: '1.0.0' }, capabilities: {} },
-      }));
+      ws.send(
+        JSON.stringify({
+          id: 'init-discover',
+          method: 'initialize',
+          params: { clientInfo: { name: 'ClawMux-discover', version: '1.0.0' }, capabilities: {} },
+        }),
+      );
     });
 
     ws.on('message', (data) => {
@@ -67,7 +72,10 @@ export async function discoverCodexModels() {
       }
     });
 
-    ws.on('error', () => { clearTimeout(timeout); resolve(null); });
+    ws.on('error', () => {
+      clearTimeout(timeout);
+      resolve(null);
+    });
   });
 }
 
@@ -274,7 +282,10 @@ export class CodexProvider {
       // Try lsof (macOS + most Linux)
       const lines = execSync(`lsof -ti:${port} 2>/dev/null`, { encoding: 'utf8' }).trim().split('\n');
       for (const pid of lines) {
-        if (pid) try { process.kill(parseInt(pid), 'SIGTERM'); } catch {}
+        if (pid)
+          try {
+            process.kill(parseInt(pid), 'SIGTERM');
+          } catch {}
       }
     } catch {
       // Fallback: ss + /proc (Linux without lsof)
@@ -283,7 +294,9 @@ export class CodexProvider {
         const pidRe = /pid=(\d+)/g;
         let m;
         while ((m = pidRe.exec(out)) !== null) {
-          try { process.kill(parseInt(m[1]), 'SIGTERM'); } catch {}
+          try {
+            process.kill(parseInt(m[1]), 'SIGTERM');
+          } catch {}
         }
       } catch {}
     }
@@ -311,9 +324,21 @@ export class CodexProvider {
         // Verify it actually accepts WebSocket connections (not just a stale HTTP listener)
         const alive = await new Promise((resolve) => {
           const ws = new WebSocket(listenUrl);
-          const timer = setTimeout(() => { try { ws.close(); } catch {} resolve(false); }, 3000);
-          ws.on('open', () => { clearTimeout(timer); ws.close(); resolve(true); });
-          ws.on('error', () => { clearTimeout(timer); resolve(false); });
+          const timer = setTimeout(() => {
+            try {
+              ws.close();
+            } catch {}
+            resolve(false);
+          }, 3000);
+          ws.on('open', () => {
+            clearTimeout(timer);
+            ws.close();
+            resolve(true);
+          });
+          ws.on('error', () => {
+            clearTimeout(timer);
+            resolve(false);
+          });
         });
         if (alive) {
           console.log(`[codex-provider] App-server already running on port ${CODEX_PORT} (verified)`);

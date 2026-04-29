@@ -26,7 +26,8 @@ function UsageBar({ pct, width = 12 }) {
   const color = ctxColor(pct);
   return (
     <span style={{ fontFamily: 'monospace', color }}>
-      [{'█'.repeat(filled)}{'░'.repeat(width - filled)}]
+      [{'█'.repeat(filled)}
+      {'░'.repeat(width - filled)}]
     </span>
   );
 }
@@ -159,9 +160,7 @@ function TailPanel({ agentId, agent, view, onViewChange, onOpenChat, launching, 
         </div>
       </div>
 
-      {(launchError || streamError) && (
-        <div className="monitor-tail-error">{launchError || streamError}</div>
-      )}
+      {(launchError || streamError) && <div className="monitor-tail-error">{launchError || streamError}</div>}
 
       <div className="monitor-tail-body" ref={bodyRef} onScroll={handleScroll}>
         {events.length === 0 ? (
@@ -258,7 +257,9 @@ export function Monitor({ onClose }) {
           <span className="monitor-sep">·</span>
           <span>click agent to tail</span>
         </div>
-        <button className="monitor-close" onClick={onClose} title="Close monitor">×</button>
+        <button className="monitor-close" onClick={onClose} title="Close monitor">
+          ×
+        </button>
       </div>
 
       <div className="monitor-body">

@@ -43,10 +43,7 @@ export const MODES = [
     description: 'Runs all commands and edits without asking — use with caution',
     icon: (
       // Lightning bolt
-      <path
-        d="M11 2L4 13h5v7l7-11h-5V2z"
-        fill="currentColor"
-      />
+      <path d="M11 2L4 13h5v7l7-11h-5V2z" fill="currentColor" />
     ),
   },
 ];

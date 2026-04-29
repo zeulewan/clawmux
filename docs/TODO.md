@@ -13,15 +13,18 @@
 See memory file `clawmux_drop_openclaw.md` for full plan. Summary:
 
 ### Tier 1 (core)
+
 - System prompt layering (user global → agent identity → workspace local)
 - Memory system (MEMORY.md + typed memory files, auto-loaded)
 
 ### Tier 2
+
 - BOOT.md hook (per-agent startup checklist)
 - Heartbeat (periodic HEARTBEAT.md read)
 - Cron (scheduled agent tasks)
 
 ### Tier 3
+
 - Realtime voice
 - ACP (richer inter-agent protocol)
 

@@ -21,6 +21,7 @@ npm run dev        # skip build, use existing dist (faster restart)
 Server runs on `http://localhost:3470`.
 
 To access from other devices (e.g. over Tailscale):
+
 ```bash
 HOST=0.0.0.0 cmx start          # bind to all interfaces
 HOST=100.x.x.x cmx start        # bind to specific IP (e.g. Tailscale)
@@ -42,12 +43,12 @@ All config lives in `~/.clawmux/`. On first run, default config files are auto-c
 
 ### Backends
 
-| Backend | CLI | Pattern | Thinking | Context % | Rate Limits | Models |
-|---------|-----|---------|----------|-----------|-------------|--------|
-| Claude | `claude` | 1 per agent | Yes | Yes (API poll) | Yes (5h/7d) | Static |
-| Codex | `codex app-server` | Shared :4500 | No (hidden) | Yes (token events) | Yes (5h/7d) | Auto-discovered |
-| pi | `pi --mode rpc` | 1 per agent | Yes | Yes (turn_end) | No | Auto-discovered |
-| OpenCode | `opencode serve` | Shared :4499 | Yes | No | No | Static |
+| Backend  | CLI                | Pattern      | Thinking    | Context %          | Rate Limits | Models          |
+| -------- | ------------------ | ------------ | ----------- | ------------------ | ----------- | --------------- |
+| Claude   | `claude`           | 1 per agent  | Yes         | Yes (API poll)     | Yes (5h/7d) | Static          |
+| Codex    | `codex app-server` | Shared :4500 | No (hidden) | Yes (token events) | Yes (5h/7d) | Auto-discovered |
+| pi       | `pi --mode rpc`    | 1 per agent  | Yes         | Yes (turn_end)     | No          | Auto-discovered |
+| OpenCode | `opencode serve`   | Shared :4499 | Yes         | No                 | No          | Static          |
 
 Switch backend per agent: click the badge in the sidebar.
 
@@ -103,19 +104,19 @@ Agents auto-resume on server restart. Session IDs stored in `agents.json` are us
 
 ### API
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/agents` | GET | List all agents with config |
-| `/api/config` | GET | Full config (agents + backends) |
-| `/api/status` | GET | Running agents + PIDs |
-| `/api/monitor` | GET | Agent states snapshot |
-| `/api/monitor/stream` | GET | SSE stream of state changes |
-| `/api/usage` | GET | Anthropic usage stats |
-| `/api/agents/:id/backend` | POST | Change agent backend |
-| `/api/agents/:id/model` | POST | Change agent model |
-| `/api/agents/:id/effort` | POST | Change agent effort level |
-| `/api/send` | POST | Inter-agent messaging |
-| `/api/terminate` | POST | Kill an agent's process |
+| Endpoint                  | Method | Description                     |
+| ------------------------- | ------ | ------------------------------- |
+| `/api/agents`             | GET    | List all agents with config     |
+| `/api/config`             | GET    | Full config (agents + backends) |
+| `/api/status`             | GET    | Running agents + PIDs           |
+| `/api/monitor`            | GET    | Agent states snapshot           |
+| `/api/monitor/stream`     | GET    | SSE stream of state changes     |
+| `/api/usage`              | GET    | Anthropic usage stats           |
+| `/api/agents/:id/backend` | POST   | Change agent backend            |
+| `/api/agents/:id/model`   | POST   | Change agent model              |
+| `/api/agents/:id/effort`  | POST   | Change agent effort level       |
+| `/api/send`               | POST   | Inter-agent messaging           |
+| `/api/terminate`          | POST   | Kill an agent's process         |
 
 ## Inter-agent messaging
 
@@ -128,6 +129,7 @@ curl -X POST http://localhost:3470/api/send \
 ## Auth
 
 Each backend manages its own auth:
+
 - **Claude**: `claude` CLI login (Max subscription)
 - **Codex**: `codex login --device-auth` (ChatGPT Pro)
 - **pi**: `pi` then `/login` (subscription or API key)

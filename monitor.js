@@ -33,7 +33,7 @@ const SHOW_CURSOR = `${ESC}?25h`;
 const BOLD = `${ESC}1m`;
 const DIM = `${ESC}2m`;
 const RESET = `${ESC}0m`;
-const FG_RESET = `${ESC}39m`;       // reset fg only — keeps bg (zebra) intact mid-row
+const FG_RESET = `${ESC}39m`; // reset fg only — keeps bg (zebra) intact mid-row
 const BG_RESET = `${ESC}49m`;
 const ALT_SCREEN = `${ESC}?1049h`;
 const MAIN_SCREEN = `${ESC}?1049l`;
@@ -56,28 +56,28 @@ const bg = (r, g, b) => `${ESC}48;2;${r};${g};${b}m`;
 
 // Backend brand colors
 const backendColor = {
-  claude: fg(74, 158, 255),     // #4A9EFF
-  codex: fg(16, 163, 127),     // OpenAI green #10A37F
-  pi: fg(195, 100, 197),       // Pi pink/magenta
+  claude: fg(74, 158, 255), // #4A9EFF
+  codex: fg(16, 163, 127), // OpenAI green #10A37F
+  pi: fg(195, 100, 197), // Pi pink/magenta
   opencode: colors.cyan,
 };
 
 // No background highlights — works in both light and dark terminal modes.
 // Visual rhythm comes from thin separator lines between rows instead of zebra shading.
 // Row flash on state change is foreground-only (highlights agent name, not bg).
-const FLASH_FG = `${ESC}36m`;        // bright cyan for transient highlight
+const FLASH_FG = `${ESC}36m`; // bright cyan for transient highlight
 
 // Explicit gray fg for "dim" content inside rows — DIM attribute is unreliable across terminals.
-const DIM_FG = `${ESC}38;5;245m`;    // medium gray, readable on both modes
+const DIM_FG = `${ESC}38;5;245m`; // medium gray, readable on both modes
 
 // Differentiated status icons
 const statusStyle = {
-  responding: { color: colors.green,   icon: '\u25cf', label: 'responding' }, // ●
-  thinking:   { color: colors.yellow,  icon: '\u25d0', label: 'thinking'   }, // ◐
-  tool_call:  { color: colors.magenta, icon: '\u25c6', label: 'tool_call'  }, // ◆
-  idle:       { color: `${ESC}38;5;110m`, icon: '\u25cb', label: 'idle'    }, // ○ soft blue-gray (alive but quiet)
-  offline:    { color: `${ESC}38;5;240m`, icon: '\u00b7', label: 'offline' }, // · very dim gray (absent)
-  error:      { color: colors.red,     icon: '\u2715', label: 'error'      }, // ✕
+  responding: { color: colors.green, icon: '\u25cf', label: 'responding' }, // ●
+  thinking: { color: colors.yellow, icon: '\u25d0', label: 'thinking' }, // ◐
+  tool_call: { color: colors.magenta, icon: '\u25c6', label: 'tool_call' }, // ◆
+  idle: { color: `${ESC}38;5;110m`, icon: '\u25cb', label: 'idle' }, // ○ soft blue-gray (alive but quiet)
+  offline: { color: `${ESC}38;5;240m`, icon: '\u00b7', label: 'offline' }, // · very dim gray (absent)
+  error: { color: colors.red, icon: '\u2715', label: 'error' }, // ✕
 };
 
 // ── State ──
@@ -97,13 +97,13 @@ const USAGE_HISTORY_MS = 30 * 60 * 1000; // keep 30 min
 
 // View state
 const view = {
-  filterActive: false,                  // f
-  sort: 'alpha',                        // s: 'alpha' | 'recent'
-  compact: false,                       // c
-  backendFilter: 'all',                 // b: 'all' | 'claude' | 'codex' | 'pi' | 'opencode'
-  search: '',                           // / committed query
-  searchMode: false,                    // /  in input mode
-  searchBuffer: '',                     //    pending input
+  filterActive: false, // f
+  sort: 'alpha', // s: 'alpha' | 'recent'
+  compact: false, // c
+  backendFilter: 'all', // b: 'all' | 'claude' | 'codex' | 'pi' | 'opencode'
+  search: '', // / committed query
+  searchMode: false, // /  in input mode
+  searchBuffer: '', //    pending input
 };
 
 const BACKENDS = ['all', 'claude', 'codex', 'pi', 'opencode'];
@@ -159,11 +159,7 @@ function shortenTool(t) {
 
 function shortenModel(m) {
   if (!m) return '';
-  return m
-    .replace('Claude ', 'C.')
-    .replace('Default (', '(')
-    .replace('Google ', '')
-    .replace('opencode', 'oc');
+  return m.replace('Claude ', 'C.').replace('Default (', '(').replace('Google ', '').replace('opencode', 'oc');
 }
 
 // Project hours-to-limit from rate of change; null if not enough history
@@ -225,14 +221,14 @@ function rowVisibleWidth(cols) {
 // the very first frame already approximates the steady-state layout.
 const colMaxFull = {
   name: 'AGENT'.length,
-  backend: 'opencode'.length,        // longest known backend name
+  backend: 'opencode'.length, // longest known backend name
   model: 'MODEL'.length,
   effort: 'THINK'.length,
-  ctx: '100%'.length,                // ctx never wider than this
-  status: 'responding'.length + 2,   // longest label + icon + space
+  ctx: '100%'.length, // ctx never wider than this
+  status: 'responding'.length + 2, // longest label + icon + space
   tool: 'TOOL'.length,
-  session: 16,                       // we slice sessionId to 16 chars
-  activity: 'just now'.length,       // longest typical timeAgo string
+  session: 16, // we slice sessionId to 16 chars
+  activity: 'just now'.length, // longest typical timeAgo string
 };
 const colMaxCompact = {
   name: 'AGENT'.length,
@@ -253,13 +249,13 @@ function computeCols(rows, compact) {
     }
     return c;
   }
-    for (const [, a] of rows) {
-      c.name = Math.max(c.name, (a.name || '').length);
-      c.backend = Math.max(c.backend, (a.backend || '-').length);
-      c.model = Math.max(c.model, shortenModel(a.model || '').length);
-      c.effort = Math.max(c.effort, (a.effort || '').length);
-      const lbl = (statusStyle[a.status] || statusStyle.offline).label;
-      c.status = Math.max(c.status, lbl.length + 2);
+  for (const [, a] of rows) {
+    c.name = Math.max(c.name, (a.name || '').length);
+    c.backend = Math.max(c.backend, (a.backend || '-').length);
+    c.model = Math.max(c.model, shortenModel(a.model || '').length);
+    c.effort = Math.max(c.effort, (a.effort || '').length);
+    const lbl = (statusStyle[a.status] || statusStyle.offline).label;
+    c.status = Math.max(c.status, lbl.length + 2);
     c.tool = Math.max(c.tool, shortenTool(a.currentTool || '').length);
     if (a.status !== 'offline') c.activity = Math.max(c.activity, timeAgo(a.lastActivity).length);
   }
@@ -309,12 +305,13 @@ function render() {
   // Health-driven header tint
   const allRows = Object.values(agents);
   const anyError = allRows.some((a) => a.status === 'error');
-  const anyHigh = (usage.anthropic && usage.anthropic.fiveHour > 80)
-               || (usage.openai && usage.openai.fiveHour > 80);
-  const headerColor = anyError || anyHigh ? colors.red
-                    : (usage.anthropic && usage.anthropic.fiveHour > 50)
-                      || (usage.openai && usage.openai.fiveHour > 50) ? colors.yellow
-                    : colors.cyan;
+  const anyHigh = (usage.anthropic && usage.anthropic.fiveHour > 80) || (usage.openai && usage.openai.fiveHour > 80);
+  const headerColor =
+    anyError || anyHigh
+      ? colors.red
+      : (usage.anthropic && usage.anthropic.fiveHour > 50) || (usage.openai && usage.openai.fiveHour > 50)
+        ? colors.yellow
+        : colors.cyan;
 
   // Active count for header summary
   const active = allRows.filter((a) => a.status !== 'offline' && a.status !== 'idle').length;
@@ -477,9 +474,7 @@ function connect() {
 
   req.on('error', (err) => {
     if (err.code === 'ECONNREFUSED') {
-      process.stdout.write(
-        `${colors.red}Cannot connect to ClawMux on port ${PORT}. Is the server running?${RESET}\n`,
-      );
+      process.stdout.write(`${colors.red}Cannot connect to ClawMux on port ${PORT}. Is the server running?${RESET}\n`);
       setTimeout(connect, 3000);
     } else {
       console.error(err.message);

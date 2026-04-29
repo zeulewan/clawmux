@@ -78,7 +78,9 @@ export function createSession({ resume, cwd, model, provider, agentId, conversat
                 if (toolBlock) {
                   const resultContent = Array.isArray(tr.content)
                     ? tr.content.map((c) => c.text || '').join('')
-                    : typeof tr.content === 'string' ? tr.content : '';
+                    : typeof tr.content === 'string'
+                      ? tr.content
+                      : '';
                   toolBlock.toolResult = { value: resultContent };
                 }
               }

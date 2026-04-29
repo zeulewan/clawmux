@@ -300,7 +300,11 @@ export async function init() {
         const serverSid = store.config?.sessions?.[store.focusedAgent]?.[backend] || null;
         const backendKey = store.focusedAgent ? `cmx-session-${store.focusedAgent}-${backend}` : null;
         const fallbackKey = store.focusedAgent ? `cmx-session-${store.focusedAgent}` : null;
-        const savedSid = serverSid || (backendKey && localStorage.getItem(backendKey)) || (fallbackKey && localStorage.getItem(fallbackKey)) || null;
+        const savedSid =
+          serverSid ||
+          (backendKey && localStorage.getItem(backendKey)) ||
+          (fallbackKey && localStorage.getItem(fallbackKey)) ||
+          null;
         const target = (savedSid && saved.find((s) => s.id === savedSid)) || saved[0];
         resumeSession(target.id, target.summary, target.provider).launch();
         setTimeout(() => getAgentState().catch(() => {}), 300);

@@ -135,8 +135,7 @@ export function readSessionMessages(sessionId, cwd) {
   for (let i = all.length - 1; i >= 0 && conversational.length < 50; i--) {
     const t = all[i].type;
     const r = all[i].message?.role;
-    if (t === 'user' || t === 'assistant' || t === 'tool_result' ||
-        r === 'user' || r === 'assistant') {
+    if (t === 'user' || t === 'assistant' || t === 'tool_result' || r === 'user' || r === 'assistant') {
       conversational.unshift(all[i]);
     }
   }
@@ -171,7 +170,11 @@ function _readJsonl(filePath) {
     .split('\n')
     .filter(Boolean)
     .map((line) => {
-      try { return JSON.parse(line); } catch { return null; }
+      try {
+        return JSON.parse(line);
+      } catch {
+        return null;
+      }
     })
     .filter(Boolean);
 }
@@ -187,5 +190,7 @@ function _readPiSession(sessionId, cwd) {
     const files = readdirSync(piDir).filter((f) => f.endsWith('.jsonl') && f.includes(sessionId));
     if (files.length === 0) return [];
     return _readJsonl(join(piDir, files[0]));
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 }

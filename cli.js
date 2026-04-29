@@ -266,7 +266,6 @@ if (!cmd || cmd === 'start') {
   import('./monitor.js');
 
   // ── agents ──
-
 } else if (cmd === 'agents') {
   try {
     const agents = await api('/api/agents');
@@ -294,7 +293,6 @@ if (!cmd || cmd === 'start') {
   }
 
   // ── send ──
-
 } else if (cmd === 'send') {
   const rawArgs = process.argv.slice(3);
   if (rawArgs.includes('--help') || rawArgs.includes('-h')) {
@@ -357,15 +355,13 @@ Agents: Adam, Alice, Alloy, Aoede, Bella, Daniel, Echo, Emma, Eric,
       if (control === 'close-thread') console.log(`${GREEN}Closed thread with ${target}${RESET}`);
       else if (control === 'reopen-thread') console.log(`${GREEN}Reopened thread with ${target}${RESET}`);
       else console.log(`${GREEN}Sent to ${target}${RESET}`);
-    }
-    else console.log(`${RED}${res.error || 'Failed'}${RESET}`);
+    } else console.log(`${RED}${res.error || 'Failed'}${RESET}`);
   } catch (e) {
     console.error(`Cannot connect to server: ${e.message}`);
     process.exit(1);
   }
 
   // ── launch ──
-
 } else if (cmd === 'launch') {
   const target = process.argv[3];
   if (!target || target === '--help' || target === '-h') {
@@ -389,7 +385,6 @@ Examples:
   }
 
   // ── terminate ──
-
 } else if (cmd === 'terminate') {
   const target = process.argv[3];
   if (!target || target === '--help' || target === '-h') {
@@ -406,7 +401,6 @@ Examples:
   }
 
   // ── migrate ──
-
 } else if (cmd === 'migrate') {
   const target = process.argv[3];
   const args = process.argv.slice(4);
@@ -456,7 +450,9 @@ Examples:
     console.log(`${GREEN}Migrated ${target} ${res.fromBackend} → ${res.toBackend}${RESET}`);
     console.log(`  Source session: ${res.sourceSessionId}`);
     console.log(`  Target session: ${res.targetSessionId || 'pending'}`);
-    console.log(`  Context budget: ~${res.estimatedTokens}/${res.tokenBudget} tokens${res.truncated ? ' (truncated)' : ''}`);
+    console.log(
+      `  Context budget: ~${res.estimatedTokens}/${res.tokenBudget} tokens${res.truncated ? ' (truncated)' : ''}`,
+    );
     console.log(`  Turns included: ${res.turnsIncluded}`);
   } catch (e) {
     console.error(`Cannot connect to server: ${e.message}`);
@@ -464,7 +460,6 @@ Examples:
   }
 
   // ── tail ──
-
 } else if (cmd === 'tail') {
   const args = process.argv.slice(3);
   const target = args.find((arg) => !arg.startsWith('--'));
@@ -498,22 +493,18 @@ Examples:
   try {
     const encoded = encodeURIComponent(target);
     console.log(`${DIM}Listening to ${target} raw stream... Ctrl+C to stop.${RESET}`);
-    await streamSse(
-      `/api/agents/${encoded}/raw/stream?limit=${Number.isFinite(limit) ? limit : 50}`,
-      (packet) => {
-        const events = packet.events || (packet.event ? [packet.event] : []);
-        for (const event of events) {
-          process.stdout.write(_formatRawEvent(event, { raw: rawView, json: jsonView }) + '\n');
-        }
-      },
-    );
+    await streamSse(`/api/agents/${encoded}/raw/stream?limit=${Number.isFinite(limit) ? limit : 50}`, (packet) => {
+      const events = packet.events || (packet.event ? [packet.event] : []);
+      for (const event of events) {
+        process.stdout.write(_formatRawEvent(event, { raw: rawView, json: jsonView }) + '\n');
+      }
+    });
   } catch (e) {
     console.error(`Cannot connect to stream: ${e.message}`);
     process.exit(1);
   }
 
   // ── logs ──
-
 } else if (cmd === 'logs') {
   if (!existsSync(LOG_PATH)) {
     console.log(`No log file yet. Start the server first: cmx start`);
@@ -523,7 +514,6 @@ Examples:
   tail.on('exit', () => process.exit(0));
 
   // ── config ──
-
 } else if (cmd === 'config') {
   try {
     const cfg = await api('/api/config');
@@ -556,7 +546,6 @@ Examples:
   }
 
   // ── version ──
-
 } else if (cmd === 'version' || cmd === '-v' || cmd === '--version') {
   const pkg = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf8'));
   let commit = 'unknown';
@@ -583,7 +572,6 @@ Examples:
   }
 
   // ── help ──
-
 } else if (cmd === 'doctor') {
   console.log(`${BOLD}ClawMux Doctor${RESET}\n`);
   let issues = 0;
@@ -611,7 +599,7 @@ Examples:
     const stale = agentList.filter(([id]) => {
       const m = monitor[id];
       if (!m || !['thinking', 'responding', 'tool_call'].includes(m.status)) return false;
-      return m.lastActivity && (Date.now() - m.lastActivity > 60000);
+      return m.lastActivity && Date.now() - m.lastActivity > 60000;
     });
 
     console.log(`${GREEN}✓${RESET} ${online.length}/${agentList.length} agents online`);
@@ -624,14 +612,18 @@ Examples:
       issues += errored.length;
     }
     if (stale.length > 0) {
-      console.log(`${YELLOW}!${RESET} ${stale.length} stale (active >60s no events): ${stale.map(([, a]) => a.name).join(', ')}`);
+      console.log(
+        `${YELLOW}!${RESET} ${stale.length} stale (active >60s no events): ${stale.map(([, a]) => a.name).join(', ')}`,
+      );
       issues += stale.length;
     }
 
     // 3. Context % warnings
     const highCtx = agentList.filter(([id]) => (monitor[id]?.contextPercent || 0) > 80);
     if (highCtx.length > 0) {
-      console.log(`${YELLOW}!${RESET} High context: ${highCtx.map(([id, a]) => `${a.name} ${monitor[id].contextPercent}%`).join(', ')}`);
+      console.log(
+        `${YELLOW}!${RESET} High context: ${highCtx.map(([id, a]) => `${a.name} ${monitor[id].contextPercent}%`).join(', ')}`,
+      );
     } else {
       console.log(`${GREEN}✓${RESET} No agents above 80% context`);
     }
@@ -672,7 +664,9 @@ Examples:
       const sessions = a.sessions || {};
       const backend = a.backend || 'claude';
       if (!sessions[backend] && Object.keys(sessions).length > 0) {
-        console.log(`${YELLOW}!${RESET} ${a.name}: on ${backend} but no ${backend} session (has: ${Object.keys(sessions).join(', ')})`);
+        console.log(
+          `${YELLOW}!${RESET} ${a.name}: on ${backend} but no ${backend} session (has: ${Object.keys(sessions).join(', ')})`,
+        );
         issues++;
       }
     }
@@ -682,7 +676,6 @@ Examples:
     console.error(`Cannot connect to server: ${e.message}`);
     process.exit(1);
   }
-
 } else if (cmd === 'migration-prompt') {
   const args = process.argv.slice(3);
   const filePath = args.find((arg) => !arg.startsWith('--'));
@@ -724,7 +717,6 @@ Examples:
     console.error(`${RED}${e.message}${RESET}`);
     process.exit(1);
   }
-
 } else if (cmd === 'help' || cmd === '-h' || cmd === '--help') {
   console.log(`${BOLD}cmx${RESET} — ClawMux Lite CLI\n`);
   console.log('Commands:');

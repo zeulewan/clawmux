@@ -16,7 +16,7 @@ function loadPronunciation() {
     const data = JSON.parse(readFileSync(PRONUNCIATION_PATH, 'utf8'));
     return {
       overrides: data.overrides || {},
-      patterns: (data.patterns || []).map(p => ({
+      patterns: (data.patterns || []).map((p) => ({
         find: new RegExp(p.find, 'g'),
         replace: p.replace,
       })),
@@ -75,7 +75,11 @@ export function stripNonSpeakable(text) {
   text = text.replace(/^\|[\s\-:|]+\|\s*$/gm, '');
   // Convert table rows to comma-separated
   text = text.replace(/^\|(.+)\|\s*$/gm, (_, row) =>
-    row.split('|').map(c => c.trim()).filter(Boolean).join(', ')
+    row
+      .split('|')
+      .map((c) => c.trim())
+      .filter(Boolean)
+      .join(', '),
   );
   // Remove bullet markers
   text = text.replace(/^[\s]*[-*+]\s+/gm, '');

@@ -105,17 +105,17 @@ export function getTick() {
 // Helpers reused across Monitor + Sidebar
 export const statusStyle = {
   responding: { color: '#22c55e', icon: '\u25cf', label: 'responding' },
-  thinking:   { color: '#eab308', icon: '\u25d0', label: 'thinking'   },
-  tool_call:  { color: '#a855f7', icon: '\u25c6', label: 'tool_call'  },
-  idle:       { color: '#7aa2c7', icon: '\u25cb', label: 'idle'       },
-  offline:    { color: '#5c6370', icon: '\u00b7', label: 'offline'    },
-  error:      { color: '#ef4444', icon: '\u2715', label: 'error'      },
+  thinking: { color: '#eab308', icon: '\u25d0', label: 'thinking' },
+  tool_call: { color: '#a855f7', icon: '\u25c6', label: 'tool_call' },
+  idle: { color: '#7aa2c7', icon: '\u25cb', label: 'idle' },
+  offline: { color: '#5c6370', icon: '\u00b7', label: 'offline' },
+  error: { color: '#ef4444', icon: '\u2715', label: 'error' },
 };
 
 export const backendColor = {
-  claude:   '#d97757',
-  codex:    '#10a37f',
-  pi:       '#c364c5',
+  claude: '#d97757',
+  codex: '#10a37f',
+  pi: '#c364c5',
   opencode: '#22d3ee',
 };
 

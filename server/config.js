@@ -57,9 +57,7 @@ const DEFAULT_BACKENDS = {
     bin: 'codex',
     label: 'Codex',
     port: 4500,
-    models: [
-      { id: 'default', label: 'Default (codex)', contextWindow: 272000 },
-    ],
+    models: [{ id: 'default', label: 'Default (codex)', contextWindow: 272000 }],
     defaultModel: 'default',
     effortLevels: ['low', 'medium', 'high', 'xhigh'],
     permissionModes: [],
@@ -70,9 +68,7 @@ const DEFAULT_BACKENDS = {
     bin: 'pi',
     label: 'Pi',
     mode: 'rpc',
-    models: [
-      { id: 'default', label: 'Default (pi)', contextWindow: 200000 },
-    ],
+    models: [{ id: 'default', label: 'Default (pi)', contextWindow: 200000 }],
     defaultModel: 'default',
     effortLevels: ['low', 'medium', 'high', 'xhigh'],
     permissionModes: [],
@@ -83,9 +79,7 @@ const DEFAULT_BACKENDS = {
     bin: 'opencode',
     label: 'OpenCode',
     port: 4499,
-    models: [
-      { id: 'default', label: 'Default (opencode)', contextWindow: 200000 },
-    ],
+    models: [{ id: 'default', label: 'Default (opencode)', contextWindow: 200000 }],
     defaultModel: 'default',
     effortLevels: [],
     permissionModes: [],

@@ -142,10 +142,13 @@ const serveCleanWebview = (req, res) => {
     // In dev mode the Vite dev server hosts the frontend with HMR.
     // Anything that lands on the backend's HTML route gets bounced over.
     const target = `http://${req.hostname}:${VITE_PORT}${req.originalUrl || '/'}`;
-    res.status(302).set('Location', target).send(
-      `<!DOCTYPE html><meta charset="utf-8"><title>ClawMux dev</title>` +
-        `<p>Dev mode — open <a href="${target}">${target}</a> for the Vite dev server (HMR enabled).</p>`,
-    );
+    res
+      .status(302)
+      .set('Location', target)
+      .send(
+        `<!DOCTYPE html><meta charset="utf-8"><title>ClawMux dev</title>` +
+          `<p>Dev mode — open <a href="${target}">${target}</a> for the Vite dev server (HMR enabled).</p>`,
+      );
     return;
   }
   res.send(`<!DOCTYPE html>
@@ -440,13 +443,16 @@ app.post('/api/launch', (req, res) => {
   const channelId = `cli_${id}_${Date.now()}`;
   const backend = getAgentBackend(id);
   const sessionId = getAgentSession(id, backend);
-  session.launchProvider({ channelId, resume: sessionId || undefined, cwd }).then(() => {
-    console.log(`[launch] ${agentName(id)} launched via API`);
-    res.json({ ok: true, channelId });
-  }).catch((err) => {
-    console.error(`[launch] Failed to launch ${agentName(id)}: ${err.message}`);
-    res.json({ error: err.message });
-  });
+  session
+    .launchProvider({ channelId, resume: sessionId || undefined, cwd })
+    .then(() => {
+      console.log(`[launch] ${agentName(id)} launched via API`);
+      res.json({ ok: true, channelId });
+    })
+    .catch((err) => {
+      console.error(`[launch] Failed to launch ${agentName(id)}: ${err.message}`);
+      res.json({ error: err.message });
+    });
 });
 
 app.get('/api/providers', (req, res) => {
@@ -666,7 +672,15 @@ app.get('/api/messages/:agentId', (req, res) => {
   const file = join(MESSAGES_DIR, `${id}.jsonl`);
   if (!existsSync(file)) return res.json([]);
   const lines = readFileSync(file, 'utf-8').trim().split('\n').filter(Boolean);
-  const messages = lines.map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  const messages = lines
+    .map((l) => {
+      try {
+        return JSON.parse(l);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
   res.json(messages.slice(-50));
 });
 
@@ -685,7 +699,7 @@ app.get('/{*path}', (req, res) => {
 
 // ── HTTPS via Tailscale cert (optional) ──────────────────────────
 const TLS_CERT = join(__dirname, 'workstation.tailee9084.ts.net.crt');
-const TLS_KEY  = join(__dirname, 'workstation.tailee9084.ts.net.key');
+const TLS_KEY = join(__dirname, 'workstation.tailee9084.ts.net.key');
 const HTTPS_PORT = process.env.HTTPS_PORT || 3471;
 
 let httpsServer = null;
@@ -894,7 +908,9 @@ if (httpsServer) {
   httpsServer.on('upgrade', (request, socket, head) => {
     const url = new URL(request.url, `https://${request.headers.host}`);
     if (url.pathname === '/ws/chat') {
-      wss.handleUpgrade(request, socket, head, (ws) => { wss.emit('connection', ws); });
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws);
+      });
     } else {
       socket.destroy();
     }
@@ -915,9 +931,11 @@ server.listen(PORT, HOST, () => {
   const piModels = discoverPiModels();
   if (piModels?.length) updateBackendModels('pi', piModels);
 
-  discoverCodexModels().then((codexModels) => {
-    if (codexModels?.length) updateBackendModels('codex', codexModels);
-  }).catch(() => {});
+  discoverCodexModels()
+    .then((codexModels) => {
+      if (codexModels?.length) updateBackendModels('codex', codexModels);
+    })
+    .catch(() => {});
 
   // Validate agent configs — fix session/backend mismatches
   {
@@ -938,7 +956,9 @@ server.listen(PORT, HOST, () => {
       }
       // Warn if agent has no session for its current backend
       if (!sessions[backend] && Object.keys(sessions).length > 0) {
-        console.log(`[startup] Warning: ${agent.name} is on ${backend} but only has sessions for: ${Object.keys(sessions).join(', ')}`);
+        console.log(
+          `[startup] Warning: ${agent.name} is on ${backend} but only has sessions for: ${Object.keys(sessions).join(', ')}`,
+        );
       }
     }
     if (fixed > 0) {

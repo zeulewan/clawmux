@@ -61,7 +61,7 @@ test('codex ignores thread-bound notifications for a different thread', () => {
   const conn = {
     alive: true,
     threadId: 'thr_alice',
-    listeners: new Set([event => events.push(event)]),
+    listeners: new Set([(event) => events.push(event)]),
   };
 
   provider._handleNotification(conn, 'turn/started', {

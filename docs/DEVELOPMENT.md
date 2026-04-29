@@ -82,29 +82,35 @@ Then add a `foo` entry to `backends.json`. The provider registry auto-discovers 
 
 ## Backend Capabilities
 
-| Feature | Claude | Codex | pi | OpenCode |
-|---------|--------|-------|----|----------|
-| Thinking | Yes (extended) | No (hidden) | Yes (thinking_start/delta/end) | Yes (reasoning parts) |
-| Context % | Yes (API poll) | Yes (tokenUsage) | Yes (turn_end usage) | No |
-| Rate limits 5h/7d | Yes (OAuth API) | Yes (rateLimits/updated) | No | No |
-| Session resume | --resume flag | thread/resume RPC | --session flag | Stale -> retry fresh |
-| Model discovery | Static | model/list RPC | pi --list-models | Static |
-| Process model | 1 per agent | Shared daemon :4500 | 1 per agent | Shared daemon :4499 |
+| Feature           | Claude          | Codex                    | pi                             | OpenCode              |
+| ----------------- | --------------- | ------------------------ | ------------------------------ | --------------------- |
+| Thinking          | Yes (extended)  | No (hidden)              | Yes (thinking_start/delta/end) | Yes (reasoning parts) |
+| Context %         | Yes (API poll)  | Yes (tokenUsage)         | Yes (turn_end usage)           | No                    |
+| Rate limits 5h/7d | Yes (OAuth API) | Yes (rateLimits/updated) | No                             | No                    |
+| Session resume    | --resume flag   | thread/resume RPC        | --session flag                 | Stale -> retry fresh  |
+| Model discovery   | Static          | model/list RPC           | pi --list-models               | Static                |
+| Process model     | 1 per agent     | Shared daemon :4500      | 1 per agent                    | Shared daemon :4499   |
 
 ## Config Files (~/.clawmux/)
 
 **agents.json** — agents + per-agent settings + session IDs:
+
 ```json
 {
   "defaults": { "backend": "claude", "model": "claude-opus-4-7", "effort": "high" },
   "agents": [
-    { "name": "Agent1", "backend": "claude", "model": "claude-opus-4-7",
-      "sessions": { "claude": "uuid-1", "codex": "uuid-2" } }
+    {
+      "name": "Agent1",
+      "backend": "claude",
+      "model": "claude-opus-4-7",
+      "sessions": { "claude": "uuid-1", "codex": "uuid-2" }
+    }
   ]
 }
 ```
 
 **backends.json** — backend definitions (auto-populated for pi/codex at startup):
+
 ```json
 {
   "_default": "claude",
@@ -118,25 +124,32 @@ Then add a `foo` entry to `backends.json`. The provider registry auto-discovers 
 ## Critical Behaviors
 
 ### Connection Reuse
+
 When an agent is already running (from auto-resume or another tab), `launchProvider` reuses the existing connection instead of killing/respawning. It remaps the channelId and re-subscribes event listeners.
 
 ### Resume Retry
+
 All backends handle stale session IDs:
+
 - **Claude**: stderr "No conversation found" -> `resume_failed` -> relaunch fresh
 - **Pi**: stderr "No session found" -> `resume_failed` -> relaunch fresh
 - **Codex**: `thread/resume` RPC error -> `resume_failed` -> relaunch with `thread/start`
 - **OpenCode**: `prompt_async` 400/404 -> `resume_failed` -> relaunch fresh
 
 ### Backend Switching
+
 `POST /api/agents/:id/backend` updates config, resets model to `'default'`, kills active session. Next `launch` spawns the new backend.
 
 ### Monitor State Machine
+
 `offline -> idle -> thinking -> responding -> tool_call -> error -> offline`
+
 - Starts `offline` — only goes online after `launchProvider`
 - Health check (30s) relaunches agents in `offline` or `error` state
 - Stale stream watchdog (120s) catches dead connections
 
 ### Session History
+
 All backends write JSONL to `~/.claude/projects/{hash}/{sessionId}.jsonl`. Claude redacts thinking content in saved sessions — provider-session writes a `thinking_cache` entry to preserve it.
 
 ## CLI Reference
