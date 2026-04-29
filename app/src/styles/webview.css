@@ -12272,15 +12272,24 @@ button {
   color: #fff;
 }
 
-/* Stop button — destructive */
+/* Stop button — always present, muted unless hovered */
 .voiceBarSideBtn--stop {
-  border-color: rgba(239, 68, 68, 0.35);
-  color: #ef4444;
+  border-color: var(--app-primary-border-color);
+  color: var(--app-secondary-foreground);
+  opacity: 0.6;
 }
 
 .voiceBarSideBtn--stop:hover {
-  background: rgba(239, 68, 68, 0.1);
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.4);
   color: #ef4444;
+  opacity: 1;
+}
+
+/* Cancel button */
+.voiceBarSideBtn--cancel {
+  border-color: var(--app-primary-border-color);
+  color: var(--app-secondary-foreground);
 }
 
 /* Animated waveform bars (recording state) */
@@ -12362,7 +12371,8 @@ button {
 }
 
 /* Speaking — mic icon, purple like idle (tap to interrupt) */
-.voiceBarMainBtn--speaking {
+.voiceBarMainBtn--speaking,
+.voiceBarMainBtn--playing {
   background: #0063d1;
   color: #fff;
   animation: voiceSpeakingPulse 2s ease-in-out infinite;
