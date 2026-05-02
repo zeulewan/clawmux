@@ -3,6 +3,15 @@ import assert from 'node:assert/strict';
 
 import { CodexProvider } from '../server/providers/codex-provider.js';
 
+test('codex app-server args use supported config overrides', () => {
+  const provider = new CodexProvider();
+  const args = provider._serverArgs();
+
+  assert.deepEqual(args, ['app-server', '-c', 'approval_policy="never"', '-c', 'sandbox_mode="danger-full-access"']);
+  assert.equal(args.includes('--listen'), false);
+  assert.equal(args.includes('--dangerously-bypass-approvals-and-sandbox'), false);
+});
+
 test('codex thread launch params force never-approve full access', () => {
   const provider = new CodexProvider();
   const conn = { cwd: '/tmp/clawmux-codex-test' };
@@ -18,7 +27,7 @@ test('codex thread launch params force never-approve full access', () => {
     cwd: '/tmp/clawmux-codex-test',
     approvalPolicy: 'never',
     sandbox: 'danger-full-access',
-    persistExtendedHistory: false,
+    excludeTurns: true,
   });
 });
 
@@ -53,6 +62,63 @@ test('codex treats request id 0 as a valid approval callback', () => {
   );
 
   assert.deepEqual(approval, { requestId: 0, allowed: true });
+});
+
+test('codex answers user-input requests so app-server cannot wedge waiting for hidden input', () => {
+  const provider = new CodexProvider();
+  const sent = [];
+  const conn = {
+    alive: true,
+    ws: { send: (payload) => sent.push(JSON.parse(payload)) },
+    listeners: new Set(),
+  };
+
+  provider._handleNotification(
+    conn,
+    'item/tool/requestUserInput',
+    {
+      questions: [
+        {
+          id: 'trust',
+          header: 'Trust',
+          question: 'Trust this workspace?',
+          options: [{ label: 'Yes', description: 'Trust this workspace' }],
+        },
+        {
+          id: 'fallback',
+          header: 'Continue',
+          question: 'Continue?',
+        },
+      ],
+    },
+    0,
+  );
+
+  assert.deepEqual(sent, [
+    {
+      id: 0,
+      result: {
+        answers: {
+          trust: { answers: ['Yes'] },
+          fallback: { answers: ['ok'] },
+        },
+      },
+    },
+  ]);
+});
+
+test('codex cancels unsupported MCP elicitations instead of leaving app-server waiting', () => {
+  const provider = new CodexProvider();
+  const sent = [];
+  const conn = {
+    alive: true,
+    ws: { send: (payload) => sent.push(JSON.parse(payload)) },
+    listeners: new Set(),
+  };
+
+  provider._handleNotification(conn, 'mcpServer/elicitation/request', { message: 'Need input' }, 0);
+
+  assert.deepEqual(sent, [{ id: 0, result: { action: 'cancel' } }]);
 });
 
 test('codex ignores thread-bound notifications for a different thread', () => {

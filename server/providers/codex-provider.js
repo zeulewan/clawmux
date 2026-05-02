@@ -1,233 +1,87 @@
 /**
  * Codex App Server provider.
  *
- * Connects via WebSocket to `codex app-server --listen ws://127.0.0.1:{port}`.
+ * Spawns `codex app-server` per session and talks JSON-RPC over stdio.
  * Translates JSON-RPC notifications into internal events.
  *
  * Tool execution: App-server handles it internally.
  * Permission flow: Server sends requestApproval, we auto-approve.
  */
 
-import { spawn, execSync } from 'child_process';
-import { WebSocket } from 'ws';
 import { writeFileSync, appendFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { CodexAppServerClient } from './codex-app-server-client.js';
+import { CodexSessionRuntime } from './codex-session-runtime.js';
 import { E } from './events.js';
 import { hashProjectPath } from '../sessions.js';
 
 const CODEX_CMD = process.env.CODEX_CMD || 'codex';
-const CODEX_PORT = parseInt(process.env.CODEX_PORT || '4500');
 const CODEX_APPROVAL_POLICY = 'never';
 const CODEX_SANDBOX_MODE = 'danger-full-access';
 const CODEX_SANDBOX_POLICY = { type: 'dangerFullAccess' };
 
-/**
- * Discover available models by querying the codex app-server via model/list RPC.
- * Requires the app-server to be running. Returns null if not available.
- */
-export async function discoverCodexModels() {
-  try {
-    // Check if server is running
-    const health = await fetch(`http://127.0.0.1:${CODEX_PORT}/readyz`);
-    if (!health.ok) return null;
-  } catch {
-    return null;
-  }
-
-  return new Promise((resolve) => {
-    const ws = new WebSocket(`ws://127.0.0.1:${CODEX_PORT}`);
-    const timeout = setTimeout(() => {
-      ws.close();
-      resolve(null);
-    }, 10000);
-
-    ws.on('open', () => {
-      ws.send(
-        JSON.stringify({
-          id: 'init-discover',
-          method: 'initialize',
-          params: { clientInfo: { name: 'ClawMux-discover', version: '1.0.0' }, capabilities: {} },
-        }),
-      );
-    });
-
-    ws.on('message', (data) => {
-      const msg = JSON.parse(data.toString());
-      if (msg.id === 'init-discover' && msg.result) {
-        ws.send(JSON.stringify({ id: 'list-models', method: 'model/list', params: {} }));
-      }
-      if (msg.id === 'list-models' && msg.result) {
-        clearTimeout(timeout);
-        const raw = msg.result.data || msg.result.models || [];
-        const models = raw
-          .filter((m) => !m.hidden)
-          .map((m) => ({
-            id: m.id || m.model,
-            label: m.displayName || m.id,
-            contextWindow: m.contextWindow || 272000,
-          }));
-        ws.close();
-        resolve(models);
-      }
-    });
-
-    ws.on('error', () => {
-      clearTimeout(timeout);
-      resolve(null);
-    });
-  });
+function codexAppServerArgs() {
+  return ['app-server', '-c', 'approval_policy="never"', '-c', 'sandbox_mode="danger-full-access"'];
 }
 
-// Single shared app-server across all connections
-let _sharedServerProc = null;
-let _sharedServerReady = false;
-let _sharedServerStarting = null;
+/**
+ * Discover available models by querying a short-lived codex app-server.
+ */
+export async function discoverCodexModels() {
+  const client = new CodexAppServerClient({
+    command: CODEX_CMD,
+    args: codexAppServerArgs(),
+    requestTimeoutMs: 10000,
+    onError: () => {},
+  });
+
+  try {
+    client.start();
+    await client.request('initialize', {
+      clientInfo: { name: 'ClawMux-discover', version: '1.0.0' },
+      capabilities: { experimentalApi: true },
+    });
+    client.notify('initialized');
+    const result = await client.request('model/list', {});
+    const raw = result?.data || result?.models || [];
+    return raw
+      .filter((m) => !m.hidden)
+      .map((m) => ({
+        id: m.id || m.model,
+        label: m.displayName || m.id || m.model,
+        contextWindow: m.contextWindow || m.modelContextWindow || 272000,
+      }));
+  } catch {
+    return null;
+  } finally {
+    client.close();
+  }
+}
 
 export class CodexProvider {
   constructor() {
     this.name = 'codex';
+    this._connections = new Set();
   }
 
   /**
-   * Connect: start app-server if needed, then connect via WebSocket.
+   * Connect: start a per-session app-server runtime over stdio.
    * @param {object} config - { cwd, model, resume }
    * @returns {Promise<object>} connection
    */
   async connect(config = {}) {
-    // Start shared app-server if not running
-    await this._ensureServer(config.cwd);
-
-    const ws = new WebSocket(`ws://127.0.0.1:${CODEX_PORT}`);
-    const conn = {
-      ws,
-      threadId: null,
-      turnId: null,
-      listeners: new Set(),
-      alive: false,
-      cwd: config.cwd,
-      model: config.model,
-      effortLevel: config.effortLevel || null,
-      _pendingApprovals: new Map(),
-    };
-
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('Codex WebSocket connect timeout')), 10000);
-      const startNewThread = () => {
-        conn._threadCreateId = crypto.randomUUID();
-        this._sendWs(conn, {
-          id: conn._threadCreateId,
-          method: 'thread/start',
-          params: this._threadStartParams(conn),
-        });
-      };
-
-      ws.on('open', async () => {
-        conn.alive = true;
-        clearTimeout(timeout);
-
-        // Send initialize handshake
-        conn._initId = crypto.randomUUID();
-        this._sendWs(conn, {
-          id: conn._initId,
-          method: 'initialize',
-          params: {
-            clientInfo: { name: 'ClawMux', version: '1.0.0' },
-            capabilities: {},
-          },
-        });
-      });
-
-      ws.on('message', (data) => {
-        try {
-          const raw = data.toString();
-          const msg = JSON.parse(raw);
-          this._emitRaw(conn, {
-            direction: 'in',
-            transport: 'ws',
-            raw,
-            payload: msg,
-          });
-          // Handle init response
-          if (msg.id === conn._initId && msg.result) {
-            console.log(`[codex-provider] Connected to ${msg.result.userAgent}`);
-            if (config.resume) {
-              // Resume existing thread
-              conn._threadCreateId = crypto.randomUUID();
-              this._sendWs(conn, {
-                id: conn._threadCreateId,
-                method: 'thread/resume',
-                params: this._threadResumeParams(conn, config.resume),
-              });
-            } else {
-              // Create new thread
-              startNewThread();
-            }
-            return;
-          }
-          // Handle thread/start or thread/resume response
-          if (msg.id === conn._threadCreateId && msg.result?.thread?.id) {
-            conn.threadId = msg.result.thread.id;
-            console.log(`[codex-provider] Thread ${config.resume ? 'resumed' : 'created'}: ${conn.threadId}`);
-            if (!config.resume) this._writeSessionFile(conn);
-            this._emit(conn, E.sessionReady(conn.threadId));
-            resolve(conn);
-            return;
-          }
-          // Handle thread/resume error (stale thread)
-          if (msg.id === conn._threadCreateId && msg.error) {
-            console.log(`[codex-provider] Thread resume failed: ${msg.error.message || 'unknown'}`);
-            if (config.resume) {
-              console.log('[codex-provider] Falling back to a fresh thread');
-              config.resume = null;
-              startNewThread();
-            } else {
-              this._emit(conn, { type: 'resume_failed' });
-              resolve(conn);
-            }
-            return;
-          }
-          this._handleMessage(conn, msg);
-        } catch (err) {
-          console.error('[codex-provider] Parse error:', err.message);
-        }
-      });
-
-      ws.on('close', () => {
-        conn.alive = false;
-        this._emit(conn, E.sessionClosed('WebSocket closed'));
-      });
-
-      ws.on('error', (err) => {
-        conn.alive = false;
-        clearTimeout(timeout);
-        reject(err);
-      });
-    });
+    const runtime = new CodexSessionRuntime(this, config, { command: CODEX_CMD });
+    const conn = await runtime.start();
+    this._connections.add(conn);
+    return conn;
   }
 
   /**
    * Send a user message — starts a new turn.
    */
   send(conn, message) {
-    if (!conn.alive) {
-      console.log('[codex-provider] send: not alive');
-      return;
-    }
-    if (!conn.threadId) {
-      console.log('[codex-provider] send: no threadId, conn keys:', Object.keys(conn), 'alive:', conn.alive);
-      return;
-    }
-    const turnId = crypto.randomUUID();
-    const payload = {
-      id: turnId,
-      method: 'turn/start',
-      params: this._turnStartParams(conn, message),
-    };
-    console.log(`[codex-provider] → turn/start threadId=${conn.threadId} input="${message.slice(0, 50)}"`);
-    this._sendWs(conn, payload);
-    this._appendToSession(conn, 'user', message);
-    // Don't emit turnStart here — the server will send turn/started notification
+    conn._runtime?.send(message);
   }
 
   onEvent(conn, callback) {
@@ -236,175 +90,30 @@ export class CodexProvider {
   }
 
   respondPermission(conn, requestId, allowed) {
-    if (!conn.alive) return;
-    this._sendWs(conn, {
-      id: requestId,
-      result: { decision: allowed ? 'accept' : 'deny' },
-    });
+    conn._runtime?.respondPermission(requestId, allowed);
   }
 
   interrupt(conn) {
-    if (!conn.alive) return;
-    this._sendWs(conn, {
-      id: crypto.randomUUID(),
-      method: 'turn/interrupt',
-      params: {
-        threadId: conn.threadId,
-        turnId: conn.turnId,
-      },
-    });
+    conn._runtime?.interrupt();
   }
 
   close(conn) {
     conn.alive = false;
+    conn._runtime?.close();
+    this._connections.delete(conn);
     try {
-      conn.ws.close();
+      conn.ws?.close();
     } catch {}
   }
 
   /**
-   * Shut down the shared app-server process.
+   * Shut down all session runtimes.
    */
   shutdown() {
-    if (_sharedServerProc && !_sharedServerProc.killed) {
-      _sharedServerProc.kill('SIGTERM');
-      _sharedServerProc = null;
-      _sharedServerReady = false;
-      _sharedServerStarting = null;
-    }
+    for (const conn of [...this._connections]) this.close(conn);
   }
 
   // ── Internal ──
-
-  /** Kill whatever process is listening on a given port. */
-  _killPortProcess(port) {
-    try {
-      // Try lsof (macOS + most Linux)
-      const lines = execSync(`lsof -ti:${port} 2>/dev/null`, { encoding: 'utf8' }).trim().split('\n');
-      for (const pid of lines) {
-        if (pid)
-          try {
-            process.kill(parseInt(pid), 'SIGTERM');
-          } catch {}
-      }
-    } catch {
-      // Fallback: ss + /proc (Linux without lsof)
-      try {
-        const out = execSync(`ss -tlnp sport = :${port} 2>/dev/null`, { encoding: 'utf8' });
-        const pidRe = /pid=(\d+)/g;
-        let m;
-        while ((m = pidRe.exec(out)) !== null) {
-          try {
-            process.kill(parseInt(m[1]), 'SIGTERM');
-          } catch {}
-        }
-      } catch {}
-    }
-  }
-
-  async _ensureServer(cwd) {
-    // Already running
-    if (_sharedServerReady && _sharedServerProc && !_sharedServerProc.killed) return;
-
-    // Already starting (another connect() is waiting)
-    if (_sharedServerStarting) return _sharedServerStarting;
-
-    _sharedServerStarting = this._startServer(cwd);
-    await _sharedServerStarting;
-    _sharedServerStarting = null;
-  }
-
-  async _startServer(cwd) {
-    const listenUrl = `ws://127.0.0.1:${CODEX_PORT}`;
-
-    // Check if something is already running on this port
-    try {
-      const r = await fetch(`http://127.0.0.1:${CODEX_PORT}/readyz`);
-      if (r.ok) {
-        // Verify it actually accepts WebSocket connections (not just a stale HTTP listener)
-        const alive = await new Promise((resolve) => {
-          const ws = new WebSocket(listenUrl);
-          const timer = setTimeout(() => {
-            try {
-              ws.close();
-            } catch {}
-            resolve(false);
-          }, 3000);
-          ws.on('open', () => {
-            clearTimeout(timer);
-            ws.close();
-            resolve(true);
-          });
-          ws.on('error', () => {
-            clearTimeout(timer);
-            resolve(false);
-          });
-        });
-        if (alive) {
-          console.log(`[codex-provider] App-server already running on port ${CODEX_PORT} (verified)`);
-          _sharedServerReady = true;
-          return;
-        }
-        // Stale process — kill it
-        console.warn(`[codex-provider] Stale process on port ${CODEX_PORT} (readyz OK but WS dead) — killing`);
-        this._killPortProcess(CODEX_PORT);
-        await new Promise((r) => setTimeout(r, 500));
-      }
-    } catch {}
-
-    console.log(`[codex-provider] Starting app-server on ${listenUrl}`);
-
-    _sharedServerProc = spawn(
-      CODEX_CMD,
-      [
-        'app-server',
-        '--listen',
-        listenUrl,
-        '--dangerously-bypass-approvals-and-sandbox',
-        '-c',
-        'approval_policy="never"',
-        '-c',
-        'sandbox_mode="danger-full-access"',
-      ],
-      {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        cwd: cwd || process.cwd(),
-        env: { ...process.env },
-      },
-    );
-
-    _sharedServerProc.stderr.on('data', (d) => {
-      const t = d.toString().trim();
-      if (t) console.error(`[codex-server] ${t}`);
-    });
-
-    _sharedServerProc.on('exit', (code) => {
-      console.error(`[codex-provider] App-server exited (code ${code}) — will restart on next connect`);
-      _sharedServerProc = null;
-      _sharedServerReady = false;
-      _sharedServerStarting = null;
-    });
-
-    // Wait for server to be ready
-    await new Promise((resolve, reject) => {
-      let attempts = 0;
-      const check = () => {
-        attempts++;
-        if (attempts > 30) {
-          reject(new Error('Codex app-server failed to start'));
-          return;
-        }
-        const ws = new WebSocket(listenUrl);
-        ws.on('open', () => {
-          ws.close();
-          _sharedServerReady = true;
-          resolve();
-        });
-        ws.on('error', () => setTimeout(check, 300));
-      };
-      setTimeout(check, 500);
-    });
-  }
 
   _getSessionPath(conn) {
     const CLAUDE_PROJECTS_DIR = join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude'), 'projects');
@@ -470,6 +179,11 @@ export class CodexProvider {
   }
 
   _sendWs(conn, payload) {
+    if (conn.client) {
+      conn.client.send(payload);
+      return;
+    }
+
     this._emitRaw(conn, {
       direction: 'out',
       transport: 'ws',
@@ -479,32 +193,54 @@ export class CodexProvider {
     conn.ws.send(JSON.stringify(payload));
   }
 
+  _serverArgs() {
+    return codexAppServerArgs();
+  }
+
   _threadStartParams(conn) {
-    return {
+    const params = {
       cwd: conn.cwd || undefined,
       approvalPolicy: CODEX_APPROVAL_POLICY,
       sandbox: CODEX_SANDBOX_MODE,
     };
+    if (conn.model && conn.model !== 'default') params.model = conn.model;
+    return params;
   }
 
   _threadResumeParams(conn, threadId) {
-    return {
+    const params = {
       threadId,
       cwd: conn.cwd || undefined,
       approvalPolicy: CODEX_APPROVAL_POLICY,
       sandbox: CODEX_SANDBOX_MODE,
-      persistExtendedHistory: false,
+      excludeTurns: true,
     };
+    if (conn.model && conn.model !== 'default') params.model = conn.model;
+    return params;
   }
 
   _turnStartParams(conn, message) {
-    return {
+    const params = {
       threadId: conn.threadId,
       input: [{ type: 'text', text: message }],
       effort: conn.effortLevel || undefined,
       approvalPolicy: CODEX_APPROVAL_POLICY,
       sandboxPolicy: CODEX_SANDBOX_POLICY,
     };
+    if (conn.model && conn.model !== 'default') params.model = conn.model;
+    return params;
+  }
+
+  _userInputResponse(params = {}) {
+    const questions = Array.isArray(params.questions) ? params.questions : [];
+    const answers = {};
+    for (const question of questions) {
+      if (!question?.id) continue;
+      const firstOption = Array.isArray(question.options) ? question.options[0] : null;
+      const answer = firstOption?.label || (question.isSecret ? '' : 'ok');
+      answers[question.id] = { answers: [answer] };
+    }
+    return { answers };
   }
 
   _handleMessage(conn, msg) {
@@ -755,6 +491,32 @@ export class CodexProvider {
         break;
       }
 
+      case 'item/tool/requestUserInput': {
+        const reqId = msgId ?? params.requestId ?? params.id;
+        if (reqId === undefined || reqId === null) {
+          console.warn(
+            `[codex-provider] ${method} arrived without request id; params keys=${Object.keys(params).join(',') || '(none)'}`,
+          );
+          break;
+        }
+        console.warn(`[codex-provider] Auto-answering ${method} (id=${reqId})`);
+        this._sendWs(conn, { id: reqId, result: this._userInputResponse(params) });
+        break;
+      }
+
+      case 'mcpServer/elicitation/request': {
+        const reqId = msgId ?? params.requestId ?? params.id;
+        if (reqId === undefined || reqId === null) {
+          console.warn(
+            `[codex-provider] ${method} arrived without request id; params keys=${Object.keys(params).join(',') || '(none)'}`,
+          );
+          break;
+        }
+        console.warn(`[codex-provider] Cancelling unsupported ${method} (id=${reqId})`);
+        this._sendWs(conn, { id: reqId, result: { action: 'cancel' } });
+        break;
+      }
+
       case 'turn/completed': {
         conn.turnId = null;
         conn._turnStartEmitted = null;
@@ -828,6 +590,7 @@ export class CodexProvider {
       case 'app/list/updated':
       case 'fs/changed':
       case 'model/rerouted':
+      case 'remoteControl/status/changed':
       case 'deprecationNotice':
       case 'configWarning':
       case 'fuzzyFileSearch/sessionUpdated':
