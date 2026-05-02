@@ -37,6 +37,7 @@ import { discoverPiModels } from './server/providers/pi-provider.js';
 import { discoverCodexModels } from './server/providers/codex-provider.js';
 import { buildMigrationPromptFromSession } from './server/session-migration.js';
 import { voiceRouter } from './server/voice/index.js';
+import { maybeConfigureTailscaleServe } from './server/tailscale-serve.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -701,6 +702,7 @@ app.get('/{*path}', (req, res) => {
 const TLS_CERT = join(__dirname, 'workstation.tailee9084.ts.net.crt');
 const TLS_KEY = join(__dirname, 'workstation.tailee9084.ts.net.key');
 const HTTPS_PORT = process.env.HTTPS_PORT || 3471;
+const HTTPS_HOST = process.env.HTTPS_HOST || HOST;
 
 let httpsServer = null;
 if (existsSync(TLS_CERT) && existsSync(TLS_KEY)) {
@@ -915,8 +917,11 @@ if (httpsServer) {
       socket.destroy();
     }
   });
-  httpsServer.listen(HTTPS_PORT, '0.0.0.0', () => {
-    console.log(`ClawMux Lite (HTTPS) on https://workstation.tailee9084.ts.net:${HTTPS_PORT}`);
+  httpsServer.listen(HTTPS_PORT, HTTPS_HOST, () => {
+    console.log(`ClawMux Lite (HTTPS) on https://${HTTPS_HOST}:${HTTPS_PORT}`);
+    maybeConfigureTailscaleServe({ port: HTTPS_PORT }).catch((err) => {
+      console.warn(`[tailscale] serve check failed: ${err.message}`);
+    });
   });
 }
 

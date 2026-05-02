@@ -1,20 +1,70 @@
 #!/usr/bin/env node
 
-import { execSync, spawn } from 'child_process';
-import { readFileSync, existsSync, openSync } from 'fs';
+import { execFileSync, execSync, spawn } from 'child_process';
+import { readFileSync, existsSync, openSync, mkdirSync, unlinkSync, writeFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { homedir } from 'os';
 import http from 'http';
+import https from 'https';
+import { lookup } from 'dns/promises';
+import {
+  CLAWMUX_CRON_MARKER,
+  CLAWMUX_LAUNCHD_LABEL,
+  CLAWMUX_SERVICE_FILE,
+  CLAWMUX_SERVICE_NAME,
+  cronLine,
+  launchdPlist,
+  launchdPlistPath,
+  serviceEnvironment,
+  systemdUnit,
+  systemdUnitPath,
+} from './server/clawmux-service.js';
 import { buildMigrationPromptFromFile } from './server/session-migration.js';
+import {
+  checkTailscaleServe,
+  ensureTailscaleServe,
+  expectedTailscaleTarget,
+  getTailscaleDnsName,
+} from './server/tailscale-serve.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const cmd = process.argv[2];
 const PORT = process.env.PORT || '3470';
 const BASE = `http://localhost:${PORT}`;
+const HOST = process.env.HOST || '127.0.0.1';
+const HTTPS_PORT = process.env.HTTPS_PORT || '3471';
+const HTTPS_HOST = process.env.HTTPS_HOST || HOST;
+const CLAWMUX_DIR = join(homedir(), '.clawmux');
 const LOG_PATH = join(homedir(), '.clawmux', 'server.log');
 
 // ── Helpers ──
+
+function ensureClawmuxDir() {
+  mkdirSync(CLAWMUX_DIR, { recursive: true });
+}
+
+function safeExecFile(file, args, options = {}) {
+  return execFileSync(file, args, {
+    encoding: 'utf8',
+    timeout: 5000,
+    ...options,
+  });
+}
+
+function commandExists(name) {
+  try {
+    safeExecFile('command', ['-v', name], { stdio: 'ignore' });
+    return true;
+  } catch {
+    try {
+      execSync(`command -v ${name}`, { stdio: 'ignore', timeout: 5000 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
 
 // Find node processes listening on PORT. Returns [{ pid, line }] or [].
 // Tries lsof first, falls back to ss + /proc for systems without lsof.
@@ -70,6 +120,44 @@ function stop() {
   return killed;
 }
 
+function waitForPortToClose({ timeoutMs = 10000, intervalMs = 200 } = {}) {
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const poll = () => {
+      if (!isPortInUse()) return resolve(true);
+      if (Date.now() - started >= timeoutMs) return resolve(false);
+      setTimeout(poll, intervalMs);
+    };
+    poll();
+  });
+}
+
+function serverEnv({ tailscaleMode = 'ensure' } = {}) {
+  return {
+    ...process.env,
+    PORT,
+    HOST,
+    HTTPS_PORT,
+    HTTPS_HOST,
+    CLAWMUX_TAILSCALE_SERVE: process.env.CLAWMUX_TAILSCALE_SERVE || tailscaleMode,
+  };
+}
+
+function spawnServer({ hard = false, tailscaleMode = 'ensure' } = {}) {
+  ensureClawmuxDir();
+  const args = [join(__dirname, 'server.js')];
+  if (hard) args.push('--hard');
+  const logFd = openSync(LOG_PATH, 'a');
+  const child = spawn('node', args, {
+    stdio: ['ignore', logFd, logFd],
+    cwd: __dirname,
+    detached: true,
+    env: serverEnv({ tailscaleMode }),
+  });
+  child.unref();
+  return child;
+}
+
 function serverStatus() {
   const listeners = findListeners();
   if (listeners.length > 0) {
@@ -119,6 +207,346 @@ function postApi(path, data) {
     req.on('error', reject);
     req.end(body);
   });
+}
+
+function requestHealth(url, { timeoutMs = 3000, rejectUnauthorized = true } = {}) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const lib = parsed.protocol === 'https:' ? https : http;
+    const req = lib.request(
+      {
+        hostname: parsed.hostname,
+        port: parsed.port,
+        path: `${parsed.pathname}${parsed.search}`,
+        method: 'GET',
+        timeout: timeoutMs,
+        rejectUnauthorized,
+      },
+      (res) => {
+        let body = '';
+        res.on('data', (chunk) => {
+          body += chunk;
+        });
+        res.on('end', () => {
+          resolve({ ok: res.statusCode >= 200 && res.statusCode < 300, statusCode: res.statusCode, body });
+        });
+      },
+    );
+    req.on('timeout', () => req.destroy(new Error(`timeout after ${timeoutMs}ms`)));
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+function localHealthUrl({ httpsMode = false } = {}) {
+  return httpsMode ? `https://${HTTPS_HOST}:${HTTPS_PORT}/api/agents` : `http://${HOST}:${PORT}/api/agents`;
+}
+
+function serviceEnvForInstall() {
+  return serviceEnvironment({
+    port: PORT,
+    host: HOST,
+    httpsPort: HTTPS_PORT,
+    httpsHost: HTTPS_HOST,
+    tailscaleMode: 'ensure',
+  });
+}
+
+function canUseSystemdUser() {
+  if (process.platform !== 'linux' || !commandExists('systemctl')) return false;
+  try {
+    safeExecFile('systemctl', ['--user', 'show-environment'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function canUseLaunchd() {
+  return process.platform === 'darwin' && commandExists('launchctl');
+}
+
+function canUseCron() {
+  return commandExists('crontab');
+}
+
+function autostartBackend() {
+  if (canUseSystemdUser()) return 'systemd';
+  if (canUseLaunchd()) return 'launchd';
+  if (canUseCron()) return 'cron';
+  return null;
+}
+
+function systemdStatus() {
+  const path = systemdUnitPath(homedir());
+  const installed = existsSync(path);
+  let active = false;
+  let pid = null;
+  let detail = installed ? path : 'not installed';
+  if (canUseSystemdUser()) {
+    try {
+      active = safeExecFile('systemctl', ['--user', 'is-active', CLAWMUX_SERVICE_FILE]).trim() === 'active';
+    } catch {}
+    try {
+      const rawPid = safeExecFile('systemctl', ['--user', 'show', CLAWMUX_SERVICE_FILE, '-p', 'MainPID', '--value'])
+        .trim()
+        .replace(/\D/g, '');
+      if (rawPid && rawPid !== '0') pid = Number(rawPid);
+    } catch {}
+  } else if (installed) {
+    detail = `${path} (systemd user manager unavailable)`;
+  }
+  return { backend: 'systemd', installed, active, pid, detail, path };
+}
+
+function launchdStatus() {
+  const path = launchdPlistPath(homedir());
+  const installed = existsSync(path);
+  let active = false;
+  let pid = null;
+  if (canUseLaunchd()) {
+    try {
+      const out = safeExecFile('launchctl', ['print', `gui/${process.getuid()}/${CLAWMUX_LAUNCHD_LABEL}`]);
+      active = true;
+      const pidMatch = out.match(/pid = (\d+)/);
+      if (pidMatch) pid = Number(pidMatch[1]);
+    } catch {}
+  }
+  return { backend: 'launchd', installed, active, pid, detail: installed ? path : 'not installed', path };
+}
+
+function readCrontab() {
+  try {
+    return safeExecFile('crontab', ['-l']);
+  } catch {
+    return '';
+  }
+}
+
+function cronStatus() {
+  const crontab = readCrontab();
+  const installed = crontab.includes(CLAWMUX_CRON_MARKER);
+  const active = installed && isPortInUse();
+  const pid = active ? findListeners()[0]?.pid || null : null;
+  return { backend: 'cron', installed, active, pid, detail: installed ? 'crontab @reboot entry' : 'not installed' };
+}
+
+function getAutostartStatus() {
+  if (process.platform === 'linux') {
+    const status = systemdStatus();
+    if (status.installed || canUseSystemdUser()) return status;
+  }
+  if (process.platform === 'darwin') {
+    const status = launchdStatus();
+    if (status.installed || canUseLaunchd()) return status;
+  }
+  const cron = cronStatus();
+  if (cron.installed || canUseCron()) return cron;
+  return { backend: null, installed: false, active: false, pid: null, detail: 'no supported service manager found' };
+}
+
+function installSystemdAutostart() {
+  const path = systemdUnitPath(homedir());
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(
+    path,
+    systemdUnit({
+      repoDir: __dirname,
+      nodePath: process.execPath,
+      logPath: LOG_PATH,
+      env: serviceEnvForInstall(),
+    }),
+  );
+  safeExecFile('systemctl', ['--user', 'daemon-reload'], { stdio: 'inherit' });
+  safeExecFile('systemctl', ['--user', 'enable', '--now', CLAWMUX_SERVICE_FILE], { stdio: 'inherit' });
+  return path;
+}
+
+function uninstallSystemdAutostart() {
+  const path = systemdUnitPath(homedir());
+  if (canUseSystemdUser()) {
+    try {
+      safeExecFile('systemctl', ['--user', 'disable', '--now', CLAWMUX_SERVICE_FILE], { stdio: 'inherit' });
+    } catch {}
+  }
+  if (existsSync(path)) unlinkSync(path);
+  if (canUseSystemdUser()) {
+    try {
+      safeExecFile('systemctl', ['--user', 'daemon-reload'], { stdio: 'inherit' });
+    } catch {}
+  }
+  return path;
+}
+
+function installLaunchdAutostart() {
+  const path = launchdPlistPath(homedir());
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(
+    path,
+    launchdPlist({
+      repoDir: __dirname,
+      nodePath: process.execPath,
+      logPath: LOG_PATH,
+      env: serviceEnvForInstall(),
+    }),
+  );
+  try {
+    safeExecFile('launchctl', ['bootout', `gui/${process.getuid()}`, path], { stdio: 'ignore' });
+  } catch {}
+  safeExecFile('launchctl', ['bootstrap', `gui/${process.getuid()}`, path], { stdio: 'inherit' });
+  safeExecFile('launchctl', ['enable', `gui/${process.getuid()}/${CLAWMUX_LAUNCHD_LABEL}`], { stdio: 'inherit' });
+  return path;
+}
+
+function uninstallLaunchdAutostart() {
+  const path = launchdPlistPath(homedir());
+  if (existsSync(path)) {
+    try {
+      safeExecFile('launchctl', ['bootout', `gui/${process.getuid()}`, path], { stdio: 'inherit' });
+    } catch {}
+    unlinkSync(path);
+  }
+  return path;
+}
+
+function writeCrontab(next) {
+  const child = spawn('crontab', ['-'], { stdio: ['pipe', 'inherit', 'inherit'] });
+  child.stdin.end(next);
+  return new Promise((resolve, reject) => {
+    child.on('error', reject);
+    child.on('exit', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`crontab exited with code ${code}`));
+    });
+  });
+}
+
+async function installCronAutostart() {
+  const current = readCrontab()
+    .split('\n')
+    .filter((line) => line.trim() && !line.includes(CLAWMUX_CRON_MARKER));
+  current.push(
+    cronLine({
+      repoDir: __dirname,
+      nodePath: process.execPath,
+      logPath: LOG_PATH,
+      env: serviceEnvForInstall(),
+    }),
+  );
+  await writeCrontab(`${current.join('\n')}\n`);
+  return 'crontab @reboot entry';
+}
+
+async function uninstallCronAutostart() {
+  const current = readCrontab()
+    .split('\n')
+    .filter((line) => line.trim() && !line.includes(CLAWMUX_CRON_MARKER));
+  await writeCrontab(current.length ? `${current.join('\n')}\n` : '');
+  return 'crontab @reboot entry';
+}
+
+async function installAutostart() {
+  const backend = autostartBackend();
+  if (!backend) throw new Error('No supported autostart backend found (systemd user, launchd, or cron)');
+  stop();
+  const closed = await waitForPortToClose();
+  if (!closed) throw new Error(`Port ${PORT} is still in use; refusing to install autostart over a live server`);
+  if (backend === 'systemd') return { backend, location: installSystemdAutostart() };
+  if (backend === 'launchd') return { backend, location: installLaunchdAutostart() };
+  const location = await installCronAutostart();
+  const child = spawnServer({ tailscaleMode: 'ensure' });
+  return { backend, location, pid: child.pid };
+}
+
+async function uninstallAutostart() {
+  const status = getAutostartStatus();
+  if (status.backend === 'systemd') return { backend: 'systemd', location: uninstallSystemdAutostart() };
+  if (status.backend === 'launchd') return { backend: 'launchd', location: uninstallLaunchdAutostart() };
+  if (status.backend === 'cron') return { backend: 'cron', location: await uninstallCronAutostart() };
+  return { backend: null, location: null };
+}
+
+async function getNetworkStatus({ ensure = false } = {}) {
+  const target = process.env.CLAWMUX_TAILSCALE_TARGET || expectedTailscaleTarget(HTTPS_PORT, HTTPS_HOST);
+  const result = ensure
+    ? await ensureTailscaleServe({ port: HTTPS_PORT, target })
+    : await checkTailscaleServe({ port: HTTPS_PORT, target });
+  const dnsName = result.url ? new URL(result.url).hostname : await getTailscaleDnsName();
+  let dns = null;
+  try {
+    dns = await lookup(dnsName);
+  } catch (err) {
+    dns = { error: err.message };
+  }
+  return { ...result, dnsName, dns };
+}
+
+async function printStatus({ ensureTailscale = false } = {}) {
+  const listeners = findListeners();
+  if (listeners.length > 0) {
+    console.log(`${GREEN}✓${RESET} Server running (PID ${listeners[0].pid})`);
+  } else {
+    console.log(`${RED}✗${RESET} Server not running`);
+  }
+
+  try {
+    const res = await requestHealth(localHealthUrl());
+    console.log(`${res.ok ? GREEN + '✓' + RESET : RED + '✗' + RESET} HTTP ${localHealthUrl()} (${res.statusCode})`);
+  } catch (err) {
+    console.log(`${RED}✗${RESET} HTTP ${localHealthUrl()} (${err.message})`);
+  }
+
+  try {
+    const res = await requestHealth(localHealthUrl({ httpsMode: true }), { rejectUnauthorized: false });
+    console.log(
+      `${res.ok ? GREEN + '✓' + RESET : RED + '✗' + RESET} HTTPS ${localHealthUrl({ httpsMode: true })} (${
+        res.statusCode
+      })`,
+    );
+  } catch (err) {
+    console.log(`${YELLOW}!${RESET} HTTPS ${localHealthUrl({ httpsMode: true })} (${err.message})`);
+  }
+
+  const autostart = getAutostartStatus();
+  const autostartIcon = autostart.active
+    ? `${GREEN}✓${RESET}`
+    : autostart.installed
+      ? `${YELLOW}!${RESET}`
+      : `${GRAY}-${RESET}`;
+  const autostartState = autostart.installed
+    ? `${autostart.active ? 'active' : 'installed, inactive'}${autostart.pid ? ` (PID ${autostart.pid})` : ''}`
+    : 'not installed';
+  console.log(`${autostartIcon} Autostart ${autostart.backend || 'none'}: ${autostartState}`);
+
+  try {
+    const network = await getNetworkStatus({ ensure: ensureTailscale });
+    const icon = network.ok ? `${GREEN}✓${RESET}` : `${RED}✗${RESET}`;
+    console.log(
+      `${icon} Tailscale Serve ${network.url || `:${HTTPS_PORT}`} -> ${network.actualTarget || 'not configured'}`,
+    );
+    if (!network.ok) console.log(`  expected: ${network.expectedTarget}`);
+    if (network.dnsName) {
+      const dnsText = network.dns?.address
+        ? `${network.dns.address} (${network.dns.family})`
+        : network.dns?.error || 'unknown';
+      console.log(
+        `${network.dns?.address ? GREEN + '✓' + RESET : YELLOW + '!' + RESET} MagicDNS ${network.dnsName}: ${dnsText}`,
+      );
+    }
+    if (network.url) {
+      const healthUrl = `${network.url}api/agents`;
+      try {
+        const tailnet = await requestHealth(healthUrl);
+        console.log(
+          `${tailnet.ok ? GREEN + '✓' + RESET : RED + '✗' + RESET} Tailnet URL ${network.url} (${tailnet.statusCode})`,
+        );
+      } catch (err) {
+        console.log(`${RED}✗${RESET} Tailnet URL ${network.url} (${err.message})`);
+      }
+    }
+  } catch (err) {
+    console.log(`${YELLOW}!${RESET} Tailscale status unavailable (${err.message})`);
+  }
 }
 
 function pad(s, n) {
@@ -201,17 +629,16 @@ const MAGENTA = COLOR ? '\x1b[35m' : '';
 
 if (!cmd || cmd === 'start') {
   if (serverStatus()) {
+    try {
+      const network = await getNetworkStatus({ ensure: true });
+      if (network.ok) console.log(`Tailscale Serve: ${network.url}`);
+    } catch (err) {
+      console.log(`${YELLOW}!${RESET} Tailscale Serve check failed: ${err.message}`);
+    }
     console.log('Already running. Use cmx restart to restart.');
     process.exit(0);
   }
-  const logFd = openSync(LOG_PATH, 'a');
-  const child = spawn('node', [join(__dirname, 'server.js')], {
-    stdio: ['ignore', logFd, logFd],
-    cwd: __dirname,
-    detached: true,
-    env: { ...process.env, PORT },
-  });
-  child.unref();
+  const child = spawnServer({ tailscaleMode: 'ensure' });
   console.log(`Started (PID ${child.pid}), log: ${LOG_PATH}`);
 } else if (cmd === 'stop') {
   if (stop()) console.log('Stopped');
@@ -219,24 +646,13 @@ if (!cmd || cmd === 'start') {
 } else if (cmd === 'restart') {
   const hard = process.argv.includes('--hard');
   stop();
-  const wait = () => {
-    if (isPortInUse()) {
-      setTimeout(wait, 200);
-    } else {
-      const serverArgs = [join(__dirname, 'server.js')];
-      if (hard) serverArgs.push('--hard');
-      const logFd2 = openSync(LOG_PATH, 'a');
-      const c = spawn('node', serverArgs, {
-        stdio: ['ignore', logFd2, logFd2],
-        cwd: __dirname,
-        detached: true,
-        env: { ...process.env, PORT },
-      });
-      c.unref();
-      console.log(`Started (PID ${c.pid})`);
-    }
-  };
-  setTimeout(wait, 200);
+  const closed = await waitForPortToClose();
+  if (!closed) {
+    console.error(`${RED}Port ${PORT} is still in use after stopping; not starting a second server.${RESET}`);
+    process.exit(1);
+  }
+  const c = spawnServer({ hard, tailscaleMode: 'ensure' });
+  console.log(`Started (PID ${c.pid})`);
 } else if (cmd === 'update') {
   const env = { ...process.env, PATH: `${dirname(process.execPath)}:${process.env.PATH}` };
   execSync('git stash 2>/dev/null; git pull', { stdio: 'inherit', cwd: __dirname, env });
@@ -244,24 +660,45 @@ if (!cmd || cmd === 'start') {
   execSync('npm install', { stdio: 'inherit', cwd: join(__dirname, 'app'), env });
   execSync('npm run build', { stdio: 'inherit', cwd: __dirname, env });
   if (stop()) {
-    for (let i = 0; i < 20; i++) {
-      if (!isPortInUse()) break;
-      execSync('sleep 0.3');
+    const closed = await waitForPortToClose();
+    if (!closed) {
+      console.error(`${RED}Port ${PORT} is still in use after stopping; not starting a second server.${RESET}`);
+      process.exit(1);
     }
-    const logFd3 = openSync(LOG_PATH, 'a');
-    const c = spawn('node', [join(__dirname, 'server.js')], {
-      stdio: ['ignore', logFd3, logFd3],
-      cwd: __dirname,
-      detached: true,
-      env: { ...process.env, PORT },
-    });
-    c.unref();
+    const c = spawnServer({ tailscaleMode: 'ensure' });
     console.log(`Updated and restarted (PID ${c.pid})`);
   } else {
     console.log('Updated (server was not running)');
   }
 } else if (cmd === 'status') {
-  serverStatus();
+  await printStatus({ ensureTailscale: process.argv.includes('--ensure') });
+} else if (cmd === 'autostart') {
+  const action = process.argv[3] || 'status';
+  if (action === 'on' || action === 'enable') {
+    try {
+      const result = await installAutostart();
+      console.log(`${GREEN}Autostart enabled${RESET} (${result.backend}): ${result.location}`);
+      const network = await getNetworkStatus({ ensure: true });
+      if (network.ok) console.log(`Tailscale Serve: ${network.url}`);
+      if (result.pid) console.log(`Started (PID ${result.pid})`);
+    } catch (err) {
+      console.error(`${RED}${err.message}${RESET}`);
+      process.exit(1);
+    }
+  } else if (action === 'off' || action === 'disable') {
+    try {
+      const result = await uninstallAutostart();
+      console.log(`${GREEN}Autostart disabled${RESET}${result.backend ? ` (${result.backend})` : ''}`);
+    } catch (err) {
+      console.error(`${RED}${err.message}${RESET}`);
+      process.exit(1);
+    }
+  } else if (action === 'status') {
+    await printStatus();
+  } else {
+    console.log('Usage: cmx autostart [on|off|status]');
+    process.exit(1);
+  }
 } else if (cmd === 'monitor') {
   import('./monitor.js');
 
@@ -588,6 +1025,20 @@ Examples:
   }
 
   try {
+    const network = await getNetworkStatus();
+    if (network.ok) {
+      console.log(`${GREEN}✓${RESET} Tailscale Serve ${network.url}`);
+    } else {
+      console.log(`${RED}✗${RESET} Tailscale Serve mismatch on ${network.webKey || `:${HTTPS_PORT}`}`);
+      console.log(`  expected: ${network.expectedTarget}`);
+      console.log(`  actual:   ${network.actualTarget || 'not configured'}`);
+      issues++;
+    }
+  } catch (err) {
+    console.log(`${YELLOW}!${RESET} Tailscale Serve status unavailable: ${err.message}`);
+  }
+
+  try {
     const monitor = await api('/api/monitor');
     const agents = await api('/api/agents');
 
@@ -628,13 +1079,22 @@ Examples:
       console.log(`${GREEN}✓${RESET} No agents above 80% context`);
     }
 
-    // 4. Backend daemons
+    // 4. Backend runtimes
     const backends = new Set(agentList.map(([, a]) => a.backend));
-    for (const b of ['codex', 'opencode']) {
-      if (!backends.has(b)) continue;
-      const port = b === 'codex' ? 4500 : 4499;
+    if (backends.has('codex')) {
       try {
-        const endpoint = b === 'codex' ? `http://127.0.0.1:${port}/readyz` : `http://127.0.0.1:${port}/global/health`;
+        const version = safeExecFile('codex', ['--version']).trim().split('\n')[0];
+        console.log(`${GREEN}✓${RESET} codex app-server runtime available (${version})`);
+      } catch {
+        console.log(`${RED}✗${RESET} codex CLI not reachable`);
+        issues++;
+      }
+    }
+    for (const b of ['opencode']) {
+      if (!backends.has(b)) continue;
+      const port = 4499;
+      try {
+        const endpoint = `http://127.0.0.1:${port}/global/health`;
         const r = await fetch(endpoint);
         if (r.ok) {
           console.log(`${GREEN}✓${RESET} ${b} daemon running (port ${port})`);
@@ -723,7 +1183,8 @@ Examples:
   console.log(`  ${BOLD}start${RESET}              Start the server (default)`);
   console.log(`  ${BOLD}stop${RESET}               Stop the server`);
   console.log(`  ${BOLD}restart${RESET}            Restart the server`);
-  console.log(`  ${BOLD}status${RESET}             Check if server is running`);
+  console.log(`  ${BOLD}status${RESET}             Check server, HTTPS, Tailscale, and autostart`);
+  console.log(`  ${BOLD}autostart${RESET}          Manage persistent startup`);
   console.log(`  ${BOLD}monitor${RESET}            Live agent status dashboard`);
   console.log(`  ${BOLD}agents${RESET}             List all agents`);
   console.log(`  ${BOLD}send${RESET} <agent> <msg> Send a message to an agent`);
