@@ -98,6 +98,7 @@ export async function getAgentState() {
   }
   window._clawmuxEffortLevels = res?.config?.effortLevels || null;
   window._clawmuxPermissionModes = res?.config?.permissionModes || null;
+  window._clawmuxCurrentPermissionMode = res?.config?.permissionMode || 'bypassPermissions';
   return res;
 }
 

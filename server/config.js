@@ -17,11 +17,11 @@ const BACKENDS_PATH = join(CONFIG_DIR, 'backends.json');
 const DEFAULT_AGENTS = {
   defaults: {
     backend: 'claude',
-    model: 'claude-opus-4-7',
+    model: 'claude-sonnet-4-6',
     effort: 'high',
     permissionMode: 'bypassPermissions',
   },
-  agents: [{ name: 'Agent', backend: 'claude', model: 'claude-opus-4-7' }],
+  agents: [{ name: 'Agent', backend: 'claude', model: 'claude-sonnet-4-6' }],
 };
 
 const DEFAULT_BACKENDS = {
@@ -35,7 +35,7 @@ const DEFAULT_BACKENDS = {
       { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', contextWindow: 200000 },
       { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', contextWindow: 200000 },
     ],
-    defaultModel: 'claude-opus-4-7',
+    defaultModel: 'claude-sonnet-4-6',
     effortLevels: ['low', 'medium', 'high', 'max'],
     permissionModes: [
       { id: 'acceptEdits', label: 'Ask before edits' },
@@ -278,6 +278,10 @@ export function getAgentEffort(id) {
   return getAgentsMap()[_cleanId(id)]?.effort || 'high';
 }
 
+export function getAgentPermissionMode(id) {
+  return getAgentsMap()[_cleanId(id)]?.permissionMode || 'bypassPermissions';
+}
+
 // ── Per-agent setters (persist to agents.json) ──
 
 function _setAgentField(id, field, value) {
@@ -314,6 +318,14 @@ export function setAgentModel(id, model) {
 export function setAgentEffort(id, effort) {
   const backend = getAgentBackend(id);
   _setAgentField(id, 'effort', _normalizeEffortForBackend(backend, effort));
+}
+
+export function setAgentPermissionMode(id, permissionMode) {
+  const backend = getAgentBackend(id);
+  const cfg = getBackendsConfig()[backend];
+  const validModes = (cfg?.permissionModes || []).map((mode) => mode.id);
+  const normalized = validModes.includes(permissionMode) ? permissionMode : validModes[0] || 'bypassPermissions';
+  _setAgentField(id, 'permissionMode', normalized);
 }
 
 // ── Session registry (stored per-agent in agents.json) ──

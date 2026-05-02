@@ -27,11 +27,13 @@ import {
   getBackendsConfig,
   getDefaultBackend,
   getAgentBackend,
+  getAgentPermissionMode,
   setAgentSession,
   getAgentModel,
   getAgentEffort,
   setAgentModel,
   setAgentEffort,
+  setAgentPermissionMode,
 } from './config.js';
 
 const CLAUDE_PROJECTS_DIR = join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude'), 'projects');
@@ -551,9 +553,10 @@ export default class ProviderSession {
     }
 
     const spawnCwd = cwd || this.cwd;
+    const configPermissionMode = getAgentPermissionMode(this.agentId);
 
     console.log(
-      `[launch] provider=${this.providerName} agent=${this.agentId} channel=${channelId} resume=${desiredResume || 'new'} model=${configModel} cwd=${spawnCwd}`,
+      `[launch] provider=${this.providerName} agent=${this.agentId} channel=${channelId} resume=${desiredResume || 'new'} model=${configModel} permission=${configPermissionMode} cwd=${spawnCwd}`,
     );
 
     try {
@@ -563,6 +566,7 @@ export default class ProviderSession {
         resume: desiredResume,
         agentId: this.agentId,
         effortLevel: configEffort,
+        permissionMode: configPermissionMode,
       });
 
       // Subscribe to events and translate to frontend protocol
@@ -910,6 +914,7 @@ export default class ProviderSession {
             models: this._getModelsForProvider(),
             effortLevels: this._getEffortLevelsForProvider(),
             permissionModes: this._getPermissionModesForProvider(),
+            permissionMode: this._getPermissionConfigForProvider().permissionMode,
             account: { tokenSource: 'api_key', subscriptionType: 'pro' },
           },
         });
@@ -982,6 +987,19 @@ export default class ProviderSession {
           }
           monitorBus.emit('change', this.agentId);
           console.log(`[session] Effort level set to: ${settings.effortLevel}`);
+        }
+        if (settings.permissionMode) {
+          setAgentPermissionMode(this.agentId, settings.permissionMode);
+          for (const [, entry] of this.connections) {
+            if (entry.conn) entry.conn.permissionMode = settings.permissionMode;
+          }
+          if (this.provider?.setPermissionMode) {
+            for (const [, entry] of this.connections) {
+              if (entry.conn) this.provider.setPermissionMode(entry.conn, settings.permissionMode);
+            }
+          }
+          monitorBus.emit('change', this.agentId);
+          console.log(`[session] Permission mode set to: ${settings.permissionMode}`);
         }
         respond({ type: 'apply_settings_response' });
         break;
@@ -1513,8 +1531,12 @@ export default class ProviderSession {
   _getPermissionConfigForProvider() {
     const modes = this._getBackendConfig().permissionModes || [];
     const hasBypass = modes.some((m) => m.id === 'bypassPermissions');
+    const configuredMode = getAgentPermissionMode(this.agentId);
+    const permissionMode = modes.some((m) => m.id === configuredMode)
+      ? configuredMode
+      : modes[0]?.id || 'bypassPermissions';
     return {
-      permissionMode: 'bypassPermissions',
+      permissionMode,
       allowBypass: hasBypass,
     };
   }

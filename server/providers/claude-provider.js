@@ -1,134 +1,29 @@
 /**
- * Claude Code CLI provider.
+ * Claude Agent SDK provider.
  *
- * Spawns `claude -p --output-format stream-json --input-format stream-json`
- * and translates stdio JSONL events into normalized E.* internal events.
+ * Uses the Claude Agent SDK query stream and translates SDK messages
+ * into normalized E.* internal events.
  *
  * All events go through the same translation layer as other providers.
  * No _raw passthrough.
  */
 
-import { spawn } from 'child_process';
 import { E } from './events.js';
-
-const CLAUDE_CMD = process.env.CLAUDE_CMD || 'claude';
+import { ClaudeSessionRuntime } from './claude-session-runtime.js';
 
 export class ClaudeProvider {
-  constructor() {
+  constructor(options = {}) {
     this.name = 'claude';
+    this.SessionRuntime = options.sessionRuntimeClass || ClaudeSessionRuntime;
   }
 
-  connect(config = {}) {
-    const args = [
-      '--dangerously-skip-permissions',
-      '-p',
-      '--output-format',
-      'stream-json',
-      '--verbose',
-      '--input-format',
-      'stream-json',
-      '--include-partial-messages',
-    ];
-    if (config.resume) args.push('--resume', config.resume);
-    if (config.model && config.model !== 'default') args.push('--model', config.model);
-    if (config.effortLevel && config.effortLevel !== 'default') args.push('--effort', config.effortLevel);
-
-    const proc = spawn(CLAUDE_CMD, args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, CMX_AGENT: config.agentId || '' },
-      cwd: config.cwd || process.cwd(),
-    });
-
-    const conn = {
-      proc,
-      sessionId: config.resume || null,
-      listeners: new Set(),
-      alive: true,
-      _stdoutBuf: '',
-      _currentToolId: null,
-      _textBlockOpen: false,
-      _thinkingBlockOpen: false,
-    };
-
-    // Strict \n JSONL parsing (same pattern as pi-provider)
-    proc.stdout.on('data', (chunk) => {
-      conn._stdoutBuf += chunk.toString('utf8');
-      let nl;
-      while ((nl = conn._stdoutBuf.indexOf('\n')) !== -1) {
-        let line = conn._stdoutBuf.slice(0, nl);
-        conn._stdoutBuf = conn._stdoutBuf.slice(nl + 1);
-        if (line.endsWith('\r')) line = line.slice(0, -1);
-        if (!line) continue;
-        try {
-          const parsed = JSON.parse(line);
-          this._emitRaw(conn, {
-            direction: 'in',
-            transport: 'stdio',
-            raw: line,
-            payload: parsed,
-          });
-          this._handleEvent(conn, parsed);
-        } catch (err) {
-          console.error(`[claude-provider] parse/handle error: ${err.message}, line: ${line.slice(0, 200)}`);
-        }
-      }
-    });
-
-    proc.stderr.on('data', (d) => {
-      const t = d.toString().trim();
-      if (!t) return;
-      this._emitRaw(conn, {
-        direction: 'err',
-        transport: 'stderr',
-        raw: t,
-        payload: { type: 'stderr', text: t },
-      });
-      console.error(`[claude-provider] stderr: ${t}`);
-      // If resume fails, mark session ID as invalid so caller can retry
-      if (t.includes('No conversation found')) {
-        conn._resumeFailed = true;
-      }
-    });
-
-    proc.on('exit', (code, signal) => {
-      conn.alive = false;
-      const isClean = signal === 'SIGTERM' || signal === 'SIGINT' || code === 143 || code === 130;
-      if (conn._resumeFailed) {
-        // Resume failed — emit special event so session layer can retry without resume
-        this._emit(conn, { type: 'resume_failed' });
-        return;
-      }
-      if (code !== 0 && !isClean) {
-        this._emit(conn, E.turnError(`Claude exited with code ${code}`));
-      }
-      this._emit(conn, E.sessionClosed(isClean ? 'normal' : `exit ${code}`));
-    });
-
-    proc.on('error', (err) => {
-      conn.alive = false;
-      this._emit(conn, E.turnError(`Failed to spawn Claude: ${err.message}`));
-      this._emit(conn, E.sessionClosed(err.message));
-    });
-
-    return conn;
+  async connect(config = {}) {
+    const runtime = new this.SessionRuntime(this, config);
+    return await runtime.start();
   }
 
   send(conn, message) {
-    if (!conn.alive || !conn.proc.stdin.writable) return;
-    const payload = {
-      type: 'user',
-      uuid: crypto.randomUUID(),
-      session_id: conn.sessionId || '',
-      parent_tool_use_id: null,
-      message: { role: 'user', content: [{ type: 'text', text: message }] },
-    };
-    this._emitRaw(conn, {
-      direction: 'out',
-      transport: 'stdio',
-      raw: JSON.stringify(payload),
-      payload,
-    });
-    conn.proc.stdin.write(JSON.stringify(payload) + '\n');
+    conn._runtime?.send(message);
   }
 
   onEvent(conn, callback) {
@@ -137,51 +32,23 @@ export class ClaudeProvider {
   }
 
   respondPermission(conn, requestId, allowed) {
-    if (!conn.alive || !conn.proc.stdin.writable) return;
-    const payload = {
-      type: 'control_response',
-      response: {
-        request_id: requestId,
-        subtype: 'success',
-        result: { behavior: allowed ? 'allow' : 'deny' },
-      },
-    };
-    this._emitRaw(conn, {
-      direction: 'out',
-      transport: 'stdio',
-      raw: JSON.stringify(payload),
-      payload,
-      summary: 'control_response',
-    });
-    conn.proc.stdin.write(JSON.stringify(payload) + '\n');
+    conn._runtime?.respondPermission(requestId, allowed);
   }
 
   interrupt(conn) {
-    if (!conn.alive) return;
-    if (conn.proc.stdin.writable) {
-      const payload = {
-        request_id: Math.random().toString(36).substring(2, 15),
-        type: 'control_request',
-        request: { subtype: 'interrupt' },
-      };
-      this._emitRaw(conn, {
-        direction: 'out',
-        transport: 'stdio',
-        raw: JSON.stringify(payload),
-        payload,
-        summary: 'interrupt',
-      });
-      conn.proc.stdin.write(JSON.stringify(payload) + '\n');
-    } else {
-      conn.proc.kill('SIGINT');
-    }
+    conn._runtime?.interrupt();
   }
 
   close(conn) {
-    conn.alive = false;
-    try {
-      conn.proc.kill('SIGTERM');
-    } catch {}
+    conn._runtime?.close();
+  }
+
+  setThinkingLevel(conn, level) {
+    return conn._runtime?.setThinkingLevel(level);
+  }
+
+  setPermissionMode(conn, mode) {
+    return conn._runtime?.setPermissionMode(mode);
   }
 
   // ── Internal ──
@@ -249,6 +116,8 @@ export class ClaudeProvider {
         if (isError) {
           const errMsg =
             parsed.error ||
+            (Array.isArray(parsed.errors) && parsed.errors.length > 0 ? parsed.errors.join('; ') : null) ||
+            (typeof parsed.result === 'string' && parsed.result ? parsed.result : null) ||
             (parsed.api_error_status ? `API error (HTTP ${parsed.api_error_status})` : null) ||
             'Unknown error';
           this._emit(conn, E.turnError(errMsg));
@@ -273,24 +142,11 @@ export class ClaudeProvider {
       }
 
       case 'control_request':
-        // Auto-approve tool permissions
-        if (parsed.request?.subtype === 'can_use_tool' && conn.proc.stdin.writable) {
-          const payload = {
-            type: 'control_response',
-            response: {
-              request_id: parsed.request_id,
-              subtype: 'success',
-              result: { behavior: 'allow', updatedInput: parsed.request?.input },
-            },
-          };
-          this._emitRaw(conn, {
-            direction: 'out',
-            transport: 'stdio',
-            raw: JSON.stringify(payload),
-            payload,
-            summary: 'control_response',
-          });
-          conn.proc.stdin.write(JSON.stringify(payload) + '\n');
+        if (parsed.request?.subtype === 'can_use_tool') {
+          this._emit(
+            conn,
+            E.permissionRequest(parsed.request_id, parsed.request.tool_name, parsed.request.input || {}),
+          );
         }
         break;
 

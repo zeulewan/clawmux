@@ -54,7 +54,7 @@ export function InputBar({ onSubmit, onInterrupt, busy, session, effortLevel: li
     }
     return { bottom, left: Math.max(8, r.left) };
   };
-  const [permissionMode, setPermissionMode] = useState('bypassPermissions');
+  const [permissionMode, _setPermissionMode] = useState(window._clawmuxCurrentPermissionMode || 'bypassPermissions');
   const [selectedEffortLevel, _setEffortLevel] = useState(liveEffortLevel);
   const setEffortLevel = useCallback(
     (level) => {
@@ -73,6 +73,22 @@ export function InputBar({ onSubmit, onInterrupt, busy, session, effortLevel: li
   useEffect(() => {
     _setEffortLevel(liveEffortLevel);
   }, [liveEffortLevel]);
+  const setPermissionMode = useCallback(
+    (mode) => {
+      _setPermissionMode(mode);
+      if (session) {
+        session.permissionMode = mode;
+        session.notify?.();
+      }
+      import('../lib/protocol.js').then(({ request }) => {
+        request('apply_settings', { settings: { permissionMode: mode } }).catch(() => {});
+      });
+    },
+    [session],
+  );
+  useEffect(() => {
+    _setPermissionMode(window._clawmuxCurrentPermissionMode || 'bypassPermissions');
+  }, [session?.provider]);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [attachments, setAttachments] = useState([]);
   const [dragging, setDragging] = useState(false);
